@@ -1,0 +1,180 @@
+package session
+
+import (
+	"testing"
+	"time"
+
+	"github.com/donjor/zmux/internal/tmux"
+)
+
+func TestIsTemp(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{"tmp-1", true},
+		{"tmp-42", true},
+		{"tmp-0", true},
+		{"tmp-", false},
+		{"tmp", false},
+		{"dev", false},
+		{"my-tmp-1", false},
+		{"tmp-1-extra", false},
+		{"TMP-1", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := IsTemp(tt.name)
+			if got != tt.want {
+				t.Errorf("IsTemp(%q) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNextTmpName(t *testing.T) {
+	tests := []struct {
+		desc     string
+		sessions []tmux.Session
+		want     string
+	}{
+		{
+			desc: "no sessions",
+			want: "tmp-1",
+		},
+		{
+			desc: "no tmp sessions",
+			sessions: []tmux.Session{
+				{Name: "dev"},
+				{Name: "work"},
+			},
+			want: "tmp-1",
+		},
+		{
+			desc: "existing tmp sessions",
+			sessions: []tmux.Session{
+				{Name: "tmp-1"},
+				{Name: "tmp-3"},
+				{Name: "dev"},
+			},
+			want: "tmp-4",
+		},
+		{
+			desc: "sequential tmp sessions",
+			sessions: []tmux.Session{
+				{Name: "tmp-1"},
+				{Name: "tmp-2"},
+			},
+			want: "tmp-3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			m := tmux.NewMockRunner()
+			m.Sessions = tt.sessions
+			got := NextTmpName(m)
+			if got != tt.want {
+				t.Errorf("NextTmpName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHumanAge(t *testing.T) {
+	now := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		desc string
+		t    time.Time
+		want string
+	}{
+		{"seconds ago", now.Add(-30 * time.Second), "30s"},
+		{"minutes ago", now.Add(-5 * time.Minute), "5m"},
+		{"hours ago", now.Add(-2 * time.Hour), "2h"},
+		{"day ago", now.Add(-36 * time.Hour), "1d"},
+		{"days ago", now.Add(-3 * 24 * time.Hour), "3d"},
+		{"week ago", now.Add(-10 * 24 * time.Hour), "1w"},
+		{"weeks ago", now.Add(-21 * 24 * time.Hour), "3w"},
+		{"zero duration", now, "0s"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			got := HumanAgeSince(tt.t, now)
+			if got != tt.want {
+				t.Errorf("HumanAgeSince(%v, %v) = %q, want %q", tt.t, now, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestListSessions(t *testing.T) {
+	now := time.Now()
+	m := tmux.NewMockRunner()
+	m.Sessions = []tmux.Session{
+		{Name: "tmp-2", Windows: 1, Attached: false, Activity: now, Dir: "/tmp"},
+		{Name: "dev", Windows: 3, Attached: true, Activity: now, Dir: "/home/user/work"},
+		{Name: "tmp-1", Windows: 1, Attached: true, Activity: now, Dir: "/tmp"},
+		{Name: "alpha", Windows: 2, Attached: false, Activity: now, Dir: "/home/user"},
+	}
+
+	sessions, err := ListSessions(m)
+	if err != nil {
+		t.Fatalf("ListSessions() error: %v", err)
+	}
+
+	if len(sessions) != 4 {
+		t.Fatalf("expected 4 sessions, got %d", len(sessions))
+	}
+
+	// Named sessions should come first, alphabetically.
+	if sessions[0].Name != "alpha" {
+		t.Errorf("expected first session to be 'alpha', got %q", sessions[0].Name)
+	}
+	if sessions[1].Name != "dev" {
+		t.Errorf("expected second session to be 'dev', got %q", sessions[1].Name)
+	}
+
+	// Tmp sessions come after, alphabetically.
+	if sessions[2].Name != "tmp-1" {
+		t.Errorf("expected third session to be 'tmp-1', got %q", sessions[2].Name)
+	}
+	if sessions[3].Name != "tmp-2" {
+		t.Errorf("expected fourth session to be 'tmp-2', got %q", sessions[3].Name)
+	}
+
+	// Verify IsTmp flag.
+	if sessions[0].IsTmp {
+		t.Error("'alpha' should not be marked as tmp")
+	}
+	if !sessions[2].IsTmp {
+		t.Error("'tmp-1' should be marked as tmp")
+	}
+
+	// Verify attached state.
+	if !sessions[1].Attached {
+		t.Error("'dev' should be attached")
+	}
+	if sessions[3].Attached {
+		t.Error("'tmp-2' should not be attached")
+	}
+}
+
+func TestListSessionsError(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.Err = errTestError
+
+	_, err := ListSessions(m)
+	if err == nil {
+		t.Fatal("expected error from ListSessions")
+	}
+}
+
+var errTestError = &testError{}
+
+type testError struct{}
+
+func (e *testError) Error() string { return "test error" }

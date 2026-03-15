@@ -1,0 +1,16 @@
+name = "dev"
+description = "Full dev environment: editor, server, git"
+
+[[windows]]
+name = "editor"
+command = "nvim ."
+
+[[windows]]
+name = "server"
+
+[[windows]]
+name = "git"
+command = "git status"
+
+[options]
+focus = "editor"

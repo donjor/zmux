@@ -1,0 +1,17 @@
+name = "monitor"
+description = "System monitoring: htop, gpu, logs"
+
+[[windows]]
+name = "htop"
+command = "htop"
+
+[[windows]]
+name = "gpu"
+command = "watch -n1 nvidia-smi"
+
+[[windows]]
+name = "logs"
+command = "journalctl -f"
+
+[options]
+focus = "htop"

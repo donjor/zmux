@@ -1,0 +1,305 @@
+# zmux — vision
+
+## What is zmux?
+
+An opinionated, all-in-one tmux management wrapper. It replaces tmux's sharp
+edges with a beautiful, interactive experience powered by modern CLI tooling.
+
+zmux handles:
+- **Session management** — interactive picker, fuzzy search, templates
+- **tmux configuration** — opinionated defaults, keybinds, vim copy mode
+- **Theming** — 300+ themes, status bar presets, theme sync across tools
+- **Quality of life** — help system, prefix hints, session dashboard
+
+## Who is it for?
+
+Primarily built for the author's workflow (Hyprland, Ghostty, neovim).
+Designed to be publishable and useful for anyone running tmux on Linux/macOS
+who wants a polished experience without deep tmux knowledge.
+
+## Versioning
+
+### v0 — bash + gum prototype (complete)
+- Bash scripts + charmbracelet/gum for UI
+- Proved out the UX, feature set, and config format
+- Ships as a working tool, not just a prototype
+
+### v1 — Go rewrite (active)
+- Clean-room rewrite in Go (bubbletea + lipgloss + cobra)
+- Single binary, no gum/bash dependency
+- TDD from the start
+- Clean break from v0 — no migration tooling
+- TOML config with proper sections
+
+## Architecture (v1)
+
+```
+cmd/
+└── zmux/
+    └── main.go                 entry point, cobra root command
+
+internal/
+├── config/                     TOML config loading, defaults, validation
+├── theme/                      theme parsing, resolution, semantic palette
+├── tui/                        bubbletea models (picker, dashboard, palette)
+├── session/                    session lifecycle, templates, tmp cleanup
+├── bar/                        status bar presets, tmux status-line generation
+├── sync/                       theme sync targets (ghostty, nvim)
+└── tmux/                       tmux command interface, conf generation
+
+themes/
+├── bundled/                    curated dark themes (shipped with binary)
+└── iterm2/                     full iterm2-color-schemes set (downloaded)
+
+templates/                      bundled TOML session templates
+```
+
+User paths:
+```
+~/.zmux.toml                    user config
+~/.zmux/themes/                 user custom themes
+~/.zmux/templates/              user custom templates
+```
+
+## Design Decisions
+
+### Hybrid dashboard
+Inside tmux, zmux operates in two modes:
+- **Command palette** — fast, spotlight-style overlay for quick actions
+  (switch session, new from template, theme switch)
+- **Full dashboard** — deeper management view with session list, context,
+  and action menu
+
+Both render as tmux popup overlays, activated via keybind (not a pane).
+
+### Declarative templates
+v0 templates were bash scripts. v1 uses declarative TOML:
+
+```toml
+name = "dev"
+description = "Editor, server, and git"
+
+[[windows]]
+name = "editor"
+command = "nvim ."
+
+[[windows]]
+name = "server"
+
+[[windows]]
+name = "git"
+
+[options]
+focus = "editor"
+```
+
+Templates are discovered from:
+1. `~/.zmux/templates/` — user custom
+2. Bundled templates (embedded in binary)
+
+### Visual direction
+Charm CLI / Ghostty aesthetic — clean, spacious, beautiful, restrained.
+Let the content speak. No unnecessary decoration. Elegant typography.
+
+### tmux coupling
+v1 builds directly against tmux. No multiplexer abstraction layer.
+Architecture stays clean enough that abstracting later (zellij, etc.)
+is feasible without a rewrite.
+
+## Configuration — .zmux.toml
+
+```toml
+theme = "ayu-dark"
+prefix = "C-Space"
+
+[bar]
+preset = "default"              # default, minimal, powerline, blocks
+
+[sessions]
+auto_cleanup_tmp = true
+default_shell = ""
+
+[templates]
+paths = ["~/.zmux/templates"]
+
+[sync]
+target = "ghostty"              # ghostty, nvim, or none
+ghostty_config = "auto"         # auto-detected, or explicit path
+```
+
+## Themes
+
+### Source
+Themes use the iterm2-color-schemes format (key=value pairs with ANSI palette,
+background, foreground, cursor, selection colors). This is the same format used
+by Ghostty, Alacritty, Kitty, WezTerm, and others.
+
+Themes are sourced from the
+[mbadolato/iTerm2-Color-Schemes](https://github.com/mbadolato/iTerm2-Color-Schemes)
+repository — the same upstream that Ghostty, Alacritty, and others pull from.
+zmux does not depend on any terminal emulator being installed.
+
+### Resolution order
+1. `~/.zmux/themes/<name>`          — user custom themes (highest priority)
+2. Bundled themes (embedded)        — curated set shipped with zmux
+3. `~/.zmux/themes/iterm2/<name>`   — full downloaded set
+
+### Palette mapping
+iterm2 ANSI palette maps directly to zmux semantic roles:
+
+| ANSI palette | zmux role | Semantic purpose |
+|---|---|---|
+| background | `BG` | base background |
+| foreground | `FG` | primary text |
+| palette 0 (black) | `SURFACE` | cards, elevated panels |
+| palette 1 (red) | `ERROR` | destructive actions, errors |
+| palette 2 (green) | `SUCCESS` | confirmations, active status |
+| palette 3 (yellow) | `ACCENT` | primary accent, branding |
+| palette 4 (blue) | `INFO` | links, secondary accent |
+| palette 5 (magenta) | `SPECIAL` | unique items, templates |
+| palette 6 (cyan) | `META` | tags, metadata |
+| palette 7 (white) | `MUTED` | secondary text, labels |
+| palette 8 (bright black) | `DIM` | borders, separators, faint |
+| cursor-color | `HIGHLIGHT` | focus indicators, cursor |
+
+Role names are semantic — they describe purpose, not color. A theme's
+`ERROR` may be red, pink, or orange depending on the palette. Code uses
+`theme.Error` not `theme.Red`.
+
+### Theme picker
+Color swatches + metadata display. Shows palette strips, dark/light tag,
+semantic role labels. Fast and informative — not a live terminal preview.
+
+## Status Bar
+
+### Design philosophy
+The status bar is visually cohesive with starship prompts — same color palette,
+similar segment-based layout. They are **not integrated** — they just share
+a theme so they look consistent.
+
+### Presets
+Users pick a preset in `.zmux.toml`. Each preset defines the layout and style
+of the status bar segments.
+
+**default** — session name pill, window tabs with separators,
+prefix hints on activation, clock on right.
+
+**minimal** — just session name and window tabs. No decorations.
+
+**powerline** — angled separators, filled segments, starship-like feel.
+
+**blocks** — square bracket segments, monospace aesthetic.
+
+### Behavior
+- Normal state: session name (accent), window tabs, clock
+- Prefix active: session name changes color, right side shows available hotkeys
+- Inactive windows are dimmed
+- Current theme colors applied automatically
+
+## Theme Sync
+
+### Design
+zmux **owns its own theme**. It never writes to other tools' configs.
+
+Theme sync is a **pull-only** convenience feature. It reads what theme another
+tool is using and sets zmux to match.
+
+```
+zmux theme sync            — pull from default sync target
+zmux theme pull ghostty    — read Ghostty's current theme, apply to zmux
+zmux theme pull nvim       — read nvim's colorscheme, find matching theme
+```
+
+### Why pull-only?
+- zmux is independent. Changing your zmux theme doesn't break anything else.
+- You change your Ghostty/nvim theme whenever you want. When you want zmux
+  to match, run `zmux theme sync`. One command.
+- No file watchers, no background processes, no race conditions.
+- Other tools' configs are their business.
+
+### Adding sync targets
+Each target implements a `SyncTarget` interface with a `Pull()` method
+that returns a theme name. Adding a new target (alacritty, kitty, wezterm)
+means implementing one interface.
+
+## Session Management
+
+### Model
+- Each terminal window starts zmux outside tmux
+- zmux shows the interactive picker: attach existing or create new
+- New sessions are temp (`tmp-N`) by default
+- Rename to promote to a named session
+- Unattached tmp sessions are cleaned up on next zmux start
+
+### Dashboard (inside tmux)
+Activated via tmux popup keybind. Two modes:
+
+**Command palette** (default):
+- Quick fuzzy search across actions
+- Switch session, new session, theme switch, etc.
+- Keyboard-driven, gets out of the way fast
+
+**Full dashboard** (toggle):
+- Session list with status indicators
+- Current session context (name, dir, windows)
+- Action menu with hotkey hints
+- Theme browser with swatches
+
+## Keybinds
+
+### tmux prefix: Ctrl+Space
+
+| Key | Action |
+|-----|--------|
+| , | rename session |
+| . | rename tab |
+| s | switch session |
+| x | kill session |
+| c | new tab |
+| n | next tab |
+| v | copy mode (vim) |
+| p | paste buffer |
+| r | reload config |
+| ? | help popup |
+| d | zmux dashboard (popup) |
+| Alt+1-5 | jump to tab (no prefix) |
+
+### Copy mode (vim)
+| Key | Action |
+|-----|--------|
+| v | begin selection |
+| y | yank to clipboard |
+| / | search forward |
+| ? | search backward |
+| Esc | exit |
+
+## CLI Interface
+
+```
+zmux                        — session picker (outside tmux) / dashboard (inside)
+zmux theme                  — browse + switch themes (fuzzy picker)
+zmux theme set <name>       — set theme directly
+zmux theme list             — list available themes
+zmux theme sync             — pull theme from default sync target
+zmux theme pull <target>    — pull theme from specific target (ghostty, nvim)
+zmux bar                    — pick status bar preset
+zmux bar <preset>           — set preset directly
+zmux init                   — first-time setup wizard (TUI)
+zmux status                 — show current config summary
+zmux help                   — help text
+zmux version                — version info
+```
+
+## Dependencies
+
+### Required
+- tmux (>= 3.2)
+- Go 1.22+ (build only)
+
+### Runtime (zero dependencies)
+Single static binary. No bash, no gum, no external tools required.
+
+### Optional
+- wl-copy / xclip / pbcopy — clipboard integration
+- curl — theme download during init
+- ghostty, nvim — for theme sync targets

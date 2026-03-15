@@ -1,0 +1,16 @@
+name = "claude"
+description = "Claude Code session: claude, shell, git"
+
+[[windows]]
+name = "claude"
+command = "claude"
+
+[[windows]]
+name = "shell"
+
+[[windows]]
+name = "git"
+command = "git status"
+
+[options]
+focus = "claude"

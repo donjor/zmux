@@ -1,0 +1,19 @@
+name = "webdev"
+description = "Web development: editor, dev server, tests, git"
+
+[[windows]]
+name = "editor"
+command = "nvim ."
+
+[[windows]]
+name = "dev"
+
+[[windows]]
+name = "test"
+
+[[windows]]
+name = "git"
+command = "git status"
+
+[options]
+focus = "editor"

@@ -1,0 +1,16 @@
+theme = "ayu-dark"
+prefix = "C-Space"
+
+[bar]
+preset = "default"
+
+[sessions]
+auto_cleanup_tmp = true
+default_shell = ""
+
+[templates]
+paths = ["~/.zmux/templates"]
+
+[sync]
+target = "none"
+ghostty_config = "auto"

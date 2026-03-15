@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# zmux-apply-theme — loads theme via shared library, applies to tmux
+
+ZMUX_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# ── Load shared theme library ──
+source "$ZMUX_ROOT/lib/theme.sh"
+zmux_load_config
+zmux_load_theme
+
+# ── Apply status bar preset ──
+source "$ZMUX_ROOT/lib/status.sh"
+zmux_apply_status_preset "$ZMUX_STATUS_PRESET"
+
+# ── Dynamic clipboard binding ──
+if [[ -n "$ZMUX_CLIPBOARD_TOOL" ]]; then
+    tmux bind -T copy-mode-vi y send -X copy-pipe-and-cancel "$ZMUX_CLIPBOARD_TOOL"
+    tmux bind -T copy-mode-vi Enter send -X copy-pipe-and-cancel "$ZMUX_CLIPBOARD_TOOL"
+fi
+
+# ── zmux help popup ──
+tmux bind ? display-popup -w 52 -h 22 -E "$ZMUX_ROOT/lib/help-popup.sh"
+
+# ── Store theme info for other zmux scripts ──
+tmux set -g @zmux_theme "$ZMUX_THEME_NAME"
+tmux set -g @zmux_root "$ZMUX_ROOT"
