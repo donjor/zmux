@@ -40,8 +40,8 @@ func sharedOptions(p *theme.Palette) []TmuxOption {
 		{"message-command-style", fmt.Sprintf("bg=%s,fg=%s", p.Surface.Hex(), p.FG.Hex())},
 		{"mode-style", fmt.Sprintf("bg=%s,fg=%s", p.Info.Hex(), p.BG.Hex())},
 		{"clock-mode-colour", p.Accent.Hex()},
-		{"window-active-style", fmt.Sprintf("#{?client_prefix,bg=%s,bg=%s}", p.BGPrefix.Hex(), p.BG.Hex())},
-		{"window-style", fmt.Sprintf("bg=%s", p.BGDim.Hex())},
+		{"window-active-style", fmt.Sprintf("#{?client_prefix,bg=%s,bg=default}", p.BGPrefix.Hex())},
+		{"window-style", "bg=default"},
 	}
 }
 
@@ -53,20 +53,19 @@ func defaultOptions(p *theme.Palette) []TmuxOption {
 		p.Info.Hex(), p.Accent.Hex(), p.Surface.Hex(),
 	)
 
+	// Prefix hints: shown when prefix is active (client_prefix).
+	// Format: key in accent, description in dim.
+	hi := p.Info.Hex()
+	dm := p.Dim.Hex()
 	prefixHint := fmt.Sprintf(
-		"#[fg=%s],#[fg=%s]rename #[fg=%s]s#[fg=%s]witch #[fg=%s]c#[fg=%s] tab #[fg=%s]v#[fg=%s]isual #[fg=%s]x#[fg=%s]kill #[fg=%s]r#[fg=%s]eload #[fg=%s]?#[fg=%s]help ",
-		p.Info.Hex(), p.Dim.Hex(),
-		p.Info.Hex(), p.Dim.Hex(),
-		p.Info.Hex(), p.Dim.Hex(),
-		p.Info.Hex(), p.Dim.Hex(),
-		p.Info.Hex(), p.Dim.Hex(),
-		p.Info.Hex(), p.Dim.Hex(),
-		p.Info.Hex(), p.Dim.Hex(),
+		"#[fg=%s]spc#[fg=%s]dash #[fg=%s]d#[fg=%s]etach #[fg=%s]c#[fg=%s]tab #[fg=%s]s#[fg=%s]witch #[fg=%s]v#[fg=%s]im #[fg=%s]?#[fg=%s]help ",
+		hi, dm, hi, dm, hi, dm, hi, dm, hi, dm, hi, dm,
 	)
 
+	// Normal: show prefix key + time. Prefix active: show hints.
 	statusRight := fmt.Sprintf(
 		"#{?client_prefix,%s,#[fg=%s]ctrl+space #[fg=%s]%%I:%%M %%p }",
-		prefixHint, p.Dim.Hex(), p.Muted.Hex(),
+		prefixHint, dm, p.Muted.Hex(),
 	)
 
 	windowFmt := fmt.Sprintf("#[fg=%s] #I #W ", p.Dim.Hex())

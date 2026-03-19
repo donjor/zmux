@@ -344,7 +344,7 @@ _init_write_config() {
 _init_setup_tmux_conf() {
     local tmux_conf="${HOME}/.tmux.conf"
     local zmux_conf_line="source-file ${ZMUX_ROOT}/tmux/zmux.tmux.conf"
-    local zmux_run_line="run-shell \"${ZMUX_ROOT}/bin/zmux-apply-theme\""
+    local zmux_run_line="run-shell \"${ZMUX_ROOT}/bin/zmux0-apply-theme\""
 
     printf "\n"
 

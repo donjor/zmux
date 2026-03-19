@@ -12,10 +12,23 @@ type MockCall struct {
 type MockRunner struct {
 	Sessions    []Session
 	Windows     map[string][]Window // keyed by session name
+	Panes       map[string][]Pane   // keyed by session name
 	InsideTmux  bool
 	ServerUp    bool
 	TmuxVersion string
 	Calls       []MockCall
+
+	// Endpoint is the tmux server endpoint this mock is associated with.
+	Endpoint Endpoint
+
+	// DisplayMessageResult is the content returned by DisplayMessage.
+	DisplayMessageResult string
+
+	// CapturedPaneContent is the content returned by CapturePane.
+	CapturedPaneContent string
+
+	// CapturePaneFunc, if set, overrides CapturedPaneContent with dynamic responses.
+	CapturePaneFunc func(target string, lines int) (string, error)
 
 	// Optional error to return from any method.
 	Err error
@@ -25,6 +38,7 @@ type MockRunner struct {
 func NewMockRunner() *MockRunner {
 	return &MockRunner{
 		Windows:     make(map[string][]Window),
+		Panes:       make(map[string][]Pane),
 		TmuxVersion: "3.4",
 		ServerUp:    true,
 	}
@@ -57,6 +71,12 @@ func (m *MockRunner) NewSession(name, dir string) error {
 	return m.Err
 }
 
+// NewGroupedSession records the call.
+func (m *MockRunner) NewGroupedSession(target, name string) error {
+	m.record("NewGroupedSession", target, name)
+	return m.Err
+}
+
 // KillSession records the call.
 func (m *MockRunner) KillSession(name string) error {
 	m.record("KillSession", name)
@@ -66,6 +86,12 @@ func (m *MockRunner) KillSession(name string) error {
 // AttachSession records the call.
 func (m *MockRunner) AttachSession(name string) error {
 	m.record("AttachSession", name)
+	return m.Err
+}
+
+// AttachSessionDetach records the call.
+func (m *MockRunner) AttachSessionDetach(name string) error {
+	m.record("AttachSessionDetach", name)
 	return m.Err
 }
 
@@ -117,22 +143,43 @@ func (m *MockRunner) MoveWindow(srcSession, dstSession string) error {
 	return m.Err
 }
 
+// SwapWindow records the call.
+func (m *MockRunner) SwapWindow(session string, idx1, idx2 int) error {
+	m.record("SwapWindow", session, fmt.Sprintf("%d", idx1), fmt.Sprintf("%d", idx2))
+	return m.Err
+}
+
+// ListPanes returns the configured panes for a session.
+func (m *MockRunner) ListPanes(session string) ([]Pane, error) {
+	m.record("ListPanes", session)
+	return m.Panes[session], m.Err
+}
+
+// SplitWindow records the call.
+func (m *MockRunner) SplitWindow(target, direction string) error {
+	m.record("SplitWindow", target, direction)
+	return m.Err
+}
+
 // SendKeys records the call.
 func (m *MockRunner) SendKeys(target string, keys ...string) error {
 	m.record("SendKeys", append([]string{target}, keys...)...)
 	return m.Err
 }
 
-// DisplayMessage records the call and returns an empty string.
+// DisplayMessage records the call and returns the configured result.
 func (m *MockRunner) DisplayMessage(target, format string) (string, error) {
 	m.record("DisplayMessage", target, format)
-	return "", m.Err
+	return m.DisplayMessageResult, m.Err
 }
 
-// CapturePane records the call and returns an empty string.
+// CapturePane records the call and returns the configured content.
 func (m *MockRunner) CapturePane(target string, lines int) (string, error) {
 	m.record("CapturePane", target, fmt.Sprintf("%d", lines))
-	return "", m.Err
+	if m.CapturePaneFunc != nil {
+		return m.CapturePaneFunc(target, lines)
+	}
+	return m.CapturedPaneContent, m.Err
 }
 
 // SetOption records the call.

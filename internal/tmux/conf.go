@@ -21,10 +21,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 
 	// General settings
 	writeSection(&b, "General")
-	b.WriteString("set -g default-terminal \"xterm-256color\"\n")
-	b.WriteString("set -ga terminal-overrides \",xterm-256color:Tc\"\n")
+	b.WriteString("set -g default-terminal \"tmux-256color\"\n")
+	b.WriteString("set -ga terminal-overrides \",tmux-256color:Tc\"\n")
 	b.WriteString("set -g extended-keys on\n")
-	b.WriteString("set -ga terminal-features \",xterm-256color:extkeys\"\n")
+	b.WriteString("set -ga terminal-features \",tmux-256color:extkeys\"\n")
 	b.WriteString("set -g mouse on\n")
 	b.WriteString("set -g history-limit 50000\n")
 	b.WriteString("set -g escape-time 10\n")
@@ -91,15 +91,24 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 
 	// Pasting
 	writeSection(&b, "Pasting")
-	b.WriteString("bind p paste-buffer\n")
+	b.WriteString("bind P paste-buffer\n")
 	b.WriteString("\n")
 
-	// Popup binding (prefix+d)
-	writeSection(&b, "Popup")
+	// Command Palette popup (prefix+p)
+	writeSection(&b, "Command Palette")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind d display-popup -w 80%% -h 80%% -E \"%s --dashboard\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind p display-popup -w 60%% -h 50%% -E \"%s --palette\"\n", zmuxBin)
 	} else {
-		b.WriteString("bind d display-popup -w 80% -h 80% -E \"zmux --dashboard\"\n")
+		b.WriteString("bind p display-popup -w 60% -h 50% -E \"zmux --palette\"\n")
+	}
+	b.WriteString("\n")
+
+	// Dashboard popup (prefix+Space — "double-tap" zmux)
+	writeSection(&b, "Dashboard")
+	if zmuxBin != "" {
+		fmt.Fprintf(&b, "bind Space display-popup -w 80%% -h 80%% -E \"%s --dashboard\"\n", zmuxBin)
+	} else {
+		b.WriteString("bind Space display-popup -w 80% -h 80% -E \"zmux --dashboard\"\n")
 	}
 	b.WriteString("\n")
 
@@ -110,12 +119,16 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	}
 	b.WriteString("\n")
 
-	// Reload
+	// Reload (prefix+r runs full zmux apply — regenerates conf + applies everything)
 	writeSection(&b, "Reload")
-	b.WriteString("bind r source-file ~/.tmux.conf \\; display \"Config reloaded\"\n")
+	if zmuxBin != "" {
+		fmt.Fprintf(&b, "bind r run-shell \"%s apply\" \\; display \"zmux reloaded\"\n", zmuxBin)
+	} else {
+		b.WriteString("bind r source-file ~/.tmux.conf \\; display \"Config reloaded\"\n")
+	}
 	b.WriteString("\n")
 
-	// Bootstrap: run-shell for zmux apply
+	// Bootstrap: apply theme + bar on tmux start
 	writeSection(&b, "Bootstrap")
 	if zmuxBin != "" {
 		fmt.Fprintf(&b, "run-shell \"%s apply\"\n", zmuxBin)

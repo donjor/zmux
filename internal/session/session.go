@@ -14,15 +14,29 @@ import (
 
 // SessionInfo provides enriched metadata about a tmux session.
 type SessionInfo struct {
-	Name     string
-	Windows  int
-	Attached bool
-	Activity time.Time
-	Dir      string
-	IsTmp    bool
+	Name         string
+	Windows      int
+	Attached     bool
+	Activity     time.Time
+	Created      time.Time
+	LastAttached time.Time
+	Dir          string
+	IsTmp        bool
 }
 
 var tmpPattern = regexp.MustCompile(`^tmp-(\d+)$`)
+
+// ValidateName checks if a session name is valid.
+// Names cannot start with a digit (reserved for index-based selection).
+func ValidateName(name string) error {
+	if name == "" {
+		return nil // empty is allowed (means auto tmp-N)
+	}
+	if len(name) > 0 && name[0] >= '0' && name[0] <= '9' {
+		return fmt.Errorf("session name cannot start with a number (reserved for quick-select)")
+	}
+	return nil
+}
 
 // IsTemp returns true if the session name matches the "tmp-N" pattern.
 func IsTemp(name string) bool {
@@ -60,12 +74,14 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 	infos := make([]SessionInfo, 0, len(raw))
 	for _, s := range raw {
 		infos = append(infos, SessionInfo{
-			Name:     s.Name,
-			Windows:  s.Windows,
-			Attached: s.Attached,
-			Activity: s.Activity,
-			Dir:      s.Dir,
-			IsTmp:    IsTemp(s.Name),
+			Name:         s.Name,
+			Windows:      s.Windows,
+			Attached:     s.Attached,
+			Activity:     s.Activity,
+			Created:      s.Created,
+			LastAttached: s.LastAttached,
+			Dir:          s.Dir,
+			IsTmp:        IsTemp(s.Name),
 		})
 	}
 

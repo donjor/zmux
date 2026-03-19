@@ -102,9 +102,10 @@ type WizardModel struct {
 	chosenSync   string
 
 	// Result
-	Cancelled bool
-	Done      bool
-	Error     error
+	Cancelled  bool
+	Done       bool
+	Error      error
+	Copied     bool // whether the user copied the restart command
 
 	// For rendering previews
 	resolver *theme.Resolver
@@ -232,6 +233,13 @@ func (m WizardModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case stepSuccess:
 		if key.Matches(msg, wizardKeys.Enter) || msg.String() == "q" {
 			return m, tea.Quit
+		}
+		if (msg.String() == "c" || msg.String() == "y") && !m.Copied {
+			cmd := restartCmd()
+			if err := copyToClipboard(cmd); err == nil {
+				m.Copied = true
+			}
+			return m, nil
 		}
 	}
 
@@ -743,15 +751,15 @@ func (m WizardModel) viewSuccess() string {
 
 	b.WriteString("  " + m.styles.Success.Render("Configuration written successfully!") + "\n\n")
 
-	b.WriteString(m.styles.Normal.Render("  Next steps:") + "\n\n")
-	b.WriteString(m.styles.Accent.Render("  1. ") + m.styles.Normal.Render("Source your tmux config:") + "\n")
-	b.WriteString(m.styles.Muted.Render("     tmux source-file ~/.tmux.conf") + "\n\n")
-	b.WriteString(m.styles.Accent.Render("  2. ") + m.styles.Normal.Render("Or restart tmux for changes to take effect.") + "\n\n")
-	b.WriteString(m.styles.Accent.Render("  3. ") + m.styles.Normal.Render("Launch zmux to manage sessions:") + "\n")
-	b.WriteString(m.styles.Muted.Render("     zmux") + "\n")
+	cmd := restartCmd()
+	b.WriteString(m.styles.Normal.Render("  Run this to apply:") + "\n\n")
+	b.WriteString("    " + m.styles.Accent.Render(cmd) + "\n\n")
 
-	b.WriteString("\n")
-	b.WriteString(m.styles.Muted.Render("  Press Enter or q to exit.") + "\n")
+	if m.Copied {
+		b.WriteString("  " + m.styles.Success.Render("Copied to clipboard!") + "\n")
+	} else {
+		b.WriteString(m.styles.Muted.Render("  c/y:copy  enter:exit") + "\n")
+	}
 
 	return b.String()
 }
@@ -771,14 +779,33 @@ func (m WizardModel) viewHelp() string {
 	return m.styles.Help.Render("  " + strings.Join(parts, "  "))
 }
 
-// ChosenTheme returns the user's theme choice.
-func (m WizardModel) ChosenTheme() string { return m.chosenTheme }
-
-// ChosenPreset returns the user's bar preset choice.
-func (m WizardModel) ChosenPreset() string { return m.chosenPreset }
-
-// ChosenSync returns the user's sync target choice.
-func (m WizardModel) ChosenSync() string { return m.chosenSync }
-
 // Step returns the current wizard step (for testing).
 func (m WizardModel) Step() wizardStep { return m.step }
+
+// RestartCmd returns the command the user should run after init.
+// Exported so the caller can echo it after the TUI exits.
+func RestartCmd() string { return restartCmd() }
+
+func restartCmd() string {
+	return "tmux source-file ~/.tmux.conf 2>/dev/null; exec $SHELL"
+}
+
+func copyToClipboard(text string) error {
+	tools := []string{"wl-copy", "xclip", "pbcopy"}
+	for _, tool := range tools {
+		path, err := exec.LookPath(tool)
+		if err != nil {
+			continue
+		}
+		var cmd *exec.Cmd
+		switch tool {
+		case "xclip":
+			cmd = exec.Command(path, "-selection", "clipboard")
+		default:
+			cmd = exec.Command(path)
+		}
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+	}
+	return fmt.Errorf("no clipboard tool found")
+}

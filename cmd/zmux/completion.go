@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 )
@@ -121,12 +120,3 @@ func bundledThemeNames() []string {
 	return names
 }
 
-// PresetNames returns all preset names for bar completions (exported for use by other packages).
-func AllPresetNames() []string {
-	presets := bar.AllPresets()
-	names := make([]string, len(presets))
-	for i, p := range presets {
-		names[i] = p.String()
-	}
-	return names
-}

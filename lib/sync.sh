@@ -112,6 +112,6 @@ _zmux_set_theme() {
 
     # Apply if inside tmux
     if [[ -n "$TMUX" ]]; then
-        "$ZMUX_ROOT/bin/zmux-apply-theme"
+        "$ZMUX_ROOT/bin/zmux0-apply-theme"
     fi
 }

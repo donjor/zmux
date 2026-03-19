@@ -1,7 +1,6 @@
 package session
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -224,12 +223,6 @@ func TestCreateFromTemplate(t *testing.T) {
 		t.Fatalf("CreateFromTemplate() error: %v", err)
 	}
 
-	// Verify calls: HasSession, NewSession, RenameWindow, SendKeys, NewWindow, NewWindow, SendKeys, SelectWindow
-	methods := make([]string, len(m.Calls))
-	for i, c := range m.Calls {
-		methods[i] = c.Method
-	}
-
 	// Should have called NewSession.
 	found := false
 	for _, c := range m.Calls {
@@ -274,6 +267,4 @@ func TestCreateFromTemplate(t *testing.T) {
 	if selectCount != 1 {
 		t.Errorf("expected 1 SelectWindow call, got %d", selectCount)
 	}
-
-	fmt.Printf("All calls: %v\n", methods)
 }

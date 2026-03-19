@@ -122,12 +122,11 @@ func TestGenerateDefaultPrefixHints(t *testing.T) {
 	if !strings.Contains(right.Value, "client_prefix") {
 		t.Error("default status-right should contain client_prefix conditional")
 	}
-	if !strings.Contains(right.Value, "rename") {
-		t.Error("default status-right should contain prefix hint text like 'rename'")
+	if !strings.Contains(right.Value, "dash") {
+		t.Error("default status-right should contain prefix hint for dashboard")
 	}
-	// "switch" is split across tmux format: key "s" highlighted, then "witch" in dim
-	if !strings.Contains(right.Value, "witch") {
-		t.Error("default status-right should contain prefix hint for switch (s + witch)")
+	if !strings.Contains(right.Value, "etach") {
+		t.Error("default status-right should contain prefix hint for detach")
 	}
 }
 

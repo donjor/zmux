@@ -91,12 +91,7 @@ func NewThemePickerModel(resolver *theme.Resolver, styles Styles) ThemePickerMod
 	return m
 }
 
-// themesLoadedMsg signals that themes have been loaded.
-type themesLoadedMsg struct {
-	themes []theme.ThemeInfo
-}
-
-// Init loads themes.
+// Init is a no-op since themes are loaded in the constructor.
 func (m ThemePickerModel) Init() tea.Cmd {
 	return nil
 }

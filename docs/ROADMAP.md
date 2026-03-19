@@ -26,55 +26,79 @@
 ## v1.0 — Go rewrite (feature parity + polish)
 
 ### Foundation
-- [ ] Go module setup (bubbletea + lipgloss + cobra)
-- [ ] Standard project layout (`cmd/zmux`, `internal/*`)
-- [ ] TOML config loading + validation
-- [ ] Config defaults and `~/.zmux.toml` creation
-- [ ] tmux command interface (wrapper for tmux CLI)
-- [ ] tmux.conf generation from config
+- [x] Go module setup (bubbletea + lipgloss + cobra)
+- [x] Standard project layout (`cmd/zmux`, `internal/*`)
+- [x] TOML config loading + validation
+- [x] Config defaults and `~/.zmux.toml` creation
+- [x] tmux command interface (wrapper for tmux CLI)
+- [x] tmux.conf generation from config
+- [x] Opt-in debug logging (ZMUX_DEBUG=1)
 
 ### Theming
-- [ ] Theme file parser (iterm2-color-schemes format)
-- [ ] Semantic palette mapping (ANSI → role structs)
-- [ ] Theme resolution (user > bundled > iterm2)
-- [ ] Bundled themes embedded in binary
-- [ ] iterm2 theme download
-- [ ] Theme picker TUI — swatches + metadata (dark/light, role labels)
-- [ ] `zmux theme set/list/sync/pull` commands
+- [x] Theme file parser (iterm2-color-schemes format)
+- [x] Semantic palette mapping (ANSI → role structs)
+- [x] Theme resolution (user > bundled > iterm2)
+- [x] Bundled themes embedded in binary
+- [x] iterm2 theme download
+- [x] Theme picker TUI — swatches + metadata (dark/light, role labels)
+- [x] `zmux theme set/list/sync/pull` commands
 
 ### Status Bar
-- [ ] 4 presets (default, minimal, powerline, blocks)
-- [ ] Dynamic prefix-active state
-- [ ] Active/inactive window styling
-- [ ] Preset picker with previews
+- [x] 4 presets (default, minimal, powerline, blocks)
+- [x] Dynamic prefix-active state
+- [x] Active/inactive window styling
+- [x] Preset picker with previews
 
 ### Session Management
-- [ ] Session picker (outside tmux) — fuzzy search, create, attach
-- [ ] Tmp session model + auto-cleanup
-- [ ] Declarative TOML templates
-- [ ] Template discovery (user + bundled)
-- [ ] New session from template flow
+- [x] Session picker (outside tmux) — fuzzy search, create, attach
+- [x] Tmp session model + auto-cleanup
+- [x] Declarative TOML templates
+- [x] Template discovery (user + bundled)
+- [x] New session from template flow
+- [x] `zmux ls` — list sessions
+- [x] `zmux tabs` — list tabs in a session
+- [x] Attach modes: mirror (auto-grouped), hijack
 
 ### Dashboard (inside tmux)
-- [ ] tmux popup overlay activation via keybind
-- [ ] Command palette mode — fuzzy action search, quick switch
-- [ ] Full dashboard mode — session list, context, actions
-- [ ] Toggle between palette and dashboard
-- [ ] Theme browser (swatches view)
-- [ ] Session management actions (rename, kill, move tab)
+- [x] tmux popup overlay activation via keybind (prefix+Space)
+- [x] Tabbed dashboard: This Session, Sessions, Settings, Help
+- [x] Session list with local + external source groups
+- [x] Settings tab — theme picker with swatches, bar preset selection
+- [x] Help tab — keybindings reference
+
+### Command Palette
+- [x] Command palette popup (prefix+p)
+- [x] Registry + provider architecture
+- [x] Fuzzy search across all actions
+- [x] Post-action execution (close, open dashboard tab, error)
+
+### Terminal Commands
+- [x] `zmux run` — run command in named window, wait/detach/follow
+- [x] `zmux watch` — capture output, follow, wait for pattern
+- [x] `zmux send` — send keystrokes to window
+- [x] `zmux type` — type text + Enter
+
+### Source Discovery
+- [x] Multi-socket scanning (tmux socket directory)
+- [x] Process correlation (ps-based)
+- [x] Overmind provider — detect processes, extract metadata
+- [x] Live socket probing with timeout
+- [x] Catalog model (local + external groups)
 
 ### Theme Sync
-- [ ] SyncTarget interface
-- [ ] Ghostty sync target
-- [ ] Neovim sync target
-- [ ] `zmux theme sync` / `zmux theme pull <target>`
+- [x] SyncTarget interface
+- [x] Ghostty sync target
+- [x] Neovim sync target
+- [x] `zmux theme sync` / `zmux theme pull <target>`
 
 ### Polish
-- [ ] TUI init wizard (replaces gum-based wizard)
-- [ ] Shell completions (bash, zsh, fish via cobra)
-- [ ] `zmux status` / `zmux help` / `zmux version`
-- [ ] Clipboard detection + integration
-- [ ] Error handling and user-friendly messages
+- [x] TUI init wizard (replaces gum-based wizard)
+- [x] Shell completions (bash, zsh, fish via cobra)
+- [x] `zmux status` / `zmux help` / `zmux version`
+- [x] `zmux apply` — regenerate + apply config
+- [x] Clipboard detection + integration
+- [x] Error handling and user-friendly messages
+- [x] Claude Code skill (auto-installed by dev.sh/install.sh)
 
 ## v1.x — near-term features
 
@@ -84,9 +108,14 @@
 - [ ] Layout-only — no command re-execution
 
 ### Workspaces
-- [ ] Workspace concept — group related sessions
+- [x] Auto-grouped sessions — attaching to an attached session creates an
+      independent viewport (shared windows, separate focus)
+- [ ] Workspace concept — tag sessions to a named project/workspace
+- [ ] `zmux new -w <workspace> [name]` — create session in a workspace
+- [ ] Picker groups sessions by workspace
 - [ ] Switch entire workspace at once
 - [ ] Workspace-aware dashboard
+- [ ] Compose: workspace members can have grouped sessions (multi-monitor)
 
 ### SSH Remote Support
 - [ ] `zmux ssh <host>` — connect and auto-attach remote tmux session
@@ -108,6 +137,11 @@
 - [ ] File watcher mode (opt-in)
 - [ ] Additional sync targets (alacritty, kitty, wezterm)
 - [ ] Bidirectional sync (opt-in)
+
+### Picker UX Configuration
+- [ ] Optional vim-style navigation mode (j/k + / to search, i/a for insert)
+- [ ] Configurable search behavior: always-on (current) vs explicit / trigger
+- [ ] Configurable via `[picker]` section in .zmux.toml
 
 ### Distribution
 - [ ] GitHub releases with goreleaser

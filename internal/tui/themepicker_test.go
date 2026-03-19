@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -27,16 +26,6 @@ func (noopFS) MkdirAll(path string, perm os.FileMode) error          { return ni
 func (noopFS) Stat(path string) (os.FileInfo, error)                  { return nil, os.ErrNotExist }
 func (noopFS) UserHomeDir() (string, error)                           { return "/tmp", nil }
 func (noopFS) Glob(pattern string) ([]string, error)                  { return nil, nil }
-
-// fakeThemeFileInfo satisfies os.FileInfo.
-type fakeThemeFileInfo struct{ name string }
-
-func (f fakeThemeFileInfo) Name() string        { return f.name }
-func (f fakeThemeFileInfo) Size() int64         { return 0 }
-func (f fakeThemeFileInfo) Mode() os.FileMode   { return 0o644 }
-func (f fakeThemeFileInfo) ModTime() time.Time  { return time.Time{} }
-func (f fakeThemeFileInfo) IsDir() bool         { return false }
-func (f fakeThemeFileInfo) Sys() any            { return nil }
 
 func newTestThemePicker() ThemePickerModel {
 	resolver := newTestThemeResolver()

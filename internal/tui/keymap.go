@@ -14,6 +14,8 @@ type keymap struct {
 	Delete   key.Binding
 	Rename   key.Binding
 	Cleanup  key.Binding
+	MoveTab  key.Binding
+	Preview  key.Binding
 }
 
 // Keys defines the default keybindings for TUI components.
@@ -61,5 +63,13 @@ var Keys = keymap{
 	Cleanup: key.NewBinding(
 		key.WithKeys("c"),
 		key.WithHelp("c", "cleanup tmp"),
+	),
+	MoveTab: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "move tab"),
+	),
+	Preview: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "preview"),
 	),
 }

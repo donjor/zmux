@@ -9,8 +9,10 @@ type Runner interface {
 	ListSessions() ([]Session, error)
 	HasSession(name string) bool
 	NewSession(name, dir string) error
+	NewGroupedSession(target, name string) error
 	KillSession(name string) error
 	AttachSession(name string) error
+	AttachSessionDetach(name string) error
 	SwitchClient(target string) error
 	RenameSession(old, new string) error
 
@@ -21,6 +23,11 @@ type Runner interface {
 	RenameWindow(session, old, new string) error
 	SelectWindow(session string, index int) error
 	MoveWindow(srcSession, dstSession string) error
+	SwapWindow(session string, idx1, idx2 int) error
+
+	// Panes
+	ListPanes(session string) ([]Pane, error)
+	SplitWindow(target, direction string) error
 
 	// I/O
 	SendKeys(target string, keys ...string) error

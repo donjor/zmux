@@ -2,25 +2,26 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/donjor/zmux/internal/bar"
+	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
+	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
 var applyCmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply theme and bar preset to the running tmux session",
-	Long: `Non-interactive command that reads the zmux config, resolves the theme
-and bar preset, and applies all tmux options. Intended for use in
-tmux.conf via run-shell:
+	Short: "Regenerate tmux.conf and apply theme + bar to running tmux",
+	Long: `Reads ~/.zmux.toml, regenerates ~/.tmux.conf, and applies all theme
+and bar options to the running tmux server.
 
-  run-shell "zmux apply"`,
+Used by:
+  - prefix+r (reload keybind)
+  - After changing theme/bar/config manually
+  - run-shell in tmux.conf (bootstrap — skips source to avoid loop)`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !app.Runner.ServerRunning() {
-			return fmt.Errorf("tmux server is not running")
-		}
-
 		cfg, err := loadConfig(app.FS)
 		if err != nil {
 			return fmt.Errorf("load config: %w", err)
@@ -31,26 +32,45 @@ tmux.conf via run-shell:
 			return fmt.Errorf("load palette: %w", err)
 		}
 
-		// Apply theme environment variables to tmux.
-		resolver := theme.NewResolver(app.FS, "~/.zmux/themes", "~/.zmux/themes/iterm2")
-		t, err := resolver.Resolve(cfg.Theme)
+		zmuxBin, err := os.Executable()
 		if err != nil {
-			// Fall back to applying bar only if theme resolution fails.
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not resolve theme %q: %v\n", cfg.Theme, err)
-		} else {
-			if err := theme.Apply(app.Runner, app.FS, &cfg, t, "~/.zmux.toml"); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not apply theme env vars: %v\n", err)
+			zmuxBin = "zmux"
+		}
+
+		// Step 1: Regenerate tmux.conf.
+		confContent := tmux.GenerateConf(&cfg, palette, zmuxBin)
+		confPath, _ := config.ExpandHome(app.FS, "~/.tmux.conf")
+		if confPath == "" {
+			confPath = "~/.tmux.conf"
+		}
+		if err := tmux.WriteConf(app.FS, confPath, confContent); err != nil {
+			return fmt.Errorf("write tmux.conf: %w", err)
+		}
+
+		if !app.Runner.ServerRunning() {
+			return nil
+		}
+
+		// Step 2: Apply theme env vars.
+		resolver, err := newResolver(app.FS)
+		if err == nil {
+			t, resolveErr := resolver.Resolve(cfg.Theme)
+			if resolveErr == nil {
+				cfgPath, _ := config.ConfigPath(app.FS)
+				_ = theme.Apply(app.Runner, app.FS, &cfg, t, cfgPath)
 			}
 		}
 
-		// Apply bar preset.
-		preset, err := bar.PresetFromString(cfg.Bar.Preset)
-		if err != nil {
-			return fmt.Errorf("parse preset: %w", err)
-		}
+		// Step 3: Apply bar preset (live set-option calls).
+		preset, _ := bar.PresetFromString(cfg.Bar.Preset)
+		_ = bar.Apply(app.Runner, preset, palette)
 
-		if err := bar.Apply(app.Runner, preset, palette); err != nil {
-			return fmt.Errorf("apply bar: %w", err)
+		// Step 4: Source conf ONLY when called interactively (prefix+r).
+		// The bootstrap run-shell in tmux.conf must NOT re-source, or it loops.
+		// We detect this: if TMUX_PANE is not set, we're in run-shell context.
+		if os.Getenv("TMUX_PANE") != "" {
+			// Interactive — source to pick up keybind/setting changes.
+			_ = app.Runner.SourceFile(confPath)
 		}
 
 		return nil

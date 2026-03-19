@@ -81,8 +81,6 @@ func newResolver(fs config.FS) (*theme.Resolver, error) {
 }
 
 func runThemePicker() error {
-
-
 	resolver, err := newResolver(app.FS)
 	if err != nil {
 		return err
@@ -106,8 +104,6 @@ func runThemePicker() error {
 }
 
 func setTheme(name string) error {
-
-
 	resolver, err := newResolver(app.FS)
 	if err != nil {
 		return err
@@ -159,8 +155,6 @@ func setTheme(name string) error {
 }
 
 func listThemes() error {
-
-
 	resolver, err := newResolver(app.FS)
 	if err != nil {
 		return err
@@ -191,8 +185,6 @@ func listThemes() error {
 }
 
 func syncTheme(targetName string) error {
-
-
 	cfg, err := loadConfig(app.FS)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)

@@ -14,7 +14,7 @@ func TestGenerateConfContainsGeneral(t *testing.T) {
 	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
 
 	checks := []string{
-		`set -g default-terminal "xterm-256color"`,
+		`set -g default-terminal "tmux-256color"`,
 		`set -g mouse on`,
 		`set -g history-limit 50000`,
 		`set -g escape-time 10`,
@@ -138,8 +138,8 @@ func TestGenerateConfContainsPopupBinding(t *testing.T) {
 	palette := testPalette()
 	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
 
-	if !strings.Contains(conf, "bind d display-popup") {
-		t.Error("conf missing popup binding (prefix+d)")
+	if !strings.Contains(conf, "bind Space display-popup") {
+		t.Error("conf missing dashboard popup binding (prefix+Space)")
 	}
 }
 
@@ -182,8 +182,21 @@ func TestGenerateConfContainsPasteBuffer(t *testing.T) {
 	palette := testPalette()
 	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
 
-	if !strings.Contains(conf, "bind p paste-buffer") {
-		t.Error("conf missing paste-buffer binding")
+	if !strings.Contains(conf, "bind P paste-buffer") {
+		t.Error("conf missing paste-buffer binding (prefix+P)")
+	}
+}
+
+func TestGenerateConfContainsPaletteBinding(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	if !strings.Contains(conf, "bind p display-popup") {
+		t.Error("conf missing command palette popup binding (prefix+p)")
+	}
+	if !strings.Contains(conf, "--palette") {
+		t.Error("conf missing --palette flag in palette popup binding")
 	}
 }
 
@@ -192,7 +205,7 @@ func TestGenerateConfContainsReload(t *testing.T) {
 	palette := testPalette()
 	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
 
-	if !strings.Contains(conf, "bind r source-file") {
+	if !strings.Contains(conf, "bind r run-shell") {
 		t.Error("conf missing reload binding")
 	}
 }

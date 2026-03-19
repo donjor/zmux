@@ -2,6 +2,7 @@ package session
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/donjor/zmux/internal/tmux"
 )
@@ -76,12 +77,73 @@ func CreateFromTemplate(runner tmux.Runner, tmpl Template, name, dir string) err
 }
 
 // Attach connects to the named session. If already inside tmux, uses
-// SwitchClient; otherwise uses AttachSession.
+// SwitchClient. If outside tmux and the session is already attached
+// elsewhere, creates a grouped session (shared windows, independent viewport)
+// named <session>-b, -c, -d, etc. Cleaned up automatically on detach.
 func Attach(runner tmux.Runner, name string) error {
 	if runner.IsInsideTmux() {
 		return runner.SwitchClient(name)
 	}
+
+	// Check if session is already attached.
+	sessions, err := runner.ListSessions()
+	if err == nil {
+		for _, s := range sessions {
+			if s.Name == name && s.Attached {
+				groupName := nextGroupName(runner, name)
+				if err := runner.NewGroupedSession(name, groupName); err != nil {
+					// Fallback to regular attach (mirrored).
+					return runner.AttachSession(name)
+				}
+				err := runner.AttachSession(groupName)
+				// Clean up grouped session after detach.
+				_ = runner.KillSession(groupName)
+				return err
+			}
+		}
+	}
+
 	return runner.AttachSession(name)
+}
+
+// AttachMirror attaches to a session with a literal shared view — both clients
+// see the exact same terminal. Useful for agent/user shared terminals where
+// both need to see output and can type.
+func AttachMirror(runner tmux.Runner, name string) error {
+	if runner.IsInsideTmux() {
+		return runner.SwitchClient(name)
+	}
+	// Plain tmux attach (no -d, no grouped session) = mirror mode.
+	return runner.AttachSession(name)
+}
+
+// AttachHijack forcefully attaches to a session, detaching any existing clients.
+// Use when you want to steal a session (e.g., dead SSH connection left it attached).
+func AttachHijack(runner tmux.Runner, name string) error {
+	if runner.IsInsideTmux() {
+		return runner.SwitchClient(name)
+	}
+	// tmux attach -d detaches other clients.
+	return runner.AttachSessionDetach(name)
+}
+
+// nextGroupName finds the next available grouped session suffix: name-b, name-c, etc.
+func nextGroupName(runner tmux.Runner, base string) string {
+	sessions, err := runner.ListSessions()
+	taken := map[string]bool{}
+	if err == nil {
+		for _, s := range sessions {
+			taken[s.Name] = true
+		}
+	}
+	for c := 'b'; c <= 'z'; c++ {
+		candidate := fmt.Sprintf("%s-%c", base, c)
+		if !taken[candidate] {
+			return candidate
+		}
+	}
+	// Fallback if somehow a-z are all taken.
+	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano()%10000)
 }
 
 // Switch switches the current tmux client to the named session.

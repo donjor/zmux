@@ -33,7 +33,9 @@ func init() {
 }
 
 func runInitWizard() error {
-
+	if app.Runner.IsInsideTmux() {
+		return fmt.Errorf("zmux init should be run outside of tmux — exit your session first")
+	}
 
 	// Warn if config already exists.
 	if config.ConfigExists(app.FS) {
@@ -67,6 +69,13 @@ func runInitWizard() error {
 
 	if wizard.Error != nil {
 		return wizard.Error
+	}
+
+	// After TUI exits, echo the restart command so user can copy/paste.
+	if wizard.Done && !wizard.Copied {
+		fmt.Println()
+		fmt.Printf("  Run this to apply:\n\n")
+		fmt.Printf("    %s\n\n", tui.RestartCmd())
 	}
 
 	return nil

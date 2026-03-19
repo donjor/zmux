@@ -26,7 +26,6 @@ func init() {
 }
 
 func runStatus() error {
-
 	styles := tui.DefaultStyles()
 
 	cfg, err := loadConfig(app.FS)

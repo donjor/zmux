@@ -9,7 +9,9 @@ zmux handles:
 - **Session management** — interactive picker, fuzzy search, templates
 - **tmux configuration** — opinionated defaults, keybinds, vim copy mode
 - **Theming** — 300+ themes, status bar presets, theme sync across tools
-- **Quality of life** — help system, prefix hints, session dashboard
+- **Terminal commands** — run, watch, send, type for scripting and agent workflows
+- **Source discovery** — multi-socket scanning, overmind integration
+- **Quality of life** — help system, prefix hints, session dashboard, command palette
 
 ## Who is it for?
 
@@ -19,17 +21,17 @@ who wants a polished experience without deep tmux knowledge.
 
 ## Versioning
 
-### v0 — bash + gum prototype (complete)
+### v0 — bash + gum prototype (complete, archived as `zmux0`)
 - Bash scripts + charmbracelet/gum for UI
 - Proved out the UX, feature set, and config format
-- Ships as a working tool, not just a prototype
+- Still available as `bin/zmux0` and `zmux0` command
 
-### v1 — Go rewrite (active)
+### v1 — Go rewrite (current)
 - Clean-room rewrite in Go (bubbletea + lipgloss + cobra)
 - Single binary, no gum/bash dependency
-- TDD from the start
-- Clean break from v0 — no migration tooling
+- TDD from the start — 191 tests
 - TOML config with proper sections
+- Installed as `zmux` (the primary command)
 
 ## Architecture (v1)
 
@@ -41,17 +43,38 @@ cmd/
 internal/
 ├── config/                     TOML config loading, defaults, validation
 ├── theme/                      theme parsing, resolution, semantic palette
-├── tui/                        bubbletea models (picker, dashboard, palette)
-├── session/                    session lifecycle, templates, tmp cleanup
+├── tmux/                       tmux command interface, conf generation
 ├── bar/                        status bar presets, tmux status-line generation
+├── session/                    session lifecycle, templates, tmp cleanup
 ├── sync/                       theme sync targets (ghostty, nvim)
-└── tmux/                       tmux command interface, conf generation
-
-themes/
-├── bundled/                    curated dark themes (shipped with binary)
-└── iterm2/                     full iterm2-color-schemes set (downloaded)
-
-templates/                      bundled TOML session templates
+├── source/                     external source discovery (sockets, overmind)
+├── debug/                      opt-in debug logging (ZMUX_DEBUG=1)
+└── tui/
+    ├── picker.go, styles.go    session picker TUI, shared styles
+    ├── dashboard/              tabbed dashboard app (DashboardApp)
+    │   ├── app.go              tab switching, chrome, layout
+    │   └── tabs/               tab implementations
+    │       ├── current.go      This Session — windows, actions
+    │       ├── sessions.go     Sessions — list, switch, create, external sources
+    │       ├── settings.go     Settings — theme picker, bar presets
+    │       └── help.go         Help — keybindings reference
+    ├── palette/                command palette (spotlight-style overlay)
+    │   ├── model.go            bubbletea model, fuzzy search
+    │   ├── registry.go         action registry
+    │   ├── providers.go        action providers (sessions, themes, etc.)
+    │   ├── action.go           action types
+    │   └── executor.go         post-selection execution
+    └── views/                  shared view components
+        ├── sessionrow.go       session list row rendering
+        ├── windowrow.go        window list row rendering
+        ├── tabbar.go           tab bar widget
+        ├── swatch.go           color swatch rendering
+        ├── header.go           section headers
+        ├── actions.go          action menu rendering
+        ├── sessionlist.go      session list widget
+        ├── confirm.go          confirmation dialog
+        ├── depcheck.go         dependency check display
+        └── input.go            text input widget
 ```
 
 User paths:
@@ -61,14 +84,62 @@ User paths:
 ~/.zmux/templates/              user custom templates
 ```
 
+### Dashboard tab system
+
+The dashboard is a tabbed bubbletea application rendered as a tmux popup
+(prefix+Space). The architecture follows a container/tab pattern:
+
+- **DashboardApp** — root model that owns the tab bar, handles global keys
+  (tab switching, quit), and delegates to the active tab.
+- **Tab interface** — each tab implements `Init`, `Update`, `View`, plus
+  metadata methods (`ID`, `Title`, `ShortHelp`).
+- **Tabs:**
+  - **CurrentTab** — windows in the current session, quick actions
+  - **SessionsTab** — all local + external sessions, switch/create/kill,
+    overmind process management
+  - **SettingsTab** — theme picker with swatches, bar preset selection
+  - **HelpTab** — keybindings and command reference
+
+Shared view components in `internal/tui/views/` (SessionRow, WindowRow,
+TabBar, etc.) are used by multiple tabs for consistent rendering.
+
+### Command palette
+
+The command palette (prefix+p) is a separate bubbletea model that provides
+spotlight-style fuzzy search across all available actions:
+
+- **Registry** collects actions from multiple **providers** (session actions,
+  theme actions, navigation actions).
+- **PaletteModel** renders the filtered list and handles selection.
+- **Executor** runs the chosen action and returns a **PostAction** that may
+  close the palette, open the dashboard to a specific tab, or show an error.
+
+### Source discovery
+
+The `internal/source/` package discovers tmux sessions beyond the default server:
+
+- **Socket scanning** — reads the tmux socket directory (`/tmp/tmux-<uid>/`)
+  for non-default sockets.
+- **Process correlation** — single `ps` call to build a process table, then
+  matches sockets to known owners (overmind, etc.).
+- **Overmind provider** — detects `overmind start` processes, extracts control
+  socket and Procfile paths, correlates to tmux sockets.
+- **Live probing** — each candidate socket is probed with a timeout to verify
+  liveness and collect session lists.
+- **Catalog model** — `Catalog` groups sessions into `Local` (default server)
+  and `External` (`SourceGroup` entries, each with a `Source` and its sessions).
+
+The picker and dashboard SessionsTab both consume the catalog to show local
+and external sessions in grouped sections.
+
 ## Design Decisions
 
 ### Hybrid dashboard
-Inside tmux, zmux operates in two modes:
-- **Command palette** — fast, spotlight-style overlay for quick actions
+Inside tmux, zmux provides two complementary interfaces:
+- **Command palette** (prefix+p) — fast, spotlight-style overlay for quick actions
   (switch session, new from template, theme switch)
-- **Full dashboard** — deeper management view with session list, context,
-  and action menu
+- **Full dashboard** (prefix+Space) — deeper management view with tabbed layout,
+  session list, settings, and help
 
 Both render as tmux popup overlays, activated via keybind (not a pane).
 
@@ -105,6 +176,14 @@ Let the content speak. No unnecessary decoration. Elegant typography.
 v1 builds directly against tmux. No multiplexer abstraction layer.
 Architecture stays clean enough that abstracting later (zellij, etc.)
 is feasible without a rewrite.
+
+### Attach modes
+The `zmux attach` command supports three modes:
+- **Default** — standard tmux attach (shared session, shared focus)
+- **`--mirror`** — auto-grouped session (shared windows, independent focus).
+  Useful for agent+user working on the same session without fighting over
+  the active window.
+- **`--hijack`** — steals the session from the existing client.
 
 ## Configuration — .zmux.toml
 
@@ -232,18 +311,38 @@ means implementing one interface.
 - Unattached tmp sessions are cleaned up on next zmux start
 
 ### Dashboard (inside tmux)
-Activated via tmux popup keybind. Two modes:
+Activated via prefix+Space as a tmux popup. Four tabs:
 
-**Command palette** (default):
-- Quick fuzzy search across actions
-- Switch session, new session, theme switch, etc.
-- Keyboard-driven, gets out of the way fast
+- **This Session** — windows in the current session, quick actions
+- **Sessions** — all local + external sessions, switch/create/kill
+- **Settings** — theme picker with swatches, bar preset selection
+- **Help** — keybindings and command reference
 
-**Full dashboard** (toggle):
-- Session list with status indicators
-- Current session context (name, dir, windows)
-- Action menu with hotkey hints
-- Theme browser with swatches
+### Command palette (inside tmux)
+Activated via prefix+p as a tmux popup. Spotlight-style fuzzy search
+across all available actions — switch session, new from template,
+change theme, open dashboard tabs.
+
+## Terminal Commands
+
+zmux provides commands for running processes in named tmux windows and
+interacting with them programmatically:
+
+```
+zmux run '<cmd>' -n <tab>      Run command in a named window, wait for exit
+zmux run '<cmd>' -n <tab> -d   Run detached (don't wait — for servers)
+zmux run '<cmd>' -n <tab> -f   Run and follow output
+zmux watch <tab>               Capture current output from a window
+zmux watch <tab> --until <pat> Wait until output matches a pattern
+zmux watch <tab> -f            Follow output continuously
+zmux send <tab> <keys>         Send raw keystrokes (e.g., C-c)
+zmux type <tab> '<text>'       Type text followed by Enter
+```
+
+These are designed for agent workflows (Claude Code, scripts) where
+processes need to run in managed windows without blocking the caller.
+The `run` command creates or reuses a window by name, so repeated calls
+target the same window.
 
 ## Keybinds
 
@@ -251,6 +350,10 @@ Activated via tmux popup keybind. Two modes:
 
 | Key | Action |
 |-----|--------|
+| Space | zmux dashboard (popup) |
+| p | command palette (popup) |
+| d | detach |
+| ? | help popup |
 | , | rename session |
 | . | rename tab |
 | s | switch session |
@@ -258,10 +361,8 @@ Activated via tmux popup keybind. Two modes:
 | c | new tab |
 | n | next tab |
 | v | copy mode (vim) |
-| p | paste buffer |
-| r | reload config |
-| ? | help popup |
-| d | zmux dashboard (popup) |
+| P | paste buffer |
+| r | reload config (zmux apply) |
 | Alt+1-5 | jump to tab (no prefix) |
 
 ### Copy mode (vim)
@@ -276,18 +377,42 @@ Activated via tmux popup keybind. Two modes:
 ## CLI Interface
 
 ```
-zmux                        — session picker (outside tmux) / dashboard (inside)
-zmux theme                  — browse + switch themes (fuzzy picker)
-zmux theme set <name>       — set theme directly
-zmux theme list             — list available themes
-zmux theme sync             — pull theme from default sync target
-zmux theme pull <target>    — pull theme from specific target (ghostty, nvim)
-zmux bar                    — pick status bar preset
-zmux bar <preset>           — set preset directly
-zmux init                   — first-time setup wizard (TUI)
-zmux status                 — show current config summary
-zmux help                   — help text
-zmux version                — version info
+zmux                            — session picker (outside tmux) / dashboard (inside)
+zmux <name>                     — attach or create session (shorthand)
+
+zmux new [name]                 — create session + attach (alias: n)
+zmux new -t <tmpl> [name]       — create from template
+zmux attach <name>              — attach to existing session (alias: a)
+zmux attach --mirror <name>     — shared view, independent focus
+zmux attach --hijack <name>     — steal session
+zmux kill <name>                — kill session (alias: k)
+zmux ls                         — list sessions
+zmux tabs [session]             — list tabs (alias: t)
+
+zmux run '<cmd>' -n <tab>       — run in named window, wait for exit
+zmux run '<cmd>' -n <tab> -d    — run detached (servers)
+zmux run '<cmd>' -n <tab> -f    — run + follow output
+zmux watch <tab>                — capture tab output
+zmux watch <tab> --until <pat>  — wait for pattern
+zmux watch <tab> -f             — follow output
+zmux send <tab> <keys>          — send keystrokes
+zmux type <tab> '<text>'        — type text + Enter
+
+zmux theme                      — browse + switch themes (fuzzy picker)
+zmux theme set <name>           — set theme directly
+zmux theme list                 — list available themes
+zmux theme sync                 — pull theme from default sync target
+zmux theme pull <target>        — pull theme from specific target (ghostty, nvim)
+
+zmux bar                        — list bar presets with previews
+zmux bar <preset>               — set preset directly
+
+zmux init                       — setup wizard (run outside tmux)
+zmux apply                      — apply theme + bar to running tmux
+zmux status                     — show current config summary
+zmux help                       — styled help with keybindings
+zmux version                    — version info
+zmux completion <shell>         — generate completions (bash/zsh/fish)
 ```
 
 ## Dependencies
