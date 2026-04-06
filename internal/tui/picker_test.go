@@ -38,6 +38,7 @@ func newTestPicker() (PickerModel, *tmux.MockRunner) {
 	sessions, _ := session.ListSessions(m)
 	model.sessions = sessions
 	model.filtered = sessions
+	model.buildItems()
 
 	wins := make(map[string][]tmux.Window)
 	for _, s := range sessions {
@@ -55,6 +56,7 @@ func newEmptyPicker() PickerModel {
 	model := NewPickerModel(m, styles)
 	model.sessions = nil
 	model.filtered = nil
+	model.buildItems()
 	return model
 }
 
@@ -261,21 +263,21 @@ func TestPickerEscEmptyQuits(t *testing.T) {
 
 // ── Delete ──
 
-func TestPickerCtrlDOnSessionEntersDeleteMode(t *testing.T) {
+func TestPickerCtrlXOnSessionEntersDeleteMode(t *testing.T) {
 	model, _ := newTestPicker()
 	model.cursor = 1 // On a session, not "+ new".
 
-	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	m := result.(PickerModel)
 	if m.mode != modeConfirmDelete {
 		t.Error("expected confirm delete mode")
 	}
 }
 
-func TestPickerCtrlDOnNewDoesNothing(t *testing.T) {
+func TestPickerCtrlXOnNewDoesNothing(t *testing.T) {
 	model, _ := newTestPicker()
 	// cursor at 0 (+ new session).
-	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	m := result.(PickerModel)
 	if m.mode == modeConfirmDelete {
 		t.Error("should not enter delete mode on + new entry")
@@ -360,5 +362,209 @@ func TestPickerFuzzyPartial(t *testing.T) {
 	model.applyFilter()
 	if len(model.filtered) != 1 {
 		t.Errorf("expected 1 filtered result for 'al', got %d", len(model.filtered))
+	}
+}
+
+func TestPickerFilterMovesToMatch(t *testing.T) {
+	model, _ := newTestPicker()
+	model.input.SetValue("dev")
+	model.applyFilter()
+	// Cursor should move off "+ create" to the matching session.
+	if model.cursor != 1 {
+		t.Errorf("expected cursor 1 (matching session), got %d", model.cursor)
+	}
+}
+
+func TestPickerFilterClearedResetsToCreate(t *testing.T) {
+	model, _ := newTestPicker()
+	model.input.SetValue("dev")
+	model.applyFilter()
+	if model.cursor != 1 {
+		t.Fatalf("setup: expected cursor 1, got %d", model.cursor)
+	}
+	// Clear search — cursor should reset to 0 (+ new session).
+	model.input.SetValue("")
+	model.applyFilter()
+	if model.cursor != 0 {
+		t.Errorf("expected cursor 0 after clearing search, got %d", model.cursor)
+	}
+}
+
+func TestPickerArrowNavNoResetOnEmptyQuery(t *testing.T) {
+	model, _ := newTestPicker()
+	// Navigate down with no search text.
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m := result.(PickerModel)
+	if m.cursor != 1 {
+		t.Fatalf("setup: expected cursor 1, got %d", m.cursor)
+	}
+	// applyFilter runs on text input updates but cursor should stay put
+	// because query hasn't changed (still empty).
+	m.applyFilter()
+	if m.cursor != 1 {
+		t.Errorf("expected cursor 1 (unchanged), got %d", m.cursor)
+	}
+}
+
+func TestPickerFilterNoMatchStaysOnCreate(t *testing.T) {
+	model, _ := newTestPicker()
+	model.input.SetValue("nonexistent")
+	model.applyFilter()
+	// No matches — cursor stays at 0 (create).
+	if model.cursor != 0 {
+		t.Errorf("expected cursor 0 (create), got %d", model.cursor)
+	}
+}
+
+func TestPickerFilterMatchLandsOnWorkspaceHeader(t *testing.T) {
+	model := newTestPickerWithWorkspaces()
+	model.input.SetValue("dev")
+	model.applyFilter()
+	// With workspaces, items[0] is workspace header "bridge" (selectable), items[1] is "dev".
+	// Cursor should land on workspace header at 1 (it's selectable now).
+	if model.cursor != 1 {
+		t.Errorf("expected cursor 1 (workspace header, selectable), got %d", model.cursor)
+	}
+}
+
+// ── Workspace grouping ──
+
+func newTestPickerWithWorkspaces() PickerModel {
+	m := tmux.NewMockRunner()
+	now := time.Now()
+	m.Sessions = []tmux.Session{
+		{Name: "dev", Windows: 3, Attached: true, Activity: now, Created: now.Add(-2 * time.Hour), Dir: "/home/user/bridge"},
+		{Name: "monitor", Windows: 1, Attached: false, Activity: now, Created: now.Add(-1 * time.Hour), Dir: "/home/user/bridge"},
+		{Name: "zmux", Windows: 2, Attached: false, Activity: now, Created: now.Add(-3 * time.Hour), Dir: "/home/user/zmux"},
+		{Name: "tmp-1", Windows: 1, Attached: false, Activity: now, Created: now.Add(-5 * time.Minute), Dir: "/tmp"},
+	}
+	m.Windows["dev"] = []tmux.Window{{Index: 1, Name: "editor", Active: true}}
+	m.Windows["monitor"] = []tmux.Window{{Index: 1, Name: "htop", Active: true}}
+	m.Windows["zmux"] = []tmux.Window{{Index: 1, Name: "nvim", Active: true}}
+	m.Windows["tmp-1"] = []tmux.Window{{Index: 1, Name: "zsh", Active: true}}
+
+	styles := DefaultStyles()
+	model := NewPickerModel(m, styles)
+
+	sessions, _ := session.ListSessions(m)
+	model.sessions = sessions
+	model.filtered = sessions
+
+	// Set workspace state.
+	model.workspaceState = map[string]string{
+		"dev":     "bridge",
+		"monitor": "bridge",
+	}
+	model.buildItems()
+
+	wins := make(map[string][]tmux.Window)
+	for _, s := range sessions {
+		w, _ := m.ListWindows(s.Name)
+		wins[s.Name] = w
+	}
+	model.windows = wins
+
+	return model
+}
+
+func TestPickerWorkspaceGrouping(t *testing.T) {
+	model := newTestPickerWithWorkspaces()
+
+	// Should have items: header(bridge), dev, monitor, header(sessions), zmux, header(temporary), tmp-1
+	if len(model.items) != 7 {
+		t.Fatalf("expected 7 items, got %d", len(model.items))
+	}
+
+	// First item: workspace header "bridge"
+	if !model.items[0].IsHeader || model.items[0].Header != "bridge" {
+		t.Errorf("items[0] should be header 'bridge', got IsHeader=%v Header=%q", model.items[0].IsHeader, model.items[0].Header)
+	}
+
+	// Sessions under bridge
+	if model.items[1].Session == nil || model.items[1].Session.Name != "dev" {
+		t.Errorf("items[1] should be session 'dev'")
+	}
+	if model.items[2].Session == nil || model.items[2].Session.Name != "monitor" {
+		t.Errorf("items[2] should be session 'monitor'")
+	}
+
+	// Untagged section
+	if !model.items[3].IsHeader || model.items[3].Header != "other" {
+		t.Errorf("items[3] should be header 'sessions'")
+	}
+	if model.items[4].Session == nil || model.items[4].Session.Name != "zmux" {
+		t.Errorf("items[4] should be session 'zmux'")
+	}
+
+	// Temporary section
+	if !model.items[5].IsHeader || model.items[5].Header != "temporary" {
+		t.Errorf("items[5] should be header 'temporary'")
+	}
+	if model.items[6].Session == nil || model.items[6].Session.Name != "tmp-1" {
+		t.Errorf("items[6] should be session 'tmp-1'")
+	}
+}
+
+func TestPickerWorkspaceHeadersSelectable(t *testing.T) {
+	model := newTestPickerWithWorkspaces()
+
+	// Start at cursor 0 (+ new session), go down.
+	// Cursor 1 = item[0] = workspace header "bridge" — should be selectable (not skipped).
+	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m := result.(PickerModel)
+	// Workspace headers are now selectable, so cursor lands on 1.
+	if m.cursor != 1 {
+		t.Errorf("expected cursor 1 (workspace header), got %d", m.cursor)
+	}
+}
+
+func TestPickerWorkspaceGroupedSessionInheritsWorkspace(t *testing.T) {
+	m := tmux.NewMockRunner()
+	now := time.Now()
+	m.Sessions = []tmux.Session{
+		{Name: "dev", Windows: 2, Attached: true, Activity: now, Created: now.Add(-2 * time.Hour), Dir: "/home/user/bridge"},
+		{Name: "dev-b", Windows: 2, Attached: false, Activity: now, Created: now.Add(-1 * time.Hour), Dir: "/home/user/bridge"},
+	}
+
+	styles := DefaultStyles()
+	model := NewPickerModel(m, styles)
+
+	sessions, _ := session.ListSessions(m)
+	model.sessions = sessions
+	model.filtered = sessions
+
+	// Only root "dev" is tagged; dev-b should inherit via RootName.
+	model.workspaceState = map[string]string{
+		"dev": "bridge",
+	}
+	model.buildItems()
+
+	// Expect: header(bridge), dev, dev-b — dev-b inherits root's workspace.
+	if len(model.items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(model.items))
+	}
+	if !model.items[0].IsHeader || model.items[0].Header != "bridge" {
+		t.Error("items[0] should be header 'bridge'")
+	}
+	if model.items[1].Session == nil || model.items[1].Session.Name != "dev" {
+		t.Error("items[1] should be session 'dev'")
+	}
+	if model.items[2].Session == nil || model.items[2].Session.Name != "dev-b" {
+		t.Error("items[2] should be session 'dev-b'")
+	}
+}
+
+func TestPickerWorkspaceViewRendersHeaders(t *testing.T) {
+	model := newTestPickerWithWorkspaces()
+	view := model.View()
+
+	if !strings.Contains(view, "bridge") {
+		t.Error("expected workspace header 'bridge' in view")
+	}
+	if !strings.Contains(view, "other") {
+		t.Error("expected 'other' header in view")
+	}
+	if !strings.Contains(view, "temporary") {
+		t.Error("expected 'temporary' header in view")
 	}
 }

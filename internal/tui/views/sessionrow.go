@@ -19,8 +19,9 @@ type SessionRow struct {
 	IsCurrent     bool
 	IsAttached    bool
 	IsTmp         bool
-	IsSelected    bool // cursor is on this row
-	Index         int  // 1-based quick-select index (0 = no index)
+	IsSelected      bool // cursor is on this row
+	Index           int  // 1-based quick-select index (0 = no index)
+	AttachedClients int  // total attached clients (including grouped copies)
 }
 
 // SessionRowStyles holds the lipgloss styles needed by the session row renderer.
@@ -102,7 +103,11 @@ func RenderSessionRow(row SessionRow, styles SessionRowStyles, width int) string
 			dotStyle = styles.Info.Bold(true)
 		}
 		statusDot = dotStyle.Render("●")
-		statusLabel = styles.Info.Render(" attached")
+		if row.AttachedClients > 1 {
+			statusLabel = styles.Info.Render(fmt.Sprintf(" attached ×%d", row.AttachedClients))
+		} else {
+			statusLabel = styles.Info.Render(" attached")
+		}
 	} else {
 		statusDot = styles.Dim.Render("○")
 		statusLabel = styles.Dim.Render(" idle")

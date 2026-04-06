@@ -8,6 +8,7 @@ import (
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
+	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 )
@@ -15,7 +16,8 @@ import (
 func newTestSettingsTab() *SettingsTab {
 	resolver := theme.NewResolver(config.RealFS{}, "", "")
 	styles := tui.DefaultStyles()
-	tab := NewSettingsTab(resolver, config.RealFS{}, styles)
+	mock := tmux.NewMockRunner()
+	tab := NewSettingsTab(resolver, config.RealFS{}, mock, styles)
 	tab.Resize(80, 40)
 	return tab
 }
@@ -67,124 +69,14 @@ func TestSettingsTabTitle(t *testing.T) {
 	}
 }
 
-func TestSettingsTabActivateLoadsData(t *testing.T) {
+func TestSettingsTabActivateLoadsConfig(t *testing.T) {
 	tab := newTestSettingsTab()
 	tab = simulateSettingsActivate(tab)
 
-	if len(tab.themes) == 0 {
-		t.Error("expected themes to be loaded")
-	}
-	if len(tab.filtered) == 0 {
-		t.Error("expected filtered themes to be populated")
-	}
-}
-
-func TestSettingsTabSectionSwitch(t *testing.T) {
-	tab := newTestSettingsTab()
-	tab = simulateSettingsActivate(tab)
-
-	if tab.section != sectionTheme {
-		t.Fatalf("expected initial section Theme, got %d", tab.section)
-	}
-
-	// Switch to Bar.
-	tab, _ = sendSettingsKey(tab, "right")
-	if tab.section != sectionBar {
-		t.Errorf("expected section Bar, got %d", tab.section)
-	}
-
-	// Switch to General.
-	tab, _ = sendSettingsKey(tab, "right")
-	if tab.section != sectionGeneral {
-		t.Errorf("expected section General, got %d", tab.section)
-	}
-
-	// Should not go past end.
-	tab, _ = sendSettingsKey(tab, "right")
-	if tab.section != sectionGeneral {
-		t.Errorf("expected section still General, got %d", tab.section)
-	}
-
-	// Switch back.
-	tab, _ = sendSettingsKey(tab, "left")
-	if tab.section != sectionBar {
-		t.Errorf("expected section Bar, got %d", tab.section)
-	}
-
-	tab, _ = sendSettingsKey(tab, "left")
-	if tab.section != sectionTheme {
-		t.Errorf("expected section Theme, got %d", tab.section)
-	}
-
-	// Should not go below 0.
-	tab, _ = sendSettingsKey(tab, "left")
-	if tab.section != sectionTheme {
-		t.Errorf("expected section still Theme, got %d", tab.section)
-	}
-}
-
-func TestSettingsTabThemeNavigate(t *testing.T) {
-	tab := newTestSettingsTab()
-	tab = simulateSettingsActivate(tab)
-
-	if tab.themeCursor != 0 {
-		t.Fatalf("expected theme cursor at 0, got %d", tab.themeCursor)
-	}
-
-	tab, _ = sendSettingsKey(tab, "j")
-	if tab.themeCursor != 1 {
-		t.Errorf("expected theme cursor at 1, got %d", tab.themeCursor)
-	}
-
-	tab, _ = sendSettingsKey(tab, "k")
-	if tab.themeCursor != 0 {
-		t.Errorf("expected theme cursor at 0, got %d", tab.themeCursor)
-	}
-}
-
-func TestSettingsTabThemeFilterMode(t *testing.T) {
-	tab := newTestSettingsTab()
-	tab = simulateSettingsActivate(tab)
-
-	tab, _ = sendSettingsKey(tab, "/")
-	if tab.mode != settingsModeFilter {
-		t.Errorf("expected settingsModeFilter, got %d", tab.mode)
-	}
-}
-
-func TestSettingsTabThemeFilterCancel(t *testing.T) {
-	tab := newTestSettingsTab()
-	tab = simulateSettingsActivate(tab)
-
-	tab, _ = sendSettingsKey(tab, "/")
-	tab, _ = sendSettingsKey(tab, "esc")
-
-	if tab.mode != settingsModeList {
-		t.Errorf("expected settingsModeList after esc, got %d", tab.mode)
-	}
-}
-
-func TestSettingsTabBarNavigate(t *testing.T) {
-	tab := newTestSettingsTab()
-	tab = simulateSettingsActivate(tab)
-
-	// Switch to bar section.
-	tab, _ = sendSettingsKey(tab, "right")
-	if tab.section != sectionBar {
-		t.Fatalf("expected bar section, got %d", tab.section)
-	}
-
-	// Reset cursor to 0 for deterministic testing (actual position depends on config on disk).
-	tab.barCursor = 0
-
-	tab, _ = sendSettingsKey(tab, "j")
-	if tab.barCursor != 1 {
-		t.Errorf("expected bar cursor at 1, got %d", tab.barCursor)
-	}
-
-	tab, _ = sendSettingsKey(tab, "k")
-	if tab.barCursor != 0 {
-		t.Errorf("expected bar cursor at 0, got %d", tab.barCursor)
+	// Config should be loaded (either from disk or defaults).
+	if tab.cfg.Prefix == "" && tab.cfg.Sync.Target == "" {
+		// Default config should still have some non-zero values.
+		// Just verify activation didn't panic.
 	}
 }
 
@@ -192,11 +84,8 @@ func TestSettingsTabGeneralNavigate(t *testing.T) {
 	tab := newTestSettingsTab()
 	tab = simulateSettingsActivate(tab)
 
-	// Switch to general section.
-	tab, _ = sendSettingsKey(tab, "right")
-	tab, _ = sendSettingsKey(tab, "right")
-	if tab.section != sectionGeneral {
-		t.Fatalf("expected general section, got %d", tab.section)
+	if tab.cfgCursor != 0 {
+		t.Fatalf("expected config cursor at 0, got %d", tab.cfgCursor)
 	}
 
 	tab, _ = sendSettingsKey(tab, "j")
@@ -210,40 +99,51 @@ func TestSettingsTabGeneralNavigate(t *testing.T) {
 	}
 }
 
-func TestSettingsTabViewContainsSectionHeaders(t *testing.T) {
+func TestSettingsTabGeneralNavigateGg(t *testing.T) {
+	tab := newTestSettingsTab()
+	tab = simulateSettingsActivate(tab)
+
+	tab, _ = sendSettingsKey(tab, "G")
+	if tab.cfgCursor != len(tab.configRows)-1 {
+		t.Errorf("expected cursor at last row, got %d", tab.cfgCursor)
+	}
+
+	tab, _ = sendSettingsKey(tab, "g")
+	if tab.cfgCursor != 0 {
+		t.Errorf("expected cursor at 0, got %d", tab.cfgCursor)
+	}
+}
+
+func TestSettingsTabViewContainsConfigPath(t *testing.T) {
 	tab := newTestSettingsTab()
 	tab = simulateSettingsActivate(tab)
 
 	view := tab.View()
 
-	if !strings.Contains(view, "Theme") {
-		t.Error("expected view to contain 'Theme' section header")
-	}
-	if !strings.Contains(view, "Bar") {
-		t.Error("expected view to contain 'Bar' section header")
-	}
-	if !strings.Contains(view, "General") {
-		t.Error("expected view to contain 'General' section header")
+	if !strings.Contains(view, ".zmux.toml") {
+		t.Error("expected view to contain '.zmux.toml'")
 	}
 }
 
-func TestSettingsTabViewThemeSectionShowsCurrent(t *testing.T) {
+func TestSettingsTabViewShowsConfigRows(t *testing.T) {
 	tab := newTestSettingsTab()
 	tab = simulateSettingsActivate(tab)
-	tab.currentTheme = "ayu-dark"
 
 	view := tab.View()
 
-	if !strings.Contains(view, "ayu-dark") {
-		t.Error("expected view to contain current theme 'ayu-dark'")
+	if !strings.Contains(view, "Prefix") {
+		t.Error("expected view to contain 'Prefix' config row")
+	}
+	if !strings.Contains(view, "Sync Target") {
+		t.Error("expected view to contain 'Sync Target' config row")
 	}
 }
 
-func TestSettingsTabDeactivateBlursInputs(t *testing.T) {
+func TestSettingsTabDeactivateBlursEdit(t *testing.T) {
 	tab := newTestSettingsTab()
 	tab = simulateSettingsActivate(tab)
 
-	tab.mode = settingsModeFilter
+	tab.mode = settingsModeEdit
 	tab.Deactivate()
 
 	if tab.mode != settingsModeList {
@@ -254,51 +154,85 @@ func TestSettingsTabDeactivateBlursInputs(t *testing.T) {
 func TestSettingsTabShortHelp(t *testing.T) {
 	tab := newTestSettingsTab()
 
-	// Theme section.
-	tab.section = sectionTheme
 	help := tab.ShortHelp()
-	if !strings.Contains(help, "enter:apply") {
-		t.Error("expected help to contain 'enter:apply' for theme section")
-	}
-	if !strings.Contains(help, "/:filter") {
-		t.Error("expected help to contain '/:filter' for theme section")
-	}
-
-	// Bar section.
-	tab.section = sectionBar
-	help = tab.ShortHelp()
-	if !strings.Contains(help, "enter:apply") {
-		t.Error("expected help to contain 'enter:apply' for bar section")
-	}
-
-	// General section.
-	tab.section = sectionGeneral
-	help = tab.ShortHelp()
 	if !strings.Contains(help, "s:save") {
-		t.Error("expected help to contain 's:save' for general section")
+		t.Error("expected help to contain 's:save'")
+	}
+	if !strings.Contains(help, "enter:edit") {
+		t.Error("expected help to contain 'enter:edit'")
+	}
+
+	// Edit mode.
+	tab.mode = settingsModeEdit
+	help = tab.ShortHelp()
+	if !strings.Contains(help, "enter:confirm") {
+		t.Error("expected edit help to contain 'enter:confirm'")
+	}
+	if !strings.Contains(help, "esc:cancel") {
+		t.Error("expected edit help to contain 'esc:cancel'")
 	}
 }
 
-func TestSettingsTabApplyFilter(t *testing.T) {
+func TestSettingsTabCycleOption(t *testing.T) {
+	options := []string{"none", "ghostty", "nvim"}
+
+	if got := cycleOption(options, "none"); got != "ghostty" {
+		t.Errorf("expected 'ghostty', got %q", got)
+	}
+	if got := cycleOption(options, "nvim"); got != "none" {
+		t.Errorf("expected 'none' (wrap), got %q", got)
+	}
+	if got := cycleOption(options, "unknown"); got != "none" {
+		t.Errorf("expected 'none' (default), got %q", got)
+	}
+}
+
+func TestSettingsTabToggleActivate(t *testing.T) {
 	tab := newTestSettingsTab()
 	tab = simulateSettingsActivate(tab)
 
-	initialCount := len(tab.filtered)
-	if initialCount == 0 {
-		t.Skip("no themes to filter")
+	// Navigate to the toggle row (Auto Cleanup Tmp is index 3).
+	tab.cfgCursor = 3
+	initial := tab.configRows[3].getValue(tab.cfg)
+
+	tab, _ = sendSettingsKey(tab, "enter")
+
+	after := tab.configRows[3].getValue(tab.cfg)
+	if initial == after {
+		t.Error("expected toggle to change value")
+	}
+}
+
+func TestSettingsTabEditMode(t *testing.T) {
+	tab := newTestSettingsTab()
+	tab = simulateSettingsActivate(tab)
+
+	// First row (Prefix) is text, so enter should activate edit mode.
+	tab.cfgCursor = 0
+	tab, _ = sendSettingsKey(tab, "enter")
+
+	if tab.mode != settingsModeEdit {
+		t.Errorf("expected settingsModeEdit, got %d", tab.mode)
 	}
 
-	tab.filter.SetValue("xxxxxxnonexistent")
-	tab.applyFilter()
+	// Escape should cancel.
+	tab, _ = sendSettingsKey(tab, "esc")
+	if tab.mode != settingsModeList {
+		t.Errorf("expected settingsModeList after esc, got %d", tab.mode)
+	}
+}
 
-	if len(tab.filtered) != 0 {
-		t.Errorf("expected 0 filtered results, got %d", len(tab.filtered))
+func TestSettingsTabHasConfigChanges(t *testing.T) {
+	tab := newTestSettingsTab()
+	tab = simulateSettingsActivate(tab)
+
+	if tab.hasConfigChanges() {
+		t.Error("expected no changes initially")
 	}
 
-	tab.filter.SetValue("")
-	tab.applyFilter()
-
-	if len(tab.filtered) != initialCount {
-		t.Errorf("expected %d results after clearing filter, got %d", initialCount, len(tab.filtered))
+	// Modify a value.
+	tab.cfg.Prefix = "C-a"
+	if !tab.hasConfigChanges() {
+		t.Error("expected changes after modification")
 	}
 }

@@ -11,16 +11,13 @@ type TabID string
 const (
 	TabCurrent  TabID = "current"
 	TabSessions TabID = "sessions"
+	TabThemes   TabID = "themes"
 	TabSettings TabID = "settings"
 	TabHelp     TabID = "help"
-
-	// Deprecated: kept for backward compatibility in tests.
-	TabThemes TabID = "themes"
-	TabConfig TabID = "config"
 )
 
 // TabOrder defines the canonical ordering of tabs.
-var TabOrder = []TabID{TabCurrent, TabSessions, TabSettings, TabHelp}
+var TabOrder = []TabID{TabCurrent, TabSessions, TabThemes, TabSettings, TabHelp}
 
 // ActivateReason indicates why a tab is being activated.
 type ActivateReason int

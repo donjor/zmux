@@ -11,6 +11,7 @@ import (
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
+	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
@@ -23,6 +24,7 @@ var app = NewApp()
 var dashboardFlag bool
 var dashboardTabFlag string
 var paletteFlag bool
+var tabPickerFlag bool
 
 var rootCmd = &cobra.Command{
 	Use:   "zmux",
@@ -32,6 +34,10 @@ var rootCmd = &cobra.Command{
 	SilenceErrors: true,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if tabPickerFlag {
+			return runTabPicker()
+		}
+
 		if paletteFlag {
 			return runPalette()
 		}
@@ -48,9 +54,22 @@ var rootCmd = &cobra.Command{
 			_, _ = session.CleanupTmp(app.Runner)
 		}
 
-		// Shorthand: `zmux <name>` attaches or creates.
+		// Shorthand: `zmux <name>` — check workspace first, then session.
 		if len(args) > 0 {
 			name := args[0]
+
+			// Check if it's a workspace name.
+			ws, _ := app.WorkspaceStore.GetWorkspace(name)
+			if ws != nil {
+				target := resolveLastActive(ws)
+				if target != "" {
+					_ = app.WorkspaceStore.SetLastActive(name, target)
+					return session.Attach(app.Runner, target)
+				}
+				// Workspace exists but no live sessions — fall through to create.
+			}
+
+			// Fall back to session attach/create.
 			if app.Runner.HasSession(name) {
 				return session.Attach(app.Runner, name)
 			}
@@ -90,31 +109,58 @@ func launchPalettePopup() error {
 	return app.Runner.DisplayPopup("-w60%", "-h50%", "-E", zmuxBin+" --palette")
 }
 
+// loadActiveStyles loads the configured theme and returns palette-aware styles.
+// Falls back to DefaultStyles if theme can't be resolved.
+func loadActiveStyles() (tui.Styles, *theme.Palette, *theme.Resolver) {
+	resolver, err := newResolver(app.FS)
+	if err != nil {
+		return tui.DefaultStyles(), nil, nil
+	}
+	cfg, err := loadConfig(app.FS)
+	if err != nil {
+		return tui.DefaultStyles(), nil, resolver
+	}
+	t, err := resolver.Resolve(cfg.Theme)
+	if err != nil {
+		return tui.DefaultStyles(), nil, resolver
+	}
+	p := t.SemanticPalette()
+	return tui.NewStyles(&p), &p, resolver
+}
+
 func runDashboard() error {
 	return runNewDashboard()
 }
 
 func runNewDashboard() error {
-	styles := tui.DefaultStyles()
-
-	// Build theme resolver for the themes tab.
-	resolver, err := newResolver(app.FS)
-	if err != nil {
-		// Non-fatal: themes tab will show empty.
-		resolver = nil
-	}
+	styles, pal, resolver := loadActiveStyles()
 
 	services := dashboard.Services{
-		Runner: app.Runner,
-		FS:     app.FS,
-		Styles: styles,
+		Runner:   app.Runner,
+		FS:       app.FS,
+		Styles:   styles,
+		Palette:  pal,
+		Resolver: resolver,
 	}
 
-	// Build tabs.
+	// Build tabs (order: Current, Sessions, Themes, Settings, Help).
 	tabImpls := []dashboard.Tab{
 		tabs.NewCurrentTab(app.Runner, styles),
-		tabs.NewSessionsTab(app.Runner, styles),
-		tabs.NewSettingsTab(resolver, app.FS, styles),
+		tabs.NewSessionsTab(app.Runner, styles, func() map[string]string {
+			st, err := app.WorkspaceStore.Load()
+			if err != nil {
+				return nil
+			}
+			out := make(map[string]string)
+			for _, ws := range st.Workspaces {
+				for _, sess := range ws.Sessions {
+					out[sess] = ws.Name
+				}
+			}
+			return out
+		}),
+		tabs.NewThemesTab(resolver, app.FS, app.Runner, styles),
+		tabs.NewSettingsTab(resolver, app.FS, app.Runner, styles),
 		tabs.NewHelpTab(styles),
 	}
 
@@ -141,13 +187,7 @@ func runNewDashboard() error {
 }
 
 func runPalette() error {
-	styles := tui.DefaultStyles()
-
-	// Build theme resolver for theme actions.
-	resolver, err := newResolver(app.FS)
-	if err != nil {
-		resolver = nil
-	}
+	styles, _, resolver := loadActiveStyles()
 
 	// Build registry with all providers.
 	reg := palette.NewDefaultRegistry(app.Runner, resolver, app.FS)
@@ -188,6 +228,50 @@ func runPalette() error {
 			return post.Err
 		}
 		return nil
+	}
+
+	return nil
+}
+
+func runTabPicker() error {
+	// Get current session name.
+	sessionName, err := app.Runner.DisplayMessage("", "#{session_name}")
+	if err != nil {
+		return fmt.Errorf("not inside a tmux session")
+	}
+
+	styles, _, _ := loadActiveStyles()
+	model := tui.NewTabPickerModel(app.Runner, sessionName, styles)
+
+	p := tea.NewProgram(model, tea.WithAltScreen())
+	result, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("tab picker: %w", err)
+	}
+
+	tp, ok := result.(tui.TabPickerModel)
+	if !ok || tp.Quitting && tp.Result.Action == "" {
+		return nil
+	}
+
+	res := tp.Result
+	switch res.Action {
+	case "select":
+		return app.Runner.SelectWindow(sessionName, res.Index)
+	case "new":
+		dir, _ := os.Getwd()
+		name := res.Name
+		if name == "" {
+			name = ""
+		}
+		return app.Runner.NewWindow(sessionName, name, dir)
+	case "rename":
+		old := fmt.Sprintf("%d", res.Index)
+		return app.Runner.RenameWindow(sessionName, old, res.Name)
+	case "close":
+		return app.Runner.KillWindow(sessionName, res.Index)
+	case "swap":
+		return app.Runner.SwapWindow(sessionName, res.Index, res.Index+res.Delta)
 	}
 
 	return nil
@@ -261,9 +345,27 @@ func runSessionPicker() error {
 	cfg := config.DefaultConfig()
 	templates, _ := session.LoadTemplates(app.FS, cfg.Templates.Paths)
 
-	styles := tui.DefaultStyles()
+	styles, _, _ := loadActiveStyles()
 	model := tui.NewPickerModel(app.Runner, styles)
 	model.SetTemplates(templates)
+	model.SetWorkspaceLoader(func() map[string]string {
+		// Reconcile before loading state.
+		if roots := liveRootSet(); roots != nil {
+			_ = app.WorkspaceStore.Reconcile(roots)
+		}
+		st, err := app.WorkspaceStore.Load()
+		if err != nil {
+			return nil
+		}
+		// Convert v2 state to flat map for picker (will be updated in Phase 3).
+		out := make(map[string]string)
+		for _, ws := range st.Workspaces {
+			for _, sess := range ws.Sessions {
+				out[sess] = ws.Name
+			}
+		}
+		return out
+	})
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	result, err := p.Run()
@@ -344,6 +446,19 @@ func runSessionPicker() error {
 			return source.ConnectFallback(src.Endpoint, res.Session, "")
 		}
 		return fmt.Errorf("no source for external-attach")
+
+	case "workspace-focus":
+		// Focus workspace's last-active session.
+		ws, err := app.WorkspaceStore.GetWorkspace(res.Workspace)
+		if err != nil || ws == nil {
+			return fmt.Errorf("workspace %q not found", res.Workspace)
+		}
+		target := resolveLastActive(ws)
+		if target == "" {
+			return fmt.Errorf("workspace %q has no live sessions", res.Workspace)
+		}
+		_ = app.WorkspaceStore.SetLastActive(res.Workspace, target)
+		return session.Attach(app.Runner, target)
 	}
 
 	return nil
@@ -376,5 +491,6 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&dashboardFlag, "dashboard", false, "render dashboard TUI directly (used by popup)")
 	rootCmd.PersistentFlags().StringVar(&dashboardTabFlag, "dashboard-tab", "", "initial tab for dashboard (current, sessions, settings, help)")
 	rootCmd.PersistentFlags().BoolVar(&paletteFlag, "palette", false, "render command palette directly (used by popup)")
+	rootCmd.PersistentFlags().BoolVar(&tabPickerFlag, "tab-picker", false, "render tab picker directly (used by Alt+`)")
 	rootCmd.AddCommand(versionCmd)
 }

@@ -16,7 +16,19 @@ type Config struct {
 
 // BarConfig holds status bar settings.
 type BarConfig struct {
-	Preset string `toml:"preset"`
+	Preset    string         `toml:"preset"`
+	Segments  BarSegments    `toml:"segments"`
+}
+
+// BarSegments controls which segments are shown in the status bar.
+type BarSegments struct {
+	Workspace bool `toml:"workspace"`
+	Git       bool `toml:"git"`
+	Lang      bool `toml:"lang"`
+	Clock     bool `toml:"clock"`
+	Directory bool `toml:"directory"`
+	Process   bool `toml:"process"`
+	Group     bool `toml:"group"`
 }
 
 // SessionsConfig holds session management settings.
@@ -43,6 +55,15 @@ func DefaultConfig() Config {
 		Prefix: "C-Space",
 		Bar: BarConfig{
 			Preset: "default",
+			Segments: BarSegments{
+				Workspace: true,
+				Git:       true,
+				Lang:      true,
+				Clock:     true,
+				Directory: true,
+				Process:   true,
+				Group:     true,
+			},
 		},
 		Sessions: SessionsConfig{
 			AutoCleanupTmp: true,

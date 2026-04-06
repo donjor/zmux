@@ -43,6 +43,15 @@ zmux tabs                        # list tabs in current session (alias: t)
 zmux tabs <session>              # list tabs in specific session
 ```
 
+### Workspaces
+```bash
+zmux ws list                     # see workspaces and their sessions
+zmux ws add myproject dev        # tag session "dev" to workspace "myproject"
+zmux ws remove dev               # untag session
+zmux ws show myproject           # show sessions in workspace
+zmux new server -w myproject     # create session tagged to workspace
+```
+
 ### Run commands in named tabs
 ```bash
 zmux run '<cmd>' -n <name>               # run + wait for completion (DEFAULT)

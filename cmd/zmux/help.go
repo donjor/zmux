@@ -5,10 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-
-	"github.com/donjor/zmux/internal/tui"
 )
 
 var helpCmd = &cobra.Command{
@@ -46,11 +43,11 @@ type helpGroup struct {
 }
 
 func printStyledHelp() {
-	styles := tui.DefaultStyles()
+	styles, _, _ := loadActiveStyles()
 
-	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3"))
-	groupStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
-	cmdStyle := lipgloss.NewStyle().Width(32).Foreground(lipgloss.Color("2"))
+	titleStyle := styles.Accent.Bold(true)
+	groupStyle := styles.Info.Bold(true)
+	cmdStyle := styles.Success.Width(32)
 	descStyle := styles.Normal
 
 	groups := []helpGroup{
@@ -67,6 +64,10 @@ func printStyledHelp() {
 				{"zmux kill <name>", "Kill session (alias: k)"},
 				{"zmux ls", "List sessions"},
 				{"zmux tabs [session]", "List tabs (alias: t)"},
+				{"zmux ws list", "List workspaces (alias: workspace)"},
+				{"zmux ws add <ws> <sess>", "Tag session to workspace"},
+				{"zmux ws remove <sess>", "Untag session"},
+				{"zmux ws show <ws>", "Show workspace sessions"},
 			},
 		},
 		{
@@ -135,9 +136,14 @@ func printStyledHelp() {
 		{"prefix + d", "Detach"},
 		{"prefix + ?", "Help popup"},
 		{"prefix + c", "New tab"},
-		{"prefix + n", "Next tab"},
+		{"prefix + n / N", "Next / previous tab"},
+		{"prefix + < / >", "Move tab left / right"},
+		{"prefix + x", "Close tab (with confirm)"},
+		{"prefix + .", "Rename tab"},
+		{"prefix + ,", "Rename session"},
 		{"prefix + r", "Reload config (zmux apply)"},
-		{"Alt+1-5", "Switch to tab (no prefix)"},
+		{"Alt+1-9", "Switch to tab (no prefix)"},
+		{"Alt+`", "Tab switcher (no prefix)"},
 	}
 	for _, entry := range bindings {
 		cmd := cmdStyle.Render("  " + entry.cmd)

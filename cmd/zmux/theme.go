@@ -86,7 +86,7 @@ func runThemePicker() error {
 		return err
 	}
 
-	styles := tui.DefaultStyles()
+	styles, _, _ := loadActiveStyles()
 	model := tui.NewThemePickerModel(resolver, styles)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())

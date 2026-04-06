@@ -173,6 +173,67 @@ func TestListSessionsError(t *testing.T) {
 	}
 }
 
+func TestListSessionsCollapsesGrouped(t *testing.T) {
+	now := time.Now()
+	m := tmux.NewMockRunner()
+	m.Sessions = []tmux.Session{
+		{Name: "zmux", Windows: 2, Attached: true, Activity: now, Dir: "/home/user/zmux", Group: "zmux"},
+		{Name: "zmux-b", Windows: 2, Attached: true, Activity: now, Dir: "/home/user/zmux", Group: "zmux"},
+		{Name: "dev", Windows: 3, Attached: false, Activity: now, Dir: "/home/user/work"},
+	}
+
+	sessions, err := ListSessions(m)
+	if err != nil {
+		t.Fatalf("ListSessions() error: %v", err)
+	}
+
+	// Should collapse zmux + zmux-b into one entry.
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 sessions (zmux collapsed, dev), got %d", len(sessions))
+	}
+
+	// Find zmux entry.
+	var zmuxSession *SessionInfo
+	for i := range sessions {
+		if sessions[i].Name == "zmux" {
+			zmuxSession = &sessions[i]
+			break
+		}
+	}
+	if zmuxSession == nil {
+		t.Fatal("expected 'zmux' session in results")
+	}
+	if zmuxSession.AttachedClients != 2 {
+		t.Errorf("expected AttachedClients=2, got %d", zmuxSession.AttachedClients)
+	}
+
+	// zmux-b should NOT appear.
+	for _, s := range sessions {
+		if s.Name == "zmux-b" {
+			t.Error("grouped session 'zmux-b' should not appear in list")
+		}
+	}
+}
+
+func TestListSessionsUngroupedSuffixNotCollapsed(t *testing.T) {
+	now := time.Now()
+	m := tmux.NewMockRunner()
+	// "work-b" exists but "work" does NOT — should not be collapsed.
+	m.Sessions = []tmux.Session{
+		{Name: "work-b", Windows: 2, Attached: false, Activity: now, Dir: "/home/user"},
+		{Name: "dev", Windows: 1, Attached: false, Activity: now, Dir: "/home/user"},
+	}
+
+	sessions, err := ListSessions(m)
+	if err != nil {
+		t.Fatalf("ListSessions() error: %v", err)
+	}
+
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(sessions))
+	}
+}
+
 var errTestError = &testError{}
 
 type testError struct{}

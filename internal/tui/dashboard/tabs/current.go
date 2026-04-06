@@ -151,6 +151,9 @@ func (t *CurrentTab) Resize(width, height int) {
 // Update processes messages for the current session tab.
 func (t *CurrentTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
+	case dashboard.ThemeChangedMsg:
+		t.styles = msg.Styles
+		return t, nil
 	case currentDataMsg:
 		if msg.reqID != t.reqID {
 			return t, nil
@@ -449,7 +452,7 @@ func (t *CurrentTab) viewList() string {
 	if t.sessionDir != "" {
 		metaParts = append(metaParts, shortenDir(t.sessionDir))
 	}
-	metaParts = append(metaParts, fmt.Sprintf("%d windows", len(t.windows)))
+	metaParts = append(metaParts, fmt.Sprintf("%d tabs", len(t.windows)))
 	if t.attached > 0 {
 		metaParts = append(metaParts, fmt.Sprintf("%d client", t.attached))
 	}
@@ -484,8 +487,8 @@ func (t *CurrentTab) viewList() string {
 	if len(t.windows) == 0 {
 		b.WriteString("\n")
 		b.WriteString(views.RenderEmptyState(
-			"No windows in this session.",
-			"Press n to create a new window.",
+			"No tabs in this session.",
+			"Press n to create a new tab.",
 			t.styles.Dim,
 		))
 		return b.String()
@@ -578,8 +581,8 @@ func (t *CurrentTab) viewMove() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(t.styles.Accent.Bold(true).Render("Move Window") + "\n")
-	b.WriteString(t.styles.Dim.Render("Move window to another session") + "\n\n")
+	b.WriteString(t.styles.Accent.Bold(true).Render("Move Tab") + "\n")
+	b.WriteString(t.styles.Dim.Render("Move tab to another session") + "\n\n")
 
 	if len(t.moveTargets) == 0 {
 		b.WriteString(t.styles.Dim.Render("  No other sessions available.") + "\n")

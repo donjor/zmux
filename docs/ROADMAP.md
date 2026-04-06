@@ -44,10 +44,13 @@
 - [x] `zmux theme set/list/sync/pull` commands
 
 ### Status Bar
-- [x] 4 presets (default, minimal, powerline, blocks)
+- [x] 9 presets (default, minimal, powerline, blocks, rounded, hacker, zen, starship, rpowerline)
+- [x] Dynamic rendering via `zmux bar-render` — git, lang, workspace, directory, process
+- [x] Configurable segment toggles in `[bar.segments]`
 - [x] Dynamic prefix-active state
-- [x] Active/inactive window styling
-- [x] Preset picker with previews
+- [x] Active/inactive window styling, two-tone catppuccin-style tabs
+- [x] Preset picker with live preview carousel
+- [x] Instant refresh on session/window switch via tmux hooks
 
 ### Session Management
 - [x] Session picker (outside tmux) — fuzzy search, create, attach
@@ -61,9 +64,10 @@
 
 ### Dashboard (inside tmux)
 - [x] tmux popup overlay activation via keybind (prefix+Space)
-- [x] Tabbed dashboard: This Session, Sessions, Settings, Help
+- [x] Tabbed dashboard: This Session, Sessions, Themes, Settings, Help
 - [x] Session list with local + external source groups
-- [x] Settings tab — theme picker with swatches, bar preset selection
+- [x] Themes tab — theme picker with swatches, color editor, bar preset with live preview
+- [x] Settings tab — config fields (prefix, sync, sessions)
 - [x] Help tab — keybindings reference
 
 ### Command Palette
@@ -110,11 +114,17 @@
 ### Workspaces
 - [x] Auto-grouped sessions — attaching to an attached session creates an
       independent viewport (shared windows, separate focus)
-- [ ] Workspace concept — tag sessions to a named project/workspace
-- [ ] `zmux new -w <workspace> [name]` — create session in a workspace
-- [ ] Picker groups sessions by workspace
-- [ ] Switch entire workspace at once
-- [ ] Workspace-aware dashboard
+- [x] Workspace concept — first-class objects (versioned TOML v2)
+- [x] `zmux new <workspace> [session]` — workspace-first session creation
+- [x] `zmux open <workspace> [session]` — workspace-level access (replaces attach)
+- [x] `zmux attach` retained as hidden alias for `open`
+- [x] Picker groups sessions by workspace, headers selectable (Enter to focus)
+- [x] Workspace-aware dashboard — sessions tab groups by workspace
+- [x] Status bar shows workspace + session position (e.g. `myapp 2/4`)
+- [x] Session navigation keybindings (Shift+Alt+1-9, prefix+w, prefix+[/])
+- [x] `zmux tab move/kill`, `zmux session kill`, `zmux workspace kill`
+- [x] Reconcile auto-heals unmanaged sessions into same-named workspaces
+- [ ] Fork command: `zmux fork <session>` (shape decided, implementation deferred)
 - [ ] Compose: workspace members can have grouped sessions (multi-monitor)
 
 ### SSH Remote Support
@@ -124,13 +134,19 @@
 - [ ] Transparent local/remote session switching
 
 ### Contextual Status Bar
+- [x] Git branch display with dirty/ahead/behind indicators
+- [x] Per-window git status via pane working directory
+- [x] Workspace display in status bar
+- [x] Language version detection (Go, Node, Rust, Python)
+- [x] Active process and directory display
 - [ ] Status bar adapts based on session type
-- [ ] Git branch display in dev sessions
 - [ ] Custom indicators per workspace/session
 
 ### Custom Status Segments
-- [ ] User-defined segments in TOML config
-- [ ] Built-in segments: git-branch, clock, hostname, etc.
+- [x] Built-in segments: git, workspace, clock, lang, directory, process, group
+- [x] Segment toggles in `[bar.segments]` config
+- [x] Settings tab toggles segments with live preview
+- [ ] User-defined custom segments in TOML config
 - [ ] Segment ordering (left/right)
 
 ### Theme Sync Enhancements

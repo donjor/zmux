@@ -2,216 +2,175 @@ package bar
 
 import (
 	"fmt"
-	"io"
+	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
-
+	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 )
 
-// renderer forces TrueColor output so previews contain ANSI escapes
-// regardless of whether stdout is a TTY.
-var renderer = newTrueColorRenderer()
-
-func newTrueColorRenderer() *lipgloss.Renderer {
-	r := lipgloss.NewRenderer(io.Discard)
-	r.SetColorProfile(termenv.TrueColor)
-	return r
+// RenderPreview returns an ANSI-colored string that shows what the bar looks
+// like for a given preset. Uses the SAME render functions as the live bar,
+// converted from tmux format strings to ANSI escape codes.
+// RenderPreviewWithSegments renders a preview with specific segment visibility.
+func RenderPreviewWithSegments(preset Preset, palette *theme.Palette, segments config.BarSegments) string {
+	return renderPreviewCtx(preset, palette, segments)
 }
 
-// RenderPreview returns an ANSI-colored string that approximates the
-// appearance of the given status bar preset. Useful for terminal previews
-// when picking a bar layout.
 func RenderPreview(preset Preset, palette *theme.Palette) string {
-	switch preset {
-	case Minimal:
-		return renderMinimalPreview(palette)
-	case Powerline:
-		return renderPowerlinePreview(palette)
-	case Blocks:
-		return renderBlocksPreview(palette)
-	default:
-		return renderDefaultPreview(palette)
-	}
+	return renderPreviewCtx(preset, palette, config.BarSegments{
+		Workspace: true, Git: true, Lang: true, Clock: true,
+		Directory: true, Process: true, Group: true,
+	})
 }
 
-func colorStr(c theme.Color) string {
-	return c.Hex()
-}
-
-// style creates a new Style bound to our TrueColor renderer.
-func style() lipgloss.Style {
-	return renderer.NewStyle()
-}
-
-func renderDefaultPreview(p *theme.Palette) string {
-	surfaceBG := style().Background(lipgloss.Color(colorStr(p.Surface)))
-
-	sessionPill := style().
-		Background(lipgloss.Color(colorStr(p.Accent))).
-		Foreground(lipgloss.Color(colorStr(p.BG))).
-		Bold(true).
-		Render(" main ")
-
-	sep := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Dim))).Render("\u2502")
-
-	inactiveWin := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Dim))).Render(" 1 zsh ")
-	activeWin := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Accent))).Bold(true).Render(" 2 nvim ")
-	inactiveWin2 := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Dim))).Render(" 3 htop ")
-
-	clock := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Muted))).Render(" 02:30 PM ")
-
-	left := sessionPill + " " + inactiveWin + sep + activeWin + sep + inactiveWin2
-	right := clock
-
-	return padBar(left, right, p.Surface)
-}
-
-func renderMinimalPreview(p *theme.Palette) string {
-	surfaceBG := style().Background(lipgloss.Color(colorStr(p.Surface)))
-
-	session := surfaceBG.
-		Foreground(lipgloss.Color(colorStr(p.Accent))).
-		Bold(true).
-		Render(" main ")
-
-	pipe := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Dim))).Render("\u2502")
-
-	inactiveWin := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Dim))).Render(" zsh ")
-	activeWin := surfaceBG.Foreground(lipgloss.Color(colorStr(p.FG))).Bold(true).Render(" nvim ")
-	inactiveWin2 := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Dim))).Render(" htop ")
-
-	clock := surfaceBG.Foreground(lipgloss.Color(colorStr(p.Dim))).Render(" 14:30 ")
-
-	left := session + pipe + " " + inactiveWin + " " + activeWin + " " + inactiveWin2
-	right := clock
-
-	return padBar(left, right, p.Surface)
-}
-
-func renderPowerlinePreview(p *theme.Palette) string {
-	sessionPill := style().
-		Background(lipgloss.Color(colorStr(p.Accent))).
-		Foreground(lipgloss.Color(colorStr(p.BG))).
-		Bold(true).
-		Render(" main ")
-
-	arrow1 := style().
-		Background(lipgloss.Color(colorStr(p.Surface))).
-		Foreground(lipgloss.Color(colorStr(p.Accent))).
-		Render("\ue0b0")
-
-	inactiveWin := style().
-		Background(lipgloss.Color(colorStr(p.Dim))).
-		Foreground(lipgloss.Color(colorStr(p.Muted))).
-		Render(" 1 zsh ")
-
-	arrowInL := style().
-		Background(lipgloss.Color(colorStr(p.Dim))).
-		Foreground(lipgloss.Color(colorStr(p.Surface))).
-		Render("\ue0b0")
-
-	arrowInR := style().
-		Background(lipgloss.Color(colorStr(p.Surface))).
-		Foreground(lipgloss.Color(colorStr(p.Dim))).
-		Render("\ue0b0")
-
-	activeWin := style().
-		Background(lipgloss.Color(colorStr(p.Accent))).
-		Foreground(lipgloss.Color(colorStr(p.BG))).
-		Bold(true).
-		Render(" 2 nvim ")
-
-	arrowActL := style().
-		Background(lipgloss.Color(colorStr(p.Accent))).
-		Foreground(lipgloss.Color(colorStr(p.Surface))).
-		Render("\ue0b0")
-
-	arrowActR := style().
-		Background(lipgloss.Color(colorStr(p.Surface))).
-		Foreground(lipgloss.Color(colorStr(p.Accent))).
-		Render("\ue0b0")
-
-	// Right side
-	rArrowTime := style().
-		Background(lipgloss.Color(colorStr(p.Surface))).
-		Foreground(lipgloss.Color(colorStr(p.Dim))).
-		Render("\ue0b2")
-
-	timeSeg := style().
-		Background(lipgloss.Color(colorStr(p.Dim))).
-		Foreground(lipgloss.Color(colorStr(p.Muted))).
-		Render(" 14:30 ")
-
-	rArrowDate := style().
-		Background(lipgloss.Color(colorStr(p.Dim))).
-		Foreground(lipgloss.Color(colorStr(p.Accent))).
-		Render("\ue0b2")
-
-	dateSeg := style().
-		Background(lipgloss.Color(colorStr(p.Accent))).
-		Foreground(lipgloss.Color(colorStr(p.BG))).
-		Bold(true).
-		Render(" Mar 16 ")
-
-	left := sessionPill + arrow1 + " " + arrowInL + inactiveWin + arrowInR + arrowActL + activeWin + arrowActR
-	right := rArrowTime + timeSeg + rArrowDate + dateSeg
-
-	return padBar(left, right, p.Surface)
-}
-
-func renderBlocksPreview(p *theme.Palette) string {
-	surfaceBG := style().Background(lipgloss.Color(colorStr(p.Surface)))
-
-	session := surfaceBG.
-		Foreground(lipgloss.Color(colorStr(p.Accent))).
-		Bold(true).
-		Render(" [main] ")
-
-	inactiveWin := surfaceBG.
-		Foreground(lipgloss.Color(colorStr(p.Dim))).
-		Render(" [1:zsh] ")
-
-	activeWin := surfaceBG.
-		Foreground(lipgloss.Color(colorStr(p.Accent))).
-		Bold(true).
-		Render(" [2:nvim] ")
-
-	inactiveWin2 := surfaceBG.
-		Foreground(lipgloss.Color(colorStr(p.Dim))).
-		Render(" [3:htop] ")
-
-	clock := surfaceBG.
-		Foreground(lipgloss.Color(colorStr(p.Dim))).
-		Render(" [14:30] ")
-
-	left := session + inactiveWin + activeWin + inactiveWin2
-	right := clock
-
-	return padBar(left, right, p.Surface)
-}
-
-// padBar creates a fixed-width bar string with left- and right-aligned content
-// separated by surface-colored padding.
-func padBar(left, right string, surface theme.Color) string {
-	const barWidth = 60
-
-	// Calculate visible widths by stripping ANSI codes
-	leftVisible := stripANSI(left)
-	rightVisible := stripANSI(right)
-
-	padLen := barWidth - len(leftVisible) - len(rightVisible)
-	if padLen < 1 {
-		padLen = 1
+func renderPreviewCtx(preset Preset, palette *theme.Palette, segments config.BarSegments) string {
+	ctx := BarContext{
+		Session:       "main",
+		Workspace:     "project",
+		GitBranch:     "main",
+		GitDirty:      false,
+		LangIcon:      " ",
+		LangVersion:   "1.24",
+		Time:          "14:30",
+		PaneDir:       "~/project",
+		PaneCmd:       "nvim",
+		ShowWorkspace: segments.Workspace,
+		ShowGit:       segments.Git,
+		ShowLang:      segments.Lang,
+		ShowClock:     segments.Clock,
+		ShowDirectory: segments.Directory,
+		ShowProcess:   segments.Process,
+		ShowGroup:     segments.Group,
 	}
 
-	pad := style().
-		Background(lipgloss.Color(colorStr(surface))).
-		Render(strings.Repeat(" ", padLen))
+	left := RenderLeft(palette, ctx, preset)
+	right := RenderRight(palette, ctx, preset)
 
-	return fmt.Sprintf("%s%s%s", left, pad, right)
+	// Convert tmux #[...] format strings to ANSI escape codes.
+	left = tmuxToANSI(left)
+	right = tmuxToANSI(right)
+
+	// Build a fake window section in the middle.
+	windows := previewWindows(palette, preset)
+
+	// Assemble with padding.
+	reset := "\033[0m"
+	surfaceBg := fmt.Sprintf("\033[48;2;%d;%d;%dm", palette.Surface.R, palette.Surface.G, palette.Surface.B)
+
+	content := left + "  " + windows + "  " + right + reset
+	visible := stripANSI(content)
+	pad := 72 - len(visible)
+	if pad < 0 {
+		pad = 0
+	}
+
+	return content + surfaceBg + strings.Repeat(" ", pad) + reset
+}
+
+// previewWindows generates fake window tabs for the preview.
+func previewWindows(p *theme.Palette, preset Preset) string {
+	// Get the window format strings from dynamicOptions.
+	opts := dynamicOptions(p, "/usr/bin/zmux", preset)
+
+	var windowFmt, windowCurrentFmt, windowSep string
+	for _, opt := range opts {
+		switch opt.Key {
+		case "window-status-format":
+			windowFmt = opt.Value
+		case "window-status-current-format":
+			windowCurrentFmt = opt.Value
+		case "window-status-separator":
+			windowSep = opt.Value
+		}
+	}
+
+	// Replace tmux variables with sample data.
+	inactive := strings.ReplaceAll(windowFmt, "#I", "1")
+	inactive = strings.ReplaceAll(inactive, "#W", "zsh")
+	active := strings.ReplaceAll(windowCurrentFmt, "#I", "2")
+	active = strings.ReplaceAll(active, "#W", "nvim")
+	inactive2 := strings.ReplaceAll(windowFmt, "#I", "3")
+	inactive2 = strings.ReplaceAll(inactive2, "#W", "git")
+
+	// Strip tmux conditionals (always use non-prefix state for preview).
+	inactive = stripTmuxConditionals(inactive, false)
+	active = stripTmuxConditionals(active, false)
+	inactive2 = stripTmuxConditionals(inactive2, false)
+	sep := stripTmuxConditionals(windowSep, false)
+
+	// Convert to ANSI.
+	return tmuxToANSI(inactive + sep + active + sep + inactive2)
+}
+
+// tmuxToANSI converts tmux #[fg=...,bg=...] format strings to ANSI escape codes.
+var tmuxFormatRe = regexp.MustCompile(`#\[([^\]]*)\]`)
+
+func tmuxToANSI(s string) string {
+	return tmuxFormatRe.ReplaceAllStringFunc(s, func(match string) string {
+		inner := match[2 : len(match)-1] // strip #[ and ]
+		parts := strings.Split(inner, ",")
+
+		var codes []string
+		for _, part := range parts {
+			part = strings.TrimSpace(part)
+			switch {
+			case part == "bold":
+				codes = append(codes, "1")
+			case part == "nobold":
+				codes = append(codes, "22")
+			case part == "blink":
+				codes = append(codes, "5")
+			case part == "noblink":
+				codes = append(codes, "25")
+			case strings.HasPrefix(part, "fg="):
+				color := strings.TrimPrefix(part, "fg=")
+				if color == "default" {
+					codes = append(codes, "39")
+				} else {
+					codes = append(codes, hexToANSI("38", color))
+				}
+			case strings.HasPrefix(part, "bg="):
+				color := strings.TrimPrefix(part, "bg=")
+				if color == "default" {
+					codes = append(codes, "49")
+				} else {
+					codes = append(codes, hexToANSI("48", color))
+				}
+			}
+		}
+
+		if len(codes) == 0 {
+			return "\033[0m"
+		}
+		return "\033[" + strings.Join(codes, ";") + "m"
+	})
+}
+
+// hexToANSI converts a hex color like "#f9af4f" to an ANSI 24-bit color code prefix.
+func hexToANSI(prefix, hex string) string {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != 6 {
+		return prefix + ";2;128;128;128"
+	}
+	var r, g, b int
+	fmt.Sscanf(hex, "%02x%02x%02x", &r, &g, &b)
+	return fmt.Sprintf("%s;2;%d;%d;%d", prefix, r, g, b)
+}
+
+// stripTmuxConditionals resolves #{?client_prefix,A,B} to A or B.
+func stripTmuxConditionals(s string, prefixActive bool) string {
+	re := regexp.MustCompile(`#\{[?]client_prefix,([^,}]*),([^}]*)\}`)
+	return re.ReplaceAllStringFunc(s, func(match string) string {
+		m := re.FindStringSubmatch(match)
+		if len(m) < 3 {
+			return match
+		}
+		if prefixActive {
+			return m[1]
+		}
+		return m[2]
+	})
 }
 
 // stripANSI removes ANSI escape sequences to measure visible string length.

@@ -256,7 +256,7 @@ func TestSessionsTabKillConfirmDialog(t *testing.T) {
 	tab, _ := newTestSessionsTab()
 	tab = simulateActivate(tab)
 
-	tab, _ = sendSessionKey(tab, "d")
+	tab, _ = sendSessionKey(tab, "x")
 	if tab.mode != sessionsModeConfirmKill {
 		t.Errorf("expected sessionsModeConfirmKill, got %d", tab.mode)
 	}
@@ -269,7 +269,7 @@ func TestSessionsTabKillCancel(t *testing.T) {
 	tab, _ := newTestSessionsTab()
 	tab = simulateActivate(tab)
 
-	tab, _ = sendSessionKey(tab, "d")
+	tab, _ = sendSessionKey(tab, "x")
 	tab, _ = sendSessionKey(tab, "n") // any key except y cancels
 
 	if tab.mode != sessionsModeList {
@@ -281,7 +281,7 @@ func TestSessionsTabKillConfirm(t *testing.T) {
 	tab, mock := newTestSessionsTab()
 	tab = simulateActivate(tab)
 
-	tab, _ = sendSessionKey(tab, "d")
+	tab, _ = sendSessionKey(tab, "x")
 	_, cmd := sendSessionKey(tab, "y")
 
 	if cmd != nil {

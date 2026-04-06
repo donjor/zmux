@@ -391,8 +391,8 @@ func TestCurrentTabViewShowsWindowCount(t *testing.T) {
 
 	view := tab.View()
 
-	if !strings.Contains(view, "3 windows") {
-		t.Error("expected view to contain '3 windows'")
+	if !strings.Contains(view, "3 tabs") {
+		t.Error("expected view to contain '3 tabs'")
 	}
 }
 

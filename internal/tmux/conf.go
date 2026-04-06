@@ -72,21 +72,46 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	writeSection(&b, "Windows")
 	b.WriteString("bind c new-window -c \"#{pane_current_path}\"\n")
 	b.WriteString("bind n next-window\n")
+	b.WriteString("bind N previous-window\n")
 	b.WriteString("bind . command-prompt -p \"rename tab:\" \"rename-window '%%'\"\n")
+	b.WriteString("bind < swap-window -t -1 \\; select-window -t -1\n")
+	b.WriteString("bind > swap-window -t +1 \\; select-window -t +1\n")
+	b.WriteString("bind x confirm-before -p \"close tab #W? (y/n)\" kill-window\n")
 	b.WriteString("\n")
 
-	// Alt+1-5 tab switching
-	b.WriteString("# Alt+1-5 tab switching (no prefix)\n")
-	for i := 1; i <= 5; i++ {
+	// Alt+1-9 tab switching (no prefix)
+	b.WriteString("# Alt+1-9 tab switching (no prefix)\n")
+	for i := 1; i <= 9; i++ {
 		fmt.Fprintf(&b, "bind -n M-%d select-window -t %d\n", i, i)
+	}
+	b.WriteString("\n")
+
+	// Alt+` tab switcher for current session (no prefix)
+	if zmuxBin != "" {
+		fmt.Fprintf(&b, "bind -n M-` display-popup -w 60%% -h 40%% -E \"%s --tab-picker\"\n", zmuxBin)
 	}
 	b.WriteString("\n")
 
 	// Sessions
 	writeSection(&b, "Sessions")
 	b.WriteString("bind , command-prompt -p \"rename session:\" \"rename-session '%%'\"\n")
-	b.WriteString("bind s choose-tree -s\n")
-	b.WriteString("bind x confirm-before -p \"kill session #S? (y/n)\" \"run-shell 'tmux kill-session -t \\\"#S\\\"'\"\n")
+	b.WriteString("\n")
+
+	// Session navigation (workspace-scoped)
+	writeSection(&b, "Session navigation")
+	if zmuxBin != "" {
+		// prefix+w: workspace session picker
+		fmt.Fprintf(&b, "bind w display-popup -w 60%% -h 50%% -E \"%s --picker\"\n", zmuxBin)
+		// prefix+[ / prefix+]: cycle prev/next session in workspace
+		fmt.Fprintf(&b, "bind [ run-shell \"%s workspace prev\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind ] run-shell \"%s workspace next\"\n", zmuxBin)
+		// Shift+Alt+1-9: direct session switching within workspace
+		for i := 1; i <= 9; i++ {
+			fmt.Fprintf(&b, "bind -n M-S-%d run-shell \"%s workspace switch-to %d\"\n", i, zmuxBin, i)
+		}
+	} else {
+		b.WriteString("bind s choose-tree -s\n")
+	}
 	b.WriteString("\n")
 
 	// Pasting
@@ -126,6 +151,16 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	} else {
 		b.WriteString("bind r source-file ~/.tmux.conf \\; display \"Config reloaded\"\n")
 	}
+	b.WriteString("\n")
+
+	// Status bar refresh hooks — force immediate refresh on context change
+	// so the bar doesn't show stale session/window info for 5 seconds.
+	writeSection(&b, "Status refresh hooks")
+	b.WriteString("set-hook -g client-session-changed \"refresh-client -S\"\n")
+	b.WriteString("set-hook -g session-window-changed \"refresh-client -S\"\n")
+	b.WriteString("set-hook -g window-linked \"refresh-client -S\"\n")
+	b.WriteString("set-hook -g window-renamed \"refresh-client -S\"\n")
+	b.WriteString("set-hook -g session-renamed \"refresh-client -S\"\n")
 	b.WriteString("\n")
 
 	// Bootstrap: apply theme + bar on tmux start

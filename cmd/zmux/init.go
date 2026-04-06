@@ -48,7 +48,7 @@ func runInitWizard() error {
 		resolver = theme.NewResolver(app.FS, "", "")
 	}
 
-	styles := tui.DefaultStyles()
+	styles, _, _ := loadActiveStyles()
 	model := tui.NewWizardModel(app.FS, resolver, version, styles)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())

@@ -28,6 +28,10 @@ func (t *HelpTab) Title() string         { return "Help" }
 func (t *HelpTab) Init() tea.Cmd         { return nil }
 
 func (t *HelpTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
+	if tc, ok := msg.(dashboard.ThemeChangedMsg); ok {
+		t.styles = tc.Styles
+		return t, nil
+	}
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
@@ -103,7 +107,7 @@ func (t *HelpTab) helpLines() []string {
 
 	return []string{
 		section("Dashboard"),
-		binding("1-4", "Switch to tab by number"),
+		binding("1-5", "Switch to tab by number"),
 		binding("Tab / Shift+Tab", "Cycle through tabs"),
 		binding("Esc", "Close dashboard"),
 		"",

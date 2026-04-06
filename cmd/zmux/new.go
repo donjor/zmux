@@ -12,55 +12,129 @@ import (
 
 var newTemplateFlag string
 
+// Deprecated: kept for one release cycle.
+var newWorkspaceFlag string
+
 var newCmd = &cobra.Command{
-	Use:     "new [name]",
+	Use:     "new [workspace] [session]",
 	Aliases: []string{"n"},
-	Short:   "Create a new session and attach",
+	Short:   "Create a new session in a workspace",
 	Long: `Create a new tmux session and attach to it.
 
-If no name is given, creates a tmp-N session.
-With --template/-t, creates from a template layout.`,
-	Args: cobra.MaximumNArgs(1),
+  zmux new <workspace>             Create workspace + session (session = workspace name)
+  zmux new <workspace> <session>   Add session to existing workspace
+  zmux new                         Create tmp-N session (no workspace)
+  zmux new -t <template> <ws>      Create from template in workspace
+
+If the workspace doesn't exist, it is created automatically.`,
+	Args: cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir, err := os.Getwd()
 		if err != nil {
 			dir = os.Getenv("HOME")
 		}
 
-		name := ""
-		if len(args) > 0 {
-			name = args[0]
+		// Deprecated -w flag: rewrite to new positional args.
+		if newWorkspaceFlag != "" {
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
+			}
+			fmt.Fprintf(os.Stderr, "Warning: -w flag is deprecated. Use: zmux new %s %s\n", newWorkspaceFlag, name)
+			return runNewInWorkspace(newWorkspaceFlag, name, dir)
 		}
 
-		if newTemplateFlag != "" {
-			return runNewFromTemplate(name, dir)
+		switch len(args) {
+		case 0:
+			// zmux new → tmp session (no workspace)
+			if newTemplateFlag != "" {
+				return fmt.Errorf("template requires a workspace: zmux new -t %s <workspace>", newTemplateFlag)
+			}
+			return runNewTmp(dir)
+		case 1:
+			// zmux new <workspace>
+			wsName := args[0]
+			if newTemplateFlag != "" {
+				return runNewFromTemplate(wsName, wsName, dir)
+			}
+			return runNewInWorkspace(wsName, "", dir)
+		case 2:
+			// zmux new <workspace> <session>
+			wsName := args[0]
+			sessName := args[1]
+			if newTemplateFlag != "" {
+				return runNewFromTemplate(wsName, sessName, dir)
+			}
+			return runNewInWorkspace(wsName, sessName, dir)
 		}
-
-		return runNew(name, dir)
+		return nil
 	},
 }
 
-func runNew(name, dir string) error {
-	if err := session.ValidateName(name); err != nil {
-		return err
-	}
-
-	if name == "" {
-		name = session.NextTmpName(app.Runner)
-	}
-
-	if app.Runner.HasSession(name) {
-		return fmt.Errorf("session %q already exists", name)
-	}
-
+// runNewTmp creates a tmp-N session with no workspace (backward compat).
+func runNewTmp(dir string) error {
+	name := session.NextTmpName(app.Runner)
 	if err := session.Create(app.Runner, name, dir); err != nil {
 		return err
 	}
-
 	return session.Attach(app.Runner, name)
 }
 
-func runNewFromTemplate(name, dir string) error {
+// runNewInWorkspace creates a session within a workspace.
+func runNewInWorkspace(wsName, sessName, dir string) error {
+	// Validate workspace name.
+	if err := session.ValidateName(wsName); err != nil {
+		return fmt.Errorf("invalid workspace name: %w", err)
+	}
+
+	// Check if workspace exists.
+	ws, err := app.WorkspaceStore.GetWorkspace(wsName)
+	if err != nil {
+		return err
+	}
+
+	if sessName == "" {
+		if ws != nil && len(ws.Sessions) > 0 {
+			// Workspace exists with sessions — ambiguous without session name.
+			return fmt.Errorf(
+				"workspace %q already exists with %d session(s)\n"+
+					"  Use: zmux open %s          (enter existing)\n"+
+					"  Or:  zmux new %s <session>  (add a session)",
+				wsName, len(ws.Sessions), wsName, wsName,
+			)
+		}
+		// New workspace or empty workspace — session defaults to workspace name.
+		sessName = wsName
+	}
+
+	if err := session.ValidateName(sessName); err != nil {
+		return fmt.Errorf("invalid session name: %w", err)
+	}
+
+	if app.Runner.HasSession(sessName) {
+		return fmt.Errorf("session %q already exists", sessName)
+	}
+
+	// Ensure workspace exists.
+	if _, err := app.WorkspaceStore.EnsureWorkspace(wsName, dir); err != nil {
+		return err
+	}
+
+	// Create the tmux session.
+	if err := session.Create(app.Runner, sessName, dir); err != nil {
+		return err
+	}
+
+	// Register in workspace.
+	if err := app.WorkspaceStore.AddSession(wsName, sessName); err != nil {
+		return err
+	}
+	_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
+
+	return session.Attach(app.Runner, sessName)
+}
+
+func runNewFromTemplate(wsName, sessName, dir string) error {
 	cfg := config.DefaultConfig()
 	templates, _ := session.LoadTemplates(app.FS, cfg.Templates.Paths)
 
@@ -80,19 +154,30 @@ func runNewFromTemplate(name, dir string) error {
 		return fmt.Errorf("template %q not found (available: %s)", newTemplateFlag, joinOr(available))
 	}
 
-	if name == "" {
-		name = tmpl.Name
+	if sessName == "" {
+		sessName = wsName
 	}
 
-	if app.Runner.HasSession(name) {
-		return fmt.Errorf("session %q already exists", name)
+	if app.Runner.HasSession(sessName) {
+		return fmt.Errorf("session %q already exists", sessName)
 	}
 
-	if err := session.CreateFromTemplate(app.Runner, *tmpl, name, dir); err != nil {
+	// Ensure workspace.
+	if _, err := app.WorkspaceStore.EnsureWorkspace(wsName, dir); err != nil {
 		return err
 	}
 
-	return session.Attach(app.Runner, name)
+	if err := session.CreateFromTemplate(app.Runner, *tmpl, sessName, dir); err != nil {
+		return err
+	}
+
+	// Register in workspace.
+	if err := app.WorkspaceStore.AddSession(wsName, sessName); err != nil {
+		return err
+	}
+	_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
+
+	return session.Attach(app.Runner, sessName)
 }
 
 func joinOr(items []string) string {
@@ -104,5 +189,7 @@ func joinOr(items []string) string {
 
 func init() {
 	newCmd.Flags().StringVarP(&newTemplateFlag, "template", "t", "", "create from template")
+	newCmd.Flags().StringVarP(&newWorkspaceFlag, "workspace", "w", "", "tag session to workspace (deprecated: use positional args)")
+	_ = newCmd.Flags().MarkHidden("workspace")
 	rootCmd.AddCommand(newCmd)
 }

@@ -40,7 +40,7 @@ func RenderTabBar(tabs []TabID, active TabID, styles tui.Styles, width int) stri
 // RenderHelpBar renders the bottom help bar with contextual hints.
 func RenderHelpBar(tabHelp string, styles tui.Styles, width int) string {
 	// Global keys always shown.
-	globalHelp := "1-4:tabs  tab/shift+tab:cycle  esc:quit"
+	globalHelp := "1-5:tabs  tab/shift+tab:cycle  esc:quit"
 
 	left := styles.Dim.Render(tabHelp)
 	right := styles.Dim.Render(globalHelp)
@@ -77,6 +77,8 @@ func tabLabel(id TabID) string {
 		return "This Session"
 	case TabSessions:
 		return "Sessions"
+	case TabThemes:
+		return "Themes"
 	case TabSettings:
 		return "Settings"
 	case TabHelp:

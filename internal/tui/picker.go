@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -30,13 +31,24 @@ const (
 
 // PickerResult holds the outcome of the picker interaction.
 type PickerResult struct {
-	Action   string // "attach", "hijack", "new", "template", "overmind-connect", "external-attach", ""
-	Session  string // session name to attach
-	Name     string // name for new session (may be "" for auto tmp-N)
-	Template string // template name if action is "template"
+	Action    string // "attach", "hijack", "new", "template", "overmind-connect", "external-attach", "workspace-focus", ""
+	Session   string // session name to attach
+	Name      string // name for new session (may be "" for auto tmp-N)
+	Template  string // template name if action is "template"
+	Workspace string // workspace name for workspace-level actions
 
 	// External source fields (overmind-connect, external-attach).
 	ExternalSource *source.Source // source owning the session/process
+}
+
+// pickerItem represents a single row in the grouped picker list.
+// Workspace headers are selectable (Enter → focus workspace).
+// Section headers ("sessions", "temporary") are non-selectable.
+type pickerItem struct {
+	IsHeader  bool
+	Header    string               // section label
+	Workspace string               // non-empty on workspace headers (selectable)
+	Session   *session.SessionInfo // nil for headers
 }
 
 // windowsMsg carries fetched window data for all sessions.
@@ -49,12 +61,19 @@ type catalogMsg struct {
 	catalog *source.Catalog
 }
 
+// workspaceStateMsg carries workspace state loaded asynchronously.
+type workspaceStateMsg struct {
+	state map[string]string // session → workspace
+}
+
 // PickerModel is the bubbletea model for the outside-tmux session picker.
 type PickerModel struct {
 	runner   tmux.Runner
 	sessions []session.SessionInfo
 	filtered []session.SessionInfo
+	items    []pickerItem // grouped view built from filtered + workspaceState
 	cursor   int
+	lastQuery string // previous filter value — for detecting clears
 	width    int
 	height   int
 	styles   Styles
@@ -64,6 +83,9 @@ type PickerModel struct {
 
 	// Window names per session (cached).
 	windows map[string][]tmux.Window
+
+	// Workspace state: root session name → workspace name.
+	workspaceState map[string]string
 
 	// Templates available for selection.
 	templates      []session.Template
@@ -75,6 +97,9 @@ type PickerModel struct {
 	// Selected template (when in modeTemplateName).
 	selectedTemplate string
 
+	// Workspace loader (set via SetWorkspaceLoader).
+	wsLoader WorkspaceLoader
+
 	// External sources (catalog).
 	catalog       *source.Catalog
 	groupExpanded map[int]bool // expanded state per source group index
@@ -83,6 +108,10 @@ type PickerModel struct {
 	Result   PickerResult
 	Quitting bool
 }
+
+// WorkspaceLoader is a function that returns the current workspace state
+// (session→workspace map). Used to decouple picker from workspace package.
+type WorkspaceLoader func() map[string]string
 
 // NewPickerModel creates a new session picker model.
 func NewPickerModel(runner tmux.Runner, styles Styles) PickerModel {
@@ -96,13 +125,20 @@ func NewPickerModel(runner tmux.Runner, styles Styles) PickerModel {
 	ni.CharLimit = 64
 
 	return PickerModel{
-		runner:        runner,
-		styles:        styles,
-		input:         ti,
-		nameInput:     ni,
-		windows:       make(map[string][]tmux.Window),
-		groupExpanded: make(map[int]bool),
+		runner:         runner,
+		styles:         styles,
+		input:          ti,
+		nameInput:      ni,
+		windows:        make(map[string][]tmux.Window),
+		groupExpanded:  make(map[int]bool),
+		workspaceState: make(map[string]string),
 	}
+}
+
+// SetWorkspaceLoader sets the function used to load workspace state.
+// Must be called before the picker's Init runs.
+func (m *PickerModel) SetWorkspaceLoader(loader WorkspaceLoader) {
+	m.wsLoader = loader
 }
 
 // SetTemplates sets the available templates for the picker.
@@ -140,7 +176,14 @@ func fetchWindows(runner tmux.Runner, sessions []session.SessionInfo) tea.Cmd {
 // ── Init ──
 
 func (m PickerModel) Init() tea.Cmd {
-	return tea.Batch(refreshSessions(m.runner), textinput.Blink, discoverCatalog())
+	cmds := []tea.Cmd{refreshSessions(m.runner), textinput.Blink, discoverCatalog()}
+	if m.wsLoader != nil {
+		loader := m.wsLoader
+		cmds = append(cmds, func() tea.Msg {
+			return workspaceStateMsg{state: loader()}
+		})
+	}
+	return tea.Batch(cmds...)
 }
 
 // discoverCatalog runs external source discovery asynchronously.
@@ -186,6 +229,13 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case workspaceStateMsg:
+		if msg.state != nil {
+			m.workspaceState = msg.state
+		}
+		m.buildItems()
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -211,9 +261,9 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmDelete {
 		switch msg.String() {
 		case "y", "Y":
-			sessionIdx := m.cursor - 1
-			if sessionIdx >= 0 && sessionIdx < len(m.filtered) {
-				_ = session.Kill(m.runner, m.filtered[sessionIdx].Name)
+			itemIdx := m.cursor - 1
+			if itemIdx >= 0 && itemIdx < len(m.items) && m.items[itemIdx].Session != nil {
+				_ = session.Kill(m.runner, m.items[itemIdx].Session.Name)
 			}
 			m.mode = modeNormal
 			return m, refreshSessions(m.runner)
@@ -286,6 +336,7 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up":
 		if m.cursor > 0 {
 			m.cursor--
+			m.skipHeaders(-1)
 		}
 		return m, nil
 
@@ -293,6 +344,7 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		total := m.totalItems()
 		if m.cursor < total-1 {
 			m.cursor++
+			m.skipHeaders(1)
 		}
 		return m, nil
 
@@ -304,15 +356,15 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Only when input is empty (otherwise it's a character).
 		if m.input.Value() == "" {
 			idx, _ := strconv.Atoi(msg.String())
-			// Count only named sessions.
+			// Count only named (non-tmp, non-header) items.
 			n := 0
-			for _, s := range m.filtered {
-				if s.IsTmp {
+			for _, item := range m.items {
+				if item.IsHeader || item.Session == nil || item.Session.IsTmp {
 					continue
 				}
 				n++
 				if n == idx {
-					m.Result = PickerResult{Action: "attach", Session: s.Name}
+					m.Result = PickerResult{Action: "attach", Session: item.Session.Name}
 					m.Quitting = true
 					return m, tea.Quit
 				}
@@ -320,18 +372,19 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case "ctrl+d":
-		// Delete selected session (not the "+ new" entry at cursor 0).
-		if m.cursor > 0 && m.cursor-1 < len(m.filtered) {
+	case "ctrl+x":
+		// Kill selected session (not the "+ new" entry, not headers).
+		itemIdx := m.cursor - 1
+		if itemIdx >= 0 && itemIdx < len(m.items) && !m.items[itemIdx].IsHeader && m.items[itemIdx].Session != nil {
 			m.mode = modeConfirmDelete
 		}
 		return m, nil
 
 	case "ctrl+h":
 		// Hijack — forcefully attach, detaching other clients.
-		sessionIdx := m.cursor - 1
-		if sessionIdx >= 0 && sessionIdx < len(m.filtered) {
-			s := m.filtered[sessionIdx]
+		itemIdx := m.cursor - 1
+		if itemIdx >= 0 && itemIdx < len(m.items) && !m.items[itemIdx].IsHeader && m.items[itemIdx].Session != nil {
+			s := m.items[itemIdx].Session
 			if s.Attached {
 				m.Result = PickerResult{Action: "hijack", Session: s.Name}
 				m.Quitting = true
@@ -387,13 +440,25 @@ func (m PickerModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
-	// Cursor > 0 = session at filtered[cursor-1].
-	sessionIdx := m.cursor - 1
-	if sessionIdx < len(m.filtered) {
-		selected := m.filtered[sessionIdx]
-		m.Result = PickerResult{Action: "attach", Session: selected.Name}
-		m.Quitting = true
-		return m, tea.Quit
+	// Cursor > 0 = item at items[cursor-1].
+	itemIdx := m.cursor - 1
+	if itemIdx < len(m.items) {
+		item := m.items[itemIdx]
+		if item.IsHeader && item.Workspace != "" {
+			// Workspace header — focus workspace. Caller resolves last-active.
+			m.Result = PickerResult{Action: "workspace-focus", Workspace: item.Workspace}
+			m.Quitting = true
+			return m, tea.Quit
+		}
+		if item.IsHeader {
+			// Non-workspace headers (e.g., "other", "temporary") — non-selectable.
+			return m, nil
+		}
+		if item.Session != nil {
+			m.Result = PickerResult{Action: "attach", Session: item.Session.Name}
+			m.Quitting = true
+			return m, tea.Quit
+		}
 	}
 
 	// Check if cursor is in external source area.
@@ -430,6 +495,9 @@ func (m PickerModel) handleEnter() (tea.Model, tea.Cmd) {
 
 func (m *PickerModel) applyFilter() {
 	query := m.input.Value()
+	changed := query != m.lastQuery
+	m.lastQuery = query
+
 	if query == "" {
 		m.filtered = m.sessions
 	} else {
@@ -444,9 +512,150 @@ func (m *PickerModel) applyFilter() {
 		}
 	}
 
+	m.buildItems()
+
 	total := m.totalItems()
 	if m.cursor >= total {
 		m.cursor = max(0, total-1)
+	}
+
+	if !changed {
+		return
+	}
+
+	// Query cleared — reset cursor to "+ new session".
+	if query == "" {
+		m.cursor = 0
+		return
+	}
+
+	// Query matches existing sessions — point cursor at the first match
+	// rather than staying on "+ Create".
+	if len(m.filtered) > 0 && m.cursor == 0 {
+		m.cursor = 1
+		m.skipHeaders(1)
+	}
+}
+
+// buildItems constructs the grouped item list from filtered sessions and
+// workspace state. When no workspaces exist, items is a flat list matching
+// filtered (no headers). When workspaces exist, items include section headers.
+func (m *PickerModel) buildItems() {
+	if len(m.workspaceState) == 0 {
+		// No workspace state — flat list, no headers.
+		m.items = make([]pickerItem, len(m.filtered))
+		for i := range m.filtered {
+			s := m.filtered[i]
+			m.items[i] = pickerItem{Session: &s}
+		}
+		return
+	}
+
+	// Group sessions by workspace.
+	type wsGroup struct {
+		name     string
+		sessions []session.SessionInfo
+	}
+
+	groups := make(map[string]*wsGroup)
+	var order []string
+	var untagged []session.SessionInfo
+	var tmp []session.SessionInfo
+
+	for i := range m.filtered {
+		s := m.filtered[i]
+		if s.IsTmp {
+			tmp = append(tmp, s)
+			continue
+		}
+		root := session.RootName(s.Name)
+		ws, ok := m.workspaceState[root]
+		if ok {
+			g, exists := groups[ws]
+			if !exists {
+				g = &wsGroup{name: ws}
+				groups[ws] = g
+				order = append(order, ws)
+			}
+			g.sessions = append(g.sessions, s)
+		} else {
+			untagged = append(untagged, s)
+		}
+	}
+
+	// Sort workspace names for stable display.
+	sort.Strings(order)
+
+	var items []pickerItem
+
+	// Workspace groups (headers are selectable).
+	for _, ws := range order {
+		g := groups[ws]
+		items = append(items, pickerItem{IsHeader: true, Header: ws, Workspace: ws})
+		for i := range g.sessions {
+			s := g.sessions[i]
+			items = append(items, pickerItem{Session: &s})
+		}
+	}
+
+	// Untagged sessions (header is NOT selectable — no Workspace field).
+	if len(untagged) > 0 {
+		items = append(items, pickerItem{IsHeader: true, Header: "other"})
+		for i := range untagged {
+			s := untagged[i]
+			items = append(items, pickerItem{Session: &s})
+		}
+	}
+
+	// Temporary sessions.
+	if len(tmp) > 0 {
+		items = append(items, pickerItem{IsHeader: true, Header: "temporary"})
+		for i := range tmp {
+			s := tmp[i]
+			items = append(items, pickerItem{Session: &s})
+		}
+	}
+
+	m.items = items
+}
+
+// itemSessionAt returns the session at the given item index (0-based within
+// the items slice), or nil if it's a header.
+func (m PickerModel) itemSessionAt(itemIdx int) *session.SessionInfo {
+	if itemIdx < 0 || itemIdx >= len(m.items) {
+		return nil
+	}
+	return m.items[itemIdx].Session
+}
+
+// isSkippableHeaderAt returns true if the item at cursor position is a
+// non-selectable header (section headers like "other", "temporary").
+// Workspace headers are selectable and NOT skipped.
+// cursor is absolute (0=new, 1..=items, after=external).
+func (m PickerModel) isHeaderAt(cursor int) bool {
+	itemIdx := cursor - 1 // offset for "+ new session"
+	if itemIdx < 0 || itemIdx >= len(m.items) {
+		return false
+	}
+	item := m.items[itemIdx]
+	// Workspace headers are selectable — don't skip.
+	if item.IsHeader && item.Workspace != "" {
+		return false
+	}
+	return item.IsHeader
+}
+
+// skipHeaders adjusts the cursor to skip header items in the given direction.
+// dir is +1 (down) or -1 (up).
+func (m *PickerModel) skipHeaders(dir int) {
+	total := m.totalItems()
+	for m.cursor >= 1 && m.cursor < 1+len(m.items) && m.isHeaderAt(m.cursor) {
+		m.cursor += dir
+		if m.cursor < 0 || m.cursor >= total {
+			// Went past bounds — reverse.
+			m.cursor -= dir
+			break
+		}
 	}
 }
 
@@ -475,15 +684,15 @@ func (m PickerModel) externalItemCount() int {
 	return count
 }
 
-// totalItems returns the total number of selectable cursor positions.
+// totalItems returns the total number of cursor positions (including headers).
 func (m PickerModel) totalItems() int {
-	return 1 + len(m.filtered) + m.externalItemCount()
+	return 1 + len(m.items) + m.externalItemCount()
 }
 
 // externalItemAt returns the external item at the given absolute cursor
 // position, or nil if the cursor is not in the external area.
 func (m PickerModel) externalItemAt(cursor int) *externalItem {
-	base := 1 + len(m.filtered) // start of external area
+	base := 1 + len(m.items) // start of external area
 	if cursor < base {
 		return nil
 	}
@@ -512,7 +721,7 @@ func (m PickerModel) externalItemAt(cursor int) *externalItem {
 
 // isOnExternalItem returns true if the cursor is in the external area.
 func (m PickerModel) isOnExternalItem() bool {
-	return m.cursor >= 1+len(m.filtered) && m.externalItemAt(m.cursor) != nil
+	return m.cursor >= 1+len(m.items) && m.externalItemAt(m.cursor) != nil
 }
 
 // ── View ──
@@ -563,10 +772,10 @@ func (m PickerModel) View() string {
 	}
 
 	// ── Delete confirmation ──
-	sessionIdx := m.cursor - 1
-	if m.mode == modeConfirmDelete && sessionIdx >= 0 && sessionIdx < len(m.filtered) {
+	itemIdx := m.cursor - 1
+	if m.mode == modeConfirmDelete && itemIdx >= 0 && itemIdx < len(m.items) && m.items[itemIdx].Session != nil {
 		b.WriteString("\n")
-		name := m.filtered[sessionIdx].Name
+		name := m.items[itemIdx].Session.Name
 		prompt := m.styles.Error.Render("  Delete ") +
 			m.styles.Error.Bold(true).Render(name) +
 			m.styles.Error.Render("? ") +
@@ -616,8 +825,8 @@ func (m PickerModel) viewNormal() string {
 		b.WriteString("    " + m.styles.Muted.Render(newLabel) + "\n")
 	}
 
-	// ── Session list ──
-	if len(m.filtered) > 0 {
+	// ── Session list (grouped) ──
+	if len(m.items) > 0 {
 		b.WriteString("\n")
 		b.WriteString(m.viewSessionList())
 	} else if query != "" {
@@ -638,9 +847,9 @@ func (m PickerModel) viewSessionList() string {
 
 	// Max name width for alignment.
 	maxName := 0
-	for _, s := range m.filtered {
-		if len(s.Name) > maxName {
-			maxName = len(s.Name)
+	for _, item := range m.items {
+		if item.Session != nil && len(item.Session.Name) > maxName {
+			maxName = len(item.Session.Name)
 		}
 	}
 	if maxName < 8 {
@@ -650,16 +859,7 @@ func (m PickerModel) viewSessionList() string {
 		maxName = 20
 	}
 
-	// Check if we have named sessions for divider logic.
-	hasNamed := false
-	for _, s := range m.filtered {
-		if !s.IsTmp {
-			hasNamed = true
-			break
-		}
-	}
-
-	// Scroll window. listCursor is the cursor within the session list (0-based).
+	// Scroll window. listCursor is the cursor within items (0-based).
 	listCursor := m.cursor - 1 // offset for "+ new session" entry
 	listHeight := m.height - 14
 	if listHeight < 5 {
@@ -670,28 +870,52 @@ func (m PickerModel) viewSessionList() string {
 		start = listCursor - listHeight + 1
 	}
 	end := start + listHeight
-	if end > len(m.filtered) {
-		end = len(m.filtered)
+	if end > len(m.items) {
+		end = len(m.items)
 	}
 
-	shownDivider := false
-	for i := start; i < end; i++ {
-		s := m.filtered[i]
-
-		// Divider before first tmp session.
-		if s.IsTmp && !shownDivider && hasNamed {
-			b.WriteString("  " + m.styles.Dim.Render(strings.Repeat("─", maxName+30)) + "\n")
-			shownDivider = true
+	// Track whether we need a named/tmp divider (flat mode, no workspace headers).
+	hasHeaders := false
+	for _, item := range m.items {
+		if item.IsHeader {
+			hasHeaders = true
+			break
 		}
+	}
+	shownDivider := false
 
-		b.WriteString(m.viewSessionEntry(i, s, maxName, listCursor))
+	for i := start; i < end; i++ {
+		item := m.items[i]
+		if item.IsHeader {
+			// Workspace / section header.
+			b.WriteString("\n")
+			b.WriteString("  " + m.styles.Dim.Render(item.Header) + "\n")
+			continue
+		}
+		if item.Session != nil {
+			// In flat mode (no workspace headers), show a divider before first tmp session.
+			if !hasHeaders && item.Session.IsTmp && !shownDivider {
+				// Check if there are named sessions for divider logic.
+				for _, it := range m.items {
+					if it.Session != nil && !it.Session.IsTmp {
+						shownDivider = true
+						b.WriteString("  " + m.styles.Dim.Render(strings.Repeat("\u2500", maxName+30)) + "\n")
+						break
+					}
+				}
+				if !shownDivider {
+					shownDivider = true // no named sessions, skip divider
+				}
+			}
+			b.WriteString(m.viewSessionEntry(i, *item.Session, maxName, listCursor))
+		}
 	}
 
 	if start > 0 {
-		b.WriteString(m.styles.Dim.Render("  ↑ more") + "\n")
+		b.WriteString(m.styles.Dim.Render("  \u2191 more") + "\n")
 	}
-	if end < len(m.filtered) {
-		b.WriteString(m.styles.Dim.Render("  ↓ more") + "\n")
+	if end < len(m.items) {
+		b.WriteString(m.styles.Dim.Render("  \u2193 more") + "\n")
 	}
 
 	return b.String()
@@ -704,7 +928,7 @@ func (m PickerModel) viewExternalSources() string {
 	b.WriteString("\n")
 	b.WriteString("  " + m.styles.Dim.Render(strings.Repeat("\u2501", 40)) + "\n")
 
-	pos := 1 + len(m.filtered) // first external cursor position
+	pos := 1 + len(m.items) // first external cursor position
 	for i, g := range m.catalog.External {
 		selected := m.cursor == pos
 
@@ -793,13 +1017,13 @@ func (m PickerModel) viewSessionEntry(idx int, s session.SessionInfo, maxName in
 	}
 
 	// Index number — named sessions get sequential 1-9 indices for quick-select.
-	// namedIdx is passed in as the count of named sessions seen so far.
 	var indexStr string
-	if !s.IsTmp && idx < 9 {
-		// Count how many named sessions appear before this one.
+	if !s.IsTmp {
+		// Count how many named (non-tmp, non-header) sessions appear before this one.
 		namedCount := 0
 		for i := 0; i < idx; i++ {
-			if !m.filtered[i].IsTmp {
+			item := m.items[i]
+			if !item.IsHeader && item.Session != nil && !item.Session.IsTmp {
 				namedCount++
 			}
 		}
@@ -878,13 +1102,14 @@ func (m PickerModel) viewSessionEntry(idx int, s session.SessionInfo, maxName in
 		lastActiveStr = m.styles.Dim.Render(session.HumanAge(s.LastAttached) + " ago")
 	}
 
-	// Attached tag — shows group hint when selected.
+	// Attached tag — shows client count when multiple viewports.
 	attachedTag := ""
-	if s.Attached && selected {
-		attachedTag = "  " + m.styles.Info.Render("attached") +
-			m.styles.Dim.Render(" → "+s.Name+"-b")
-	} else if s.Attached {
-		attachedTag = "  " + m.styles.Info.Render("attached")
+	if s.Attached {
+		if s.AttachedClients > 1 {
+			attachedTag = "  " + m.styles.Info.Render(fmt.Sprintf("attached ×%d", s.AttachedClients))
+		} else {
+			attachedTag = "  " + m.styles.Info.Render("attached")
+		}
 	}
 
 	line := "  " + cursor + iconStr + " " + nameStr + createdStr + "  " + windowStr + "  " + dirStr
@@ -987,9 +1212,9 @@ func (m PickerModel) viewHelp() string {
 	// Check if selected session is attached.
 	selectedAttached := false
 	if m.cursor > 0 {
-		si := m.cursor - 1
-		if si < len(m.filtered) {
-			selectedAttached = m.filtered[si].Attached
+		itemIdx := m.cursor - 1
+		if itemIdx < len(m.items) && m.items[itemIdx].Session != nil {
+			selectedAttached = m.items[itemIdx].Session.Attached
 		}
 	}
 
@@ -1004,8 +1229,11 @@ func (m PickerModel) viewHelp() string {
 
 	parts = append(parts, "ctrl+t:template")
 
-	if m.cursor > 0 && len(m.filtered) > 0 {
-		parts = append(parts, "ctrl+d:delete")
+	if m.cursor > 0 {
+		itemIdx := m.cursor - 1
+		if itemIdx < len(m.items) && !m.items[itemIdx].IsHeader && m.items[itemIdx].Session != nil {
+			parts = append(parts, "ctrl+x:kill")
+		}
 	}
 
 	if query != "" {
@@ -1035,9 +1263,9 @@ func (m PickerModel) ghostCmd() string {
 		}
 		return "zmux new -t ..."
 	case modeConfirmDelete:
-		si := m.cursor - 1
-		if si >= 0 && si < len(m.filtered) {
-			return "zmux kill " + m.filtered[si].Name
+		itemIdx := m.cursor - 1
+		if itemIdx >= 0 && itemIdx < len(m.items) && m.items[itemIdx].Session != nil {
+			return "zmux kill " + m.items[itemIdx].Session.Name
 		}
 		return "zmux kill ..."
 	}
@@ -1051,13 +1279,19 @@ func (m PickerModel) ghostCmd() string {
 		return "zmux new"
 	}
 
-	sessionIdx := m.cursor - 1
-	if sessionIdx < len(m.filtered) {
-		s := m.filtered[sessionIdx]
-		if s.Attached {
-			return "zmux " + s.Name + "  \u2192  " + s.Name + "-b"
+	itemIdx := m.cursor - 1
+	if itemIdx < len(m.items) {
+		item := m.items[itemIdx]
+		if item.IsHeader {
+			return "# " + item.Header
 		}
-		return "zmux " + s.Name
+		if item.Session != nil {
+			s := item.Session
+			if s.Attached {
+				return "zmux " + s.Name + "  \u2192  " + s.Name + "-b"
+			}
+			return "zmux " + s.Name
+		}
 	}
 
 	// External source ghost commands.

@@ -122,7 +122,10 @@ func TestGenerateConfContainsSessionBindings(t *testing.T) {
 
 	checks := []string{
 		`bind , command-prompt -p "rename session:"`,
-		"bind s choose-tree -s",
+		"bind w display-popup",
+		"bind [ run-shell",
+		"bind ] run-shell",
+		"bind -n M-S-1 run-shell",
 		`bind x confirm-before`,
 	}
 

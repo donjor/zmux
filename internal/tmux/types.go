@@ -11,6 +11,7 @@ type Session struct {
 	Created      time.Time
 	LastAttached time.Time
 	Dir          string
+	Group        string // session group name (empty if ungrouped)
 }
 
 // Window represents a tmux window.

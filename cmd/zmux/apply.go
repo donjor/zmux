@@ -61,7 +61,16 @@ Used by:
 			}
 		}
 
-		// Step 3: Apply bar preset (live set-option calls).
+		// Step 3: Set workspace env var for native tmux format access.
+		if app.Runner.IsInsideTmux() || os.Getenv("TMUX") != "" {
+			sessionName, _ := app.Runner.DisplayMessage("", "#{session_name}")
+			if sessionName != "" {
+				ws, _ := app.WorkspaceStore.WorkspaceFor(sessionName)
+				_ = app.Runner.SetEnvironment("ZMUX_WORKSPACE", ws)
+			}
+		}
+
+		// Step 4: Apply bar preset (live set-option calls).
 		preset, _ := bar.PresetFromString(cfg.Bar.Preset)
 		_ = bar.Apply(app.Runner, preset, palette)
 

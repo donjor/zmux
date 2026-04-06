@@ -8,14 +8,12 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/sahilm/fuzzy"
 
-	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
+	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
-	"github.com/donjor/zmux/internal/tui/views"
 )
 
 // ── Shared config row types ──
@@ -32,7 +30,7 @@ const (
 // configRow describes a single editable config field.
 type configRow struct {
 	label    string
-	key      string // dotted key for display, e.g. "bar.preset"
+	key      string // dotted key for display, e.g. "sync.target"
 	kind     configRowKind
 	options  []string // for cycle kind
 	getValue func(config.Config) string
@@ -55,52 +53,24 @@ func cycleOption(options []string, current string) string {
 // settingsReqCounter is a monotonic counter for async correctness.
 var settingsReqCounter atomic.Int64
 
-// settingsSection identifies the active section within the settings tab.
-type settingsSection int
-
-const (
-	sectionTheme   settingsSection = iota
-	sectionBar
-	sectionGeneral
-)
-
-var sectionNames = [...]string{
-	sectionTheme:   "Theme",
-	sectionBar:     "Bar",
-	sectionGeneral: "General",
-}
-
-const sectionCount = 3
-
 // settingsMode tracks the current interaction mode.
 type settingsMode int
 
 const (
-	settingsModeList   settingsMode = iota // browsing within a section
-	settingsModeFilter                     // theme filter input active
-	settingsModeEdit                       // config text input active
+	settingsModeList settingsMode = iota // browsing config rows
+	settingsModeEdit                     // config text input active
 )
 
 // ── Messages ──
 
 type settingsDataMsg struct {
-	reqID        int64
-	themes       []theme.ThemeInfo
-	currentTheme string
-	cfg          config.Config
-	cfgExists    bool
-	err          error
-}
-
-func (m settingsDataMsg) TargetTab() dashboard.TabID { return dashboard.TabSettings }
-
-type settingsThemeApplyMsg struct {
 	reqID     int64
-	themeName string
+	cfg       config.Config
+	cfgExists bool
 	err       error
 }
 
-func (m settingsThemeApplyMsg) TargetTab() dashboard.TabID { return dashboard.TabSettings }
+func (m settingsDataMsg) TargetTab() dashboard.TabID { return dashboard.TabSettings }
 
 type settingsConfigSaveMsg struct {
 	reqID int64
@@ -109,31 +79,16 @@ type settingsConfigSaveMsg struct {
 
 func (m settingsConfigSaveMsg) TargetTab() dashboard.TabID { return dashboard.TabSettings }
 
-// SettingsTab implements the Tab interface for merged settings.
+// SettingsTab implements the Tab interface for general config editing.
 type SettingsTab struct {
-	resolver *theme.Resolver
-	fs       config.FS
-	styles   tui.Styles
-
-	// Active section.
-	section settingsSection
+	fs     config.FS
+	runner tmux.Runner
+	styles tui.Styles
 
 	// Data.
 	reqID int64
 
-	// Theme section.
-	themes       []theme.ThemeInfo
-	filtered     []theme.ThemeInfo
-	currentTheme string
-	themeCursor  int
-	filter       textinput.Model
-
-	// Bar section.
-	barPresets   []bar.Preset
-	barCursor    int
-	currentBar   string
-
-	// General section.
+	// General config.
 	cfg         config.Config
 	originalCfg config.Config
 	cfgExists   bool
@@ -154,21 +109,16 @@ type SettingsTab struct {
 }
 
 // NewSettingsTab creates a new settings tab.
-func NewSettingsTab(resolver *theme.Resolver, fs config.FS, styles tui.Styles) *SettingsTab {
-	filterInput := textinput.New()
-	filterInput.Placeholder = "filter themes..."
-	filterInput.CharLimit = 64
-
+// The resolver parameter is accepted for backward compatibility but unused.
+func NewSettingsTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, styles tui.Styles) *SettingsTab {
 	editInput := textinput.New()
 	editInput.CharLimit = 256
 
 	t := &SettingsTab{
-		resolver:   resolver,
-		fs:         fs,
-		styles:     styles,
-		barPresets: bar.AllPresets(),
-		filter:     filterInput,
-		editInput:  editInput,
+		fs:        fs,
+		runner:    runner,
+		styles:    styles,
+		editInput: editInput,
 	}
 	t.configRows = t.buildConfigRows()
 	return t
@@ -225,10 +175,6 @@ func (t *SettingsTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 }
 
 func (t *SettingsTab) Deactivate() {
-	if t.mode == settingsModeFilter {
-		t.filter.Blur()
-		t.mode = settingsModeList
-	}
 	if t.mode == settingsModeEdit {
 		t.editInput.Blur()
 		t.mode = settingsModeList
@@ -243,6 +189,10 @@ func (t *SettingsTab) Resize(width, height int) {
 // Update processes messages for the settings tab.
 func (t *SettingsTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
+	case dashboard.ThemeChangedMsg:
+		t.styles = msg.Styles
+		return t, nil
+
 	case settingsDataMsg:
 		if msg.reqID != t.reqID {
 			return t, nil
@@ -252,35 +202,10 @@ func (t *SettingsTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 				return dashboard.SetStatusIntent{Text: "Failed to load settings", IsError: true}
 			}
 		}
-		t.themes = msg.themes
-		t.currentTheme = msg.currentTheme
 		t.cfg = msg.cfg
 		t.originalCfg = msg.cfg
 		t.cfgExists = msg.cfgExists
-		t.currentBar = msg.cfg.Bar.Preset
-		t.applyFilter()
-		// Sync bar cursor with current preset.
-		for i, p := range t.barPresets {
-			if p.String() == t.currentBar {
-				t.barCursor = i
-				break
-			}
-		}
 		return t, nil
-
-	case settingsThemeApplyMsg:
-		if msg.reqID != t.reqID {
-			return t, nil
-		}
-		if msg.err != nil {
-			return t, func() tea.Msg {
-				return dashboard.SetStatusIntent{Text: fmt.Sprintf("Failed to apply: %v", msg.err), IsError: true}
-			}
-		}
-		t.currentTheme = msg.themeName
-		return t, func() tea.Msg {
-			return dashboard.SetStatusIntent{Text: "Applied " + msg.themeName, IsError: false}
-		}
 
 	case settingsConfigSaveMsg:
 		if msg.reqID != t.reqID {
@@ -304,14 +229,6 @@ func (t *SettingsTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 		return t.handleKey(msg)
 	}
 
-	// Forward to filter input if active.
-	if t.mode == settingsModeFilter {
-		var cmd tea.Cmd
-		t.filter, cmd = t.filter.Update(msg)
-		t.applyFilter()
-		return t, cmd
-	}
-
 	// Forward to edit input if active.
 	if t.mode == settingsModeEdit {
 		var cmd tea.Cmd
@@ -323,142 +240,12 @@ func (t *SettingsTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 }
 
 func (t *SettingsTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	// Section switch with left/right takes priority (in list mode only).
-	if t.mode == settingsModeList {
-		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("left", "h"))):
-			if t.section > 0 {
-				t.section--
-			}
-			return t, nil
-		case key.Matches(msg, key.NewBinding(key.WithKeys("right", "l"))):
-			if t.section < sectionCount-1 {
-				t.section++
-			}
-			return t, nil
-		}
-	}
-
 	switch t.mode {
-	case settingsModeFilter:
-		return t.handleFilterKey(msg)
 	case settingsModeEdit:
 		return t.handleEditKey(msg)
 	default:
-		switch t.section {
-		case sectionTheme:
-			return t.handleThemeKey(msg)
-		case sectionBar:
-			return t.handleBarKey(msg)
-		case sectionGeneral:
-			return t.handleGeneralKey(msg)
-		}
+		return t.handleGeneralKey(msg)
 	}
-
-	return t, nil
-}
-
-// ── Theme section key handling ──
-
-func (t *SettingsTab) handleThemeKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
-		if t.themeCursor > 0 {
-			t.themeCursor--
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
-		if t.themeCursor < len(t.filtered)-1 {
-			t.themeCursor++
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
-		if t.themeCursor < len(t.filtered) {
-			return t, t.applyTheme(t.filtered[t.themeCursor].Name)
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("/"))):
-		t.mode = settingsModeFilter
-		t.filter.Focus()
-		return t, textinput.Blink
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
-		if len(t.filtered) > 0 {
-			t.themeCursor = len(t.filtered) - 1
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
-		t.themeCursor = 0
-		return t, nil
-	}
-
-	return t, nil
-}
-
-func (t *SettingsTab) handleFilterKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
-		t.mode = settingsModeList
-		t.filter.SetValue("")
-		t.filter.Blur()
-		t.applyFilter()
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
-		t.mode = settingsModeList
-		t.filter.Blur()
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up"))):
-		if t.themeCursor > 0 {
-			t.themeCursor--
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down"))):
-		if t.themeCursor < len(t.filtered)-1 {
-			t.themeCursor++
-		}
-		return t, nil
-	}
-
-	var cmd tea.Cmd
-	t.filter, cmd = t.filter.Update(msg)
-	t.applyFilter()
-	return t, cmd
-}
-
-// ── Bar section key handling ──
-
-func (t *SettingsTab) handleBarKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
-		if t.barCursor > 0 {
-			t.barCursor--
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
-		if t.barCursor < len(t.barPresets)-1 {
-			t.barCursor++
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
-		if t.barCursor < len(t.barPresets) {
-			preset := t.barPresets[t.barCursor]
-			t.currentBar = preset.String()
-			t.cfg.Bar.Preset = preset.String()
-			return t, t.saveConfig()
-		}
-		return t, nil
-	}
-
-	return t, nil
 }
 
 // ── General section key handling ──
@@ -557,227 +344,8 @@ func (t *SettingsTab) activateConfigRow() (dashboard.Tab, tea.Cmd) {
 
 func (t *SettingsTab) View() string {
 	var b strings.Builder
-
 	b.WriteString("\n")
-
-	// Section tabs.
-	for i := 0; i < sectionCount; i++ {
-		label := sectionNames[i]
-		if settingsSection(i) == t.section {
-			b.WriteString(t.styles.Accent.Bold(true).Underline(true).Render(label))
-		} else {
-			b.WriteString(t.styles.Dim.Render(label))
-		}
-		if i < sectionCount-1 {
-			b.WriteString("    ")
-		}
-	}
-	b.WriteString("\n")
-
-	lineWidth := t.width - 4
-	if lineWidth < 20 {
-		lineWidth = 20
-	}
-	if lineWidth > 60 {
-		lineWidth = 60
-	}
-	b.WriteString(t.styles.Dim.Render(strings.Repeat("─", lineWidth)) + "\n")
-
-	switch t.section {
-	case sectionTheme:
-		b.WriteString(t.viewTheme())
-	case sectionBar:
-		b.WriteString(t.viewBar())
-	case sectionGeneral:
-		b.WriteString(t.viewGeneral())
-	}
-
-	return b.String()
-}
-
-func (t *SettingsTab) viewTheme() string {
-	var b strings.Builder
-
-	// Header.
-	b.WriteString("\n")
-	currentLabel := "none"
-	if t.currentTheme != "" {
-		currentLabel = t.currentTheme
-	}
-	b.WriteString(t.styles.Dim.Render("Current: ") + t.styles.Success.Render(currentLabel))
-	b.WriteString("  " + t.styles.Dim.Render(fmt.Sprintf("%d themes", len(t.themes))))
-	b.WriteString("\n\n")
-
-	// Filter bar.
-	if t.mode == settingsModeFilter {
-		prompt := t.styles.Accent.Render("  / ")
-		b.WriteString(prompt + t.filter.View() + "\n\n")
-	} else if t.filter.Value() != "" {
-		b.WriteString(t.styles.Dim.Render("  filter: "+t.filter.Value()) + "\n\n")
-	}
-
-	// Theme list.
-	if len(t.filtered) == 0 {
-		if t.filter.Value() != "" {
-			b.WriteString(views.RenderEmptyState(
-				"No themes match your filter.",
-				"Press / to search or esc to clear.",
-				t.styles.Dim,
-			))
-		} else {
-			b.WriteString(views.RenderEmptyState(
-				"No themes available.",
-				"",
-				t.styles.Dim,
-			))
-		}
-	} else {
-		availableHeight := t.height - 12
-		if availableHeight < 5 {
-			availableHeight = 10
-		}
-
-		start := 0
-		if t.themeCursor >= availableHeight {
-			start = t.themeCursor - availableHeight + 1
-		}
-		end := start + availableHeight
-		if end > len(t.filtered) {
-			end = len(t.filtered)
-		}
-
-		if start > 0 {
-			b.WriteString(t.styles.Dim.Render("  ↑ " + fmt.Sprintf("%d more", start)) + "\n")
-		}
-
-		for i := start; i < end; i++ {
-			b.WriteString(t.renderThemeEntry(i, t.filtered[i]))
-		}
-
-		if end < len(t.filtered) {
-			b.WriteString(t.styles.Dim.Render("  ↓ " + fmt.Sprintf("%d more", len(t.filtered)-end)) + "\n")
-		}
-
-		// Color swatch.
-		if t.themeCursor < len(t.filtered) && t.resolver != nil {
-			b.WriteString("\n")
-			swatch := t.renderSwatch(t.filtered[t.themeCursor])
-			if swatch != "" {
-				b.WriteString("  " + swatch + "\n")
-			}
-		}
-	}
-
-	return b.String()
-}
-
-func (t *SettingsTab) renderThemeEntry(idx int, ti theme.ThemeInfo) string {
-	selected := idx == t.themeCursor
-	isCurrent := ti.Name == t.currentTheme
-
-	cursor := "  "
-	if selected {
-		cursor = t.styles.Accent.Render("▸ ")
-	}
-
-	nameStyle := t.styles.Normal
-	if selected {
-		nameStyle = t.styles.Accent.Bold(true)
-	}
-	name := nameStyle.Render(ti.Name)
-
-	currentMark := ""
-	if isCurrent {
-		currentMark = t.styles.Success.Render(" ●")
-	}
-
-	var sourceTag string
-	switch ti.Source {
-	case theme.SourceBundled:
-		sourceTag = t.styles.Dim.Render(" bundled")
-	case theme.SourceUser:
-		sourceTag = t.styles.Special.Render(" user")
-	case theme.SourceIterm2:
-		sourceTag = t.styles.Info.Render(" iterm2")
-	}
-
-	var modeTag string
-	if ti.IsDark {
-		modeTag = t.styles.Dim.Render(" dark")
-	} else {
-		modeTag = t.styles.Accent.Render(" light")
-	}
-
-	return "  " + cursor + name + currentMark + sourceTag + modeTag + "\n"
-}
-
-func (t *SettingsTab) renderSwatch(ti theme.ThemeInfo) string {
-	if t.resolver == nil {
-		return ""
-	}
-	resolved, err := t.resolver.Resolve(ti.Name)
-	if err != nil {
-		return ""
-	}
-	palette := resolved.SemanticPalette()
-
-	width := t.width
-	if width <= 0 {
-		width = 80
-	}
-	return views.RenderSwatch(&palette, width)
-}
-
-func (t *SettingsTab) viewBar() string {
-	var b strings.Builder
-
-	b.WriteString("\n")
-	currentLabel := "default"
-	if t.currentBar != "" {
-		currentLabel = t.currentBar
-	}
-	b.WriteString(t.styles.Dim.Render("Current: ") + t.styles.Success.Render(currentLabel))
-	b.WriteString("\n\n")
-
-	// Resolve palette for previews.
-	var palette *theme.Palette
-	if t.resolver != nil && t.currentTheme != "" {
-		resolved, err := t.resolver.Resolve(t.currentTheme)
-		if err == nil {
-			p := resolved.SemanticPalette()
-			palette = &p
-		}
-	}
-
-	for i, preset := range t.barPresets {
-		selected := i == t.barCursor
-		isCurrent := preset.String() == t.currentBar
-
-		cursor := "  "
-		if selected {
-			cursor = t.styles.Accent.Render("▸ ")
-		}
-
-		nameStyle := t.styles.Normal
-		if selected {
-			nameStyle = t.styles.Accent.Bold(true)
-		}
-
-		currentMark := ""
-		if isCurrent {
-			currentMark = t.styles.Success.Render(" ●")
-		}
-
-		b.WriteString("  " + cursor + nameStyle.Render(preset.String()) + currentMark + "\n")
-
-		// ANSI preview.
-		if palette != nil {
-			preview := bar.RenderPreview(preset, palette)
-			b.WriteString("    " + preview + "\n")
-		}
-		b.WriteString("\n")
-	}
-
+	b.WriteString(t.viewGeneral())
 	return b.String()
 }
 
@@ -882,36 +450,18 @@ func (t *SettingsTab) hasConfigChanges() bool {
 
 func (t *SettingsTab) ShortHelp() string {
 	switch t.mode {
-	case settingsModeFilter:
-		return "enter:confirm  esc:clear"
 	case settingsModeEdit:
 		return "enter:confirm  esc:cancel"
 	default:
-		switch t.section {
-		case sectionTheme:
-			return "enter:apply  /:filter  h/l:section  j/k:navigate"
-		case sectionBar:
-			return "enter:apply  h/l:section  j/k:navigate"
-		case sectionGeneral:
-			return "enter:edit  s:save  h/l:section  j/k:navigate"
-		default:
-			return "h/l:section  j/k:navigate"
-		}
+		return "enter:edit  s:save  j/k:navigate"
 	}
 }
 
 // ── Data fetching ──
 
 func (t *SettingsTab) fetchData(reqID int64) tea.Cmd {
-	resolver := t.resolver
 	fs := t.fs
 	return func() tea.Msg {
-		var themes []theme.ThemeInfo
-		if resolver != nil {
-			themes = resolver.List()
-		}
-
-		currentTheme := ""
 		cfgPath, err := config.ConfigPath(fs)
 		if err != nil {
 			return settingsDataMsg{reqID: reqID, err: err}
@@ -921,42 +471,12 @@ func (t *SettingsTab) fetchData(reqID int64) tea.Cmd {
 		cfg, err := config.Load(fs, cfgPath)
 		if err != nil {
 			cfg = config.DefaultConfig()
-		} else {
-			currentTheme = cfg.Theme
 		}
 
 		return settingsDataMsg{
-			reqID:        reqID,
-			themes:       themes,
-			currentTheme: currentTheme,
-			cfg:          cfg,
-			cfgExists:    exists,
-		}
-	}
-}
-
-func (t *SettingsTab) applyTheme(name string) tea.Cmd {
-	fs := t.fs
-	reqID := t.reqID
-	return func() tea.Msg {
-		cfgPath, err := config.ConfigPath(fs)
-		if err != nil {
-			return settingsThemeApplyMsg{reqID: reqID, err: err}
-		}
-
-		cfg, err := config.Load(fs, cfgPath)
-		if err != nil {
-			cfg = config.DefaultConfig()
-		}
-
-		cfg.Theme = name
-		if err := config.Save(fs, cfgPath, cfg); err != nil {
-			return settingsThemeApplyMsg{reqID: reqID, err: err}
-		}
-
-		return settingsThemeApplyMsg{
 			reqID:     reqID,
-			themeName: name,
+			cfg:       cfg,
+			cfgExists: exists,
 		}
 	}
 }
@@ -976,26 +496,5 @@ func (t *SettingsTab) saveConfig() tea.Cmd {
 		}
 
 		return settingsConfigSaveMsg{reqID: reqID}
-	}
-}
-
-func (t *SettingsTab) applyFilter() {
-	query := t.filter.Value()
-	if query == "" {
-		t.filtered = t.themes
-	} else {
-		names := make([]string, len(t.themes))
-		for i, ti := range t.themes {
-			names[i] = ti.Name
-		}
-		matches := fuzzy.Find(query, names)
-		t.filtered = make([]theme.ThemeInfo, len(matches))
-		for i, match := range matches {
-			t.filtered[i] = t.themes[match.Index]
-		}
-	}
-
-	if t.themeCursor >= len(t.filtered) {
-		t.themeCursor = max(0, len(t.filtered)-1)
 	}
 }

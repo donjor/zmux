@@ -83,7 +83,7 @@ func (c *Client) Version() (string, error) {
 // ListSessions lists all tmux sessions.
 func (c *Client) ListSessions() ([]Session, error) {
 	out, err := c.run("list-sessions", "-F",
-		"#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_activity}\t#{session_path}\t#{session_created}\t#{session_last_attached}")
+		"#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_activity}\t#{session_path}\t#{session_created}\t#{session_last_attached}\t#{session_group}")
 	if err != nil {
 		return nil, err
 	}

@@ -6,11 +6,12 @@ status bar presets, and a popup dashboard — in a single binary.
 ## Features
 
 - **Session picker** — fuzzy search, create, attach, templates
-- **Dashboard** — tabbed view as a tmux popup (prefix+Space)
+- **Dashboard** — 5-tab popup (prefix+Space): session, themes, settings, help
 - **Command palette** — spotlight-style quick actions (prefix+p)
 - **Theming** — 300+ themes (iterm2-color-schemes format), semantic palette, color swatches
 - **Theme sync** — pull your theme from Ghostty or Neovim
-- **Status bar** — 4 presets: default, minimal, powerline, blocks
+- **Workspaces** — first-class workspace objects grouping sessions by project
+- **Status bar** — 9 presets with dynamic segments (git, lang, workspace, directory)
 - **Templates** — declarative TOML session layouts
 - **Terminal commands** — run, watch, send, type for agent/scripting workflows
 - **Multi-source discovery** — find sessions across tmux sockets and overmind
@@ -35,7 +36,18 @@ The installer:
 2. Builds the binary
 3. Installs to `~/.local/bin/zmux`
 4. Optionally adds shell integration (auto-start on terminal open)
-5. Tells you to run `zmux init`
+5. Optionally installs the Claude Code skill
+6. Runs `zmux init` setup wizard
+
+### Updating
+
+After pulling new changes:
+
+```bash
+make install        # build + copy to ~/.local/bin/zmux
+```
+
+This only rebuilds the binary — no config prompts, no shell changes.
 
 ### Manual install
 
@@ -44,7 +56,7 @@ If you prefer to do it yourself:
 ```bash
 make build          # builds ./zmux
 make install        # copies to ~/.local/bin/zmux
-zmux init           # interactive setup wizard
+zmux init           # interactive setup wizard (first time only)
 ```
 
 ### Legacy v0 (bash+gum)
@@ -76,20 +88,25 @@ After `zmux init`, restart tmux or `prefix+r` to reload config.
 
 ## Usage
 
-### Session Management
+### Session & Workspace Management
 
 ```
 zmux                           Session picker (outside tmux) / dashboard (inside)
 zmux <name>                    Attach or create session (shorthand)
 
-zmux new [name]                Create session + attach (alias: zmux n)
-zmux new -t <tmpl> [name]      Create from template
-zmux attach <name>             Attach to existing session (alias: zmux a)
-zmux attach --mirror <name>    Shared view (independent viewport)
-zmux attach --hijack <name>    Steal session from other client
+zmux new <workspace> [session] Create session in workspace + attach (alias: zmux n)
+zmux new -t <tmpl> <ws> [name] Create from template in workspace
+zmux open <workspace> [session] Open workspace (attach or create session) (alias: zmux o)
 zmux kill <name>               Kill session (alias: zmux k)
 zmux ls                        List sessions
 zmux tabs [session]            List tabs in session (alias: zmux t)
+
+zmux tab move <tab> <dest>     Move tab to another session
+zmux tab kill <tab>            Kill a tab
+zmux session kill <session>    Kill a session
+zmux workspace list            List workspaces (alias: zmux ws)
+zmux workspace kill <workspace> Kill a workspace and all its sessions
+zmux workspace show <ws>       Show workspace sessions
 ```
 
 ### Terminal Commands
@@ -121,8 +138,9 @@ zmux theme pull <target>       Pull theme from ghostty or nvim
 ### Configuration
 
 ```
-zmux bar                       List bar presets with ANSI previews
-zmux bar <preset>              Set preset (default/minimal/powerline/blocks)
+zmux bar                       List bar presets with ANSI previews (live carousel inside tmux)
+zmux bar <preset>              Set preset directly
+zmux bar show                  Show current preset with preview
 zmux init                      Setup wizard (run outside tmux)
 zmux apply                     Regenerate + apply config
 zmux status                    Show current config summary
@@ -142,19 +160,23 @@ Prefix: `Ctrl+Space` (configurable)
 
 | Key | Action |
 |-----|--------|
-| prefix + Space | Open zmux dashboard popup |
-| prefix + p | Open command palette popup |
-| prefix + d | Detach from session (back to terminal) |
-| prefix + ? | Open help popup |
-| prefix + v | Enter copy mode (vi keys) |
-| prefix + c | New window |
-| prefix + n | Next window |
-| prefix + , | Rename session |
+| prefix + Space | Dashboard |
+| prefix + p | Command palette |
+| prefix + d | Detach |
+| prefix + ? | Help popup |
+| prefix + c | New tab |
+| prefix + n / N | Next / previous tab |
+| prefix + < / > | Move tab left / right |
+| prefix + x | Close tab (with confirm) |
 | prefix + . | Rename tab |
-| prefix + s | Switch session |
-| prefix + x | Kill session |
+| prefix + , | Rename session |
+| prefix + w | Workspace session picker |
+| prefix + [ / ] | Prev / next session in workspace |
 | prefix + r | Reload config (zmux apply) |
-| Alt+1-5 | Switch to window (no prefix) |
+| prefix + v | Enter copy mode (vi keys) |
+| Alt+1-9 | Switch to tab (no prefix) |
+| Shift+Alt+1-9 | Switch to session N in workspace (no prefix) |
+| Alt+` | Tab switcher (no prefix) |
 
 ## Configuration
 
@@ -166,6 +188,15 @@ prefix = "C-Space"
 
 [bar]
 preset = "default"
+
+[bar.segments]
+workspace = true
+git = true
+lang = true
+clock = true
+directory = true
+process = true
+group = true
 
 [sessions]
 auto_cleanup_tmp = true
@@ -231,12 +262,22 @@ are included: dev, claude, webdev, monitor.
 
 | Preset | Description |
 |--------|-------------|
-| default | Session pill, window tabs, prefix hints, clock |
-| minimal | Session name and windows only |
-| powerline | Angled separators, filled segments |
-| blocks | Square bracket segments |
+| default | Catppuccin-inspired rounded pills, icons, elevated surfaces |
+| minimal | Clean, barely decorated, content-first |
+| powerline | Angled separators, filled segments, directory chain |
+| blocks | Square bracket segments, monospace, dense |
+| rounded | Elevated pill segments, premium feel |
+| hacker | Matrix-inspired, monospace, dense info |
+| zen | Ultra-minimal, barely there |
+| starship | Colorful prompt-inspired, each segment its own color |
+| rpowerline | Rounded powerline — angled fills with rounded caps |
 
-Preview them: `zmux bar`
+All presets show dynamic segments: git branch/dirty/ahead-behind, language
+version, workspace with session position (e.g. `myapp 2/4`), directory,
+active process, and group indicator. Segments are individually toggleable
+in `[bar.segments]`.
+
+Preview them: `zmux bar` (live carousel inside tmux, static ANSI outside)
 
 ## Agent Integration
 

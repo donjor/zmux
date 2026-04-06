@@ -14,14 +14,16 @@ import (
 
 // SessionInfo provides enriched metadata about a tmux session.
 type SessionInfo struct {
-	Name         string
-	Windows      int
-	Attached     bool
-	Activity     time.Time
-	Created      time.Time
-	LastAttached time.Time
-	Dir          string
-	IsTmp        bool
+	Name            string
+	Windows         int
+	Attached        bool
+	Activity        time.Time
+	Created         time.Time
+	LastAttached    time.Time
+	Dir             string
+	IsTmp           bool
+	Group           string // session group name (empty if ungrouped)
+	AttachedClients int    // number of attached clients (including grouped copies)
 }
 
 var tmpPattern = regexp.MustCompile(`^tmp-(\d+)$`)
@@ -65,24 +67,59 @@ func NextTmpName(runner tmux.Runner) string {
 
 // ListSessions returns enriched session info, sorted with named sessions
 // first (alphabetically) and tmp sessions last (by number).
+// Grouped sessions (e.g. zmux-b sharing windows with zmux) are collapsed
+// into the root session with an AttachedClients count.
 func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 	raw, err := runner.ListSessions()
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
 
-	infos := make([]SessionInfo, 0, len(raw))
+	// Build a set of session names for root-existence checks.
+	nameSet := make(map[string]bool, len(raw))
 	for _, s := range raw {
-		infos = append(infos, SessionInfo{
-			Name:         s.Name,
-			Windows:      s.Windows,
-			Attached:     s.Attached,
-			Activity:     s.Activity,
-			Created:      s.Created,
-			LastAttached: s.LastAttached,
-			Dir:          s.Dir,
-			IsTmp:        IsTemp(s.Name),
-		})
+		nameSet[s.Name] = true
+	}
+
+	// First pass: identify root sessions and count grouped copies.
+	// A session is a grouped copy if it has a group, its RootName differs
+	// from its own name, and the root session actually exists.
+	roots := make(map[string]*SessionInfo) // group name → root info
+	var infos []SessionInfo
+
+	for _, s := range raw {
+		root := RootName(s.Name)
+		isGroupedCopy := s.Group != "" && root != s.Name && nameSet[root]
+
+		if isGroupedCopy {
+			// Merge into root: count attached clients.
+			if ri, ok := roots[s.Group]; ok {
+				if s.Attached {
+					ri.AttachedClients++
+				}
+			}
+			continue // don't add grouped copy to the list
+		}
+
+		info := SessionInfo{
+			Name:            s.Name,
+			Windows:         s.Windows,
+			Attached:        s.Attached,
+			Activity:        s.Activity,
+			Created:         s.Created,
+			LastAttached:    s.LastAttached,
+			Dir:             s.Dir,
+			IsTmp:           IsTemp(s.Name),
+			Group:           s.Group,
+			AttachedClients: 0,
+		}
+		if s.Attached {
+			info.AttachedClients = 1
+		}
+		infos = append(infos, info)
+		if s.Group != "" {
+			roots[s.Group] = &infos[len(infos)-1]
+		}
 	}
 
 	sort.Slice(infos, func(i, j int) bool {

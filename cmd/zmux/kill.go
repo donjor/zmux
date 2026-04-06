@@ -20,7 +20,13 @@ var killCmd = &cobra.Command{
 			return fmt.Errorf("session %q does not exist", name)
 		}
 
-		return session.Kill(app.Runner, name)
+		if err := session.Kill(app.Runner, name); err != nil {
+			return err
+		}
+
+		// Remove from workspace tracking.
+		_ = app.WorkspaceStore.Delete(session.RootName(name))
+		return nil
 	},
 }
 

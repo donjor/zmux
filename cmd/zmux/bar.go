@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/config"
@@ -58,11 +59,17 @@ func init() {
 	rootCmd.AddCommand(barCmd)
 }
 
-// barList prints all presets with ANSI previews.
+// barList shows all presets. Inside tmux: live preview carousel (applies each
+// preset to the actual status bar for 2 seconds). Outside tmux: static ANSI previews.
 func barList(palette *theme.Palette) error {
 	cfg, _ := loadConfig(app.FS)
 	currentPreset := cfg.Bar.Preset
 
+	if app.Runner.IsInsideTmux() {
+		return barListLive(palette, currentPreset)
+	}
+
+	// Outside tmux: static previews.
 	for _, p := range bar.AllPresets() {
 		marker := "  "
 		if p.String() == currentPreset {
@@ -71,6 +78,43 @@ func barList(palette *theme.Palette) error {
 		fmt.Printf("%s%s\n", marker, p)
 		fmt.Printf("  %s\n\n", bar.RenderPreview(p, palette))
 	}
+	return nil
+}
+
+// barListLive cycles through presets on the actual tmux status bar.
+func barListLive(palette *theme.Palette, currentPreset string) error {
+	presets := bar.AllPresets()
+
+	fmt.Println("  Cycling through bar presets (live preview)...")
+	fmt.Println("  Watch your status bar!")
+	fmt.Println()
+
+	for _, p := range presets {
+		marker := "  "
+		if p.String() == currentPreset {
+			marker = "* "
+		}
+		fmt.Printf("%s%s", marker, p)
+
+		// Apply this preset to the live bar.
+		_ = bar.Apply(app.Runner, p, palette)
+
+		if p.String() == currentPreset {
+			fmt.Println("  (current)")
+		} else {
+			fmt.Println()
+		}
+
+		// Hold for 2 seconds so user can see it.
+		time.Sleep(2 * time.Second)
+	}
+
+	// Restore the current preset.
+	current, _ := bar.PresetFromString(currentPreset)
+	_ = bar.Apply(app.Runner, current, palette)
+
+	fmt.Printf("\n  Restored: %s\n", currentPreset)
+	fmt.Println("  Set with: zmux bar <preset>")
 	return nil
 }
 

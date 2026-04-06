@@ -53,8 +53,8 @@ var Keys = keymap{
 		key.WithHelp("t", "from template"),
 	),
 	Delete: key.NewBinding(
-		key.WithKeys("d"),
-		key.WithHelp("d", "delete"),
+		key.WithKeys("x"),
+		key.WithHelp("x", "kill"),
 	),
 	Rename: key.NewBinding(
 		key.WithKeys("r"),

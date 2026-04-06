@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 )
 
 var statusCmd = &cobra.Command{
@@ -26,7 +24,7 @@ func init() {
 }
 
 func runStatus() error {
-	styles := tui.DefaultStyles()
+	styles, _, _ := loadActiveStyles()
 
 	cfg, err := loadConfig(app.FS)
 	if err != nil {
@@ -66,7 +64,7 @@ func runStatus() error {
 	title := styles.Title.Render("zmux status")
 	b.WriteString(title + "\n\n")
 
-	labelStyle := lipgloss.NewStyle().Width(16).Foreground(lipgloss.Color("3"))
+	labelStyle := styles.Accent.Width(16)
 	valueStyle := styles.Normal
 
 	rows := []struct {

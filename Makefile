@@ -17,6 +17,7 @@ lint:
 	@which staticcheck > /dev/null 2>&1 && staticcheck ./... || echo "staticcheck not installed, skipping"
 
 install: build
+	rm -f ~/.local/bin/zmux 2>/dev/null || true
 	cp zmux ~/.local/bin/zmux
 
 clean:

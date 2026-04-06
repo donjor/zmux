@@ -8,8 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/donjor/zmux/internal/config"
-	"github.com/donjor/zmux/internal/tui"
+	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/tui"
 )
 
 // Services bundles the dependencies tabs need.
@@ -17,6 +18,8 @@ type Services struct {
 	Runner   tmux.Runner
 	FS       config.FS
 	Styles   tui.Styles
+	Palette  *theme.Palette  // Theme palette (nil if unresolved).
+	Resolver *theme.Resolver // Theme resolver for lookups.
 }
 
 // DashboardApp is the top-level bubbletea model for the tabbed dashboard.
@@ -108,6 +111,21 @@ func (m *DashboardApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if handled, cmd := m.handleTabSwitchKey(msg); handled {
 			return m, cmd
 		}
+	}
+
+	// Theme changes broadcast to ALL tabs + update services.
+	if tc, ok := msg.(ThemeChangedMsg); ok {
+		m.services.Styles = tc.Styles
+		m.services.Palette = &tc.Palette
+		var cmds []tea.Cmd
+		for id, tab := range m.tabs {
+			updated, cmd := tab.Update(tc)
+			m.tabs[id] = updated
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
 	}
 
 	// Route TargetedMsg to the specific tab.
@@ -211,6 +229,8 @@ func (m *DashboardApp) handleTabSwitchKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return true, m.switchToIndex(2)
 	case "4":
 		return true, m.switchToIndex(3)
+	case "5":
+		return true, m.switchToIndex(4)
 	case "tab":
 		return true, m.cycleTab(1)
 	case "shift+tab":
@@ -281,6 +301,9 @@ func (m *DashboardApp) handleIntent(intent AppIntentMsg) (tea.Model, tea.Cmd) {
 		m.Chosen = it.Chosen
 		m.Quitting = true
 		return m, tea.Quit
+
+	case ThemeChangeIntent:
+		return m.Update(ThemeChangedMsg{Palette: it.Palette, Styles: it.Styles})
 	}
 
 	return m, nil

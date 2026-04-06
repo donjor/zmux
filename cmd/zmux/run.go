@@ -82,6 +82,17 @@ Examples:
 			actualCommand = fmt.Sprintf("%s; echo \"%s$?:::\"", command, zmuxSentinel)
 		}
 
+		// Write command to a temp script to avoid shell quoting issues
+		// with send-keys (newlines, quotes, special chars all break).
+		scriptPath, cleanup, err := writeCommandScript(actualCommand)
+		if err != nil {
+			return fmt.Errorf("write command script: %w", err)
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		sendCmd := fmt.Sprintf("bash %s", scriptPath)
+
 		target := fmt.Sprintf("%s:%s", sessionName, name)
 
 		// Check if tab already exists.
@@ -89,7 +100,7 @@ Examples:
 		if err == nil {
 			for _, w := range windows {
 				if w.Name == name {
-					if err := app.Runner.SendKeys(target, actualCommand, "Enter"); err != nil {
+					if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
 						return fmt.Errorf("send to %s: %w", target, err)
 					}
 					fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
@@ -110,7 +121,7 @@ Examples:
 			return fmt.Errorf("create tab: %w", err)
 		}
 
-		if err := app.Runner.SendKeys(target, actualCommand, "Enter"); err != nil {
+		if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
 			return fmt.Errorf("send to %s: %w", target, err)
 		}
 
@@ -124,6 +135,42 @@ Examples:
 		}
 		return nil
 	},
+}
+
+// writeCommandScript writes a command to a temp script file for safe execution
+// via send-keys. Returns the script path and a cleanup function.
+// This avoids shell quoting issues with newlines, quotes, and special characters.
+func writeCommandScript(command string) (string, func(), error) {
+	f, err := os.CreateTemp("", "zmux-cmd-*.sh")
+	if err != nil {
+		return "", nil, err
+	}
+
+	// Echo the command so the terminal shows what's being run,
+	// then execute it, then self-delete the script.
+	// Use printf to avoid echo interpreting escape sequences.
+	escaped := strings.ReplaceAll(command, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+	script := fmt.Sprintf("#!/usr/bin/env bash\nprintf '\\033[2m$ %%s\\033[0m\\n' %q\n%s\nrm -f %q\n", escaped, command, f.Name())
+	if _, err := f.WriteString(script); err != nil {
+		f.Close()
+		os.Remove(f.Name())
+		return "", nil, err
+	}
+	f.Close()
+
+	// The script self-deletes (rm -f at the end), so cleanup is a no-op.
+	// But provide a fallback cleanup in case it never runs.
+	cleanup := func() {
+		// Give it time to execute before cleaning up.
+		// The script self-deletes, so this is just a safety net.
+		go func() {
+			time.Sleep(time.Duration(runTimeout+10) * time.Second)
+			os.Remove(f.Name())
+		}()
+	}
+
+	return f.Name(), cleanup, nil
 }
 
 // waitForSentinel watches a tab for the AGENT_DONE sentinel and returns the exit code.

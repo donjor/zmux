@@ -95,6 +95,14 @@ func applyDefaults(cfg *Config) {
 		cfg.Sessions.AutoCleanupTmp = defaults.Sessions.AutoCleanupTmp
 	}
 
+	// For bar segments: if the entire [bar.segments] section is absent,
+	// all bools are false. Apply defaults (all true) when no segments are set.
+	seg := cfg.Bar.Segments
+	if !seg.Workspace && !seg.Git && !seg.Lang && !seg.Clock &&
+		!seg.Directory && !seg.Process && !seg.Group {
+		cfg.Bar.Segments = defaults.Bar.Segments
+	}
+
 	if cfg.Sync.Target == "" {
 		cfg.Sync.Target = defaults.Sync.Target
 	}

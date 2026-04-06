@@ -42,6 +42,7 @@ type sessionsDataMsg struct {
 	sessions []session.SessionInfo
 	windows  map[string][]tmux.Window
 	current  string
+	wsState  map[string]string // session → workspace (may be nil)
 	err      error
 }
 
@@ -121,21 +122,30 @@ type SessionsTab struct {
 	groupExpanded map[int]bool
 	// When cursor moves into external area, extCursor tracks position.
 	// Total cursor count = len(sessions) + externalItemCount.
+
+	// Workspace state (loaded alongside sessions).
+	wsLoader func() map[string]string
+	wsState  map[string]string // session → workspace
 }
 
 // NewSessionsTab creates a new sessions tab.
-func NewSessionsTab(runner tmux.Runner, styles tui.Styles) *SessionsTab {
+// wsLoader is optional — if provided, sessions are grouped by workspace.
+func NewSessionsTab(runner tmux.Runner, styles tui.Styles, wsLoader ...func() map[string]string) *SessionsTab {
 	ti := textinput.New()
 	ti.Placeholder = "new name..."
 	ti.CharLimit = 64
 
-	return &SessionsTab{
+	tab := &SessionsTab{
 		runner:        runner,
 		styles:        styles,
 		windows:       make(map[string][]tmux.Window),
 		renameInput:   ti,
 		groupExpanded: make(map[int]bool),
 	}
+	if len(wsLoader) > 0 && wsLoader[0] != nil {
+		tab.wsLoader = wsLoader[0]
+	}
+	return tab
 }
 
 func (t *SessionsTab) ID() dashboard.TabID  { return dashboard.TabSessions }
@@ -171,6 +181,9 @@ func (t *SessionsTab) Resize(width, height int) {
 // Update processes messages for the sessions tab.
 func (t *SessionsTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	switch msg := msg.(type) {
+	case dashboard.ThemeChangedMsg:
+		t.styles = msg.Styles
+		return t, nil
 	case sessionsDataMsg:
 		if msg.reqID != t.reqID {
 			return t, nil // Stale.
@@ -183,6 +196,7 @@ func (t *SessionsTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 		t.sessions = msg.sessions
 		t.windows = msg.windows
 		t.current = msg.current
+		t.wsState = msg.wsState
 		t.restoreCursor()
 		return t, nil
 
@@ -332,7 +346,9 @@ func (t *SessionsTab) handleListKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("x"))):
-		// 'x' on overmind process = stop.
+		// 'x' = kill/stop. Context-dependent:
+		// On overmind process → overmind stop
+		// On local session → confirm kill
 		if ext := t.externalItemAt(t.cursor); ext != nil && !ext.isHeader {
 			if ext.group.Source.Kind == source.SourceOvermind && ext.group.Source.Overmind != nil {
 				cs := ext.group.Source.Overmind.ControlSocket
@@ -342,11 +358,7 @@ func (t *SessionsTab) handleListKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 					return dashboard.SetStatusIntent{Text: "Stopped " + proc}
 				}
 			}
-		}
-		return t, nil
-
-	case key.Matches(msg, key.NewBinding(key.WithKeys("d"))):
-		if t.cursor < len(t.sessions) {
+		} else if t.cursor < len(t.sessions) {
 			t.killTarget = t.sessions[t.cursor].Name
 			t.mode = sessionsModeConfirmKill
 		}
@@ -556,7 +568,7 @@ func (t *SessionsTab) viewList() string {
 		b.WriteString(t.styles.Dim.Render("      ↑ " + fmt.Sprintf("%d more", start)) + "\n")
 	}
 
-	// Track named/tmp divider.
+	// Track named/tmp divider and workspace headers.
 	shownDivider := false
 	hasNamed := false
 	for _, s := range t.sessions {
@@ -574,8 +586,22 @@ func (t *SessionsTab) viewList() string {
 		}
 	}
 
+	// Track which workspace header we've already shown.
+	lastWSHeader := ""
+
 	for i := start; i < end; i++ {
 		s := t.sessions[i]
+
+		// Workspace header: show when workspace changes (and we have workspace state).
+		if t.wsState != nil && len(t.wsState) > 0 && !s.IsTmp {
+			root := session.RootName(s.Name)
+			ws := t.wsState[root]
+			if ws != "" && ws != lastWSHeader {
+				lastWSHeader = ws
+				b.WriteString("\n")
+				b.WriteString(t.styles.Accent.Bold(true).Render("  "+ws) + "\n")
+			}
+		}
 
 		// Divider before first tmp session.
 		if s.IsTmp && !shownDivider && hasNamed {
@@ -605,16 +631,17 @@ func (t *SessionsTab) viewList() string {
 		}
 
 		row := views.SessionRow{
-			Name:          s.Name,
-			Age:           session.HumanAge(s.Created),
-			StatusText:    statusText(s),
-			WindowsText:   windowsText,
-			DirectoryText: shortenPath(s.Dir),
-			IsCurrent:     s.Name == t.current,
-			IsAttached:    s.Attached,
-			IsTmp:         s.IsTmp,
-			IsSelected:    i == t.cursor,
-			Index:         idx,
+			Name:            s.Name,
+			Age:             session.HumanAge(s.Created),
+			StatusText:      statusText(s),
+			WindowsText:     windowsText,
+			DirectoryText:   shortenPath(s.Dir),
+			IsCurrent:       s.Name == t.current,
+			IsAttached:      s.Attached,
+			IsTmp:           s.IsTmp,
+			IsSelected:      i == t.cursor,
+			Index:           idx,
+			AttachedClients: s.AttachedClients,
 		}
 
 		rowStyles := views.SessionRowStyles{
@@ -722,8 +749,8 @@ func (t *SessionsTab) viewMove() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(t.styles.Accent.Bold(true).Render("Move Window") + "\n")
-	b.WriteString(t.styles.Dim.Render("Move current window to another session") + "\n\n")
+	b.WriteString(t.styles.Accent.Bold(true).Render("Move Tab") + "\n")
+	b.WriteString(t.styles.Dim.Render("Move current tab to another session") + "\n\n")
 
 	if len(t.moveTargets) == 0 {
 		b.WriteString(t.styles.Dim.Render("  No other sessions available.") + "\n")
@@ -808,7 +835,7 @@ func (t *SessionsTab) ShortHelp() string {
 			"enter:switch",
 			"n:new",
 			"r:rename",
-			"d:kill",
+			"x:kill",
 			"m:move",
 			"p:preview",
 			"c:cleanup",
@@ -884,6 +911,7 @@ func (t *SessionsTab) fetchCatalog(reqID int64) tea.Cmd {
 
 func (t *SessionsTab) fetchSessions(reqID int64) tea.Cmd {
 	runner := t.runner
+	wsLoader := t.wsLoader
 	return func() tea.Msg {
 		sessions, err := session.ListSessions(runner)
 		if err != nil {
@@ -902,11 +930,18 @@ func (t *SessionsTab) fetchSessions(reqID int64) tea.Cmd {
 		// Get current session name.
 		current, _ := runner.DisplayMessage("", "#{session_name}")
 
+		// Load workspace state if available.
+		var wsState map[string]string
+		if wsLoader != nil {
+			wsState = wsLoader()
+		}
+
 		return sessionsDataMsg{
 			reqID:    reqID,
 			sessions: sessions,
 			windows:  windows,
 			current:  strings.TrimSpace(current),
+			wsState:  wsState,
 		}
 	}
 }

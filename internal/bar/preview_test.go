@@ -6,69 +6,56 @@ import (
 )
 
 func TestRenderPreviewContainsANSI(t *testing.T) {
-	p := testPalette()
-
+	p := *testPalette()
 	for _, preset := range AllPresets() {
-		t.Run(preset.String(), func(t *testing.T) {
-			preview := RenderPreview(preset, p)
-
-			if preview == "" {
-				t.Fatal("preview is empty")
-			}
-
-			// ANSI escape sequences start with ESC[ (\x1b[)
-			if !strings.Contains(preview, "\x1b[") {
-				t.Errorf("preview should contain ANSI escape sequences, got %q", preview)
-			}
-		})
+		preview := RenderPreview(preset, &p)
+		if !strings.Contains(preview, "\033[") {
+			t.Errorf("preset %s: expected ANSI escape codes in preview", preset)
+		}
 	}
 }
 
 func TestRenderPreviewDistinctPerPreset(t *testing.T) {
-	p := testPalette()
-	presets := AllPresets()
+	p := *testPalette()
 	previews := make(map[string]Preset)
-
-	for _, preset := range presets {
-		preview := RenderPreview(preset, p)
-		stripped := stripANSI(preview)
-		if other, ok := previews[stripped]; ok {
-			t.Errorf("preset %s and %s produce identical visible output", preset, other)
+	for _, preset := range AllPresets() {
+		preview := stripANSI(RenderPreview(preset, &p))
+		if prev, exists := previews[preview]; exists {
+			t.Errorf("preset %s and %s produce identical visible output", preset, prev)
 		}
-		previews[stripped] = preset
+		previews[preview] = preset
 	}
 }
 
-func TestRenderPreviewPowerlineArrows(t *testing.T) {
-	p := testPalette()
-	preview := RenderPreview(Powerline, p)
-	stripped := stripANSI(preview)
-
-	// Powerline preview should contain arrow characters
-	if !strings.Contains(stripped, "\ue0b0") && !strings.Contains(stripped, "\ue0b2") {
-		t.Error("powerline preview should contain powerline arrow characters")
+func TestRenderPreviewContainsSampleData(t *testing.T) {
+	p := *testPalette()
+	for _, preset := range AllPresets() {
+		preview := stripANSI(RenderPreview(preset, &p))
+		if !strings.Contains(preview, "main") {
+			t.Errorf("preset %s: expected 'main' (session or branch) in preview", preset)
+		}
 	}
 }
 
-func TestRenderPreviewBlocksBrackets(t *testing.T) {
-	p := testPalette()
-	preview := RenderPreview(Blocks, p)
-	stripped := stripANSI(preview)
-
-	if !strings.Contains(stripped, "[") || !strings.Contains(stripped, "]") {
-		t.Error("blocks preview should contain square brackets")
+func TestTmuxToANSIConvertsColors(t *testing.T) {
+	input := "#[fg=#ff0000,bold]hello#[bg=#00ff00] world"
+	output := tmuxToANSI(input)
+	if !strings.Contains(output, "\033[") {
+		t.Error("expected ANSI codes in output")
 	}
-	if !strings.Contains(stripped, "[main]") {
-		t.Errorf("blocks preview should contain [main], got visible: %q", stripped)
+	if !strings.Contains(output, "hello") {
+		t.Error("expected text preserved")
 	}
 }
 
-func TestRenderPreviewDefaultSession(t *testing.T) {
-	p := testPalette()
-	preview := RenderPreview(Default, p)
-	stripped := stripANSI(preview)
-
-	if !strings.Contains(stripped, "main") {
-		t.Errorf("default preview should show session name 'main', got visible: %q", stripped)
+func TestStripTmuxConditionals(t *testing.T) {
+	input := "#{?client_prefix,ACTIVE,NORMAL}"
+	normal := stripTmuxConditionals(input, false)
+	if normal != "NORMAL" {
+		t.Errorf("expected NORMAL, got %q", normal)
+	}
+	active := stripTmuxConditionals(input, true)
+	if active != "ACTIVE" {
+		t.Errorf("expected ACTIVE, got %q", active)
 	}
 }
