@@ -303,3 +303,183 @@ func TestWizardSuccessViewShowsNextSteps(t *testing.T) {
 		t.Error("expected success view to contain source-file instruction")
 	}
 }
+
+// ── Extra coverage added for P8 ──
+
+// Walk to a specific step with detectDepsMsg injected along the way.
+func walkToStep(t *testing.T, target wizardStep) WizardModel {
+	t.Helper()
+	m := newTestWizard()
+	m.width = 80
+	m.height = 40
+	if target == stepWelcome {
+		return m
+	}
+	m = sendWizardKey(m, "enter") // → depcheck
+	m = sendWizardMsg(m, detectDepsMsg{deps: WizardDeps{TmuxVersion: "3.4"}})
+	if target == stepDepCheck {
+		return m
+	}
+	m = sendWizardKey(m, "enter") // → detect targets
+	if target == stepDetectTargets {
+		return m
+	}
+	m = sendWizardKey(m, "enter") // → theme
+	if target == stepTheme {
+		return m
+	}
+	m = sendWizardKey(m, "enter") // → bar preset
+	if target == stepBarPreset {
+		return m
+	}
+	m = sendWizardKey(m, "enter") // → sync target
+	if target == stepSyncTarget {
+		return m
+	}
+	m = sendWizardKey(m, "enter") // → summary
+	if target == stepSummary {
+		return m
+	}
+	m = sendWizardKey(m, "enter") // → writing
+	return m
+}
+
+func TestWizardChosenAccessors(t *testing.T) {
+	m := newTestWizard()
+	if m.ChosenTheme() != "ayu-dark" {
+		t.Errorf("ChosenTheme() = %q, want ayu-dark", m.ChosenTheme())
+	}
+	if m.ChosenPreset() != "default" {
+		t.Errorf("ChosenPreset() = %q, want default", m.ChosenPreset())
+	}
+	if m.ChosenSync() != "none" {
+		t.Errorf("ChosenSync() = %q, want none", m.ChosenSync())
+	}
+}
+
+func TestWizardInitReturnsNil(t *testing.T) {
+	m := newTestWizard()
+	if cmd := m.Init(); cmd != nil {
+		t.Errorf("Init() should return nil, got %v", cmd)
+	}
+}
+
+func TestWizardHandleSuccessEnterQuits(t *testing.T) {
+	m := newTestWizard()
+	m.step = stepSuccess
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Error("enter on success should return tea.Quit cmd")
+	}
+}
+
+func TestWizardHandleSuccessQQuits(t *testing.T) {
+	m := newTestWizard()
+	m.step = stepSuccess
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Error("q on success should return tea.Quit cmd")
+	}
+}
+
+func TestWizardHandleSyncTargetCursor(t *testing.T) {
+	m := walkToStep(t, stepSyncTarget)
+	// Only "none" is available without ghostty/nvim — seed extra targets
+	// to exercise the cursor.
+	m.syncTargets = []string{"none", "ghostty", "nvim"}
+
+	m = sendWizardKey(m, "j")
+	if m.syncCursor != 1 {
+		t.Errorf("after j: syncCursor = %d, want 1", m.syncCursor)
+	}
+	m = sendWizardKey(m, "j")
+	if m.syncCursor != 2 {
+		t.Errorf("after j: syncCursor = %d, want 2", m.syncCursor)
+	}
+	// Bottom clamp.
+	m = sendWizardKey(m, "j")
+	if m.syncCursor != 2 {
+		t.Errorf("at bottom: syncCursor = %d, want 2", m.syncCursor)
+	}
+	m = sendWizardKey(m, "k")
+	if m.syncCursor != 1 {
+		t.Errorf("after k: syncCursor = %d, want 1", m.syncCursor)
+	}
+	// Enter commits the selection.
+	m = sendWizardKey(m, "enter")
+	if m.ChosenSync() != "ghostty" {
+		t.Errorf("after enter: ChosenSync() = %q, want ghostty", m.ChosenSync())
+	}
+	if m.Step() != stepSummary {
+		t.Errorf("after enter: Step() = %d, want stepSummary", m.Step())
+	}
+}
+
+func TestWizardThemeEnterCommitsSelection(t *testing.T) {
+	m := walkToStep(t, stepTheme)
+	m.themeCursor = 0
+	originalTheme := m.themes[0].Name
+
+	m = sendWizardKey(m, "enter")
+	if m.ChosenTheme() != originalTheme {
+		t.Errorf("after enter: ChosenTheme = %q, want %q", m.ChosenTheme(), originalTheme)
+	}
+	if m.Step() != stepBarPreset {
+		t.Errorf("after enter: Step = %d, want stepBarPreset", m.Step())
+	}
+}
+
+// ── View rendering for every step ──
+
+func TestWizardViewsRenderWithoutPanic(t *testing.T) {
+	// Cover each per-step view path with a non-zero terminal size.
+	for _, step := range []wizardStep{
+		stepWelcome, stepDepCheck, stepDetectTargets, stepTheme,
+		stepBarPreset, stepSyncTarget, stepSummary, stepWriting, stepSuccess,
+	} {
+		m := newTestWizard()
+		m.width = 80
+		m.height = 40
+		m.step = step
+		// Seed deps so dep-check view has content to render.
+		m.deps = WizardDeps{TmuxVersion: "3.4", ClipboardTool: "wl-copy"}
+
+		view := m.View()
+		if view == "" {
+			t.Errorf("step %d: View() returned empty", step)
+		}
+	}
+}
+
+func TestWizardBackNavFromWelcomeIsNoop(t *testing.T) {
+	m := newTestWizard()
+	m = sendWizardKey(m, "shift+tab")
+	if m.Step() != stepWelcome {
+		t.Errorf("shift+tab on welcome advanced to %d", m.Step())
+	}
+}
+
+func TestWizardCanNavigateBackBoundary(t *testing.T) {
+	// Back-nav should be disabled on welcome, writing, and success.
+	for _, step := range []wizardStep{stepWelcome, stepWriting, stepSuccess} {
+		m := newTestWizard()
+		m.step = step
+		if m.canNavigateBack() {
+			t.Errorf("canNavigateBack() true on step %d, want false", step)
+		}
+	}
+	// And enabled on the middle steps.
+	for _, step := range []wizardStep{stepDepCheck, stepDetectTargets, stepTheme, stepBarPreset, stepSyncTarget, stepSummary} {
+		m := newTestWizard()
+		m.step = step
+		if !m.canNavigateBack() {
+			t.Errorf("canNavigateBack() false on step %d, want true", step)
+		}
+	}
+}
+
+func TestRestartCmdExported(t *testing.T) {
+	if s := RestartCmd(); s == "" {
+		t.Error("RestartCmd() returned empty string")
+	}
+}

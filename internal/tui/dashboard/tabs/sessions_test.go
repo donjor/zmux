@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,32 +12,110 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/workspace"
 )
 
-func newTestSessionsTab() (*SessionsTab, *tmux.MockRunner) {
+// ── memFS for an in-process workspace store ──
+
+type sessionsMemFS struct {
+	files   map[string][]byte
+	homeDir string
+}
+
+func newSessionsMemFS(home string) *sessionsMemFS {
+	return &sessionsMemFS{files: make(map[string][]byte), homeDir: home}
+}
+
+func (m *sessionsMemFS) ReadFile(path string) ([]byte, error) {
+	data, ok := m.files[path]
+	if !ok {
+		return nil, &os.PathError{Op: "open", Path: path, Err: os.ErrNotExist}
+	}
+	return data, nil
+}
+func (m *sessionsMemFS) WriteFile(path string, data []byte, _ os.FileMode) error {
+	m.files[path] = data
+	return nil
+}
+func (m *sessionsMemFS) MkdirAll(_ string, _ os.FileMode) error { return nil }
+func (m *sessionsMemFS) Stat(path string) (os.FileInfo, error) {
+	if _, ok := m.files[path]; ok {
+		return sessionsFakeInfo{name: path}, nil
+	}
+	return nil, &os.PathError{Op: "stat", Path: path, Err: os.ErrNotExist}
+}
+func (m *sessionsMemFS) UserHomeDir() (string, error) { return m.homeDir, nil }
+func (m *sessionsMemFS) Glob(_ string) ([]string, error) {
+	return nil, nil
+}
+
+type sessionsFakeInfo struct{ name string }
+
+func (f sessionsFakeInfo) Name() string       { return f.name }
+func (f sessionsFakeInfo) Size() int64        { return 0 }
+func (f sessionsFakeInfo) Mode() os.FileMode  { return 0o644 }
+func (f sessionsFakeInfo) ModTime() time.Time { return time.Time{} }
+func (f sessionsFakeInfo) IsDir() bool        { return false }
+func (f sessionsFakeInfo) Sys() any           { return nil }
+
+// ── Test helpers ──
+
+// newTestSessionsTab builds a tab backed by a real workspace.Store on memFS
+// and a tmux mock seeded with three workspaces:
+//
+//   - dev    : 2 live sessions, one attached
+//   - api    : 1 live session, no attached
+//   - empty  : 0 live sessions
+func newTestSessionsTab(t *testing.T) (*SessionsTab, *tmux.MockRunner, *workspace.Store) {
+	t.Helper()
+
 	mock := tmux.NewMockRunner()
 	mock.InsideTmux = true
+	mock.DisplayMessageResult = "dev"
+
 	now := time.Now()
 	mock.Sessions = []tmux.Session{
 		{Name: "dev", Windows: 3, Attached: true, Activity: now, Created: now.Add(-2 * time.Hour), Dir: "/home/user/work"},
+		{Name: "dev-2", Windows: 1, Attached: false, Activity: now, Created: now.Add(-1 * time.Hour), Dir: "/home/user/work"},
 		{Name: "api", Windows: 2, Attached: false, Activity: now, Created: now.Add(-1 * time.Hour), Dir: "/home/user/api"},
-		{Name: "tmp-1", Windows: 1, Attached: false, Activity: now, Created: now.Add(-5 * time.Minute), Dir: "/tmp"},
 	}
 	mock.Windows = map[string][]tmux.Window{
-		"dev": {
-			{Index: 1, Name: "editor", Active: true, Dir: "/home/user/work"},
-			{Index: 2, Name: "server", Active: false, Dir: "/home/user/work"},
-			{Index: 3, Name: "git", Active: false, Dir: "/home/user/work"},
-		},
-		"api": {
-			{Index: 1, Name: "main", Active: true, Dir: "/home/user/api"},
-		},
+		"dev":   {{Index: 1, Name: "editor", Active: true}},
+		"dev-2": {{Index: 1, Name: "shell", Active: true}},
+		"api":   {{Index: 1, Name: "main", Active: true}},
 	}
 
-	styles := tui.DefaultStyles()
-	tab := NewSessionsTab(mock, styles)
+	fs := newSessionsMemFS("/home/user")
+	store := workspace.NewStore(fs)
+	if err := store.CreateWorkspace("dev", ""); err != nil {
+		t.Fatalf("create dev: %v", err)
+	}
+	if err := store.CreateWorkspace("api", ""); err != nil {
+		t.Fatalf("create api: %v", err)
+	}
+	if err := store.CreateWorkspace("empty", ""); err != nil {
+		t.Fatalf("create empty: %v", err)
+	}
+	if err := store.AddSession("dev", "dev"); err != nil {
+		t.Fatalf("add dev session: %v", err)
+	}
+	if err := store.AddSession("dev", "dev-2"); err != nil {
+		t.Fatalf("add dev-2 session: %v", err)
+	}
+	if err := store.AddSession("api", "api"); err != nil {
+		t.Fatalf("add api session: %v", err)
+	}
+
+	loader := func() []tui.WorkspaceViewModel {
+		ws, _ := store.ListWorkspaces()
+		live, _ := session.ListSessions(mock)
+		return tui.BuildWorkspaceViewModels(ws, live)
+	}
+
+	tab := NewSessionsTab(mock, tui.DefaultStyles(), loader, store)
 	tab.Resize(80, 40)
-	return tab, mock
+	return tab, mock, store
 }
 
 func simulateActivate(tab *SessionsTab) *SessionsTab {
@@ -44,36 +123,50 @@ func simulateActivate(tab *SessionsTab) *SessionsTab {
 	if cmd == nil {
 		return tab
 	}
-	// tea.Batch returns a BatchMsg ([]tea.Cmd) when called.
 	msg := cmd()
 	if msg == nil {
 		return tab
 	}
-	// Handle BatchMsg: execute each sub-command and feed results.
 	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, subCmd := range batch {
-			if subCmd == nil {
+		for _, sub := range batch {
+			if sub == nil {
 				continue
 			}
-			subMsg := subCmd()
-			if subMsg != nil {
+			if subMsg := sub(); subMsg != nil {
 				result, _ := tab.Update(subMsg)
 				tab = result.(*SessionsTab)
 			}
 		}
-		// Clear catalog — tests use mock runner, not real tmux sockets.
+		// Tests don't depend on real external sources.
 		tab.catalog = nil
+		tab.tree.SetRows(tab.buildRows())
 		return tab
 	}
-	// Single message path.
 	result, _ := tab.Update(msg)
 	tab = result.(*SessionsTab)
 	tab.catalog = nil
+	tab.tree.SetRows(tab.buildRows())
 	return tab
 }
 
-func sendSessionKey(tab *SessionsTab, keyStr string) (*SessionsTab, tea.Cmd) {
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
+// runMutationCmd runs a returned tea.Cmd, feeds the result back into the
+// tab, and recursively drives any follow-on commands. Used for the rename /
+// kill / move flows that produce a refetch chain.
+func runMutationCmd(tab *SessionsTab, cmd tea.Cmd) *SessionsTab {
+	for cmd != nil {
+		msg := cmd()
+		if msg == nil {
+			return tab
+		}
+		result, next := tab.Update(msg)
+		tab = result.(*SessionsTab)
+		cmd = next
+	}
+	return tab
+}
+
+func sendKey(tab *SessionsTab, keyStr string) (*SessionsTab, tea.Cmd) {
+	var msg tea.KeyMsg
 	switch keyStr {
 	case "enter":
 		msg = tea.KeyMsg{Type: tea.KeyEnter}
@@ -83,434 +176,453 @@ func sendSessionKey(tab *SessionsTab, keyStr string) (*SessionsTab, tea.Cmd) {
 		msg = tea.KeyMsg{Type: tea.KeyUp}
 	case "down":
 		msg = tea.KeyMsg{Type: tea.KeyDown}
+	default:
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
 	}
-
 	result, cmd := tab.Update(msg)
 	return result.(*SessionsTab), cmd
 }
 
-func TestSessionsTabID(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	if tab.ID() != dashboard.TabSessions {
-		t.Errorf("expected TabSessions, got %s", tab.ID())
+// findRowIndexByID returns the row index for the given outline ID, or -1.
+func findRowIndexByID(tab *SessionsTab, id string) int {
+	for i := range tab.tree.Rows {
+		if tab.tree.Rows[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// ── Identity ──
+
+func TestSessionsTabIDAndTitle(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	if tab.ID() != dashboard.TabWorkspaces {
+		t.Errorf("expected TabWorkspaces, got %s", tab.ID())
+	}
+	if tab.Title() != "Workspaces" {
+		t.Errorf("expected 'Workspaces', got %q", tab.Title())
 	}
 }
 
-func TestSessionsTabTitle(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	if tab.Title() != "Sessions" {
-		t.Errorf("expected 'Sessions', got %q", tab.Title())
+// ── Activation + row building ──
+
+func TestSessionsTabActivateLoadsWorkspaces(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+	if len(tab.workspaces) == 0 {
+		t.Fatal("expected workspaces to load after activate")
 	}
 }
 
-func TestSessionsTabActivateLoadsSessions(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+func TestSessionsTabCollapsedRowCount(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+	// 3 workspaces, none expanded → 3 rows.
+	if got := len(tab.tree.Rows); got != 3 {
+		t.Errorf("expected 3 collapsed rows, got %d: %+v", got, tab.tree.Rows)
+	}
+}
+
+func TestSessionsTabExpandShowsSessions(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+	// Cursor must land on the dev workspace.
+	devIdx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	if devIdx < 0 {
+		t.Fatal("dev workspace row not found")
+	}
+	tab.tree.Cursor = devIdx
+	tab, _ = sendKey(tab, "enter")
+	// 3 workspaces + 2 sessions under dev = 5 rows.
+	if got := len(tab.tree.Rows); got != 5 {
+		t.Errorf("expected 5 rows after expand, got %d", got)
+	}
+}
+
+func TestSessionsTabEmptyWorkspacePlaceholder(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+	emptyIdx := findRowIndexByID(tab, outline.WorkspaceID("empty"))
+	if emptyIdx < 0 {
+		t.Fatal("empty workspace row not found")
+	}
+	tab.tree.Cursor = emptyIdx
+	tab, _ = sendKey(tab, "enter")
+	// 3 workspaces + 1 placeholder = 4 rows.
+	if got := len(tab.tree.Rows); got != 4 {
+		t.Errorf("expected 4 rows with empty placeholder, got %d", got)
+	}
+}
+
+// ── Create workspace ──
+
+func TestSessionsTabCreateWorkspace(t *testing.T) {
+	tab, _, store := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	if len(tab.sessions) != 3 {
-		t.Errorf("expected 3 sessions, got %d", len(tab.sessions))
+	tab, _ = sendKey(tab, "n")
+	if tab.mode != sessionsModeCreate {
+		t.Fatalf("expected create mode, got %d", tab.mode)
+	}
+	tab.createInput.SetValue("brand-new")
+
+	tab, cmd := sendKey(tab, "enter")
+	tab = runMutationCmd(tab, cmd)
+
+	ws, _ := store.GetWorkspace("brand-new")
+	if ws == nil {
+		t.Fatal("expected workspace 'brand-new' to be created")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("brand-new")) < 0 {
+		t.Error("expected new workspace row to appear after refetch")
 	}
 }
 
-func TestSessionsTabNavigateDown(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── Rename workspace ──
+
+func TestSessionsTabRenameWorkspaceJumpsToNewID(t *testing.T) {
+	tab, _, store := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	if tab.cursor != 0 {
-		t.Fatalf("expected cursor at 0, got %d", tab.cursor)
+	idx := findRowIndexByID(tab, outline.WorkspaceID("api"))
+	if idx < 0 {
+		t.Fatal("api workspace row not found")
 	}
+	tab.tree.Cursor = idx
 
-	tab, _ = sendSessionKey(tab, "j")
-	if tab.cursor != 1 {
-		t.Errorf("expected cursor at 1, got %d", tab.cursor)
-	}
-
-	tab, _ = sendSessionKey(tab, "j")
-	if tab.cursor != 2 {
-		t.Errorf("expected cursor at 2, got %d", tab.cursor)
-	}
-
-	// Should not go past end.
-	tab, _ = sendSessionKey(tab, "j")
-	if tab.cursor != 2 {
-		t.Errorf("expected cursor clamped at 2, got %d", tab.cursor)
-	}
-}
-
-func TestSessionsTabNavigateUp(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-	tab.cursor = 2
-
-	tab, _ = sendSessionKey(tab, "k")
-	if tab.cursor != 1 {
-		t.Errorf("expected cursor at 1, got %d", tab.cursor)
-	}
-
-	tab, _ = sendSessionKey(tab, "k")
-	if tab.cursor != 0 {
-		t.Errorf("expected cursor at 0, got %d", tab.cursor)
-	}
-
-	// Should not go past start.
-	tab, _ = sendSessionKey(tab, "k")
-	if tab.cursor != 0 {
-		t.Errorf("expected cursor clamped at 0, got %d", tab.cursor)
-	}
-}
-
-func TestSessionsTabEnterSwitchesSession(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	_, cmd := sendSessionKey(tab, "enter")
-	if cmd == nil {
-		t.Fatal("expected command from enter")
-	}
-
-	msg := cmd()
-	intent, ok := msg.(dashboard.QuitIntent)
-	if !ok {
-		t.Fatalf("expected QuitIntent, got %T", msg)
-	}
-	if intent.Action != "switch" {
-		t.Errorf("expected action 'switch', got %q", intent.Action)
-	}
-}
-
-func TestSessionsTabNewSession(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	_, cmd := sendSessionKey(tab, "n")
-	if cmd == nil {
-		t.Fatal("expected command from n")
-	}
-
-	msg := cmd()
-	intent, ok := msg.(dashboard.QuitIntent)
-	if !ok {
-		t.Fatalf("expected QuitIntent, got %T", msg)
-	}
-	if intent.Action != "new" {
-		t.Errorf("expected action 'new', got %q", intent.Action)
-	}
-}
-
-func TestSessionsTabRenameEntersMode(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	tab, _ = sendSessionKey(tab, "r")
+	tab, _ = sendKey(tab, "r")
 	if tab.mode != sessionsModeRename {
-		t.Errorf("expected sessionsModeRename, got %d", tab.mode)
+		t.Fatalf("expected rename mode, got %d", tab.mode)
+	}
+	tab.renameInput.SetValue("apiv2")
+
+	tab, cmd := sendKey(tab, "enter")
+	tab = runMutationCmd(tab, cmd)
+
+	if _, err := store.GetWorkspace("apiv2"); err != nil {
+		t.Fatalf("expected workspace 'apiv2' to exist: %v", err)
+	}
+	row := tab.tree.Current()
+	if row == nil || row.ID != outline.WorkspaceID("apiv2") {
+		t.Errorf("expected cursor on apiv2, got %+v", row)
 	}
 }
 
-func TestSessionsTabRenameCancel(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── Rename session ──
+
+func TestSessionsTabRenameSessionJumpsToNewID(t *testing.T) {
+	tab, mock, _ := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	tab, _ = sendSessionKey(tab, "r")
-	tab, _ = sendSessionKey(tab, "esc")
+	// Expand dev so the session row is in the tree.
+	devIdx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	tab.tree.Cursor = devIdx
+	tab, _ = sendKey(tab, "enter")
 
-	if tab.mode != sessionsModeList {
-		t.Errorf("expected sessionsModeList after esc, got %d", tab.mode)
+	// Cursor onto a dev session.
+	sIdx := findRowIndexByID(tab, outline.SessionID("dev"))
+	if sIdx < 0 {
+		t.Fatal("dev session row not found")
+	}
+	tab.tree.Cursor = sIdx
+
+	tab, _ = sendKey(tab, "r")
+	if tab.mode != sessionsModeRename {
+		t.Fatalf("expected rename mode, got %d", tab.mode)
+	}
+	tab.renameInput.SetValue("dev-renamed")
+
+	// Update the mock so the post-mutation refetch reflects the rename.
+	prepareMockForRename(mock, "dev", "dev-renamed")
+
+	tab, cmd := sendKey(tab, "enter")
+	tab = runMutationCmd(tab, cmd)
+
+	row := tab.tree.Current()
+	if row == nil || row.ID != outline.SessionID("dev-renamed") {
+		t.Errorf("expected cursor on dev-renamed, got %+v", row)
 	}
 }
 
-func TestSessionsTabRenameConfirm(t *testing.T) {
-	tab, mock := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	tab, _ = sendSessionKey(tab, "r")
-	tab.renameInput.SetValue("newname")
-
-	tab, cmd := sendSessionKey(tab, "enter")
-
-	if tab.mode != sessionsModeList {
-		t.Errorf("expected sessionsModeList after rename confirm, got %d", tab.mode)
-	}
-
-	if cmd != nil {
-		msg := cmd()
-		if msg != nil {
-			tab.Update(msg)
+func prepareMockForRename(mock *tmux.MockRunner, oldName, newName string) {
+	for i := range mock.Sessions {
+		if mock.Sessions[i].Name == oldName {
+			mock.Sessions[i].Name = newName
 		}
 	}
-
-	// Should have called RenameSession.
-	found := false
-	for _, c := range mock.Calls {
-		if c.Method == "RenameSession" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected RenameSession to be called")
+	if wins, ok := mock.Windows[oldName]; ok {
+		mock.Windows[newName] = wins
+		delete(mock.Windows, oldName)
 	}
 }
 
-func TestSessionsTabKillConfirmDialog(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── Kill session (single confirm) ──
+
+func TestSessionsTabKillSession(t *testing.T) {
+	tab, mock, _ := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	tab, _ = sendSessionKey(tab, "x")
+	devIdx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	tab.tree.Cursor = devIdx
+	tab, _ = sendKey(tab, "enter")
+
+	sIdx := findRowIndexByID(tab, outline.SessionID("dev-2"))
+	if sIdx < 0 {
+		t.Fatal("dev-2 row not found")
+	}
+	tab.tree.Cursor = sIdx
+
+	tab, _ = sendKey(tab, "x")
 	if tab.mode != sessionsModeConfirmKill {
-		t.Errorf("expected sessionsModeConfirmKill, got %d", tab.mode)
+		t.Fatalf("expected confirm mode, got %d", tab.mode)
 	}
-	if tab.killTarget == "" {
-		t.Error("expected killTarget to be set")
-	}
-}
+	_, cmd := sendKey(tab, "y")
+	_ = runMutationCmd(tab, cmd)
 
-func TestSessionsTabKillCancel(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	tab, _ = sendSessionKey(tab, "x")
-	tab, _ = sendSessionKey(tab, "n") // any key except y cancels
-
-	if tab.mode != sessionsModeList {
-		t.Errorf("expected sessionsModeList after cancel, got %d", tab.mode)
-	}
-}
-
-func TestSessionsTabKillConfirm(t *testing.T) {
-	tab, mock := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	tab, _ = sendSessionKey(tab, "x")
-	_, cmd := sendSessionKey(tab, "y")
-
-	if cmd != nil {
-		msg := cmd()
-		if msg != nil {
-			// Don't need to update, just check mock calls.
-		}
-	}
-
-	found := false
-	for _, c := range mock.Calls {
-		if c.Method == "KillSession" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !mockCalled(mock, "KillSession") {
 		t.Error("expected KillSession to be called")
 	}
 }
 
-func TestSessionsTabPreview(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── Kill workspace (double confirm for attached) ──
+
+func TestSessionsTabKillAttachedWorkspaceDoubleConfirm(t *testing.T) {
+	tab, mock, store := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	_, cmd := sendSessionKey(tab, "p")
-	if cmd == nil {
-		t.Fatal("expected command from p")
+	idx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	if idx < 0 {
+		t.Fatal("dev workspace not found")
+	}
+	tab.tree.Cursor = idx
+
+	tab, _ = sendKey(tab, "x")
+	if tab.mode != sessionsModeConfirmKill {
+		t.Fatalf("expected first confirm, got %d", tab.mode)
 	}
 
-	msg := cmd()
-	if msg == nil {
-		t.Fatal("expected preview message")
+	// First "y" should escalate to the attached confirmation.
+	tab, _ = sendKey(tab, "y")
+	if tab.mode != sessionsModeConfirmKillAttached {
+		t.Fatalf("expected attached confirm, got %d", tab.mode)
 	}
 
-	result, _ := tab.Update(msg)
-	tab = result.(*SessionsTab)
+	_, cmd := sendKey(tab, "y")
+	_ = runMutationCmd(tab, cmd)
 
-	if tab.mode != sessionsModePreview {
-		t.Errorf("expected sessionsModePreview, got %d", tab.mode)
+	if !mockCalled(mock, "KillSession") {
+		t.Error("expected KillSession to be called for workspace sessions")
+	}
+	if ws, _ := store.GetWorkspace("dev"); ws != nil {
+		t.Error("expected dev workspace to be deleted")
 	}
 }
 
-func TestSessionsTabPreviewDismiss(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-	tab.mode = sessionsModePreview
-	tab.previewContent = "hello"
+// ── Move session inline ──
 
-	tab, _ = sendSessionKey(tab, "x")
-	if tab.mode != sessionsModeList {
-		t.Errorf("expected sessionsModeList after dismiss, got %d", tab.mode)
-	}
-	if tab.previewContent != "" {
-		t.Error("expected previewContent to be cleared")
-	}
-}
-
-func TestSessionsTabMoveTab(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+func TestSessionsTabMoveSession(t *testing.T) {
+	tab, _, store := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	_, cmd := sendSessionKey(tab, "m")
-	if cmd == nil {
-		t.Fatal("expected command from m")
+	// Expand dev and place cursor on the dev-2 session.
+	devIdx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	tab.tree.Cursor = devIdx
+	tab, _ = sendKey(tab, "enter")
+
+	sIdx := findRowIndexByID(tab, outline.SessionID("dev-2"))
+	if sIdx < 0 {
+		t.Fatal("dev-2 row not found")
 	}
+	tab.tree.Cursor = sIdx
 
-	msg := cmd()
-	if msg == nil {
-		t.Fatal("expected move destinations message")
-	}
-
-	result, _ := tab.Update(msg)
-	tab = result.(*SessionsTab)
-
+	tab, _ = sendKey(tab, "m")
 	if tab.mode != sessionsModeMove {
-		t.Errorf("expected sessionsModeMove, got %d", tab.mode)
-	}
-}
-
-func TestSessionsTabMoveCancelOnEsc(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-	tab.mode = sessionsModeMove
-	tab.moveTargets = []session.SessionInfo{{Name: "other"}}
-
-	tab, _ = sendSessionKey(tab, "esc")
-	if tab.mode != sessionsModeList {
-		t.Errorf("expected sessionsModeList after esc, got %d", tab.mode)
-	}
-}
-
-func TestSessionsTabCleanupTmp(t *testing.T) {
-	tab, mock := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	_, cmd := sendSessionKey(tab, "c")
-	if cmd != nil {
-		msg := cmd()
-		if msg != nil {
-			tab.Update(msg)
-		}
+		t.Fatalf("expected move mode, got %d", tab.mode)
 	}
 
+	// Snap should land on the dev workspace header.
+	if row := tab.tree.Current(); row == nil || row.Kind != outline.RowWorkspaceHeader {
+		t.Fatalf("expected cursor on workspace header, got %+v", row)
+	}
+
+	// Navigate to the api workspace header. Up to N tries in either direction
+	// since the workspace order depends on activity sort.
+	apiID := outline.WorkspaceID("api")
+	if !navigateToWorkspaceInMoveMode(tab, apiID) {
+		t.Fatal("could not navigate to api workspace")
+	}
+
+	_, cmd := sendKey(tab, "enter")
+	_ = runMutationCmd(tab, cmd)
+
+	apiWS, _ := store.GetWorkspace("api")
+	if apiWS == nil {
+		t.Fatal("api workspace missing")
+	}
 	found := false
-	for _, c := range mock.Calls {
-		if c.Method == "KillSession" {
+	for _, s := range apiWS.Sessions {
+		if s == "dev-2" {
 			found = true
-			break
 		}
 	}
 	if !found {
-		t.Error("expected KillSession to be called for tmp session cleanup")
+		t.Errorf("expected dev-2 to be in api workspace, got %v", apiWS.Sessions)
 	}
 }
 
-func TestSessionsTabViewRendersSessionList(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── Modal staging (Codex #4) ──
+
+func TestSessionsTabStagesDataDuringRename(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	view := tab.View()
+	idx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	tab.tree.Cursor = idx
+	tab, _ = sendKey(tab, "r")
+	if tab.mode != sessionsModeRename {
+		t.Fatalf("expected rename mode, got %d", tab.mode)
+	}
 
-	if !strings.Contains(view, "dev") {
-		t.Error("expected view to contain session 'dev'")
+	rowsBefore := len(tab.tree.Rows)
+
+	// Inject a new data message while in rename mode.
+	staged := sessionsDataMsg{
+		reqID:      tab.reqID,
+		workspaces: []tui.WorkspaceViewModel{{Workspace: workspace.Workspace{Name: "fresh"}}},
 	}
-	if !strings.Contains(view, "api") {
-		t.Error("expected view to contain session 'api'")
+	result, _ := tab.Update(staged)
+	tab = result.(*SessionsTab)
+
+	if tab.pending == nil {
+		t.Error("expected staged data while in modal")
 	}
-	if !strings.Contains(view, "tmp-1") {
-		t.Error("expected view to contain session 'tmp-1'")
+	if len(tab.tree.Rows) != rowsBefore {
+		t.Error("expected tree rows unchanged during modal")
+	}
+
+	// Exit rename and the staged data should apply.
+	tab, _ = sendKey(tab, "esc")
+	if tab.pending != nil {
+		t.Error("expected pending to clear after exit")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("fresh")) < 0 {
+		t.Error("expected staged workspace to be applied after exit")
 	}
 }
 
-func TestSessionsTabViewShowsWindowNames(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── Stale reqID dropping (Codex #9) ──
+
+func TestSessionsTabDropsStaleAfterDeactivate(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	view := tab.View()
-
-	if !strings.Contains(view, "editor") {
-		t.Error("expected view to contain window name 'editor'")
-	}
-	if !strings.Contains(view, "server") {
-		t.Error("expected view to contain window name 'server'")
-	}
-}
-
-func TestSessionsTabViewShowsAttachedStatus(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	view := tab.View()
-
-	if !strings.Contains(view, "attached") {
-		t.Error("expected view to contain 'attached' status")
-	}
-}
-
-func TestSessionsTabViewEmptyState(t *testing.T) {
-	mock := tmux.NewMockRunner()
-	styles := tui.DefaultStyles()
-	tab := NewSessionsTab(mock, styles)
-	tab.Resize(80, 40)
-
-	// Activate with no sessions.
-	tab = simulateActivate(tab)
-
-	view := tab.View()
-	if !strings.Contains(view, "No sessions") {
-		t.Error("expected empty state message")
-	}
-}
-
-func TestSessionsTabDeactivateDropsOverlays(t *testing.T) {
-	tab, _ := newTestSessionsTab()
-	tab = simulateActivate(tab)
-
-	// Enter confirm kill mode.
-	tab.mode = sessionsModeConfirmKill
-	tab.killTarget = "dev"
-
+	staleID := tab.reqID
 	tab.Deactivate()
 
-	if tab.mode != sessionsModeList {
-		t.Errorf("expected mode reset to list, got %d", tab.mode)
+	// Stale message must not panic and must not mutate state.
+	rowsBefore := len(tab.tree.Rows)
+	stale := sessionsDataMsg{
+		reqID: staleID,
+		workspaces: []tui.WorkspaceViewModel{
+			{Workspace: workspace.Workspace{Name: "ghost"}},
+		},
+	}
+	result, _ := tab.Update(stale)
+	tab = result.(*SessionsTab)
+
+	if len(tab.tree.Rows) != rowsBefore {
+		t.Errorf("expected unchanged rows after stale msg, got %d (was %d)", len(tab.tree.Rows), rowsBefore)
 	}
 }
 
-func TestSessionsTabSelectionPersistence(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── Cursor preservation ──
+
+func TestSessionsTabCursorAfterDelete(t *testing.T) {
+	tab, _, store := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	// Sessions are sorted alphabetically: api, dev, tmp-1.
-	// Cursor starts at 0 (api). Move to "dev" (index 1).
-	tab, _ = sendSessionKey(tab, "j")
-	if tab.selectedName != "dev" {
-		t.Errorf("expected selectedName 'dev', got %q", tab.selectedName)
-	}
+	idx := findRowIndexByID(tab, outline.WorkspaceID("empty"))
+	tab.tree.Cursor = idx
 
-	// Simulate a refetch that keeps the same sessions.
-	tab.restoreCursor()
-	if tab.cursor != 1 {
-		t.Errorf("expected cursor restored to 1 (dev), got %d", tab.cursor)
+	// Delete via the store directly, then refetch.
+	if err := store.DeleteWorkspace("empty"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	tab.reqID = dashboard.NextReqID()
+	tab = runMutationCmd(tab, tab.fetchData(tab.reqID))
+
+	row := tab.tree.Current()
+	if row == nil {
+		t.Fatal("expected cursor on a row after delete")
+	}
+	if !row.Selectable && row.Kind != outline.RowPlaceholder {
+		t.Errorf("expected cursor on a sensible row, got %+v", row)
 	}
 }
 
-func TestSessionsTabShortHelp(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── ShortHelp ──
 
+func TestSessionsTabShortHelpListMode(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
 	help := tab.ShortHelp()
-	if !strings.Contains(help, "enter:switch") {
-		t.Error("expected help to contain 'enter:switch'")
-	}
 	if !strings.Contains(help, "n:new") {
-		t.Error("expected help to contain 'n:new'")
+		t.Errorf("expected 'n:new' in help, got %q", help)
 	}
 }
 
-func TestSessionsTabJumpToTopBottom(t *testing.T) {
-	tab, _ := newTestSessionsTab()
+// ── View smoke test ──
+
+func TestSessionsTabViewRendersWorkspaces(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
-
-	tab, _ = sendSessionKey(tab, "G")
-	if tab.cursor != len(tab.sessions)-1 {
-		t.Errorf("expected cursor at end, got %d", tab.cursor)
+	view := tab.View()
+	if !strings.Contains(view, "dev") {
+		t.Error("expected view to contain 'dev'")
 	}
-
-	tab, _ = sendSessionKey(tab, "g")
-	if tab.cursor != 0 {
-		t.Errorf("expected cursor at 0, got %d", tab.cursor)
+	if !strings.Contains(view, "api") {
+		t.Error("expected view to contain 'api'")
 	}
+}
+
+// navigateToWorkspaceInMoveMode walks the cursor up and down (in move mode)
+// trying to land on the workspace row with the given ID. Returns false if
+// no progress can be made.
+func navigateToWorkspaceInMoveMode(tab *SessionsTab, targetID string) bool {
+	for i := 0; i < 16; i++ {
+		row := tab.tree.Current()
+		if row != nil && row.ID == targetID {
+			return true
+		}
+		prev := tab.tree.Cursor
+		tab, _ = sendKey(tab, "down")
+		if tab.tree.Cursor == prev {
+			break
+		}
+	}
+	for i := 0; i < 16; i++ {
+		row := tab.tree.Current()
+		if row != nil && row.ID == targetID {
+			return true
+		}
+		prev := tab.tree.Cursor
+		tab, _ = sendKey(tab, "up")
+		if tab.tree.Cursor == prev {
+			break
+		}
+	}
+	row := tab.tree.Current()
+	return row != nil && row.ID == targetID
+}
+
+// ── Helpers ──
+
+func mockCalled(mock *tmux.MockRunner, method string) bool {
+	for _, c := range mock.Calls {
+		if c.Method == method {
+			return true
+		}
+	}
+	return false
 }

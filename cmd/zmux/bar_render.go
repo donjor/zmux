@@ -7,7 +7,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var barRenderDir string
+var (
+	barRenderDir     string
+	barRenderSession string
+	barRenderPaneCmd string
+	barRenderPrefix  string
+	barRenderGroup   string
+)
 
 var barRenderCmd = &cobra.Command{
 	Use:    "bar-render <left|right>",
@@ -20,14 +26,26 @@ var barRenderCmd = &cobra.Command{
 
 		palette := loadPaletteOrDefault(app.FS)
 
-		// Get tmux state.
-		sessionName, _ := app.Runner.DisplayMessage("", "#{session_name}")
-		paneCmd, _ := app.Runner.DisplayMessage("", "#{pane_current_command}")
-		prefixStr, _ := app.Runner.DisplayMessage("", "#{client_prefix}")
-		groupID, _ := app.Runner.DisplayMessage("", "#{session_group}")
-
-		// Use --dir if provided (embedded in #() for per-window cache),
-		// otherwise fall back to querying tmux.
+		// Tmux state is passed via flags (substituted per-client inside
+		// #() by tmux itself). Querying tmux here would return the
+		// globally-focused client's state — wrong when multiple clients
+		// are attached to different sessions.
+		sessionName := barRenderSession
+		if sessionName == "" {
+			sessionName, _ = app.Runner.DisplayMessage("", "#{session_name}")
+		}
+		paneCmd := barRenderPaneCmd
+		if paneCmd == "" {
+			paneCmd, _ = app.Runner.DisplayMessage("", "#{pane_current_command}")
+		}
+		prefixStr := barRenderPrefix
+		if prefixStr == "" {
+			prefixStr, _ = app.Runner.DisplayMessage("", "#{client_prefix}")
+		}
+		groupID := barRenderGroup
+		if groupID == "" {
+			groupID, _ = app.Runner.DisplayMessage("", "#{session_group}")
+		}
 		paneDir := barRenderDir
 		if paneDir == "" {
 			paneDir, _ = app.Runner.DisplayMessage("", "#{pane_current_path}")
@@ -70,6 +88,10 @@ var barRenderCmd = &cobra.Command{
 
 func init() {
 	barRenderCmd.Flags().StringVar(&barRenderDir, "dir", "", "pane directory (avoids tmux query, enables per-window cache)")
+	barRenderCmd.Flags().StringVar(&barRenderSession, "session", "", "session name (passed from tmux #S, avoids global query)")
+	barRenderCmd.Flags().StringVar(&barRenderPaneCmd, "pane-cmd", "", "current pane command (passed from tmux #{pane_current_command})")
+	barRenderCmd.Flags().StringVar(&barRenderPrefix, "prefix", "", "client prefix state 0|1 (passed from tmux #{client_prefix})")
+	barRenderCmd.Flags().StringVar(&barRenderGroup, "group", "", "session group id (passed from tmux #{session_group})")
 	rootCmd.AddCommand(barRenderCmd)
 
 	var barRenderDebug = &cobra.Command{

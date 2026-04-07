@@ -177,9 +177,19 @@ func (m *DashboardApp) View() string {
 	b.WriteString(tabBar)
 	b.WriteString("\n")
 
-	// Active tab content.
+	// Active tab content — clipped to available height.
 	if tab, ok := m.tabs[m.activeTab]; ok {
 		content := tab.View()
+
+		// Clip content to available height so the top doesn't get pushed off screen.
+		maxLines := m.rect.Height
+		if maxLines > 0 {
+			lines := strings.Split(content, "\n")
+			if len(lines) > maxLines {
+				lines = lines[:maxLines]
+			}
+			content = strings.Join(lines, "\n")
+		}
 
 		// Pad the content area.
 		padded := lipgloss.NewStyle().
@@ -218,19 +228,17 @@ func (m *DashboardApp) handleGlobalKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 // handleTabSwitchKey handles tab navigation keys.
+// Digits 1–9 map to m.tabOrder[0..8]; extend naturally if TabOrder grows.
 // Returns (true, cmd) if the key was a tab switch, (false, nil) otherwise.
 func (m *DashboardApp) handleTabSwitchKey(msg tea.KeyMsg) (bool, tea.Cmd) {
-	switch msg.String() {
-	case "1":
-		return true, m.switchToIndex(0)
-	case "2":
-		return true, m.switchToIndex(1)
-	case "3":
-		return true, m.switchToIndex(2)
-	case "4":
-		return true, m.switchToIndex(3)
-	case "5":
-		return true, m.switchToIndex(4)
+	s := msg.String()
+	if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
+		idx := int(s[0] - '1')
+		if idx < len(m.tabOrder) {
+			return true, m.switchToIndex(idx)
+		}
+	}
+	switch s {
 	case "tab":
 		return true, m.cycleTab(1)
 	case "shift+tab":
@@ -303,7 +311,12 @@ func (m *DashboardApp) handleIntent(intent AppIntentMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case ThemeChangeIntent:
-		return m.Update(ThemeChangedMsg{Palette: it.Palette, Styles: it.Styles})
+		// Broadcast via a tea.Cmd rather than a recursive m.Update call.
+		// The recursive call worked only because the two structs happened
+		// to share the same field shape — any future drift on either
+		// side would silently miscompile at runtime.
+		changed := ThemeChangedMsg{Palette: it.Palette, Styles: it.Styles}
+		return m, func() tea.Msg { return changed }
 	}
 
 	return m, nil

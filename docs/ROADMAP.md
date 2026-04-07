@@ -64,7 +64,7 @@
 
 ### Dashboard (inside tmux)
 - [x] tmux popup overlay activation via keybind (prefix+Space)
-- [x] Tabbed dashboard: This Session, Sessions, Themes, Settings, Help
+- [x] Tabbed dashboard: Session, Workspaces, Themes, Settings, Help
 - [x] Session list with local + external source groups
 - [x] Themes tab — theme picker with swatches, color editor, bar preset with live preview
 - [x] Settings tab — config fields (prefix, sync, sessions)
@@ -115,15 +115,25 @@
 - [x] Auto-grouped sessions — attaching to an attached session creates an
       independent viewport (shared windows, separate focus)
 - [x] Workspace concept — first-class objects (versioned TOML v2)
-- [x] `zmux new <workspace> [session]` — workspace-first session creation
-- [x] `zmux open <workspace> [session]` — workspace-level access (replaces attach)
+- [x] `zmux new <workspace> [session...]` — variadic workspace+sessions creation
+- [x] `zmux open <workspace> [session]` — workspace-level access
 - [x] `zmux attach` retained as hidden alias for `open`
-- [x] Picker groups sessions by workspace, headers selectable (Enter to focus)
-- [x] Workspace-aware dashboard — sessions tab groups by workspace
+- [x] `zmux <workspace>` shorthand — attach last-active session
+- [x] `zmux <workspace> <session>` two-arg shorthand — attach specific session
+- [x] `zmux ls` workspace-primary — workspaces by default, `ls <ws>` for sessions
+- [x] `zmux kill` workspace-aware — workspace-first, confirms if live sessions
+- [x] **Workspace-primary picker** — single flat list with inline session expansion
+- [x] Picker: ghost tab completion, fuzzy match underline, ctrl+x delete, ctrl+h toggle empty
+- [x] Picker: search grammar `<ws> <session>` for inline filtering
+- [x] Workspace-aware dashboard — Session tab + Workspaces tab
 - [x] Status bar shows workspace + session position (e.g. `myapp 2/4`)
 - [x] Session navigation keybindings (Shift+Alt+1-9, prefix+w, prefix+[/])
 - [x] `zmux tab move/kill`, `zmux session kill`, `zmux workspace kill`
 - [x] Reconcile auto-heals unmanaged sessions into same-named workspaces
+- [x] Workspace name validation (no spaces, no reserved names)
+- [x] Dashboard: merged Session tab showing current session windows + sibling sessions
+- [ ] Dashboard: Workspaces tab full CRUD (create/rename/delete from dashboard)
+- [ ] Workspace-scoped templates (multi-session templates)
 - [ ] Fork command: `zmux fork <session>` (shape decided, implementation deferred)
 - [ ] Compose: workspace members can have grouped sessions (multi-monitor)
 

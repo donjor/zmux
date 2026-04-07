@@ -216,13 +216,6 @@ func correlateSources(sockets []socketInfo, procs []processEntry) []Source {
 	return sources
 }
 
-// overmindProcess holds parsed info from an overmind process's command line.
-type overmindProcess struct {
-	SocketName    string // tmux socket name (e.g., "overmind-abc123")
-	ControlSocket string // -s flag value
-	Procfile      string // -f flag value
-}
-
 // findOvermindProcesses scans the process table for overmind start commands
 // and extracts their socket names and flags.
 func findOvermindProcesses(procs []processEntry) map[string]*OvermindMeta {

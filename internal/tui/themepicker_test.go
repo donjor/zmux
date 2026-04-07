@@ -76,24 +76,24 @@ func TestThemePickerLoadsBundledThemes(t *testing.T) {
 func TestThemePickerNavigateUpDown(t *testing.T) {
 	model := newTestThemePicker()
 
-	if model.cursor != 0 {
-		t.Fatalf("expected cursor at 0, got %d", model.cursor)
+	if model.tree.Cursor != 0 {
+		t.Fatalf("expected cursor at 0, got %d", model.tree.Cursor)
 	}
 
 	model = sendThemeKey(model, "j")
-	if model.cursor != 1 {
-		t.Errorf("expected cursor at 1 after j, got %d", model.cursor)
+	if model.tree.Cursor != 1 {
+		t.Errorf("expected cursor at 1 after j, got %d", model.tree.Cursor)
 	}
 
 	model = sendThemeKey(model, "k")
-	if model.cursor != 0 {
-		t.Errorf("expected cursor at 0 after k, got %d", model.cursor)
+	if model.tree.Cursor != 0 {
+		t.Errorf("expected cursor at 0 after k, got %d", model.tree.Cursor)
 	}
 
 	// Should not go below 0.
 	model = sendThemeKey(model, "k")
-	if model.cursor != 0 {
-		t.Errorf("expected cursor clamped at 0, got %d", model.cursor)
+	if model.tree.Cursor != 0 {
+		t.Errorf("expected cursor clamped at 0, got %d", model.tree.Cursor)
 	}
 }
 
@@ -204,4 +204,53 @@ func TestThemePickerThemeInfo(t *testing.T) {
 	if !strings.Contains(view, "dark") {
 		t.Error("expected view to contain 'dark' tag")
 	}
+}
+
+// TestThemePickerCursorStableAcrossFilterClear covers the behavior gain
+// from adopting outline.Tree: typing a filter, landing the cursor on a
+// theme, then clearing the filter should leave the cursor on the same
+// theme — not jump back to row 0.
+func TestThemePickerCursorStableAcrossFilterClear(t *testing.T) {
+	model := newTestThemePicker()
+
+	// Find a theme index that isn't row 0 in the unfiltered list, so
+	// we can tell the difference between "restored to ID" and
+	// "snapped to 0".
+	if len(model.themes) < 3 {
+		t.Skip("need at least 3 bundled themes")
+	}
+	targetName := model.themes[2].Name
+
+	// Enter filter mode and type enough of the target's name to narrow
+	// hard enough that its row is at index 0 in the filtered view.
+	model = sendThemeKey(model, "/")
+	for _, r := range targetName {
+		model.filter.SetValue(model.filter.Value() + string(r))
+	}
+	model.applyFilter()
+
+	// Verify cursor is now pointing at the target.
+	cur := model.currentTheme()
+	if cur == nil || cur.Name != targetName {
+		t.Fatalf("after filter, cursor = %v, want %q",
+			nameOrNil(cur), targetName)
+	}
+
+	// Clear the filter. The list is back to the full set, but the
+	// cursor should still land on targetName via stable-ID restore.
+	model.filter.SetValue("")
+	model.applyFilter()
+
+	cur = model.currentTheme()
+	if cur == nil || cur.Name != targetName {
+		t.Errorf("after filter clear, cursor = %v, want %q (stable ID restore)",
+			nameOrNil(cur), targetName)
+	}
+}
+
+func nameOrNil(ti *theme.ThemeInfo) string {
+	if ti == nil {
+		return "<nil>"
+	}
+	return ti.Name
 }

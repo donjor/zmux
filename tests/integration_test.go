@@ -139,13 +139,14 @@ func TestHelpCommand(t *testing.T) {
 		t.Fatalf("zmux help failed: %v", err)
 	}
 
-	// Should contain the main help sections.
+	// Should contain the main help sections. Kept in sync with the
+	// section headers rendered by cmd/zmux/help.go.
 	sections := []string{
 		"Session Management",
+		"Terminal Commands",
 		"Theming",
-		"Status Bar",
 		"Configuration",
-		"Miscellaneous",
+		"Other",
 	}
 	for _, section := range sections {
 		if !strings.Contains(stdout, section) {

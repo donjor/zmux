@@ -54,33 +54,8 @@ var rootCmd = &cobra.Command{
 			_, _ = session.CleanupTmp(app.Runner)
 		}
 
-		// Shorthand: `zmux <name>` — check workspace first, then session.
 		if len(args) > 0 {
-			name := args[0]
-
-			// Check if it's a workspace name.
-			ws, _ := app.WorkspaceStore.GetWorkspace(name)
-			if ws != nil {
-				target := resolveLastActive(ws)
-				if target != "" {
-					_ = app.WorkspaceStore.SetLastActive(name, target)
-					return session.Attach(app.Runner, target)
-				}
-				// Workspace exists but no live sessions — fall through to create.
-			}
-
-			// Fall back to session attach/create.
-			if app.Runner.HasSession(name) {
-				return session.Attach(app.Runner, name)
-			}
-			dir, _ := os.Getwd()
-			if dir == "" {
-				dir = os.Getenv("HOME")
-			}
-			if err := session.Create(app.Runner, name, dir); err != nil {
-				return err
-			}
-			return session.Attach(app.Runner, name)
+			return resolveShorthand(args)
 		}
 
 		if app.Runner.IsInsideTmux() {
@@ -91,6 +66,71 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+// resolveDashboardTab maps the --dashboard-tab flag value to a TabID. It
+// handles the deprecated aliases "current" → TabSession and "sessions" →
+// TabWorkspaces so older scripts / palette providers keep working.
+// Empty input returns the default tab (TabSession).
+func resolveDashboardTab(flag string) dashboard.TabID {
+	if flag == "" {
+		return dashboard.TabSession
+	}
+	switch flag {
+	case "current":
+		return dashboard.TabSession
+	case "sessions":
+		return dashboard.TabWorkspaces
+	default:
+		return dashboard.TabID(flag)
+	}
+}
+
+// resolveShorthand handles `zmux <name>` and `zmux <ws> <session>` dispatch.
+//
+// Two-arg form is strict: the workspace must exist and contain the session,
+// otherwise it errors with a helpful hint.
+//
+// Single-arg form is workspace-first: checks if <name> is a workspace and
+// attaches to its last-active session. Falls back to session attach/create
+// if no matching workspace.
+func resolveShorthand(args []string) error {
+	if len(args) == 2 {
+		wsName := args[0]
+		sessName := args[1]
+		ws, _ := app.WorkspaceStore.GetWorkspace(wsName)
+		if ws == nil {
+			return fmt.Errorf("workspace %q not found — use zmux new %s %s to create", wsName, wsName, sessName)
+		}
+		if app.Runner.HasSession(sessName) {
+			_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
+			return session.Attach(app.Runner, sessName)
+		}
+		return fmt.Errorf("session %q not found in workspace %q", sessName, wsName)
+	}
+
+	// Single arg: workspace-first, then session fallback.
+	name := args[0]
+	if ws, _ := app.WorkspaceStore.GetWorkspace(name); ws != nil {
+		if target := resolveLastActive(ws); target != "" {
+			_ = app.WorkspaceStore.SetLastActive(name, target)
+			return session.Attach(app.Runner, target)
+		}
+		// Workspace exists but no live sessions — fall through to create.
+	}
+
+	if app.Runner.HasSession(name) {
+		return session.Attach(app.Runner, name)
+	}
+
+	dir, _ := os.Getwd()
+	if dir == "" {
+		dir = os.Getenv("HOME")
+	}
+	if err := session.Create(app.Runner, name, dir); err != nil {
+		return err
+	}
+	return session.Attach(app.Runner, name)
+}
+
 func launchDashboardPopup() error {
 	// Find our own binary path.
 	zmuxBin, err := os.Executable()
@@ -99,14 +139,6 @@ func launchDashboardPopup() error {
 	}
 	// Pass as single shell command string — tmux display-popup -E expects this.
 	return app.Runner.DisplayPopup("-w80%", "-h80%", "-E", zmuxBin+" --dashboard")
-}
-
-func launchPalettePopup() error {
-	zmuxBin, err := os.Executable()
-	if err != nil {
-		zmuxBin = "zmux"
-	}
-	return app.Runner.DisplayPopup("-w60%", "-h50%", "-E", zmuxBin+" --palette")
 }
 
 // loadActiveStyles loads the configured theme and returns palette-aware styles.
@@ -143,32 +175,27 @@ func runNewDashboard() error {
 		Resolver: resolver,
 	}
 
-	// Build tabs (order: Current, Sessions, Themes, Settings, Help).
+	// Shared workspace data loader for Session and Workspaces tabs.
+	wsLoader := func() []tui.WorkspaceViewModel {
+		workspaces, err := app.WorkspaceStore.ListWorkspaces()
+		if err != nil {
+			return nil
+		}
+		sessions, _ := session.ListSessions(app.Runner)
+		return tui.BuildWorkspaceViewModels(workspaces, sessions)
+	}
+
+	// Build tabs (order: Session, Workspaces, Themes, Settings, Help).
 	tabImpls := []dashboard.Tab{
-		tabs.NewCurrentTab(app.Runner, styles),
-		tabs.NewSessionsTab(app.Runner, styles, func() map[string]string {
-			st, err := app.WorkspaceStore.Load()
-			if err != nil {
-				return nil
-			}
-			out := make(map[string]string)
-			for _, ws := range st.Workspaces {
-				for _, sess := range ws.Sessions {
-					out[sess] = ws.Name
-				}
-			}
-			return out
-		}),
+		tabs.NewCurrentTab(app.Runner, styles, wsLoader, app.WorkspaceStore),
+		tabs.NewSessionsTab(app.Runner, styles, wsLoader, app.WorkspaceStore),
 		tabs.NewThemesTab(resolver, app.FS, app.Runner, styles),
 		tabs.NewSettingsTab(resolver, app.FS, app.Runner, styles),
 		tabs.NewHelpTab(styles),
 	}
 
-	// Parse initial tab.
-	initialTab := dashboard.TabCurrent
-	if dashboardTabFlag != "" {
-		initialTab = dashboard.TabID(dashboardTabFlag)
-	}
+	// Parse initial tab (handle deprecated names).
+	initialTab := resolveDashboardTab(dashboardTabFlag)
 
 	model := dashboard.NewDashboardApp(services, tabImpls, initialTab)
 
@@ -260,11 +287,7 @@ func runTabPicker() error {
 		return app.Runner.SelectWindow(sessionName, res.Index)
 	case "new":
 		dir, _ := os.Getwd()
-		name := res.Name
-		if name == "" {
-			name = ""
-		}
-		return app.Runner.NewWindow(sessionName, name, dir)
+		return app.Runner.NewWindow(sessionName, res.Name, dir)
 	case "rename":
 		old := fmt.Sprintf("%d", res.Index)
 		return app.Runner.RenameWindow(sessionName, old, res.Name)
@@ -348,29 +371,24 @@ func runSessionPicker() error {
 	styles, _, _ := loadActiveStyles()
 	model := tui.NewPickerModel(app.Runner, styles)
 	model.SetTemplates(templates)
-	model.SetWorkspaceLoader(func() map[string]string {
+	model.SetWorkspaceStore(app.WorkspaceStore)
+	model.SetWorkspaceDataLoader(func() []tui.WorkspaceViewModel {
 		// Reconcile before loading state.
 		if roots := liveRootSet(); roots != nil {
 			_ = app.WorkspaceStore.Reconcile(roots)
 		}
-		st, err := app.WorkspaceStore.Load()
+		workspaces, err := app.WorkspaceStore.ListWorkspaces()
 		if err != nil {
 			return nil
 		}
-		// Convert v2 state to flat map for picker (will be updated in Phase 3).
-		out := make(map[string]string)
-		for _, ws := range st.Workspaces {
-			for _, sess := range ws.Sessions {
-				out[sess] = ws.Name
-			}
-		}
-		return out
+		sessions, _ := session.ListSessions(app.Runner)
+		return tui.BuildWorkspaceViewModels(workspaces, sessions)
 	})
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
 	result, err := p.Run()
 	if err != nil {
-		return fmt.Errorf("session picker: %w", err)
+		return fmt.Errorf("workspace picker: %w", err)
 	}
 
 	picker, ok := result.(tui.PickerModel)
@@ -392,10 +410,42 @@ func runSessionPicker() error {
 		if name == "" {
 			name = session.NextTmpName(app.Runner)
 		}
+		// If the session already exists (e.g. "main" across workspaces),
+		// pick the next available name based on the workspace.
+		if app.Runner.HasSession(name) {
+			if res.Workspace != "" {
+				name = nextSessionName(name, res.Workspace)
+			} else {
+				name = session.NextTmpName(app.Runner)
+			}
+		}
 		if err := session.Create(app.Runner, name, dir); err != nil {
 			return err
 		}
+		// Auto-assign to workspace if specified.
+		if res.Workspace != "" {
+			_ = app.WorkspaceStore.AddSession(res.Workspace, name)
+			_ = app.WorkspaceStore.SetLastActive(res.Workspace, name)
+		}
 		return session.Attach(app.Runner, name)
+
+	case "workspace-create":
+		wsName := res.Workspace
+		if err := app.WorkspaceStore.CreateWorkspace(wsName, dir); err != nil {
+			return err
+		}
+		// Create "main" session in the new workspace. If "main" is taken,
+		// use workspace-qualified fallback.
+		sessName := "main"
+		if app.Runner.HasSession(sessName) {
+			sessName = nextSessionName(sessName, wsName)
+		}
+		if err := session.Create(app.Runner, sessName, dir); err != nil {
+			return err
+		}
+		_ = app.WorkspaceStore.AddSession(wsName, sessName)
+		_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
+		return session.Attach(app.Runner, sessName)
 
 	case "template":
 		tmplName := res.Template
@@ -417,7 +467,6 @@ func runSessionPicker() error {
 		}
 
 		if tmpl == nil {
-			// Fallback: try first template if available.
 			if len(templates) == 0 {
 				return fmt.Errorf("no templates available")
 			}
@@ -427,6 +476,10 @@ func runSessionPicker() error {
 		if err := session.CreateFromTemplate(app.Runner, *tmpl, name, dir); err != nil {
 			return err
 		}
+		// Auto-assign to workspace if specified.
+		if res.Workspace != "" {
+			_ = app.WorkspaceStore.AddSession(res.Workspace, name)
+		}
 		return session.Attach(app.Runner, name)
 
 	case "overmind-connect":
@@ -434,7 +487,6 @@ func runSessionPicker() error {
 		if src != nil && src.Overmind != nil {
 			return source.Connect(src.Overmind.ControlSocket, res.Session)
 		}
-		// Fallback to direct tmux attach.
 		if src != nil {
 			return source.ConnectFallback(src.Endpoint, res.Session, "")
 		}
@@ -448,7 +500,6 @@ func runSessionPicker() error {
 		return fmt.Errorf("no source for external-attach")
 
 	case "workspace-focus":
-		// Focus workspace's last-active session.
 		ws, err := app.WorkspaceStore.GetWorkspace(res.Workspace)
 		if err != nil || ws == nil {
 			return fmt.Errorf("workspace %q not found", res.Workspace)

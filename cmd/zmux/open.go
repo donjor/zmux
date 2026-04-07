@@ -90,6 +90,22 @@ func resolveLastActive(ws *workspace.Workspace) string {
 	return ""
 }
 
+// nextSessionName returns a session name that doesn't collide with an
+// existing tmux session. Prefers "<base>-<workspace>" then "<base>-N".
+func nextSessionName(base, workspace string) string {
+	candidate := base + "-" + workspace
+	if !app.Runner.HasSession(candidate) {
+		return candidate
+	}
+	for i := 2; i < 100; i++ {
+		candidate = fmt.Sprintf("%s-%d", base, i)
+		if !app.Runner.HasSession(candidate) {
+			return candidate
+		}
+	}
+	return base + "-" + session.NextTmpName(app.Runner)
+}
+
 // attachSession handles the attach logic: normal attach, auto-clone, or hijack.
 func attachSession(name string) error {
 	if openHijackFlag {

@@ -524,29 +524,6 @@ func TestReconcileSkipsOnEmptyLive(t *testing.T) {
 	}
 }
 
-// ── V1 compat shims ──
-
-func TestSetV1Compat(t *testing.T) {
-	store, _ := newTestStore()
-	if err := store.Set("dev", "bridge"); err != nil {
-		t.Fatal(err)
-	}
-	ws, ok := store.WorkspaceFor("dev")
-	if !ok || ws != "bridge" {
-		t.Errorf("WorkspaceFor(dev) = %q, %v; want bridge, true", ws, ok)
-	}
-}
-
-func TestSetV1CompatMoves(t *testing.T) {
-	store, _ := newTestStore()
-	_ = store.Set("dev", "bridge")
-	_ = store.Set("dev", "other")
-	ws, ok := store.WorkspaceFor("dev")
-	if !ok || ws != "other" {
-		t.Errorf("WorkspaceFor(dev) = %q, %v; want other, true", ws, ok)
-	}
-}
-
 // ── Save/Load round-trip ──
 
 func TestV2SaveLoadRoundTrip(t *testing.T) {

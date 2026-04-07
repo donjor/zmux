@@ -9,6 +9,7 @@ import (
 	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/theme"
+	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/views"
 )
 
@@ -19,6 +20,9 @@ const (
 	themeList themePickerMode = iota
 	themeFilter
 )
+
+// themeRowID returns the stable outline row ID for a theme.
+func themeRowID(name string) string { return "theme:" + name }
 
 // themeKeymap defines keybindings for the theme picker.
 var themeKeys = struct {
@@ -56,11 +60,14 @@ var themeKeys = struct {
 }
 
 // ThemePickerModel is the bubbletea model for the theme picker TUI.
+// Cursor, nav, and cursor restoration across filter changes all live
+// on the shared outline.Tree so the picker behaves consistently with
+// every other list in the app.
 type ThemePickerModel struct {
 	themes   []theme.ThemeInfo
 	resolver *theme.Resolver
 	filtered []theme.ThemeInfo
-	cursor   int
+	tree     *outline.Tree
 	mode     themePickerMode
 	filter   textinput.Model
 	width    int
@@ -86,9 +93,43 @@ func NewThemePickerModel(resolver *theme.Resolver, styles Styles) ThemePickerMod
 		filtered: themes,
 		styles:   styles,
 		filter:   ti,
+		tree:     outline.NewTree(),
 	}
-
+	m.tree.SetRows(m.buildRows())
 	return m
+}
+
+// buildRows turns the current filtered theme list into outline rows.
+// IDs use the stable "theme:<name>" form so the tree restores cursor
+// to the same theme after filter changes.
+func (m *ThemePickerModel) buildRows() []outline.Row {
+	rows := make([]outline.Row, len(m.filtered))
+	for i := range m.filtered {
+		ti := m.filtered[i]
+		rows[i] = outline.Row{
+			ID:         themeRowID(ti.Name),
+			Kind:       outline.RowSession, // flat rows reuse the session kind
+			Label:      ti.Name,
+			Selectable: true,
+			Data:       &m.filtered[i],
+		}
+	}
+	return rows
+}
+
+// cursor returns the current cursor index (shim for legacy test code
+// that referenced the removed m.cursor field directly).
+func (m ThemePickerModel) cursor() int { return m.tree.Cursor }
+
+// currentTheme returns the theme currently under the cursor, or nil
+// if the list is empty.
+func (m ThemePickerModel) currentTheme() *theme.ThemeInfo {
+	row := m.tree.CurrentSelectable()
+	if row == nil {
+		return nil
+	}
+	ti, _ := outline.RowData[theme.ThemeInfo](row)
+	return ti
 }
 
 // Init is a no-op since themes are loaded in the constructor.
@@ -152,20 +193,16 @@ func (m ThemePickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, themeKeys.Up):
-		if m.cursor > 0 {
-			m.cursor--
-		}
+		m.tree.MoveUp()
 		return m, nil
 
 	case key.Matches(msg, themeKeys.Down):
-		if m.cursor < len(m.filtered)-1 {
-			m.cursor++
-		}
+		m.tree.MoveDown()
 		return m, nil
 
 	case key.Matches(msg, themeKeys.Enter):
-		if m.cursor < len(m.filtered) {
-			m.Chosen = m.filtered[m.cursor].Name
+		if ti := m.currentTheme(); ti != nil {
+			m.Chosen = ti.Name
 		}
 		return m, tea.Quit
 
@@ -178,6 +215,10 @@ func (m ThemePickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// applyFilter rebuilds m.filtered from the raw theme list according to
+// the current filter query, then pushes the new rows into the tree.
+// Stable IDs keep the cursor on the same theme whenever that theme is
+// still in the filtered view.
 func (m *ThemePickerModel) applyFilter() {
 	query := m.filter.Value()
 	if query == "" {
@@ -193,11 +234,9 @@ func (m *ThemePickerModel) applyFilter() {
 			m.filtered[i] = m.themes[match.Index]
 		}
 	}
-
-	// Clamp cursor.
-	if m.cursor >= len(m.filtered) {
-		m.cursor = max(0, len(m.filtered)-1)
-	}
+	// SetRows preserves cursor by stable ID when possible, then falls
+	// through the restore hierarchy (same position, first selectable).
+	m.tree.SetRows(m.buildRows())
 }
 
 // View renders the theme picker UI.
@@ -237,15 +276,7 @@ func (m ThemePickerModel) View() string {
 	if len(m.filtered) == 0 {
 		b.WriteString(m.styles.Muted.Render("  No themes found.") + "\n")
 	} else {
-		// Calculate visible window.
-		start := 0
-		if m.cursor >= availableHeight {
-			start = m.cursor - availableHeight + 1
-		}
-		end := start + availableHeight
-		if end > len(m.filtered) {
-			end = len(m.filtered)
-		}
+		start, end := outline.ComputeWindow(m.tree.Cursor, len(m.filtered), availableHeight)
 
 		for i := start; i < end; i++ {
 			b.WriteString(m.renderThemeEntry(i, m.filtered[i]))
@@ -261,9 +292,9 @@ func (m ThemePickerModel) View() string {
 	}
 
 	// Color swatch for the selected theme.
-	if m.cursor < len(m.filtered) {
+	if ti := m.currentTheme(); ti != nil {
 		b.WriteString("\n")
-		swatch := m.renderSwatch(m.filtered[m.cursor])
+		swatch := m.renderSwatch(*ti)
 		if swatch != "" {
 			b.WriteString(swatch + "\n")
 		}
@@ -278,13 +309,13 @@ func (m ThemePickerModel) View() string {
 
 func (m ThemePickerModel) renderThemeEntry(idx int, ti theme.ThemeInfo) string {
 	cursor := "  "
-	if idx == m.cursor {
+	if idx == m.tree.Cursor {
 		cursor = m.styles.Accent.Render("> ")
 	}
 
 	// Name.
 	nameStyle := m.styles.Normal
-	if idx == m.cursor {
+	if idx == m.tree.Cursor {
 		nameStyle = m.styles.Selected
 	}
 	name := nameStyle.Render(ti.Name)

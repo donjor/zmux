@@ -3,7 +3,6 @@ package tabs
 import (
 	"fmt"
 	"strings"
-	"sync/atomic"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -49,9 +48,6 @@ func cycleOption(options []string, current string) string {
 	}
 	return current
 }
-
-// settingsReqCounter is a monotonic counter for async correctness.
-var settingsReqCounter atomic.Int64
 
 // settingsMode tracks the current interaction mode.
 type settingsMode int
@@ -170,7 +166,7 @@ func (t *SettingsTab) Title() string        { return "Settings" }
 func (t *SettingsTab) Init() tea.Cmd        { return nil }
 
 func (t *SettingsTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
-	t.reqID = settingsReqCounter.Add(1)
+	t.reqID = dashboard.NextReqID()
 	return t.fetchData(t.reqID)
 }
 

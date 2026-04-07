@@ -1,0 +1,262 @@
+package tabs
+
+import (
+	"fmt"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/tui"
+	"github.com/donjor/zmux/internal/tui/outline"
+)
+
+// fetchData gathers the current session, its windows, sibling sessions
+// within the same workspace, and the workspace view model. All work is
+// done inside the returned command so it runs off the UI thread.
+func (t *CurrentTab) fetchData(reqID int64) tea.Cmd {
+	runner := t.runner
+	wsLoader := t.wsLoader
+	wsStore := t.wsStore
+	return func() tea.Msg {
+		sessionName, err := runner.DisplayMessage("", "#{session_name}")
+		if err != nil {
+			return currentDataMsg{reqID: reqID, err: err}
+		}
+		sessionName = strings.TrimSpace(sessionName)
+
+		if sessionName == "" {
+			return currentDataMsg{reqID: reqID, err: fmt.Errorf("no active session")}
+		}
+
+		sessionDir, _ := runner.DisplayMessage("", "#{session_path}")
+		sessionDir = strings.TrimSpace(sessionDir)
+
+		attachedStr, _ := runner.DisplayMessage("", "#{session_attached}")
+		attached := 0
+		fmt.Sscanf(strings.TrimSpace(attachedStr), "%d", &attached)
+
+		// Workspace name for the current session.
+		wsName := ""
+		if wsStore != nil {
+			if name, ok := wsStore.WorkspaceFor(sessionName); ok {
+				wsName = name
+			}
+		}
+		if wsName == "" {
+			// Fall back to the session name itself so we always show a header.
+			wsName = sessionName
+		}
+
+		windows := fetchWindowDetails(runner, sessionName)
+
+		var siblings []session.SessionInfo
+		var wsModel *tui.WorkspaceViewModel
+		if wsLoader != nil {
+			all := wsLoader()
+			for i := range all {
+				if all[i].Name == wsName {
+					m := all[i]
+					wsModel = &m
+					for _, s := range all[i].LiveSessions {
+						if s.Name != sessionName {
+							siblings = append(siblings, s)
+						}
+					}
+					break
+				}
+			}
+		}
+
+		return currentDataMsg{
+			reqID:       reqID,
+			wsName:      wsName,
+			sessionName: sessionName,
+			sessionDir:  sessionDir,
+			attached:    attached,
+			windows:     windows,
+			siblings:    siblings,
+			wsModel:     wsModel,
+		}
+	}
+}
+
+// fetchWindowDetails enriches tmux windows with pane + process stats.
+func fetchWindowDetails(runner tmux.Runner, sessionName string) []windowDetail {
+	rawWindows, err := runner.ListWindows(sessionName)
+	if err != nil {
+		return nil
+	}
+
+	rawPanes, _ := runner.ListPanes(sessionName)
+
+	panesByWindow := make(map[int][]tmux.Pane)
+	for _, p := range rawPanes {
+		panesByWindow[p.WindowIndex] = append(panesByWindow[p.WindowIndex], p)
+	}
+
+	var pids []int
+	for _, w := range rawWindows {
+		for _, p := range panesByWindow[w.Index] {
+			if p.Active && p.PID > 0 {
+				pids = append(pids, p.PID)
+			}
+		}
+	}
+
+	allStats := tmux.GetBatchProcessStats(pids)
+
+	details := make([]windowDetail, 0, len(rawWindows))
+	for _, w := range rawWindows {
+		wd := windowDetail{
+			Window: w,
+			Panes:  panesByWindow[w.Index],
+		}
+		for _, p := range wd.Panes {
+			if p.Active && p.PID > 0 {
+				if stats, ok := allStats[p.PID]; ok {
+					wd.Stats = stats
+					wd.Uptime = stats.Uptime
+				}
+				break
+			}
+		}
+		details = append(details, wd)
+	}
+	return details
+}
+
+// fetchMoveDestinations returns the list of sessions a window can be
+// moved into (everything but the current session).
+func (t *CurrentTab) fetchMoveDestinations() tea.Cmd {
+	runner := t.runner
+	current := t.sessionName
+	reqID := t.reqID
+	return func() tea.Msg {
+		sessions, err := runner.ListSessions()
+		if err != nil {
+			return currentMoveDestMsg{reqID: reqID}
+		}
+		var targets []currentMoveTarget
+		for _, s := range sessions {
+			if s.Name != current {
+				targets = append(targets, currentMoveTarget{
+					Name:    s.Name,
+					Windows: s.Windows,
+				})
+			}
+		}
+		return currentMoveDestMsg{reqID: reqID, sessions: targets}
+	}
+}
+
+// ── Mutation helpers ──
+//
+// Workspace / session rename + kill helpers wrap shared functions in
+// shared_mutations.go (which the Workspaces tab also uses). The wrappers
+// here exist to (a) snapshot tab state into closure args, (b) set
+// pendingJumpTo for the next refetch, and (c) wrap the result in the
+// tab-specific done-message type.
+
+// renameWorkspace renames a workspace and queues a jump-to on the new ID.
+func (t *CurrentTab) renameWorkspace(oldName, newName string) tea.Cmd {
+	wsStore := t.wsStore
+	reqID := t.reqID
+	t.pendingJumpTo = outline.WorkspaceID(newName)
+	return func() tea.Msg {
+		_ = renameWorkspaceMutation(wsStore, oldName, newName)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// renameSession renames a tmux session and queues a jump-to on the new ID.
+func (t *CurrentTab) renameSession(oldName, newName string) tea.Cmd {
+	runner := t.runner
+	wsStore := t.wsStore
+	reqID := t.reqID
+	t.pendingJumpTo = outline.SessionID(newName)
+	return func() tea.Msg {
+		_ = renameSessionMutation(runner, wsStore, oldName, newName)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// renameWindow renames a window; index stays the same, jump to same ID.
+// (Window renames are tab-specific and have no shared helper.)
+func (t *CurrentTab) renameWindow(oldName, newName string, idx int) tea.Cmd {
+	runner := t.runner
+	reqID := t.reqID
+	sessionName := t.sessionName
+	t.pendingJumpTo = outline.WindowID(sessionName, idx)
+	return func() tea.Msg {
+		_ = runner.RenameWindow(sessionName, oldName, newName)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// killWorkspace kills all live sessions in the workspace and deletes it.
+func (t *CurrentTab) killWorkspace(name string) tea.Cmd {
+	runner := t.runner
+	wsStore := t.wsStore
+	reqID := t.reqID
+
+	// Snapshot live session names — current session + its siblings.
+	sessNames := make([]string, 0, 1+len(t.siblings))
+	sessNames = append(sessNames, t.sessionName)
+	for _, s := range t.siblings {
+		sessNames = append(sessNames, s.Name)
+	}
+
+	return func() tea.Msg {
+		_ = killWorkspaceMutation(runner, wsStore, name, sessNames)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// killSession kills a single session.
+func (t *CurrentTab) killSession(name string) tea.Cmd {
+	runner := t.runner
+	reqID := t.reqID
+	return func() tea.Msg {
+		_ = killSessionMutation(runner, name)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// killWindow kills a window by index in the current session.
+func (t *CurrentTab) killWindow(idx int) tea.Cmd {
+	runner := t.runner
+	sessionName := t.sessionName
+	reqID := t.reqID
+	return func() tea.Msg {
+		_ = runner.KillWindow(sessionName, idx)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// newWindow creates a new window in the named session.
+func (t *CurrentTab) newWindow(sessionName, dir string) tea.Cmd {
+	runner := t.runner
+	reqID := t.reqID
+	return func() tea.Msg {
+		_ = runner.NewWindow(sessionName, "", dir)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// createSessionInWorkspace creates a tmux session and attaches it to a workspace.
+func (t *CurrentTab) createSessionInWorkspace(wsName, sessionName string) tea.Cmd {
+	runner := t.runner
+	wsStore := t.wsStore
+	dir := t.sessionDir
+	reqID := t.reqID
+	t.pendingJumpTo = outline.SessionID(sessionName)
+	return func() tea.Msg {
+		_ = session.Create(runner, sessionName, dir)
+		if wsStore != nil {
+			_ = wsStore.AddSession(wsName, sessionName)
+		}
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}

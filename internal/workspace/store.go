@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/donjor/zmux/internal/config"
@@ -77,7 +78,7 @@ func (s *Store) Load() (StateV2, error) {
 	if err := toml.Unmarshal(data, &v1); err != nil {
 		return emptyStateV2(), err
 	}
-	if v1.Sessions == nil || len(v1.Sessions) == 0 {
+	if len(v1.Sessions) == 0 {
 		return emptyStateV2(), nil
 	}
 
@@ -119,9 +120,27 @@ func (s *Store) GetWorkspace(name string) (*Workspace, error) {
 	return ws, nil
 }
 
+// ValidateWorkspaceName checks if a workspace name is valid.
+// Names cannot be empty, contain whitespace, or use reserved names.
+func ValidateWorkspaceName(name string) error {
+	if name == "" {
+		return fmt.Errorf("workspace name cannot be empty")
+	}
+	if strings.ContainsAny(name, " \t\n\r") {
+		return fmt.Errorf("workspace name cannot contain spaces: %q", name)
+	}
+	if name == "__external__" || name == "temporary" {
+		return fmt.Errorf("workspace name %q is reserved", name)
+	}
+	return nil
+}
+
 // CreateWorkspace creates a new workspace with the given metadata.
-// Returns error if it already exists.
+// Returns error if it already exists or if the name is invalid.
 func (s *Store) CreateWorkspace(name, rootDir string) error {
+	if err := ValidateWorkspaceName(name); err != nil {
+		return err
+	}
 	st, err := s.Load()
 	if err != nil {
 		return err
@@ -142,6 +161,9 @@ func (s *Store) CreateWorkspace(name, rootDir string) error {
 
 // EnsureWorkspace creates a workspace if it doesn't exist, or returns the existing one.
 func (s *Store) EnsureWorkspace(name, rootDir string) (*Workspace, error) {
+	if err := ValidateWorkspaceName(name); err != nil {
+		return nil, err
+	}
 	st, err := s.Load()
 	if err != nil {
 		return nil, err
@@ -180,6 +202,9 @@ func (s *Store) DeleteWorkspace(name string) error {
 
 // RenameWorkspace renames a workspace.
 func (s *Store) RenameWorkspace(old, new string) error {
+	if err := ValidateWorkspaceName(new); err != nil {
+		return err
+	}
 	st, err := s.Load()
 	if err != nil {
 		return err
@@ -485,57 +510,6 @@ func (s *Store) Reconcile(liveRoots map[string]bool) error {
 		return nil
 	}
 	return s.Save(st)
-}
-
-// Cleanup is a backward-compatible alias for Reconcile.
-// Deprecated: use Reconcile instead.
-func (s *Store) Cleanup(liveRoots map[string]bool) error {
-	return s.Reconcile(liveRoots)
-}
-
-// ── Backward compatibility (v1 API shims) ──
-// These methods exist so callers that haven't been updated yet continue to compile.
-// They operate on v2 state internally.
-
-// Set tags a root session to a workspace (v1 compat shim).
-func (s *Store) Set(rootSession, workspace string) error {
-	st, err := s.Load()
-	if err != nil {
-		return err
-	}
-
-	// Remove from any existing workspace.
-	if ws, found := st.WorkspaceForSession(rootSession); found {
-		ws.Sessions = removeString(ws.Sessions, rootSession)
-		ws.UpdatedAt = time.Now()
-	}
-
-	// Add to target workspace (create if needed).
-	ws, ok := st.Workspaces[workspace]
-	if !ok {
-		now := time.Now()
-		ws = &Workspace{
-			Name:      workspace,
-			Sessions:  []string{},
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-		st.Workspaces[workspace] = ws
-	}
-	ws.Sessions = append(ws.Sessions, rootSession)
-	ws.UpdatedAt = time.Now()
-
-	return s.Save(st)
-}
-
-// Delete removes a session from workspace tracking (v1 compat shim).
-func (s *Store) Delete(rootSession string) error {
-	return s.RemoveSession(rootSession)
-}
-
-// Rename moves a workspace entry from one root session name to another (v1 compat shim).
-func (s *Store) Rename(oldRoot, newRoot string) error {
-	return s.RenameSession(oldRoot, newRoot)
 }
 
 // ── Helpers ──

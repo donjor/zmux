@@ -2,6 +2,7 @@ package tui
 
 import (
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -112,3 +113,4 @@ func DefaultStyles() Styles {
 			Foreground(lipgloss.Color("8")),
 	}
 }
+

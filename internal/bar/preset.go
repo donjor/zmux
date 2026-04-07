@@ -43,9 +43,7 @@ func PresetFromString(s string) (Preset, error) {
 	p, ok := presetsByName[s]
 	if !ok {
 		names := make([]string, len(presetNames))
-		for i, n := range presetNames {
-			names[i] = n
-		}
+		copy(names, presetNames[:])
 		return 0, fmt.Errorf("unknown bar preset %q (valid: %s)", s, join(names))
 	}
 	return p, nil

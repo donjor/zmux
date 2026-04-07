@@ -5,12 +5,12 @@ status bar presets, and a popup dashboard — in a single binary.
 
 ## Features
 
-- **Session picker** — fuzzy search, create, attach, templates
-- **Dashboard** — 5-tab popup (prefix+Space): session, themes, settings, help
+- **Workspace-primary picker** — single flat list of workspaces with inline session expansion, fuzzy search, ghost tab completion, matched-char underlines
+- **Dashboard** — 5-tab popup (prefix+Space): Session, Workspaces, Themes, Settings, Help
 - **Command palette** — spotlight-style quick actions (prefix+p)
 - **Theming** — 300+ themes (iterm2-color-schemes format), semantic palette, color swatches
 - **Theme sync** — pull your theme from Ghostty or Neovim
-- **Workspaces** — first-class workspace objects grouping sessions by project
+- **Workspaces** — first-class project containers grouping sessions
 - **Status bar** — 9 presets with dynamic segments (git, lang, workspace, directory)
 - **Templates** — declarative TOML session layouts
 - **Terminal commands** — run, watch, send, type for agent/scripting workflows
@@ -91,22 +91,30 @@ After `zmux init`, restart tmux or `prefix+r` to reload config.
 ### Session & Workspace Management
 
 ```
-zmux                           Session picker (outside tmux) / dashboard (inside)
-zmux <name>                    Attach or create session (shorthand)
+zmux                                Workspace picker (outside tmux) / dashboard (inside)
+zmux <workspace>                    Attach workspace's last-active session
+zmux <workspace> <session>          Attach specific session in workspace
+zmux <name>                         Falls back to session if workspace not found
 
-zmux new <workspace> [session] Create session in workspace + attach (alias: zmux n)
-zmux new -t <tmpl> <ws> [name] Create from template in workspace
-zmux open <workspace> [session] Open workspace (attach or create session) (alias: zmux o)
-zmux kill <name>               Kill session (alias: zmux k)
-zmux ls                        List sessions
-zmux tabs [session]            List tabs in session (alias: zmux t)
+zmux new                            Create tmp-N session (no workspace)
+zmux new <ws>                       Create workspace + 'main' session, attach
+zmux new <ws> <session>             Create workspace (if needed) + session, attach
+zmux new <ws> <s1> <s2> <s3>        Variadic — create workspace + multiple sessions
+zmux new <ws> -t <template>         Create from template in workspace
+zmux open <ws> [session]            Open workspace explicitly (alias: zmux o, attach, a)
 
-zmux tab move <tab> <dest>     Move tab to another session
-zmux tab kill <tab>            Kill a tab
-zmux session kill <session>    Kill a session
-zmux workspace list            List workspaces (alias: zmux ws)
-zmux workspace kill <workspace> Kill a workspace and all its sessions
-zmux workspace show <ws>       Show workspace sessions
+zmux kill <name>                    Smart kill — workspace-first, then session (confirms if live)
+zmux ls                             List workspaces (workspace-primary)
+zmux ls <ws>                        List sessions within a workspace
+zmux ls -s                          Flat session list (legacy/debug)
+zmux tabs [session]                 List tabs in session (alias: zmux t)
+
+zmux tab move <tab> <dest>          Move tab to another session
+zmux tab kill <tab>                 Kill a tab
+zmux session kill <session>         Kill a session
+zmux workspace list                 List workspaces (alias: zmux ws)
+zmux workspace kill <workspace>     Kill a workspace and all its sessions
+zmux workspace show <ws>            Show workspace sessions
 ```
 
 ### Terminal Commands
@@ -158,6 +166,8 @@ zmux help                      Styled help with keybindings
 
 Prefix: `Ctrl+Space` (configurable)
 
+### tmux prefix
+
 | Key | Action |
 |-----|--------|
 | prefix + Space | Dashboard |
@@ -177,6 +187,22 @@ Prefix: `Ctrl+Space` (configurable)
 | Alt+1-9 | Switch to tab (no prefix) |
 | Shift+Alt+1-9 | Switch to session N in workspace (no prefix) |
 | Alt+` | Tab switcher (no prefix) |
+
+### Picker (outside tmux)
+
+| Key | Action |
+|-----|--------|
+| ↑ / ↓ | Navigate workspaces and sessions (tree traversal) |
+| enter (top action) | Create tmp session (empty input) or workspace+main (typed) |
+| enter (workspace) | Attach to last-active, or create main session if empty |
+| enter (session) | Attach |
+| tab | Accept ghost autocompletion |
+| ctrl+x | Delete workspace or session under cursor (with confirm) |
+| ctrl+h | Toggle hide-empty workspaces |
+| ctrl+t | Open template picker |
+| 1-9 | Quick-select session by index |
+| esc | Clear query, or quit if empty |
+| ctrl+c | Quit |
 
 ## Configuration
 

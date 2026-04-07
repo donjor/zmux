@@ -10,6 +10,7 @@ import (
 	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/tui/outline"
 )
 
 // tabPickerMode tracks the current mode.
@@ -34,18 +35,25 @@ type tabEntry struct {
 	Command string // pane command
 }
 
+// tabRowID builds the stable outline row ID for a tab. Keyed by name
+// so the cursor tracks the same logical tab across rename / refetch.
+func tabRowID(name string) string { return "tab:" + name }
+
 // TabPickerModel is a lightweight tab switcher for the current session.
+// Cursor and selectable navigation run through the shared outline.Tree
+// so the cursor lands on the same tab by name across refetches,
+// rename, and filter narrowing.
 type TabPickerModel struct {
-	runner  tmux.Runner
-	session string
-	tabs    []tabEntry
+	runner   tmux.Runner
+	session  string
+	tabs     []tabEntry
 	filtered []tabEntry
-	cursor  int
-	input   textinput.Model
-	mode    tabPickerMode
-	width   int
-	height  int
-	styles  Styles
+	tree     *outline.Tree
+	input    textinput.Model
+	mode     tabPickerMode
+	width    int
+	height   int
+	styles   Styles
 
 	// rename target
 	renameIdx int
@@ -66,6 +74,7 @@ func NewTabPickerModel(runner tmux.Runner, session string, styles Styles) TabPic
 		session: session,
 		styles:  styles,
 		input:   ti,
+		tree:    outline.NewTree(),
 	}
 }
 
@@ -97,6 +106,34 @@ func (m TabPickerModel) loadTabs() tea.Cmd {
 		}
 		return tabsLoadedMsg{tabs: entries}
 	}
+}
+
+// buildRows rebuilds the outline rows from the filtered tab entries.
+// Stable IDs are keyed by tab name so rename operations keep the
+// cursor tracking the same logical tab.
+func (m *TabPickerModel) buildRows() []outline.Row {
+	rows := make([]outline.Row, len(m.filtered))
+	for i := range m.filtered {
+		t := m.filtered[i]
+		rows[i] = outline.Row{
+			ID:         tabRowID(t.Name),
+			Kind:       outline.RowWindow,
+			Label:      t.Name,
+			Selectable: true,
+			Data:       &m.filtered[i],
+		}
+	}
+	return rows
+}
+
+// currentTab returns the tab currently under the cursor, or nil.
+func (m TabPickerModel) currentTab() *tabEntry {
+	row := m.tree.CurrentSelectable()
+	if row == nil {
+		return nil
+	}
+	te, _ := outline.RowData[tabEntry](row)
+	return te
 }
 
 func (m TabPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -177,20 +214,16 @@ func (m TabPickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
+		m.tree.MoveUp()
 		return m, nil
 
 	case "down":
-		if m.cursor < len(m.filtered)-1 {
-			m.cursor++
-		}
+		m.tree.MoveDown()
 		return m, nil
 
 	case "enter":
-		if m.cursor < len(m.filtered) {
-			m.Result = TabPickerResult{Action: "select", Index: m.filtered[m.cursor].Index}
+		if t := m.currentTab(); t != nil {
+			m.Result = TabPickerResult{Action: "select", Index: t.Index}
 			m.Quitting = true
 			return m, tea.Quit
 		}
@@ -203,36 +236,39 @@ func (m TabPickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "ctrl+r":
-		if m.cursor < len(m.filtered) {
-			m.renameIdx = m.filtered[m.cursor].Index
+		if t := m.currentTab(); t != nil {
+			m.renameIdx = t.Index
 			m.mode = tpModeRename
-			m.input.SetValue(m.filtered[m.cursor].Name)
+			m.input.SetValue(t.Name)
 			m.input.Placeholder = "rename..."
-			return m, nil
 		}
 		return m, nil
 
 	case "ctrl+x":
-		if m.cursor < len(m.filtered) {
-			m.Result = TabPickerResult{Action: "close", Index: m.filtered[m.cursor].Index}
+		if t := m.currentTab(); t != nil {
+			m.Result = TabPickerResult{Action: "close", Index: t.Index}
 			m.Quitting = true
 			return m, tea.Quit
 		}
 		return m, nil
 
 	case "ctrl+left", "<":
-		if m.cursor < len(m.filtered) && m.input.Value() == "" {
-			m.Result = TabPickerResult{Action: "swap", Index: m.filtered[m.cursor].Index, Delta: -1}
-			m.Quitting = true
-			return m, tea.Quit
+		if m.input.Value() == "" {
+			if t := m.currentTab(); t != nil {
+				m.Result = TabPickerResult{Action: "swap", Index: t.Index, Delta: -1}
+				m.Quitting = true
+				return m, tea.Quit
+			}
 		}
 		return m, nil
 
 	case "ctrl+right", ">":
-		if m.cursor < len(m.filtered) && m.input.Value() == "" {
-			m.Result = TabPickerResult{Action: "swap", Index: m.filtered[m.cursor].Index, Delta: 1}
-			m.Quitting = true
-			return m, tea.Quit
+		if m.input.Value() == "" {
+			if t := m.currentTab(); t != nil {
+				m.Result = TabPickerResult{Action: "swap", Index: t.Index, Delta: 1}
+				m.Quitting = true
+				return m, tea.Quit
+			}
 		}
 		return m, nil
 	}
@@ -244,6 +280,8 @@ func (m TabPickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// applyFilter rebuilds the filtered slice based on the current input
+// value, then pushes the new rows into the tree (stable-ID restore).
 func (m *TabPickerModel) applyFilter() {
 	query := m.input.Value()
 	if query == "" {
@@ -259,9 +297,7 @@ func (m *TabPickerModel) applyFilter() {
 			m.filtered[i] = m.tabs[match.Index]
 		}
 	}
-	if m.cursor >= len(m.filtered) {
-		m.cursor = max(0, len(m.filtered)-1)
-	}
+	m.tree.SetRows(m.buildRows())
 }
 
 func (m TabPickerModel) View() string {
@@ -288,7 +324,7 @@ func (m TabPickerModel) View() string {
 		b.WriteString(m.styles.Muted.Render("  no tabs") + "\n")
 	} else {
 		for i, t := range m.filtered {
-			selected := i == m.cursor
+			selected := i == m.tree.Cursor
 
 			cursor := "  "
 			if selected {

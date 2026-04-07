@@ -55,26 +55,47 @@ internal/
 ├── source/                     external source discovery (sockets, overmind)
 ├── debug/                      opt-in debug logging (ZMUX_DEBUG=1)
 └── tui/
-    ├── picker.go               session picker TUI (outside tmux)
+    ├── picker.go               workspace picker TUI (outside tmux) — flat list, model+update
+    ├── picker_view.go          picker rendering (workspace rows, session rows, ghost cmd)
+    ├── picker_search.go        picker fuzzy search and query parsing
+    ├── picker_types.go         picker types (pickerMode, WorkspaceViewModel, confirm target)
+    ├── picker_external.go      external source section builder for the picker
     ├── tabpicker.go            tab switcher TUI (Alt+`)
     ├── themepicker.go          theme picker with swatches
     ├── wizard.go               init wizard TUI
     ├── keymap.go               shared key mappings
     ├── styles.go               shared lipgloss styles
     ├── tui.go                  shared TUI utilities
+    ├── outline/                shared flat-tree model (picker + tab rendering)
+    │   ├── row.go              Row, RowKind, stable ID constructors, FormatSessionCount
+    │   ├── tree.go             Tree — cursor, expansion, pending-jump, 5-step restore
+    │   ├── nav.go              MoveUp/Down/JumpTop/Bottom with selectable-skip
+    │   └── scroll.go           ComputeWindow (scroll margin)
     ├── dashboard/              tabbed dashboard app (DashboardApp)
     │   ├── app.go              tab switching, global keys, routing
     │   ├── chrome.go           tab bar rendering, layout chrome
     │   ├── layout.go           size calculations
-    │   ├── messages.go         cross-tab message types
+    │   ├── messages.go         cross-tab message types (intents, broadcasts)
     │   ├── tab.go              Tab interface, TabID constants
     │   └── tabs/               tab implementations
-    │       ├── current.go      This Session — windows, actions
-    │       ├── sessions.go     Sessions — list, switch, create, external sources
-    │       ├── sessions_overlay.go  session action overlays
-    │       ├── themes.go       Themes — color picker, bar preset with live preview
-    │       ├── settings.go     Settings — config fields, sync target
-    │       └── help.go         Help — keybindings reference
+    │       ├── current.go               Session tab — container, init, activation
+    │       ├── current_tree.go          Session tab row builder + renderers
+    │       ├── current_actions.go       Session tab key dispatch + mode handlers
+    │       ├── current_data.go          Session tab fetch + mutation commands
+    │       ├── current_overlay.go       Session tab modal overlay rendering
+    │       ├── sessions.go              Workspaces tab — container
+    │       ├── sessions_tree.go         Workspaces tab row builder + renderers
+    │       ├── sessions_actions.go      Workspaces tab key dispatch
+    │       ├── sessions_overlay.go      Workspaces tab modal overlay rendering
+    │       ├── themes.go                Themes tab — container, bubbletea plumbing
+    │       ├── themes_picker.go         Theme list + swatches + filter
+    │       ├── themes_editor.go         Inline color editor
+    │       ├── themes_bar.go            Bar preset carousel + segment toggles
+    │       ├── settings.go              Settings — config fields, sync target
+    │       ├── help.go                  Help — keybindings reference
+    │       ├── shared_mutations.go      Rename/kill helpers used by both tree tabs
+    │       ├── shared_overlay.go        Confirm/rename/create overlay renderers
+    │       └── mode_state.go            Unified confirmState / renameState / moveState
     ├── palette/                command palette (spotlight-style overlay)
     │   ├── model.go            bubbletea model, fuzzy search
     │   ├── registry.go         action registry
@@ -112,13 +133,13 @@ The dashboard is a tabbed bubbletea application rendered as a tmux popup
 - **Tab interface** — each tab implements `Init`, `Update`, `View`, plus
   metadata methods (`ID`, `Title`, `ShortHelp`), `Activate`/`Deactivate`.
 - **Tabs:**
-  - **CurrentTab** — windows in the current session, quick actions
-  - **SessionsTab** — all sessions grouped by workspace, switch/create/kill,
-    overmind process management
-  - **ThemesTab** — theme picker with color swatches, color editor,
+  - **Session** (current.go) — windows in the current session, quick actions
+  - **Workspaces** (sessions.go) — all sessions grouped by workspace,
+    switch/create/kill, overmind process management
+  - **Themes** — theme picker with color swatches, color editor,
     bar preset selection with live preview carousel
-  - **SettingsTab** — config fields (prefix, sync target, session options)
-  - **HelpTab** — keybindings and command reference
+  - **Settings** — config fields (prefix, sync target, session options)
+  - **Help** — keybindings and command reference
 
 Shared view components in `internal/tui/views/` (SessionRow, WindowRow,
 TabBar, etc.) are used by multiple tabs for consistent rendering.
@@ -339,8 +360,8 @@ means implementing one interface.
 ### Dashboard (inside tmux)
 Activated via prefix+Space as a tmux popup. Five tabs:
 
-- **This Session** — windows in the current session, quick actions
-- **Sessions** — all sessions grouped by workspace, switch/create/kill
+- **Session** — windows in the current session, quick actions
+- **Workspaces** — all sessions grouped by workspace, switch/create/kill
 - **Themes** — theme picker with swatches, color editor, bar preset selection
 - **Settings** — config fields (prefix, sync, sessions)
 - **Help** — keybindings and command reference
@@ -362,22 +383,47 @@ persisted as versioned TOML v2 in `~/.zmux/workspaces.toml`.
 
 ### Model
 - A workspace owns one or more sessions. Sessions belong to exactly one workspace.
-- `zmux new <workspace> [session]` creates a session within a workspace.
-- `zmux open <workspace> [session]` attaches to (or creates) a session in a workspace.
-- The picker groups sessions by workspace, with workspace headers that are
-  selectable (Enter to focus the workspace).
-- The dashboard sessions tab groups by workspace.
+- `zmux new <workspace> [session...]` creates one or more sessions within a workspace.
+- `zmux <workspace>` attaches to the workspace's last-active session (shorthand).
+- `zmux <workspace> <session>` attaches to a specific session in a workspace.
+- `zmux open <workspace> [session]` is the explicit form for scripts.
+- The picker is **workspace-primary**: a single flat list of workspaces with
+  their sessions expanded inline (when selected, or when search matches).
+- The dashboard "Workspaces" tab groups by workspace.
 - The status bar shows workspace name and session position (e.g. `myapp 2/4`).
 - Reconcile auto-heals unmanaged sessions into same-named workspaces.
-- Stale entries are cleaned up automatically.
+- Workspace name validation: no spaces, no reserved names ("temporary", etc.).
+
+### Picker model (flat list)
+
+The picker shows a single flat list of items with three kinds:
+
+1. **Top action row** — `+ new tmp session` (empty input) or `+ create "<name>"` (typed)
+2. **Workspace rows** — name, session count, root dir, last activity, attached indicator
+3. **Session rows** — nested under their workspace when expanded; icon, name, window list
+
+Navigation traverses the tree (workspaces and visible sessions). Search uses
+`<workspace> <session>` grammar — typing a space filters sessions within the
+matched workspace. Tab accepts ghost autocompletion. Matched characters are
+underlined. ctrl+x deletes the workspace or session under the cursor.
+ctrl+h toggles visibility of empty workspaces. There is no two-level drill-in.
 
 ### CLI
 ```
-zmux new <workspace> [session]  Create session in workspace + attach (alias: n)
-zmux open <workspace> [session] Open workspace session (alias: o)
-zmux workspace list             List workspaces with their sessions (alias: ws)
+zmux new <ws>                   Create workspace + 'main' session, attach
+zmux new <ws> <session>         Create workspace (if needed) + session, attach
+zmux new <ws> <s1> <s2> ...     Variadic — create workspace + multiple sessions
+zmux new <ws> -t <template>     Create workspace + template-defined sessions
+zmux <ws>                       Attach workspace last-active (shorthand)
+zmux <ws> <session>             Attach specific session in workspace (shorthand)
+zmux open <ws> [session]        Explicit attach (alias: a, attach)
+zmux kill <name>                Smart kill — workspace-first, then session
+zmux ls                         List workspaces (workspace-primary default)
+zmux ls <ws>                    List sessions within a workspace
+zmux ls -s                      Flat session list (legacy)
+zmux workspace list             List workspaces (alias: ws)
 zmux workspace show <ws>        Show sessions in a workspace
-zmux workspace kill <workspace> Kill a workspace and all its sessions
+zmux workspace kill <ws>        Kill a workspace and all its sessions
 zmux session kill <session>     Kill a session
 zmux tab move <tab> <dest>      Move tab to another session
 zmux tab kill <tab>             Kill a tab
@@ -448,14 +494,20 @@ target the same window.
 ## CLI Interface
 
 ```
-zmux                            — session picker (outside tmux) / dashboard (inside)
-zmux <name>                     — attach or create session (shorthand)
+zmux                            — workspace picker (outside tmux) / dashboard (inside)
+zmux <workspace>                — attach workspace's last-active session
+zmux <workspace> <session>      — attach specific session in workspace
+zmux <name>                     — falls back to session if workspace not found
 
-zmux new <workspace> [session]  — create session in workspace + attach (alias: n)
-zmux new -t <tmpl> <ws> [name]  — create from template in workspace
-zmux open <workspace> [session] — open workspace session (alias: o)
-zmux kill <name>                — kill session (alias: k)
-zmux ls                         — list sessions
+zmux new                        — create tmp-N session (no workspace)
+zmux new <ws>                   — create workspace + 'main' session, attach
+zmux new <ws> <session...>      — variadic: create workspace + sessions
+zmux new <ws> -t <tmpl>         — create workspace from template
+zmux open <ws> [session]        — open workspace session (alias: o, attach, a)
+zmux kill <name>                — smart kill (workspace-first, then session) (alias: k)
+zmux ls                         — list workspaces (workspace-primary)
+zmux ls <ws>                    — list sessions within a workspace
+zmux ls -s                      — flat session list
 zmux tabs [session]             — list tabs (alias: t)
 
 zmux tab move <tab> <dest>      — move tab to another session

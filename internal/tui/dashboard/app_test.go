@@ -54,8 +54,8 @@ func (t *stubTab) Deactivate() {
 
 func newTestApp() (*DashboardApp, []*stubTab) {
 	stubs := []*stubTab{
-		newStubTab(TabCurrent, "This Session"),
-		newStubTab(TabSessions, "Sessions"),
+		newStubTab(TabSession, "Session"),
+		newStubTab(TabWorkspaces, "Workspaces"),
 		newStubTab(TabSettings, "Settings"),
 		newStubTab(TabHelp, "Help"),
 	}
@@ -67,7 +67,7 @@ func newTestApp() (*DashboardApp, []*stubTab) {
 	services := Services{
 		Styles: tui.DefaultStyles(),
 	}
-	app := NewDashboardApp(services, tabImpls, TabCurrent)
+	app := NewDashboardApp(services, tabImpls, TabSession)
 	return app, stubs
 }
 
@@ -91,7 +91,7 @@ func sendKey(app *DashboardApp, keyStr string) *DashboardApp {
 func TestNewDashboardApp(t *testing.T) {
 	app, stubs := newTestApp()
 
-	if app.activeTab != TabCurrent {
+	if app.activeTab != TabSession {
 		t.Errorf("expected active tab Current, got %s", app.activeTab)
 	}
 	if len(app.tabs) != 4 {
@@ -145,7 +145,7 @@ func TestDashboardTabSwitchByNumber(t *testing.T) {
 
 	// Switch to sessions (tab 2).
 	app = sendKey(app, "2")
-	if app.activeTab != TabSessions {
+	if app.activeTab != TabWorkspaces {
 		t.Errorf("expected active tab Sessions, got %s", app.activeTab)
 	}
 	if !stubs[0].deactivated {
@@ -163,7 +163,7 @@ func TestDashboardTabSwitchByNumber(t *testing.T) {
 
 	// Switch to current (tab 1).
 	app = sendKey(app, "1")
-	if app.activeTab != TabCurrent {
+	if app.activeTab != TabSession {
 		t.Errorf("expected active tab Current, got %s", app.activeTab)
 	}
 }
@@ -173,7 +173,7 @@ func TestDashboardTabCycle(t *testing.T) {
 
 	// Cycle forward.
 	app = sendKey(app, "tab")
-	if app.activeTab != TabSessions {
+	if app.activeTab != TabWorkspaces {
 		t.Errorf("expected Sessions after tab, got %s", app.activeTab)
 	}
 
@@ -189,7 +189,7 @@ func TestDashboardTabCycle(t *testing.T) {
 
 	// Should wrap around.
 	app = sendKey(app, "tab")
-	if app.activeTab != TabCurrent {
+	if app.activeTab != TabSession {
 		t.Errorf("expected Current after tab wrap, got %s", app.activeTab)
 	}
 }
@@ -230,14 +230,14 @@ func TestDashboardViewContainsTabBar(t *testing.T) {
 
 	view := app.View()
 
-	if !strings.Contains(view, "Sessions") {
-		t.Error("expected view to contain Sessions tab label")
+	if !strings.Contains(view, "Workspaces") {
+		t.Error("expected view to contain Workspaces tab label")
 	}
 	if !strings.Contains(view, "Settings") {
 		t.Error("expected view to contain Settings tab label")
 	}
-	if !strings.Contains(view, "This Session") {
-		t.Error("expected view to contain This Session tab label")
+	if !strings.Contains(view, "Session") {
+		t.Error("expected view to contain Session tab label")
 	}
 }
 
@@ -249,8 +249,8 @@ func TestDashboardViewContainsActiveTabContent(t *testing.T) {
 
 	view := app.View()
 
-	if !strings.Contains(view, "content:current") {
-		t.Error("expected view to contain current tab content")
+	if !strings.Contains(view, "content:session") {
+		t.Error("expected view to contain session tab content")
 	}
 }
 
@@ -262,8 +262,8 @@ func TestDashboardViewContainsHelpBar(t *testing.T) {
 
 	view := app.View()
 
-	if !strings.Contains(view, "help:current") {
-		t.Error("expected view to contain current help text")
+	if !strings.Contains(view, "help:session") {
+		t.Error("expected view to contain session help text")
 	}
 }
 
@@ -346,14 +346,14 @@ func TestDashboardSwitchTabClearsStatus(t *testing.T) {
 
 func TestDashboardInvalidInitialTab(t *testing.T) {
 	stubs := []*stubTab{
-		newStubTab(TabSessions, "Sessions"),
+		newStubTab(TabWorkspaces, "Workspaces"),
 	}
 	tabImpls := []Tab{stubs[0]}
 
 	services := Services{Styles: tui.DefaultStyles()}
 	app := NewDashboardApp(services, tabImpls, "nonexistent")
 
-	if app.activeTab != TabSessions {
+	if app.activeTab != TabWorkspaces {
 		t.Errorf("expected fallback to Sessions, got %s", app.activeTab)
 	}
 }

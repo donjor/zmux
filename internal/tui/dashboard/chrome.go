@@ -73,10 +73,10 @@ func RenderTooSmall(styles tui.Styles) string {
 
 func tabLabel(id TabID) string {
 	switch id {
-	case TabCurrent:
-		return "This Session"
-	case TabSessions:
-		return "Sessions"
+	case TabSession:
+		return "Session"
+	case TabWorkspaces:
+		return "Workspaces"
 	case TabThemes:
 		return "Themes"
 	case TabSettings:

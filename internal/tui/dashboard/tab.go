@@ -9,15 +9,21 @@ import tea "github.com/charmbracelet/bubbletea"
 type TabID string
 
 const (
-	TabCurrent  TabID = "current"
-	TabSessions TabID = "sessions"
-	TabThemes   TabID = "themes"
-	TabSettings TabID = "settings"
-	TabHelp     TabID = "help"
+	TabSession    TabID = "session"    // current session + workspace context
+	TabWorkspaces TabID = "workspaces" // global workspace management
+	TabThemes     TabID = "themes"
+	TabSettings   TabID = "settings"
+	TabHelp       TabID = "help"
 )
 
+// CLI back-compat for the --dashboard-tab flag (and the corresponding
+// palette action arguments) is handled as a string-level alias by
+// cmd/zmux/root.go:resolveDashboardTab. The old Go constants
+// (TabCurrent / TabSessions) have been removed — call sites in the
+// tree were all audited and none relied on them.
+
 // TabOrder defines the canonical ordering of tabs.
-var TabOrder = []TabID{TabCurrent, TabSessions, TabThemes, TabSettings, TabHelp}
+var TabOrder = []TabID{TabSession, TabWorkspaces, TabThemes, TabSettings, TabHelp}
 
 // ActivateReason indicates why a tab is being activated.
 type ActivateReason int

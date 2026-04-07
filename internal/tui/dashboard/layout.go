@@ -8,10 +8,10 @@ type ContentRect struct {
 }
 
 const (
-	// Chrome heights.
+	// Chrome heights. Status line is inline with the tab bar, so it
+	// contributes nothing to the reserved chrome height.
 	tabBarHeight  = 3 // tab bar + separator + blank line
 	helpBarHeight = 2 // blank line + help bar
-	statusHeight  = 0 // status is inline with tab bar
 
 	// Minimum dimensions.
 	minWidth  = 60

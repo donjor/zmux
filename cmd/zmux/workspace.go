@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/donjor/zmux/internal/session"
@@ -54,7 +53,7 @@ var wsAddCmd = &cobra.Command{
 		sess := args[1]
 		root := session.RootName(sess)
 
-		if err := app.WorkspaceStore.Set(root, ws); err != nil {
+		if err := app.WorkspaceStore.MoveSession(root, ws); err != nil {
 			return fmt.Errorf("set workspace: %w", err)
 		}
 		fmt.Printf("Tagged %s → %s\n", root, ws)
@@ -74,7 +73,7 @@ var wsRemoveCmd = &cobra.Command{
 		sess := args[0]
 		root := session.RootName(sess)
 
-		if err := app.WorkspaceStore.Delete(root); err != nil {
+		if err := app.WorkspaceStore.RemoveSession(root); err != nil {
 			return fmt.Errorf("remove workspace: %w", err)
 		}
 		fmt.Printf("Untagged %s\n", root)
@@ -105,24 +104,6 @@ var wsShowCmd = &cobra.Command{
 	},
 }
 
-// cleanupWorkspaces removes workspace entries for sessions that no longer
-// exist in tmux. Called before every workspace command.
-func cleanupWorkspaces() error {
-	sessions, err := session.ListSessions(app.Runner)
-	if err != nil {
-		// tmux not running or error — skip cleanup to avoid data loss.
-		return nil
-	}
-
-	liveRoots := make(map[string]bool, len(sessions))
-	for _, s := range sessions {
-		root := session.RootName(s.Name)
-		liveRoots[root] = true
-	}
-
-	return app.WorkspaceStore.Cleanup(liveRoots)
-}
-
 // liveRootSet builds a set of root session names from the current tmux sessions.
 // Returns nil if tmux is unavailable (callers should treat nil as "skip cleanup").
 func liveRootSet() map[string]bool {
@@ -135,6 +116,17 @@ func liveRootSet() map[string]bool {
 		roots[session.RootName(s.Name)] = true
 	}
 	return roots
+}
+
+// cleanupWorkspaces removes workspace entries for sessions that no longer
+// exist in tmux. Called before every workspace command. No-op if tmux is
+// unavailable (to avoid wiping state during outages).
+func cleanupWorkspaces() error {
+	roots := liveRootSet()
+	if roots == nil {
+		return nil
+	}
+	return app.WorkspaceStore.Reconcile(roots)
 }
 
 var wsKillCmd = &cobra.Command{
@@ -262,55 +254,6 @@ func init() {
 	workspaceCmd.AddCommand(wsPrevCmd)
 	workspaceCmd.AddCommand(wsSwitchToCmd)
 	rootCmd.AddCommand(workspaceCmd)
-}
-
-// ── Helpers used by picker/dashboard for workspace grouping ──
-
-// workspaceGroups partitions sessions by workspace for display. Returns:
-//   - groups: workspace name → sessions (sorted by name)
-//   - untagged: sessions not in any workspace (non-tmp)
-//   - tmp: temporary sessions
-//
-// Grouped sessions (dev-b) inherit their root's workspace.
-func workspaceGroups(
-	sessions []session.SessionInfo,
-	wsState map[string]string,
-) (groups map[string][]session.SessionInfo, order []string, untagged, tmp []session.SessionInfo) {
-	groups = make(map[string][]session.SessionInfo)
-	seen := make(map[string]bool)
-
-	for _, s := range sessions {
-		if s.IsTmp {
-			tmp = append(tmp, s)
-			continue
-		}
-
-		root := session.RootName(s.Name)
-		ws, ok := wsState[root]
-		if ok {
-			groups[ws] = append(groups[ws], s)
-			if !seen[ws] {
-				seen[ws] = true
-				order = append(order, ws)
-			}
-		} else {
-			untagged = append(untagged, s)
-		}
-	}
-
-	sort.Strings(order)
-
-	// Sort sessions within each group by name.
-	for ws := range groups {
-		g := groups[ws]
-		sort.Slice(g, func(i, j int) bool { return g[i].Name < g[j].Name })
-		groups[ws] = g
-	}
-
-	// Sort untagged by name.
-	sort.Slice(untagged, func(i, j int) bool { return untagged[i].Name < untagged[j].Name })
-
-	return groups, order, untagged, tmp
 }
 
 // FormatWorkspaceList produces a simple text listing of workspaces for CLI output.

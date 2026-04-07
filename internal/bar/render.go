@@ -28,7 +28,8 @@ type BarContext struct {
 	GitBehind      int
 	LangVersion    string
 	LangIcon       string
-	Time           string
+	Time           string // formatted clock (e.g. "14:30") — empty when clock disabled
+	Date           string // formatted date (e.g. "Apr 07") — empty when clock disabled
 
 	// Segment visibility (from config).
 	ShowWorkspace bool
@@ -54,6 +55,7 @@ func (ctx BarContext) WorkspaceLabel() string {
 
 // GatherContext collects all dynamic state.
 func GatherContext(sessionName, paneDir, paneCmd, prefixStr, groupID string, workspace string) BarContext {
+	now := time.Now()
 	ctx := BarContext{
 		Session:   sessionName,
 		Workspace: workspace,
@@ -61,7 +63,8 @@ func GatherContext(sessionName, paneDir, paneCmd, prefixStr, groupID string, wor
 		PaneDir:   paneDir,
 		PaneCmd:   paneCmd,
 		Prefix:    prefixStr == "1",
-		Time:      time.Now().Format("15:04"),
+		Time:      now.Format("15:04"),
+		Date:      now.Format("Jan 02"),
 	}
 
 	if paneDir != "" {
@@ -98,6 +101,7 @@ func applySegmentVisibility(ctx *BarContext) {
 	}
 	if !ctx.ShowClock {
 		ctx.Time = ""
+		ctx.Date = ""
 	}
 	if !ctx.ShowDirectory {
 		ctx.PaneDir = ""
@@ -172,28 +176,27 @@ func prefixHints(p *theme.Palette) string {
 	)
 }
 
-// ── Git segment builder (shared) ──
-
-func gitSegment(p *theme.Palette, ctx BarContext) string {
+// formatGitText returns the plain git status string (icon + branch + dirty
+// marker + ahead/behind counts) used in preset pills. No tmux styling —
+// callers wrap this in their own pill chrome.
+//
+// Returns "" if no branch. Space separator before ahead/behind is caller's
+// choice; most presets omit it.
+func formatGitText(ctx BarContext) string {
 	if ctx.GitBranch == "" {
 		return ""
 	}
-	var b strings.Builder
-	branchColor := p.Success.Hex()
+	text := "󰘬 " + ctx.GitBranch
 	if ctx.GitDirty {
-		branchColor = p.Accent.Hex()
-	}
-	fmt.Fprintf(&b, "#[fg=%s] %s", branchColor, ctx.GitBranch)
-	if ctx.GitDirty {
-		fmt.Fprintf(&b, "#[fg=%s]*", p.Accent.Hex())
+		text += "*"
 	}
 	if ctx.GitAhead > 0 {
-		fmt.Fprintf(&b, "#[fg=%s]↑%d", p.Success.Hex(), ctx.GitAhead)
+		text += fmt.Sprintf(" ↑%d", ctx.GitAhead)
 	}
 	if ctx.GitBehind > 0 {
-		fmt.Fprintf(&b, "#[fg=%s]↓%d", p.Error.Hex(), ctx.GitBehind)
+		text += fmt.Sprintf(" ↓%d", ctx.GitBehind)
 	}
-	return b.String()
+	return text
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -233,15 +236,8 @@ func renderRightDefault(p *theme.Palette, ctx BarContext) string {
 		if ctx.GitDirty {
 			gitBg = p.Accent.Hex()
 		}
-		gitText := fmt.Sprintf("󰘬 %s", ctx.GitBranch)
-		if ctx.GitDirty {
-			gitText += "*"
-		}
-		if ctx.GitAhead > 0 {
-			gitText += fmt.Sprintf("↑%d", ctx.GitAhead)
-		}
 		fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] %s #[fg=%s,bg=default]\ue0b4 ",
-			gitBg, gitBg, p.BG.Hex(), gitText, gitBg)
+			gitBg, gitBg, p.BG.Hex(), formatGitText(ctx), gitBg)
 	}
 
 	// Lang pill (surface bg).
@@ -251,8 +247,10 @@ func renderRightDefault(p *theme.Palette, ctx BarContext) string {
 	}
 
 	// Time pill.
-	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s] 󱑍 %s #[fg=%s,bg=default]\ue0b4",
-		sf, sf, p.Muted.Hex(), ctx.Time, sf)
+	if ctx.Time != "" {
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s] 󱑍 %s #[fg=%s,bg=default]\ue0b4",
+			sf, sf, p.Muted.Hex(), ctx.Time, sf)
+	}
 
 	return b.String()
 }
@@ -286,7 +284,9 @@ func renderRightMinimal(p *theme.Palette, ctx BarContext) string {
 		}
 		fmt.Fprintf(&b, "#[fg=%s]%s ", c, ctx.GitBranch)
 	}
-	fmt.Fprintf(&b, "#[fg=%s]%s ", p.Dim.Hex(), ctx.Time)
+	if ctx.Time != "" {
+		fmt.Fprintf(&b, "#[fg=%s]%s ", p.Dim.Hex(), ctx.Time)
+	}
 	return b.String()
 }
 
@@ -332,24 +332,20 @@ func renderRightPowerline(p *theme.Palette, ctx BarContext) string {
 			gitBg = p.Accent.Hex()
 		}
 		fmt.Fprintf(&b, "#[fg=%s]\ue0b2", gitBg)
-		gitText := fmt.Sprintf("󰘬 %s", ctx.GitBranch)
-		if ctx.GitDirty {
-			gitText += "*"
-		}
-		if ctx.GitAhead > 0 {
-			gitText += fmt.Sprintf(" ↑%d", ctx.GitAhead)
-		}
-		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", gitBg, p.BG.Hex(), gitText)
+		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", gitBg, p.BG.Hex(), formatGitText(ctx))
 	}
 
 	// Time.
-	fmt.Fprintf(&b, "#[fg=%s]\ue0b2", p.Surface.Hex())
-	fmt.Fprintf(&b, "#[bg=%s,fg=%s] 󱑍 %s ", p.Surface.Hex(), p.Muted.Hex(), ctx.Time)
+	if ctx.Time != "" {
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b2", p.Surface.Hex())
+		fmt.Fprintf(&b, "#[bg=%s,fg=%s] 󱑍 %s ", p.Surface.Hex(), p.Muted.Hex(), ctx.Time)
+	}
 
 	// Date accent.
-	date := time.Now().Format("Jan 02")
-	fmt.Fprintf(&b, "#[fg=%s]\ue0b2", p.Accent.Hex())
-	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Accent.Hex(), p.BG.Hex(), date)
+	if ctx.Date != "" {
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b2", p.Accent.Hex())
+		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Accent.Hex(), p.BG.Hex(), ctx.Date)
+	}
 
 	return b.String()
 }
@@ -390,7 +386,9 @@ func renderRightBlocks(p *theme.Palette, ctx BarContext) string {
 	if ctx.LangVersion != "" {
 		fmt.Fprintf(&b, "#[fg=%s][%s%s] ", p.Dim.Hex(), ctx.LangIcon, ctx.LangVersion)
 	}
-	fmt.Fprintf(&b, "#[fg=%s][%s] ", p.Muted.Hex(), ctx.Time)
+	if ctx.Time != "" {
+		fmt.Fprintf(&b, "#[fg=%s][%s] ", p.Muted.Hex(), ctx.Time)
+	}
 	return b.String()
 }
 
@@ -442,15 +440,8 @@ func renderRightRounded(p *theme.Palette, ctx BarContext) string {
 		if ctx.GitDirty {
 			gitBg = p.Accent.Hex()
 		}
-		gitText := fmt.Sprintf("󰘬 %s", ctx.GitBranch)
-		if ctx.GitDirty {
-			gitText += "*"
-		}
-		if ctx.GitAhead > 0 {
-			gitText += fmt.Sprintf("↑%d", ctx.GitAhead)
-		}
 		fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] %s #[fg=%s,bg=default]\ue0b4 ",
-			gitBg, gitBg, p.BG.Hex(), gitText, gitBg)
+			gitBg, gitBg, p.BG.Hex(), formatGitText(ctx), gitBg)
 	}
 
 	// Lang pill.
@@ -460,8 +451,10 @@ func renderRightRounded(p *theme.Palette, ctx BarContext) string {
 	}
 
 	// Time pill.
-	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s] 󱑍 %s #[fg=%s,bg=default]\ue0b4",
-		sf, sf, p.Muted.Hex(), ctx.Time, sf)
+	if ctx.Time != "" {
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s] 󱑍 %s #[fg=%s,bg=default]\ue0b4",
+			sf, sf, p.Muted.Hex(), ctx.Time, sf)
+	}
 
 	return b.String()
 }
@@ -524,7 +517,9 @@ func renderRightHacker(p *theme.Palette, ctx BarContext) string {
 		fmt.Fprintf(&b, "#[fg=%s]%s%s ", d, ctx.LangIcon, ctx.LangVersion)
 	}
 
-	fmt.Fprintf(&b, "#[fg=%s]%s ", g, time.Now().Format("15:04:05"))
+	if ctx.Time != "" {
+		fmt.Fprintf(&b, "#[fg=%s]%s ", g, ctx.Time)
+	}
 
 	return b.String()
 }
@@ -559,7 +554,12 @@ func renderRightZen(p *theme.Palette, ctx BarContext) string {
 		}
 		parts = append(parts, g)
 	}
-	parts = append(parts, ctx.Time)
+	if ctx.Time != "" {
+		parts = append(parts, ctx.Time)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
 	return fmt.Sprintf("#[fg=%s]%s ", d, strings.Join(parts, "  "))
 }
 
@@ -632,7 +632,9 @@ func renderRightStarship(p *theme.Palette, ctx BarContext) string {
 	}
 
 	// Time.
-	fmt.Fprintf(&b, "#[fg=%s]󱑍 %s ", p.Muted.Hex(), ctx.Time)
+	if ctx.Time != "" {
+		fmt.Fprintf(&b, "#[fg=%s]󱑍 %s ", p.Muted.Hex(), ctx.Time)
+	}
 
 	return b.String()
 }
@@ -672,36 +674,52 @@ func renderRightRpowerline(p *theme.Palette, ctx BarContext) string {
 	if ctx.Prefix {
 		return prefixHints(p)
 	}
-	var b strings.Builder
 
-	// Git.
+	// Build the segments we want to render. Each segment has its own bg.
+	type seg struct {
+		bg   string
+		text string
+		bold bool
+	}
+	var segs []seg
+
 	if ctx.GitBranch != "" {
 		gitBg := p.Success.Hex()
 		if ctx.GitDirty {
 			gitBg = p.Accent.Hex()
 		}
-		fmt.Fprintf(&b, "#[fg=%s]\ue0b6", gitBg)
-		gitText := fmt.Sprintf("󰘬 %s", ctx.GitBranch)
-		if ctx.GitDirty {
-			gitText += "*"
-		}
-		if ctx.GitAhead > 0 {
-			gitText += fmt.Sprintf(" ↑%d", ctx.GitAhead)
-		}
-		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", gitBg, p.BG.Hex(), gitText)
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", gitBg, p.Surface.Hex())
-	} else {
-		fmt.Fprintf(&b, "#[fg=%s]\ue0b6", p.Surface.Hex())
+		segs = append(segs, seg{bg: gitBg, text: formatGitText(ctx), bold: true})
+	}
+	if ctx.Time != "" {
+		segs = append(segs, seg{bg: p.Surface.Hex(), text: "󱑍 " + ctx.Time})
+	}
+	if ctx.Date != "" {
+		segs = append(segs, seg{bg: p.Accent.Hex(), text: ctx.Date, bold: true})
 	}
 
-	// Time.
-	fmt.Fprintf(&b, "#[bg=%s,fg=%s] 󱑍 %s ", p.Surface.Hex(), p.Muted.Hex(), ctx.Time)
-	fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Surface.Hex(), p.Accent.Hex())
+	if len(segs) == 0 {
+		return ""
+	}
 
-	// Date.
-	date := time.Now().Format("Jan 02")
-	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Accent.Hex(), p.BG.Hex(), date)
-	fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4", p.Accent.Hex())
+	var b strings.Builder
+	for i, s := range segs {
+		// Lead-in: rounded left cap on first segment.
+		if i == 0 {
+			fmt.Fprintf(&b, "#[fg=%s]\ue0b6", s.bg)
+		}
+		// Pill body.
+		boldTag := ""
+		if s.bold {
+			boldTag = ",bold"
+		}
+		fmt.Fprintf(&b, "#[bg=%s,fg=%s%s] %s ", s.bg, p.BG.Hex(), boldTag, s.text)
+		// Transition: pointed arrow into next segment, or rounded cap to end.
+		if i+1 < len(segs) {
+			fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", s.bg, segs[i+1].bg)
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4", s.bg)
+		}
+	}
 
 	return b.String()
 }

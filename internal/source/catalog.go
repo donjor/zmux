@@ -60,3 +60,20 @@ type SourceGroup struct {
 	Source  Source
 	Entries []CatalogEntry
 }
+
+// GroupKey returns a stable key for an external source group. It avoids
+// index-based IDs (which would break cursor + expansion state across a
+// re-discover) by using a source-specific identifier: the overmind control
+// socket for overmind sources, the source ID (socket path) otherwise.
+func GroupKey(g *SourceGroup) string {
+	if g == nil {
+		return "unknown"
+	}
+	if g.Source.Overmind != nil && g.Source.Overmind.ControlSocket != "" {
+		return g.Source.Overmind.ControlSocket
+	}
+	if g.Source.ID != "" {
+		return g.Source.ID
+	}
+	return string(g.Source.Kind)
+}
