@@ -134,6 +134,79 @@ func TestParseWindows(t *testing.T) {
 	}
 }
 
+func TestParseClients(t *testing.T) {
+	input := "/dev/pts/13\tpi\t$28\tpi\t@50\t1\tparley\t%139\t2028292\t0\txterm-256color\tbpaste,RGB,title\tattached,focused,UTF-8\n" +
+		"/dev/pts/26\tbridge-b\t$21\tbridge\t@36\t3\tbash\t%36\t3055165\t1\txterm-ghostty\tbpaste,title\tattached,UTF-8\n"
+	clients, err := parseClients(input)
+	if err != nil {
+		t.Fatalf("parseClients: unexpected error: %v", err)
+	}
+	if len(clients) != 2 {
+		t.Fatalf("expected 2 clients, got %d", len(clients))
+	}
+	c := clients[0]
+	if c.TTY != "/dev/pts/13" || c.SessionName != "pi" || c.SessionID != "$28" || c.SessionGroup != "pi" || c.WindowID != "@50" || c.WindowIndex != 1 || c.WindowName != "parley" || c.PaneID != "%139" || c.PID != 2028292 || c.ControlMode || c.TermName != "xterm-256color" || c.TermFeatures != "bpaste,RGB,title" || c.Flags != "attached,focused,UTF-8" {
+		t.Fatalf("unexpected client[0]: %#v", c)
+	}
+	if !clients[1].ControlMode {
+		t.Fatalf("expected client[1] control mode: %#v", clients[1])
+	}
+}
+
+func TestParseClientsAcceptsLegacyTenFieldFormat(t *testing.T) {
+	input := "/dev/pts/13\tpi\t$28\tpi\t@50\t1\tparley\t%139\t2028292\t0\n"
+	clients, err := parseClients(input)
+	if err != nil {
+		t.Fatalf("parseClients legacy format: unexpected error: %v", err)
+	}
+	if len(clients) != 1 {
+		t.Fatalf("expected 1 client, got %d", len(clients))
+	}
+	if clients[0].TTY != "/dev/pts/13" || clients[0].TermName != "" || clients[0].TermFeatures != "" || clients[0].Flags != "" {
+		t.Fatalf("unexpected legacy client: %#v", clients[0])
+	}
+}
+
+func TestParseClientsInvalidFields(t *testing.T) {
+	_, err := parseClients("/dev/pts/13\tpi")
+	if err == nil {
+		t.Fatal("expected invalid client field error")
+	}
+}
+
+func TestParsePanes(t *testing.T) {
+	input := "dev\t%57\t1\t1\tnvim\t1234\t/home/user/dev\t120\t40\tclean-ui\t2\n" +
+		"dev\t%58\t2\t0\tzsh\t1235\t/home/user/dev\t80\t40\tlogs\t2\n"
+
+	panes, err := parsePanes(input)
+	if err != nil {
+		t.Fatalf("parsePanes: unexpected error: %v", err)
+	}
+	if len(panes) != 2 {
+		t.Fatalf("expected 2 panes, got %d", len(panes))
+	}
+	p := panes[0]
+	if p.Session != "dev" || p.ID != "%57" || p.Index != 1 || !p.Active || p.Command != "nvim" || p.PID != 1234 || p.Dir != "/home/user/dev" || p.Width != 120 || p.Height != 40 || p.Title != "clean-ui" || p.WindowIndex != 2 {
+		t.Fatalf("unexpected pane[0]: %#v", p)
+	}
+	if panes[1].ID != "%58" || panes[1].Active {
+		t.Fatalf("unexpected pane[1]: %#v", panes[1])
+	}
+}
+
+func TestParseWindowsAllowsEmptyDir(t *testing.T) {
+	windows, err := parseWindows("2\t[tmux]\t0\t")
+	if err != nil {
+		t.Fatalf("parseWindows empty dir: unexpected error: %v", err)
+	}
+	if len(windows) != 1 {
+		t.Fatalf("expected 1 window, got %d", len(windows))
+	}
+	if windows[0].Index != 2 || windows[0].Name != "[tmux]" || windows[0].Active || windows[0].Dir != "" {
+		t.Fatalf("unexpected empty-dir window: %#v", windows[0])
+	}
+}
+
 func TestParseWindowsEmpty(t *testing.T) {
 	windows, err := parseWindows("")
 	if err != nil {

@@ -10,25 +10,31 @@ package tabs
 
 // confirmState describes a pending y/N kill confirmation.
 //
-//   - kind is "workspace", "session", or "window".
+//   - kind is "workspace", "session", "window", or "pane".
 //   - attached is only meaningful when kind == "workspace": it triggers
 //     the second-step "this will detach you" confirmation.
-//   - windowIndex is only meaningful when kind == "window".
+//   - sessionName / windowIndex are only meaningful when kind == "window"
+//     and identify the tmux session that owns the window (may differ
+//     from the active session when targeting a sibling session's tab).
+//   - paneID is only meaningful when kind == "pane".
 type confirmState struct {
 	kind        string
 	name        string
 	attached    bool
+	sessionName string
 	windowIndex int
+	paneID      string
 }
 
 // renameState records what we're renaming.
 //
 //   - kind is "workspace", "session", or "window".
-//   - windowIndex is only meaningful when kind == "window" — both tabs
-//     leave it at zero for workspace / session renames.
+//   - sessionName / windowIndex are only meaningful when kind == "window"
+//     and identify the owning tmux session.
 type renameState struct {
 	kind        string
 	oldName     string
+	sessionName string
 	windowIndex int
 }
 

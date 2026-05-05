@@ -17,6 +17,110 @@ func RenderPreviewWithSegments(preset Preset, palette *theme.Palette, segments c
 	return renderPreviewCtx(preset, palette, segments)
 }
 
+// RenderPreviewWithSegmentsOverride renders a preview with segment
+// visibility AND a callback to modify the BarContext before rendering.
+// Used by the two-line layout to suppress position suffixes etc.
+func RenderPreviewWithSegmentsOverride(preset Preset, palette *theme.Palette, segments config.BarSegments, override func(*BarContext)) string {
+	return renderPreviewCtxOverride(preset, palette, segments, override)
+}
+
+// RenderTopPreview renders the top row (workspace + session tabs) as
+// ANSI for preview outside tmux. Uses the real RenderTop with bg-aware
+// tmux→ANSI conversion so the bar bg persists across all segments.
+func RenderTopPreview(preset Preset, palette *theme.Palette, sessions []string, currentSession string, width int) string {
+	return RenderTopPreviewVariant(preset, palette, sessions, currentSession, width, "tabs")
+}
+
+// RenderTopPreviewVariant renders the top row for any variant (tabs,
+// dots, minimal) as ANSI. Returns empty string when sessions <= 1.
+func RenderTopPreviewVariant(preset Preset, palette *theme.Palette, sessions []string, currentSession string, width int, variant string) string {
+	ctx := makePreviewCtx(config.BarSegments{Workspace: true})
+	ctx.WorkspaceSessions = sessions
+	ctx.Session = currentSession
+	ctx.WorkspaceCount = len(sessions)
+	for i, s := range sessions {
+		if s == currentSession {
+			ctx.WorkspacePos = i + 1
+			break
+		}
+	}
+
+	bg := BarBGColor(palette, preset)
+	top := RenderTopRow(palette, ctx, preset, variant)
+	if top == "" {
+		return ""
+	}
+	content := tmuxToANSIWithBarBG(top, bg)
+	return padWithBarBG(content, bg, width)
+}
+
+// RenderBarPreview renders the main bar row as ANSI with proper bar bg.
+func RenderBarPreview(preset Preset, palette *theme.Palette, segments config.BarSegments, width int) string {
+	return RenderBarPreviewOverride(preset, palette, segments, width, nil)
+}
+
+// RenderBarPreviewOverride is RenderBarPreview with a BarContext override.
+func RenderBarPreviewOverride(preset Preset, palette *theme.Palette, segments config.BarSegments, width int, override func(*BarContext)) string {
+	ctx := makePreviewCtx(segments)
+	if override != nil {
+		override(&ctx)
+	}
+
+	bg := BarBGColor(palette, preset)
+	left := RenderLeft(palette, ctx, preset)
+	right := RenderRight(palette, ctx, preset)
+
+	// Build the raw tmux content (left + windows + right), then
+	// resolve bg=default and convert to ANSI in one pass so the
+	// bar bg persists across ALL segments including the window tabs.
+	rawWindows := previewWindowsRaw(palette, preset)
+	combined := left + "  " + rawWindows + "  " + right
+	content := tmuxToANSIWithBarBG(combined, bg)
+	return padWithBarBG(content, bg, width)
+}
+
+// BarBGColor returns the bar background color for a preset. rpowerline
+// and powerline use BG (darker); others use Surface.
+func BarBGColor(palette *theme.Palette, preset Preset) theme.Color {
+	if preset == Rpowerline || preset == Powerline {
+		return palette.BG
+	}
+	return palette.Surface
+}
+
+// resolveBarBG replaces "bg=default" in tmux format strings with the
+// actual bar bg hex. In real tmux, "bg=default" means "inherit from
+// status-style"; in ANSI, [49m means "terminal bg" which breaks the
+// bar surface. This substitution makes the ANSI preview match tmux.
+func resolveBarBG(tmuxFmt string, bg theme.Color) string {
+	return strings.ReplaceAll(tmuxFmt, "bg=default", "bg="+bg.Hex())
+}
+
+// tmuxToANSIWithBarBG converts tmux format strings to ANSI with
+// bg=default resolved to the actual bar bg. Also replaces [0m full
+// resets with fg+bg restore so the bar bg persists across segments.
+func tmuxToANSIWithBarBG(s string, bg theme.Color) string {
+	s = resolveBarBG(s, bg)
+	result := tmuxToANSI(s)
+	// Replace full resets with a bg-preserving reset: clear fg/bold
+	// but keep the bar bg.
+	bgRestore := fmt.Sprintf("\033[0m\033[48;2;%d;%d;%dm", bg.R, bg.G, bg.B)
+	result = strings.ReplaceAll(result, "\033[0m", bgRestore)
+	return result
+}
+
+// padWithBarBG pads ANSI content to width with the bar bg.
+func padWithBarBG(content string, bg theme.Color, width int) string {
+	bgAnsi := fmt.Sprintf("\033[48;2;%d;%d;%dm", bg.R, bg.G, bg.B)
+	reset := "\033[0m"
+	visible := stripANSI(content)
+	pad := width - len(visible)
+	if pad < 0 {
+		pad = 0
+	}
+	return bgAnsi + content + strings.Repeat(" ", pad) + reset
+}
+
 func RenderPreview(preset Preset, palette *theme.Palette) string {
 	return renderPreviewCtx(preset, palette, config.BarSegments{
 		Workspace: true, Git: true, Lang: true, Clock: true,
@@ -24,8 +128,8 @@ func RenderPreview(preset Preset, palette *theme.Palette) string {
 	})
 }
 
-func renderPreviewCtx(preset Preset, palette *theme.Palette, segments config.BarSegments) string {
-	ctx := BarContext{
+func makePreviewCtx(segments config.BarSegments) BarContext {
+	return BarContext{
 		Session:        "main",
 		Workspace:      "myapp",
 		WorkspacePos:   1,
@@ -38,13 +142,24 @@ func renderPreviewCtx(preset Preset, palette *theme.Palette, segments config.Bar
 		Date:           "Apr 07",
 		PaneDir:        "~/src/myapp",
 		PaneCmd:        "nvim",
-		ShowWorkspace: segments.Workspace,
-		ShowGit:       segments.Git,
-		ShowLang:      segments.Lang,
-		ShowClock:     segments.Clock,
-		ShowDirectory: segments.Directory,
-		ShowProcess:   segments.Process,
-		ShowGroup:     segments.Group,
+		ShowWorkspace:  segments.Workspace,
+		ShowGit:        segments.Git,
+		ShowLang:       segments.Lang,
+		ShowClock:      segments.Clock,
+		ShowDirectory:  segments.Directory,
+		ShowProcess:    segments.Process,
+		ShowGroup:      segments.Group,
+	}
+}
+
+func renderPreviewCtx(preset Preset, palette *theme.Palette, segments config.BarSegments) string {
+	return renderPreviewCtxOverride(preset, palette, segments, nil)
+}
+
+func renderPreviewCtxOverride(preset Preset, palette *theme.Palette, segments config.BarSegments, override func(*BarContext)) string {
+	ctx := makePreviewCtx(segments)
+	if override != nil {
+		override(&ctx)
 	}
 
 	left := RenderLeft(palette, ctx, preset)
@@ -71,10 +186,23 @@ func renderPreviewCtx(preset Preset, palette *theme.Palette, segments config.Bar
 	return content + surfaceBg + strings.Repeat(" ", pad) + reset
 }
 
-// previewWindows generates fake window tabs for the preview.
+// previewWindows generates fake window tabs for the preview (ANSI).
 func previewWindows(p *theme.Palette, preset Preset) string {
-	// Get the window format strings from dynamicOptions.
-	opts := dynamicOptions(p, "/usr/bin/zmux", preset)
+	return tmuxToANSI(previewWindowsTmux(p, preset))
+}
+
+// previewWindowsRaw returns fake window tabs as TMUX FORMAT STRINGS
+// (not converted to ANSI). Callers can combine with other tmux format
+// content and do a single bg-aware ANSI conversion.
+func previewWindowsRaw(p *theme.Palette, preset Preset) string {
+	return previewWindowsTmux(p, preset)
+}
+
+// previewWindowsTmux builds fake window tabs as tmux format strings.
+// Uses a sentinel path for dynamicOptions — it only appears in the
+// #() commands (status-left/right) which we don't use from the preview.
+func previewWindowsTmux(p *theme.Palette, preset Preset) string {
+	opts := dynamicOptions(p, "zmux", preset, BarLayoutConfig{})
 
 	var windowFmt, windowCurrentFmt, windowSep string
 	for _, opt := range opts {
@@ -102,8 +230,7 @@ func previewWindows(p *theme.Palette, preset Preset) string {
 	inactive2 = stripTmuxConditionals(inactive2, false)
 	sep := stripTmuxConditionals(windowSep, false)
 
-	// Convert to ANSI.
-	return tmuxToANSI(inactive + sep + active + sep + inactive2)
+	return inactive + sep + active + sep + inactive2
 }
 
 // tmuxToANSI converts tmux #[fg=...,bg=...] format strings to ANSI escape codes.

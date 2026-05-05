@@ -19,6 +19,7 @@ type BarContext struct {
 	WorkspaceCount int // total sessions in workspace
 	GroupID        string
 	Attached       int
+	ViewportID     string // "a" (root), "b", "c" etc. — empty when not grouped
 	PaneDir        string
 	PaneCmd        string
 	Prefix         bool
@@ -31,6 +32,16 @@ type BarContext struct {
 	Time           string // formatted clock (e.g. "14:30") — empty when clock disabled
 	Date           string // formatted date (e.g. "Apr 07") — empty when clock disabled
 
+	// Session indicator rendered inside the session pill. When non-empty,
+	// SessionLabel() appends this instead of "N/M" numbers. Callers set
+	// this to compact dots (e.g. "○●○") or leave empty for numbers.
+	SessionIndicator string
+
+	// WorkspaceSessions is the list of all session names in the current
+	// workspace (ordered). Used by RenderTop to render the session row.
+	// Empty when the bar is single-line or the workspace has one session.
+	WorkspaceSessions []string
+
 	// Segment visibility (from config).
 	ShowWorkspace bool
 	ShowGit       bool
@@ -41,16 +52,24 @@ type BarContext struct {
 	ShowGroup     bool
 }
 
-// WorkspaceLabel returns the formatted workspace display string.
-// e.g., "myapp 2/4" for multi-session, "myapp" for single-session.
+// WorkspaceLabel returns the workspace name. No position indicator —
+// that belongs on the session pill (see SessionLabel).
 func (ctx BarContext) WorkspaceLabel() string {
-	if ctx.Workspace == "" {
-		return ""
+	return ctx.Workspace
+}
+
+// SessionLabel returns the session name with a position indicator
+// when the workspace has multiple sessions. The indicator is either
+// compact dots ("main ○●○"), numbers ("main 2/3"), or nothing —
+// controlled by the SessionIndicator field.
+func (ctx BarContext) SessionLabel() string {
+	if ctx.SessionIndicator != "" {
+		return ctx.Session + " " + ctx.SessionIndicator
 	}
 	if ctx.WorkspaceCount > 1 {
-		return fmt.Sprintf("%s %d/%d", ctx.Workspace, ctx.WorkspacePos, ctx.WorkspaceCount)
+		return fmt.Sprintf("%s %d/%d", ctx.Session, ctx.WorkspacePos, ctx.WorkspaceCount)
 	}
-	return ctx.Workspace
+	return ctx.Session
 }
 
 // GatherContext collects all dynamic state.
@@ -112,6 +131,7 @@ func applySegmentVisibility(ctx *BarContext) {
 	if !ctx.ShowGroup {
 		ctx.GroupID = ""
 		ctx.Attached = 0
+		ctx.ViewportID = ""
 	}
 }
 
@@ -165,14 +185,235 @@ func RenderRight(p *theme.Palette, ctx BarContext, preset Preset) string {
 	}
 }
 
+// RenderTop generates the workspace/session row for two-line status bars.
+// Outputs tmux format strings. Returns empty if there's only one session
+// (callers should collapse to single-line).
+func RenderTop(p *theme.Palette, ctx BarContext, preset Preset) string {
+	if len(ctx.WorkspaceSessions) <= 1 {
+		return ""
+	}
+	switch preset {
+	case Rpowerline:
+		return renderTopRpowerline(p, ctx)
+	case Powerline:
+		return renderTopPowerline(p, ctx)
+	case Rounded:
+		return renderTopRounded(p, ctx)
+	case Blocks:
+		return renderTopBlocks(p, ctx)
+	case Hacker:
+		return renderTopHacker(p, ctx)
+	case Zen:
+		return renderTopZen(p, ctx)
+	case Minimal:
+		return renderTopMinimal(p, ctx)
+	case Starship:
+		return renderTopStarship(p, ctx)
+	default:
+		return renderTopDefault(p, ctx)
+	}
+}
+
+// ── Top row renderers (per preset) ──
+//
+// Each mirrors the window-tab format from that preset but renders
+// sessions instead of windows. The workspace pill leads, followed
+// by session tabs, all in tmux format strings.
+
+func renderTopRpowerline(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	// Workspace pill.
+	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s #[nobold]",
+		p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.Workspace)
+	// Arrow from workspace to first session.
+	if len(ctx.WorkspaceSessions) > 0 {
+		firstBG := p.Dim.Hex()
+		if ctx.WorkspaceSessions[0] == ctx.Session {
+			firstBG = p.Accent.Hex()
+		}
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Special.Hex(), firstBG)
+	} else {
+		fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4", p.Special.Hex())
+	}
+	// Session tabs — two-section pills matching window-tab chrome.
+	for i, sess := range ctx.WorkspaceSessions {
+		isCurrent := sess == ctx.Session
+		idx := i + 1
+		if isCurrent {
+			fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %d\u2009#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s,bold] %s ",
+				p.Accent.Hex(), p.BG.Hex(), idx,
+				p.Accent.Hex(), p.Surface.Hex(),
+				p.Surface.Hex(), p.FG.Hex(), sess)
+		} else {
+			fmt.Fprintf(&b, "#[bg=%s,fg=%s] %d\u2009#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s] %s ",
+				p.Dim.Hex(), p.Surface.Hex(), idx,
+				p.Dim.Hex(), p.Surface.Hex(),
+				p.Surface.Hex(), p.Muted.Hex(), sess)
+		}
+		// Transition to next or cap.
+		if i < len(ctx.WorkspaceSessions)-1 {
+			nextBG := p.Dim.Hex()
+			if ctx.WorkspaceSessions[i+1] == ctx.Session {
+				nextBG = p.Accent.Hex()
+			}
+			fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Surface.Hex(), nextBG)
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4", p.Surface.Hex())
+		}
+	}
+	return b.String()
+}
+
+func renderTopPowerline(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s,bold] 󱂬 %s ",
+		p.BG.Hex(), p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.Workspace)
+	for i, sess := range ctx.WorkspaceSessions {
+		isCurrent := sess == ctx.Session
+		bg := p.Dim.Hex()
+		if isCurrent {
+			bg = p.Accent.Hex()
+		}
+		prevBG := p.Special.Hex()
+		if i > 0 {
+			prevBG = p.Surface.Hex()
+		}
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", prevBG, bg)
+		if isCurrent {
+			fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s #[nobold]", bg, p.BG.Hex(), sess)
+		} else {
+			fmt.Fprintf(&b, "#[bg=%s,fg=%s] %s ", bg, p.Surface.Hex(), sess)
+		}
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s] ",
+			bg, p.Surface.Hex(), p.Surface.Hex(), p.Muted.Hex())
+		if i == len(ctx.WorkspaceSessions)-1 {
+			fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b0", p.Surface.Hex())
+		}
+	}
+	return b.String()
+}
+
+func renderTopRounded(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s #[fg=%s,bg=default]\ue0b4 ",
+		p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.Workspace, p.Special.Hex())
+	for _, sess := range ctx.WorkspaceSessions {
+		if sess == ctx.Session {
+			fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] %s #[fg=%s,bg=default]\ue0b4 ",
+				p.Accent.Hex(), p.Accent.Hex(), p.BG.Hex(), sess, p.Accent.Hex())
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s] %s #[fg=%s,bg=default]\ue0b4 ",
+				p.Surface.Hex(), p.Surface.Hex(), p.Dim.Hex(), sess, p.Surface.Hex())
+		}
+	}
+	return b.String()
+}
+
+func renderTopBlocks(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#[fg=%s,bold] [󱂬 %s] ", p.Special.Hex(), ctx.Workspace)
+	for _, sess := range ctx.WorkspaceSessions {
+		if sess == ctx.Session {
+			fmt.Fprintf(&b, "#[fg=%s,bold][%s]#[nobold] ", p.Accent.Hex(), sess)
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s][%s] ", p.Dim.Hex(), sess)
+		}
+	}
+	return b.String()
+}
+
+func renderTopHacker(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	g := p.Success.Hex()
+	d := p.Dim.Hex()
+	fmt.Fprintf(&b, "#[fg=%s]%s", g, ctx.Workspace)
+	for i, sess := range ctx.WorkspaceSessions {
+		if i == 0 {
+			fmt.Fprintf(&b, "#[fg=%s]>", d)
+		}
+		if sess == ctx.Session {
+			fmt.Fprintf(&b, "#[fg=%s,bold]%d:%s#[nobold]", g, i+1, sess)
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s]%d:%s", d, i+1, sess)
+		}
+		if i < len(ctx.WorkspaceSessions)-1 {
+			fmt.Fprintf(&b, "#[fg=%s]|", d)
+		}
+	}
+	return b.String()
+}
+
+func renderTopZen(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#[fg=%s]%s ", p.Dim.Hex(), ctx.Workspace)
+	for i, sess := range ctx.WorkspaceSessions {
+		if sess == ctx.Session {
+			fmt.Fprintf(&b, "#[fg=%s]%s", p.Muted.Hex(), sess)
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s]%s", p.Dim.Hex(), sess)
+		}
+		if i < len(ctx.WorkspaceSessions)-1 {
+			fmt.Fprintf(&b, "#[fg=%s] · ", p.Dim.Hex())
+		}
+	}
+	return b.String()
+}
+
+func renderTopMinimal(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#[fg=%s,bold] %s  ", p.FG.Hex(), ctx.Workspace)
+	for i, sess := range ctx.WorkspaceSessions {
+		if sess == ctx.Session {
+			fmt.Fprintf(&b, "#[fg=%s,bold]%s#[nobold]", p.FG.Hex(), sess)
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s]%s", p.Dim.Hex(), sess)
+		}
+		if i < len(ctx.WorkspaceSessions)-1 {
+			b.WriteString("  ")
+		}
+	}
+	return b.String()
+}
+
+func renderTopStarship(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#[fg=%s,bold] 󱂬 %s  ", p.Special.Hex(), ctx.Workspace)
+	for i, sess := range ctx.WorkspaceSessions {
+		if sess == ctx.Session {
+			fmt.Fprintf(&b, "#[fg=%s,bold]%s #[fg=%s]❯#[fg=default,nobold] ",
+				p.Accent.Hex(), sess, p.Accent.Hex())
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s]%s ", p.Dim.Hex(), sess)
+		}
+		if i < len(ctx.WorkspaceSessions)-1 && sess != ctx.Session {
+			b.WriteString(" ")
+		}
+	}
+	return b.String()
+}
+
+func renderTopDefault(p *theme.Palette, ctx BarContext) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s #[fg=%s,bg=default]\ue0b4 ",
+		p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.Workspace, p.Special.Hex())
+	for _, sess := range ctx.WorkspaceSessions {
+		if sess == ctx.Session {
+			fmt.Fprintf(&b, "#[fg=%s,bold] %s #[nobold,fg=%s]", p.Accent.Hex(), sess, p.Muted.Hex())
+		} else {
+			fmt.Fprintf(&b, "#[fg=%s] %s ", p.Dim.Hex(), sess)
+		}
+	}
+	return b.String()
+}
+
 // ── Prefix hints (shared) ──
 
 func prefixHints(p *theme.Palette) string {
 	hi := p.Info.Hex()
 	dm := p.Dim.Hex()
 	return fmt.Sprintf(
-		"#[fg=%s]spc#[fg=%s]dash #[fg=%s]d#[fg=%s]etach #[fg=%s]c#[fg=%s]tab #[fg=%s]x#[fg=%s]close #[fg=%s]?#[fg=%s]help ",
-		hi, dm, hi, dm, hi, dm, hi, dm, hi, dm,
+		"#[fg=%s]spc#[fg=%s]dash #[fg=%s]d#[fg=%s]etach #[fg=%s]c#[fg=%s]tab #[fg=%s]C#[fg=%s]session #[fg=%s].#[fg=%s]rename #[fg=%s]x#[fg=%s]close #[fg=%s]?#[fg=%s]help ",
+		hi, dm, hi, dm, hi, dm, hi, dm, hi, dm, hi, dm, hi, dm,
 	)
 }
 
@@ -211,8 +452,17 @@ func renderLeftDefault(p *theme.Palette, ctx BarContext) string {
 	}
 
 	// Session pill with icon.
-	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s #[fg=%s,bg=default]\ue0b4 ",
-		bg, bg, p.BG.Hex(), ctx.Session, bg)
+	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s ",
+		bg, bg, p.BG.Hex(), ctx.SessionLabel())
+
+	// Viewport letter (attached to session pill).
+	if ctx.ViewportID != "" {
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s,bold] %s ",
+			bg, p.Info.Hex(), p.Info.Hex(), p.BG.Hex(), ctx.ViewportID)
+		fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4 ", p.Info.Hex())
+	} else {
+		fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4 ", bg)
+	}
 
 	// Workspace pill (elevated surface).
 	if ctx.Workspace != "" {
@@ -264,7 +514,10 @@ func renderLeftMinimal(p *theme.Palette, ctx BarContext) string {
 	if ctx.Prefix {
 		color = p.Info.Hex()
 	}
-	out := fmt.Sprintf("#[fg=%s,bold] %s ", color, ctx.Session)
+	out := fmt.Sprintf("#[fg=%s,bold] %s ", color, ctx.SessionLabel())
+	if ctx.ViewportID != "" {
+		out += fmt.Sprintf("#[fg=%s,bold]%s ", p.Info.Hex(), ctx.ViewportID)
+	}
 	if ctx.Workspace != "" {
 		out += fmt.Sprintf("#[fg=%s]%s ", p.Dim.Hex(), ctx.WorkspaceLabel())
 	}
@@ -307,8 +560,14 @@ func renderLeftPowerline(p *theme.Palette, ctx BarContext) string {
 		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Special.Hex(), bg)
 	}
 
-	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold]  %s ", bg, p.BG.Hex(), ctx.Session)
-	fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Surface.Hex())
+	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold]  %s ", bg, p.BG.Hex(), ctx.SessionLabel())
+	if ctx.ViewportID != "" {
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Info.Hex())
+		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Info.Hex(), p.BG.Hex(), ctx.ViewportID)
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Info.Hex(), p.Surface.Hex())
+	} else {
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Surface.Hex())
+	}
 
 	dir := shortenDir(ctx.PaneDir)
 	if dir != "" {
@@ -360,7 +619,11 @@ func renderLeftBlocks(p *theme.Palette, ctx BarContext) string {
 		color = p.Info.Hex()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "#[fg=%s,bold] [%s] ", color, ctx.Session)
+	label := ctx.SessionLabel()
+	if ctx.ViewportID != "" {
+		label += fmt.Sprintf("#[fg=%s]:%s", p.Info.Hex(), ctx.ViewportID)
+	}
+	fmt.Fprintf(&b, "#[fg=%s,bold] [%s] ", color, label)
 	if ctx.Workspace != "" {
 		fmt.Fprintf(&b, "#[fg=%s][%s] ", p.Meta.Hex(), ctx.WorkspaceLabel())
 	}
@@ -404,20 +667,20 @@ func renderLeftRounded(p *theme.Palette, ctx BarContext) string {
 	}
 	sf := p.Surface.Hex()
 
-	// Session pill.
-	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s #[fg=%s,bg=default]\ue0b4 ",
-		bg, bg, p.BG.Hex(), ctx.Session, bg)
+	// Session pill (with viewport letter attached).
+	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s ",
+		bg, bg, p.BG.Hex(), ctx.SessionLabel())
+	if ctx.ViewportID != "" {
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s,bold] %s #[fg=%s,bg=default]\ue0b4 ",
+			bg, p.Info.Hex(), p.Info.Hex(), p.BG.Hex(), ctx.ViewportID, p.Info.Hex())
+	} else {
+		fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4 ", bg)
+	}
 
 	// Workspace pill on surface.
 	if ctx.Workspace != "" {
 		fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s]  %s #[fg=%s,bg=default]\ue0b4 ",
 			sf, sf, p.Special.Hex(), ctx.WorkspaceLabel(), sf)
-	}
-
-	// Group indicator pill.
-	if ctx.GroupID != "" && ctx.Attached > 1 {
-		fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s] %d◉ #[fg=%s,bg=default]\ue0b4 ",
-			sf, sf, p.Dim.Hex(), ctx.Attached, sf)
 	}
 
 	return b.String()
@@ -468,12 +731,12 @@ func renderLeftHacker(p *theme.Palette, ctx BarContext) string {
 	g := p.Success.Hex()
 	d := p.Dim.Hex()
 
-	fmt.Fprintf(&b, "#[fg=%s,bold]%s", g, ctx.Session)
+	fmt.Fprintf(&b, "#[fg=%s,bold]%s", g, ctx.SessionLabel())
+	if ctx.ViewportID != "" {
+		fmt.Fprintf(&b, "#[fg=%s]:#[fg=%s]%s", d, p.Info.Hex(), ctx.ViewportID)
+	}
 	if ctx.Workspace != "" {
 		fmt.Fprintf(&b, "#[fg=%s]@#[fg=%s]%s", d, g, ctx.WorkspaceLabel())
-	}
-	if ctx.GroupID != "" {
-		fmt.Fprintf(&b, "#[fg=%s]:%d", d, ctx.Attached)
 	}
 	fmt.Fprintf(&b, "#[fg=%s] > ", d)
 
@@ -533,7 +796,10 @@ func renderLeftZen(p *theme.Palette, ctx BarContext) string {
 	if ctx.Prefix {
 		color = p.Accent.Hex()
 	}
-	out := fmt.Sprintf("#[fg=%s] %s", color, ctx.Session)
+	out := fmt.Sprintf("#[fg=%s] %s", color, ctx.SessionLabel())
+	if ctx.ViewportID != "" {
+		out += fmt.Sprintf("#[fg=%s] %s", p.Info.Hex(), ctx.ViewportID)
+	}
 	if ctx.Workspace != "" {
 		out += fmt.Sprintf(" · %s", ctx.WorkspaceLabel())
 	}
@@ -574,8 +840,12 @@ func renderLeftStarship(p *theme.Palette, ctx BarContext) string {
 		bg = p.Info.Hex()
 	}
 
-	// Session with chevron.
-	fmt.Fprintf(&b, "#[fg=%s,bold]  %s #[fg=%s]❯#[fg=default] ", bg, ctx.Session, bg)
+	// Session with chevron + viewport letter.
+	fmt.Fprintf(&b, "#[fg=%s,bold]  %s ", bg, ctx.SessionLabel())
+	if ctx.ViewportID != "" {
+		fmt.Fprintf(&b, "#[fg=%s]%s ", p.Info.Hex(), ctx.ViewportID)
+	}
+	fmt.Fprintf(&b, "#[fg=%s]❯#[fg=default] ", bg)
 
 	// Workspace.
 	if ctx.Workspace != "" {
@@ -658,8 +928,14 @@ func renderLeftRpowerline(p *theme.Palette, ctx BarContext) string {
 		fmt.Fprintf(&b, "#[fg=%s]\ue0b6", bg)
 	}
 
-	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold]  %s ", bg, p.BG.Hex(), ctx.Session)
-	fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Surface.Hex())
+	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold]  %s ", bg, p.BG.Hex(), ctx.SessionLabel())
+	if ctx.ViewportID != "" {
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Info.Hex())
+		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Info.Hex(), p.BG.Hex(), ctx.ViewportID)
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Info.Hex(), p.Surface.Hex())
+	} else {
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Surface.Hex())
+	}
 
 	dir := shortenDir(ctx.PaneDir)
 	if dir != "" {

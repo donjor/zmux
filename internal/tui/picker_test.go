@@ -296,7 +296,7 @@ func TestPickerEnterOnTopActionWithTypedCreatesWorkspace(t *testing.T) {
 	}
 }
 
-func TestPickerEnterOnWorkspaceWithSessionsAttaches(t *testing.T) {
+func TestPickerEnterOnWorkspaceWithSessionsDrillsIntoSessions(t *testing.T) {
 	model := newTestPickerWithWorkspaces()
 
 	// Move to "bridge" workspace.
@@ -312,14 +312,18 @@ func TestPickerEnterOnWorkspaceWithSessionsAttaches(t *testing.T) {
 	result, _ := model.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m := result.(PickerModel)
 
-	if m.Result.Action != "attach" {
-		t.Errorf("expected action 'attach', got %q", m.Result.Action)
+	if m.Quitting {
+		t.Fatal("workspace Enter should drill into sessions, not quit/attach")
 	}
-	if m.Result.Session == "" {
-		t.Error("expected session name in result")
+	if m.Result.Action != "" {
+		t.Errorf("expected no action before selecting a session, got %q", m.Result.Action)
 	}
-	if m.Result.Workspace != "bridge" {
-		t.Errorf("expected workspace 'bridge', got %q", m.Result.Workspace)
+	row := m.tree.CurrentSelectable()
+	if row == nil || row.Kind != outline.RowSession {
+		t.Fatalf("cursor after drilldown = %#v, want session row", row)
+	}
+	if parentWorkspaceName(row, m.tree) != "bridge" {
+		t.Errorf("expected cursor under bridge, got %q", parentWorkspaceName(row, m.tree))
 	}
 }
 
@@ -352,10 +356,10 @@ func TestPickerEnterOnEmptyWorkspaceCreatesMain(t *testing.T) {
 	m := result.(PickerModel)
 
 	if m.Result.Action != "new" {
-		t.Errorf("expected action 'new' (create main), got %q", m.Result.Action)
+		t.Errorf("expected action 'new' (create default session), got %q", m.Result.Action)
 	}
-	if m.Result.Name != "main" {
-		t.Errorf("expected session name 'main', got %q", m.Result.Name)
+	if m.Result.Name != "empty-ws" {
+		t.Errorf("expected session name 'empty-ws' (matches workspace), got %q", m.Result.Name)
 	}
 	if m.Result.Workspace != "empty-ws" {
 		t.Errorf("expected workspace 'empty-ws', got %q", m.Result.Workspace)

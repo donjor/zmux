@@ -56,7 +56,7 @@ func loadActiveConfig(fs config.FS) (string, config.Config, error) {
 	return cfgPath, cfg, nil
 }
 
-// fetchData loads the theme list + current config into a themesDataMsg.
+// fetchData loads the theme list + current theme name into a themesDataMsg.
 func (t *ThemesTab) fetchData(reqID int64) tea.Cmd {
 	resolver := t.resolver
 	fs := t.fs
@@ -66,27 +66,15 @@ func (t *ThemesTab) fetchData(reqID int64) tea.Cmd {
 			themes = resolver.List()
 		}
 
-		cfgPath, _, pathErr := loadActiveConfig(fs)
-		if pathErr != nil {
-			return themesDataMsg{reqID: reqID, err: pathErr}
-		}
-		_ = cfgPath // only used for error detection
-
-		exists := config.ConfigExists(fs)
-		currentTheme := ""
-		cfg, err := config.Load(fs, cfgPath)
+		_, cfg, err := loadActiveConfig(fs)
 		if err != nil {
-			cfg = config.DefaultConfig()
-		} else {
-			currentTheme = cfg.Theme
+			return themesDataMsg{reqID: reqID, err: err}
 		}
 
 		return themesDataMsg{
 			reqID:        reqID,
 			themes:       themes,
-			currentTheme: currentTheme,
-			cfg:          cfg,
-			cfgExists:    exists,
+			currentTheme: cfg.Theme,
 		}
 	}
 }
@@ -118,7 +106,12 @@ func (t *ThemesTab) applyTheme(name string) tea.Cmd {
 				_ = theme.Apply(runner, fs, &cfg, resolved, cfgPath)
 				p := resolved.SemanticPalette()
 				preset, _ := bar.PresetFromString(cfg.Bar.Preset)
-				_ = bar.Apply(runner, preset, &p)
+				lc := bar.BarLayoutConfig{
+					Layout:    cfg.Bar.Layout,
+					Indicator: cfg.Bar.Indicator,
+					TopBar:    cfg.Bar.TopBar,
+				}
+				_ = bar.Apply(runner, preset, &p, lc)
 				pal = &p
 				s := tui.NewStyles(&p)
 				sty = &s
@@ -131,37 +124,6 @@ func (t *ThemesTab) applyTheme(name string) tea.Cmd {
 			palette:   pal,
 			styles:    sty,
 		}
-	}
-}
-
-// saveConfig persists the in-memory cfg + applies the bar live.
-func (t *ThemesTab) saveConfig() tea.Cmd {
-	fs := t.fs
-	runner := t.runner
-	cfg := t.cfg
-	reqID := t.reqID
-	resolver := t.resolver
-	return func() tea.Msg {
-		cfgPath, err := config.ConfigPath(fs)
-		if err != nil {
-			return themesConfigSaveMsg{reqID: reqID, err: err}
-		}
-
-		if err := config.Save(fs, cfgPath, cfg); err != nil {
-			return themesConfigSaveMsg{reqID: reqID, err: err}
-		}
-
-		// Apply bar live.
-		if runner != nil && resolver != nil {
-			preset, _ := bar.PresetFromString(cfg.Bar.Preset)
-			resolved, resolveErr := resolver.Resolve(cfg.Theme)
-			if resolveErr == nil {
-				p := resolved.SemanticPalette()
-				_ = bar.Apply(runner, preset, &p)
-			}
-		}
-
-		return themesConfigSaveMsg{reqID: reqID}
 	}
 }
 

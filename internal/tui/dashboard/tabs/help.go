@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/donjor/zmux/internal/tui"
@@ -13,9 +14,9 @@ import (
 // HelpTab displays a static, scrollable keybinding reference.
 type HelpTab struct {
 	styles tui.Styles
+	vp     viewport.Model
 	width  int
 	height int
-	scroll int
 }
 
 // NewHelpTab creates a new help tab.
@@ -23,9 +24,9 @@ func NewHelpTab(styles tui.Styles) *HelpTab {
 	return &HelpTab{styles: styles}
 }
 
-func (t *HelpTab) ID() dashboard.TabID  { return dashboard.TabHelp }
-func (t *HelpTab) Title() string         { return "Help" }
-func (t *HelpTab) Init() tea.Cmd         { return nil }
+func (t *HelpTab) ID() dashboard.TabID { return dashboard.TabHelp }
+func (t *HelpTab) Title() string       { return "Help" }
+func (t *HelpTab) Init() tea.Cmd       { return nil }
 
 func (t *HelpTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	if tc, ok := msg.(dashboard.ThemeChangedMsg); ok {
@@ -35,18 +36,13 @@ func (t *HelpTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
-			if t.scroll > 0 {
-				t.scroll--
-			}
+			t.vp.LineUp(1)
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("down", "j"))):
-			t.scroll++
+			t.vp.LineDown(1)
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("g"))):
-			t.scroll = 0
+			t.vp.GotoTop()
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("G"))):
-			t.scroll = len(t.helpLines()) - t.height + 5
-			if t.scroll < 0 {
-				t.scroll = 0
-			}
+			t.vp.GotoBottom()
 		}
 	}
 	return t, nil
@@ -54,33 +50,16 @@ func (t *HelpTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 
 func (t *HelpTab) View() string {
 	lines := t.helpLines()
-
-	// Apply scroll.
-	start := t.scroll
-	if start >= len(lines) {
-		start = max(0, len(lines)-1)
-	}
-	end := start + t.height - 2
-	if end > len(lines) {
-		end = len(lines)
-	}
-
-	var b strings.Builder
-	b.WriteString("\n")
-	for _, line := range lines[start:end] {
-		b.WriteString(line + "\n")
-	}
-
-	if end < len(lines) {
-		b.WriteString(t.styles.Dim.Render("  ↓ scroll down for more") + "\n")
-	}
-
-	return b.String()
+	content := "\n" + strings.Join(lines, "\n")
+	t.vp.SetContent(content)
+	return renderScrollable(t.vp, t.styles)
 }
 
 func (t *HelpTab) Resize(width, height int) {
 	t.width = width
 	t.height = height
+	t.vp.Width = width
+	t.vp.Height = height
 }
 
 func (t *HelpTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
@@ -107,60 +86,88 @@ func (t *HelpTab) helpLines() []string {
 
 	return []string{
 		section("Dashboard"),
-		binding("1-5", "Switch to tab by number"),
+		binding("Alt+1-5", "Switch to tab by number"),
 		binding("Tab / Shift+Tab", "Cycle through tabs"),
 		binding("Esc", "Close dashboard"),
 		"",
-		section("This Session Tab"),
-		binding("j / k / Up / Down", "Navigate window list"),
-		binding("Enter", "Focus selected window"),
-		binding("n", "Create new window"),
-		binding("r", "Rename selected window"),
-		binding("x", "Close selected window (with confirmation)"),
+		section("Session Tab"),
+		binding("j / k", "Navigate workspace / session / window tree"),
+		binding("Enter", "Focus selected window, switch to sibling session"),
+		binding("n", "Create new window in current session"),
+		binding("r", "Rename selected item (workspace, session, or window)"),
+		binding("x", "Kill selected item (with confirmation)"),
 		binding("m", "Move window to another session"),
 		binding("< / >", "Reorder windows (swap left/right)"),
 		binding("g / G", "Jump to top / bottom"),
 		"",
-		section("Sessions Tab"),
-		binding("j / k / Up / Down", "Navigate session list"),
+		section("Workspaces Tab"),
+		binding("j / k", "Navigate workspace / session tree"),
 		binding("Enter", "Switch to selected session"),
-		binding("n", "Create new tmp session"),
-		binding("r", "Rename selected session"),
-		binding("d", "Kill selected session (with confirmation)"),
-		binding("m", "Move current window to another session"),
-		binding("p", "Preview selected session's pane"),
+		binding("n", "Create new workspace"),
+		binding("r", "Rename selected workspace or session"),
+		binding("x", "Kill workspace or session (with confirmation)"),
+		binding("m", "Move session to another workspace"),
+		binding("p", "Preview selected session"),
 		binding("c", "Clean up unattached tmp sessions"),
 		binding("g / G", "Jump to top / bottom"),
 		"",
+		section("Themes Tab"),
+		binding("j / k", "Navigate themes"),
+		binding("Enter", "Apply theme"),
+		binding("/", "Filter themes"),
+		binding("e", "Edit theme colors inline"),
+		binding("c", "Clone theme to custom"),
+		binding("q", "Revert preview"),
+		"",
+		section("Bar Tab"),
+		binding("j / k", "Navigate presets and segments"),
+		binding("Enter", "Apply preset"),
+		binding("Space", "Toggle segment"),
+		binding("g / G", "Jump to top / bottom"),
+		"",
 		section("Settings Tab"),
-		binding("h / l / Left / Right", "Switch section (Theme, Bar, General)"),
-		binding("j / k / Up / Down", "Navigate within section"),
-		binding("Enter", "Apply / edit / cycle / toggle"),
-		binding("/", "Filter themes (Theme section)"),
-		binding("s", "Save config changes (General section)"),
+		binding("j / k", "Navigate config fields"),
+		binding("Enter", "Edit / cycle / toggle value"),
+		binding("s", "Save config changes"),
 		binding("Esc", "Cancel editing"),
 		"",
-		section("Command Palette"),
-		binding("prefix + p", "Open command palette"),
-		binding("Type", "Fuzzy search actions"),
+		section("tmux Prefix Keys (Ctrl+Space)"),
+		binding("Space", "Open dashboard"),
+		binding("p", "Open command palette"),
+		binding("d", "Detach from session"),
+		binding("?", "Help popup"),
+		binding("w", "Workspace session picker"),
+		binding("[ / ]", "Previous / next session in workspace"),
+		binding("c", "New tab"),
+		binding("n / N", "Next / previous tab"),
+		binding("< / >", "Move tab left / right"),
+		binding("x", "Close tab (with confirm)"),
+		binding(".", "Label tab (blank clears)"),
+		binding(",", "Rename session"),
+		binding("r", "Reload zmux config (zmux apply)"),
+		binding("v", "Enter vi copy mode"),
+		binding("P", "Paste buffer"),
+		"",
+		section("No-Prefix Keys"),
+		binding("Alt+1-9", "Switch to tab N directly"),
+		binding("Shift+Alt+1-9", "Switch to session N in workspace"),
+		binding("Alt+`", "Tab switcher popup"),
+		"",
+		section("Tab Picker (Alt+`)"),
+		binding("Enter", "Switch to selected tab"),
+		binding("Ctrl+N", "Create new tab"),
+		binding("Ctrl+R", "Rename selected tab"),
+		binding("Ctrl+X", "Close selected tab"),
+		binding("< / >", "Reorder tabs"),
+		binding("Esc", "Close"),
+		"",
+		section("Command Palette (prefix+p)"),
+		binding("Type", "Fuzzy search all actions"),
 		binding("Enter", "Execute selected action"),
 		binding("Esc", "Close palette"),
-		binding("j / k / Up / Down", "Navigate action list"),
-		"",
-		section("tmux Prefix Bindings"),
-		binding("prefix + Space", "Open dashboard"),
-		binding("prefix + p", "Open command palette"),
-		binding("prefix + d", "Detach from session"),
-		binding("prefix + ?", "Open help popup"),
-		binding("prefix + r", "Reload zmux config (zmux apply)"),
-		binding("prefix + c", "New window (tab)"),
-		binding("prefix + n", "Next window"),
-		binding("prefix + .", "Rename window"),
-		binding("prefix + ,", "Rename session"),
-		binding("Alt+1-5", "Switch to window 1-5 (no prefix)"),
+		binding("j / k", "Navigate action list"),
 		"",
 		section("Copy Mode (vi keys)"),
-		binding("prefix + v", "Enter copy mode"),
 		binding("v", "Begin selection"),
 		binding("Ctrl+v", "Toggle rectangle selection"),
 		binding("y", "Yank selection to clipboard"),

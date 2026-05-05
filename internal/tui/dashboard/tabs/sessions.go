@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/donjor/zmux/internal/session"
@@ -66,7 +67,8 @@ type SessionsTab struct {
 	current    string
 	catalog    *source.Catalog
 
-	// Viewport.
+	// Viewport — handles scrolling automatically.
+	vp     viewport.Model
 	width  int
 	height int
 
@@ -134,6 +136,8 @@ func (t *SessionsTab) Deactivate() {
 func (t *SessionsTab) Resize(width, height int) {
 	t.width = width
 	t.height = height
+	t.vp.Width = width
+	t.vp.Height = height
 }
 
 // Update processes messages for the workspaces tab.
@@ -229,7 +233,7 @@ func (t *SessionsTab) fetchData(reqID int64) tea.Cmd {
 		}
 
 		current, _ := runner.DisplayMessage("", "#{session_name}")
-		current = strings.TrimSpace(current)
+		current = session.RootName(strings.TrimSpace(current))
 
 		// External sources are best-effort. Failures fall back to empty.
 		cat, _ := source.Discover()

@@ -273,13 +273,17 @@ func (t *SessionsTab) handleRenameKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 			return t, nil
 		}
 		var cmd tea.Cmd
+		var jumpTo string
 		switch t.rename.kind {
 		case "workspace":
 			cmd = t.renameWorkspace(t.rename.oldName, newName)
+			jumpTo = outline.WorkspaceID(newName)
 		case "session":
 			cmd = t.renameSession(t.rename.oldName, newName)
+			jumpTo = outline.SessionID(newName)
 		}
 		t.exitMode()
+		t.pendingJumpTo = jumpTo
 		return t, cmd
 
 	case tea.KeyEscape:
@@ -302,6 +306,9 @@ func (t *SessionsTab) handleCreateKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		}
 		cmd := t.createWorkspace(name)
 		t.exitMode()
+		// Re-set pendingJumpTo AFTER exitMode — see current_actions.go for
+		// the full explanation of the stale-pending-data race.
+		t.pendingJumpTo = outline.WorkspaceID(name)
 		return t, cmd
 
 	case tea.KeyEscape:

@@ -205,7 +205,7 @@ func (t *ThemesTab) viewInlineEditor() string {
 	}
 
 	if start > 0 {
-		b.WriteString(t.styles.Dim.Render("  ^ " + fmt.Sprintf("%d more", start)) + "\n")
+		b.WriteString(t.styles.Dim.Render("  ^ "+fmt.Sprintf("%d more", start)) + "\n")
 	}
 
 	for i := start; i < end; i++ {
@@ -234,7 +234,7 @@ func (t *ThemesTab) viewInlineEditor() string {
 	}
 
 	if end < len(t.editSlots) {
-		b.WriteString(t.styles.Dim.Render("  v " + fmt.Sprintf("%d more", len(t.editSlots)-end)) + "\n")
+		b.WriteString(t.styles.Dim.Render("  v "+fmt.Sprintf("%d more", len(t.editSlots)-end)) + "\n")
 	}
 
 	// Color picker (inline below the slots when active).

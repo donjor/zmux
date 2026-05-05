@@ -132,10 +132,15 @@ func (t *ThemesTab) handleFilterKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 // View — Colors section
 // ============================================================================
 
-func (t *ThemesTab) viewColors() string {
+// renderColorsContent returns the full colors section content and
+// the cursor line within it (for viewport scrolling).
+func (t *ThemesTab) renderColorsContent() (string, int) {
 	var b strings.Builder
+	cursorLine := 0
+	lineCount := 0
 
 	b.WriteString("\n")
+	lineCount++
 	currentLabel := "none"
 	if t.currentTheme != "" {
 		currentLabel = t.currentTheme
@@ -143,13 +148,16 @@ func (t *ThemesTab) viewColors() string {
 	b.WriteString(t.styles.Dim.Render("Current: ") + t.styles.Success.Render(currentLabel))
 	b.WriteString("  " + t.styles.Dim.Render(fmt.Sprintf("%d themes", len(t.themes))))
 	b.WriteString("\n\n")
+	lineCount += 2
 
 	// Filter bar.
 	if t.mode == themesModeFilter {
 		prompt := t.styles.Accent.Render("  / ")
 		b.WriteString(prompt + t.filter.View() + "\n\n")
+		lineCount += 2
 	} else if t.filter.Value() != "" {
 		b.WriteString(t.styles.Dim.Render("  filter: "+t.filter.Value()) + "\n\n")
+		lineCount += 2
 	}
 
 	// Theme list grouped by source.
@@ -168,7 +176,10 @@ func (t *ThemesTab) viewColors() string {
 			))
 		}
 	} else {
-		b.WriteString(t.viewGroupedThemeList())
+		listContent, listCursor := t.renderThemeList()
+		cursorLine = lineCount + listCursor
+		b.WriteString(listContent)
+		lineCount += strings.Count(listContent, "\n")
 	}
 
 	// Color strip for highlighted theme (always visible when not editing).
@@ -183,14 +194,17 @@ func (t *ThemesTab) viewColors() string {
 	// Inline editor below the list when editing.
 	if t.editing {
 		b.WriteString("\n")
+		lineCount++
+		cursorLine = lineCount // scroll to editor area
 		b.WriteString(t.viewInlineEditor())
 	}
 
-	return b.String()
+	return b.String(), cursorLine
 }
 
-// viewGroupedThemeList renders themes grouped by source with section headers.
-func (t *ThemesTab) viewGroupedThemeList() string {
+// renderThemeList renders themes grouped by source with section headers.
+// Returns the rendered content and the cursor line within it.
+func (t *ThemesTab) renderThemeList() (string, int) {
 	var b strings.Builder
 
 	// Group filtered themes by source.
@@ -215,86 +229,32 @@ func (t *ThemesTab) viewGroupedThemeList() string {
 		}
 	}
 
-	// Determine available height for scrollable list.
-	availableHeight := t.height - 14
-	if t.editing {
-		availableHeight -= 12
-	}
-	if availableHeight < 5 {
-		availableHeight = 10
-	}
-
-	// Build flat list of renderable items (headers + entries) with scroll window.
-	type listItem struct {
-		isHeader bool
-		text     string
-	}
-	var allItems []listItem
-
 	groups := []group{custom, bundled, downloaded}
+	cursorLine := 0
+	lineCount := 0
+
 	for _, g := range groups {
 		if len(g.items) > 0 {
-			allItems = append(allItems, listItem{isHeader: true, text: g.header})
+			b.WriteString("  " + t.styles.Muted.Bold(true).Render(g.header) + "\n")
+			lineCount++
 			for _, it := range g.items {
-				allItems = append(allItems, listItem{isHeader: false, text: t.renderThemeEntry(it.globalIdx, it.info)})
+				if it.globalIdx == t.themeCursor {
+					cursorLine = lineCount
+				}
+				entry := t.renderThemeEntry(it.globalIdx, it.info)
+				b.WriteString(entry)
+				lineCount += strings.Count(entry, "\n")
 			}
 		}
 	}
 
 	// If no downloaded themes exist, show hint.
-	hasDownloaded := len(downloaded.items) > 0
-	if !hasDownloaded {
-		allItems = append(allItems, listItem{isHeader: true, text: "Downloaded"})
-		allItems = append(allItems, listItem{isHeader: false, text: "    " + t.styles.Dim.Render("Press d to download 300+ themes from iterm2-color-schemes") + "\n"})
+	if len(downloaded.items) == 0 {
+		b.WriteString("  " + t.styles.Muted.Bold(true).Render("Downloaded") + "\n")
+		b.WriteString("    " + t.styles.Dim.Render("Press d to download 300+ themes from iterm2-color-schemes") + "\n")
 	}
 
-	// Find which line index corresponds to the cursor for scroll anchoring.
-	cursorLineIdx := 0
-	lineIdx := 0
-	for _, g := range groups {
-		if len(g.items) > 0 {
-			lineIdx++ // header
-			for _, it := range g.items {
-				if it.globalIdx == t.themeCursor {
-					cursorLineIdx = lineIdx
-				}
-				lineIdx++
-			}
-		}
-	}
-	if !hasDownloaded {
-		// Account for the hint lines.
-		lineIdx += 2
-	}
-
-	// Apply scroll window.
-	start := 0
-	if cursorLineIdx >= availableHeight {
-		start = cursorLineIdx - availableHeight + 1
-	}
-	end := start + availableHeight
-	if end > len(allItems) {
-		end = len(allItems)
-	}
-
-	if start > 0 {
-		b.WriteString(t.styles.Dim.Render("  ^ " + fmt.Sprintf("%d more", start)) + "\n")
-	}
-
-	for i := start; i < end; i++ {
-		item := allItems[i]
-		if item.isHeader {
-			b.WriteString("  " + t.styles.Muted.Bold(true).Render(item.text) + "\n")
-		} else {
-			b.WriteString(item.text)
-		}
-	}
-
-	if end < len(allItems) {
-		b.WriteString(t.styles.Dim.Render("  v " + fmt.Sprintf("%d more", len(allItems)-end)) + "\n")
-	}
-
-	return b.String()
+	return b.String(), cursorLine
 }
 
 type indexedTheme struct {

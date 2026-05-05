@@ -6,25 +6,25 @@ import "fmt"
 type Preset int
 
 const (
-	Default   Preset = iota // Session pill, prefix hints, clock
-	Minimal                 // Session name + pipe, minimal tabs
-	Powerline               // Angled separators, filled segments
-	Blocks                  // Square bracket segments
-	Rounded                 // Pill-shaped segments with rounded ends
-	Hacker                  // Matrix-inspired, monospace, dense info
-	Zen                     // Ultra-minimal, just the essentials
-	Starship                // Inspired by starship prompt — colorful segments
-	Rpowerline              // Rounded powerline — angled fills with rounded caps
+	Default    Preset = iota // Session pill, prefix hints, clock
+	Minimal                  // Session name + pipe, minimal tabs
+	Powerline                // Angled separators, filled segments
+	Blocks                   // Square bracket segments
+	Rounded                  // Pill-shaped segments with rounded ends
+	Hacker                   // Matrix-inspired, monospace, dense info
+	Zen                      // Ultra-minimal, just the essentials
+	Starship                 // Inspired by starship prompt — colorful segments
+	Rpowerline               // Rounded powerline — angled fills with rounded caps
 )
 
 var presetNames = [...]string{
-	Default:   "default",
-	Minimal:   "minimal",
-	Powerline: "powerline",
-	Blocks:    "blocks",
-	Rounded:   "rounded",
-	Hacker:    "hacker",
-	Zen:       "zen",
+	Default:    "default",
+	Minimal:    "minimal",
+	Powerline:  "powerline",
+	Blocks:     "blocks",
+	Rounded:    "rounded",
+	Hacker:     "hacker",
+	Zen:        "zen",
 	Starship:   "starship",
 	Rpowerline: "rpowerline",
 }

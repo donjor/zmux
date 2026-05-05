@@ -46,8 +46,12 @@ func TestGenerateSharedOptions(t *testing.T) {
 
 			// All presets must include these shared keys.
 			sharedKeys := []string{
+				"pane-border-status",
+				"pane-border-lines",
+				"pane-border-indicators",
 				"pane-border-style",
 				"pane-active-border-style",
+				"pane-border-format",
 				"message-style",
 				"message-command-style",
 				"mode-style",
@@ -77,6 +81,23 @@ func TestGenerateSharedOptions(t *testing.T) {
 			if !strings.Contains(activeBorderOpt.Value, p.Accent.Hex()) {
 				t.Errorf("pane-active-border-style should reference Accent color %s, got %q",
 					p.Accent.Hex(), activeBorderOpt.Value)
+			}
+
+			indicatorOpt, _ := findOpt(opts, "pane-border-indicators")
+			if indicatorOpt.Value != "both" {
+				t.Errorf("pane-border-indicators should be both, got %q", indicatorOpt.Value)
+			}
+
+			windowStyleOpt, _ := findOpt(opts, "window-style")
+			if windowStyleOpt.Value != "bg=default" {
+				t.Errorf("window-style should keep panes transparent/default, got %q", windowStyleOpt.Value)
+			}
+
+			formatOpt, _ := findOpt(opts, "pane-border-format")
+			for _, want := range []string{"#{>:#{window_panes},1}", "#{?pane_active", "#{pane_id}", "#{pane_title}", "#{pane_current_command}", "A-S arrows"} {
+				if !strings.Contains(formatOpt.Value, want) {
+					t.Errorf("pane-border-format missing %q in %q", want, formatOpt.Value)
+				}
 			}
 		})
 	}
@@ -189,11 +210,30 @@ func TestGenerateBlocksBrackets(t *testing.T) {
 	if !strings.Contains(right.Value, "[") && !strings.Contains(right.Value, "]") {
 		t.Error("blocks status-right should contain brackets")
 	}
-	if !strings.Contains(winFmt.Value, "[#I:#W]") {
-		t.Errorf("blocks window-status-format should contain [#I:#W], got %q", winFmt.Value)
+	for _, value := range []string{winFmt.Value, winCur.Value} {
+		if !strings.Contains(value, "[#I:") || !strings.Contains(value, "@zmux_label") || !strings.Contains(value, "#W") {
+			t.Errorf("blocks window format should contain index plus zmux label-aware name, got %q", value)
+		}
 	}
-	if !strings.Contains(winCur.Value, "[#I:#W]") {
-		t.Errorf("blocks window-status-current-format should contain [#I:#W], got %q", winCur.Value)
+}
+
+func TestGenerateWindowFormatsUseZmuxLabels(t *testing.T) {
+	p := testPalette()
+	for _, preset := range AllPresets() {
+		t.Run(preset.String(), func(t *testing.T) {
+			opts := Generate(preset, p)
+			for _, key := range []string{"window-status-format", "window-status-current-format"} {
+				opt, ok := findOpt(opts, key)
+				if !ok {
+					t.Fatalf("missing %s", key)
+				}
+				for _, want := range []string{"@zmux_label", "#{@zmux_label}", "[#W]"} {
+					if !strings.Contains(opt.Value, want) {
+						t.Fatalf("%s missing label token %q: %q", key, want, opt.Value)
+					}
+				}
+			}
+		})
 	}
 }
 

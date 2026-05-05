@@ -19,9 +19,11 @@ type FS interface {
 // RealFS implements FS using the real filesystem.
 type RealFS struct{}
 
-func (RealFS) ReadFile(path string) ([]byte, error)                  { return os.ReadFile(path) }
-func (RealFS) WriteFile(path string, data []byte, perm os.FileMode) error { return os.WriteFile(path, data, perm) }
-func (RealFS) MkdirAll(path string, perm os.FileMode) error         { return os.MkdirAll(path, perm) }
-func (RealFS) Stat(path string) (os.FileInfo, error)                 { return os.Stat(path) }
-func (RealFS) UserHomeDir() (string, error)                          { return os.UserHomeDir() }
-func (RealFS) Glob(pattern string) ([]string, error)                 { return filepath.Glob(pattern) }
+func (RealFS) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
+func (RealFS) WriteFile(path string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(path, data, perm)
+}
+func (RealFS) MkdirAll(path string, perm os.FileMode) error { return os.MkdirAll(path, perm) }
+func (RealFS) Stat(path string) (os.FileInfo, error)        { return os.Stat(path) }
+func (RealFS) UserHomeDir() (string, error)                 { return os.UserHomeDir() }
+func (RealFS) Glob(pattern string) ([]string, error)        { return filepath.Glob(pattern) }

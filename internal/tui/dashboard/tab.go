@@ -12,6 +12,7 @@ const (
 	TabSession    TabID = "session"    // current session + workspace context
 	TabWorkspaces TabID = "workspaces" // global workspace management
 	TabThemes     TabID = "themes"
+	TabBar        TabID = "bar"
 	TabSettings   TabID = "settings"
 	TabHelp       TabID = "help"
 )
@@ -23,7 +24,7 @@ const (
 // tree were all audited and none relied on them.
 
 // TabOrder defines the canonical ordering of tabs.
-var TabOrder = []TabID{TabSession, TabWorkspaces, TabThemes, TabSettings, TabHelp}
+var TabOrder = []TabID{TabSession, TabWorkspaces, TabThemes, TabBar, TabSettings, TabHelp}
 
 // ActivateReason indicates why a tab is being activated.
 type ActivateReason int

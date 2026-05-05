@@ -73,8 +73,60 @@ func parseSessions(output string) ([]Session, error) {
 	return sessions, nil
 }
 
+// parseClients parses tab-delimited list-clients output into []ClientInfo.
+// Expected format per line: tty\tclient_session\tsession_id\tsession_group\twindow_id\twindow_index\twindow_name\tpane_id\tclient_pid\tclient_control_mode[\tclient_termname\tclient_termfeatures\tclient_flags]
+func parseClients(output string) ([]ClientInfo, error) {
+	if output == "" {
+		return nil, nil
+	}
+
+	lines := strings.Split(output, "\n")
+	clients := make([]ClientInfo, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		fields := strings.SplitN(line, "\t", 13)
+		if len(fields) < 10 {
+			return nil, fmt.Errorf("expected 10 tab-delimited client fields, got %d: %q", len(fields), line)
+		}
+		windowIndex, err := strconv.Atoi(fields[5])
+		if err != nil {
+			return nil, fmt.Errorf("invalid client window index %q: %w", fields[5], err)
+		}
+		pid, err := strconv.Atoi(fields[8])
+		if err != nil {
+			return nil, fmt.Errorf("invalid client pid %q: %w", fields[8], err)
+		}
+		client := ClientInfo{
+			TTY:          fields[0],
+			SessionName:  fields[1],
+			SessionID:    fields[2],
+			SessionGroup: fields[3],
+			WindowID:     fields[4],
+			WindowIndex:  windowIndex,
+			WindowName:   fields[6],
+			PaneID:       fields[7],
+			PID:          pid,
+			ControlMode:  fields[9] == "1",
+		}
+		if len(fields) > 10 {
+			client.TermName = fields[10]
+		}
+		if len(fields) > 11 {
+			client.TermFeatures = fields[11]
+		}
+		if len(fields) > 12 {
+			client.Flags = fields[12]
+		}
+		clients = append(clients, client)
+	}
+	return clients, nil
+}
+
 // parsePanes parses tab-delimited list-panes output into []Pane.
-// Expected format per line: pane_index\tpane_active\tcommand\tpid\tdir\twidth\theight\ttitle\twindow_index
+// Expected format per line: session_name\tpane_id\tpane_index\tpane_active\tcommand\tpid\tdir\twidth\theight\ttitle\twindow_index
 func parsePanes(output string) ([]Pane, error) {
 	if output == "" {
 		return nil, nil
@@ -89,32 +141,34 @@ func parsePanes(output string) ([]Pane, error) {
 			continue
 		}
 
-		fields := strings.SplitN(line, "\t", 9)
-		if len(fields) < 8 {
+		fields := strings.SplitN(line, "\t", 11)
+		if len(fields) < 10 {
 			continue // skip malformed lines gracefully
 		}
 
-		index, _ := strconv.Atoi(fields[0])
-		active := fields[1] == "1"
-		pid, _ := strconv.Atoi(fields[3])
-		width, _ := strconv.Atoi(fields[5])
-		height, _ := strconv.Atoi(fields[6])
+		index, _ := strconv.Atoi(fields[2])
+		active := fields[3] == "1"
+		pid, _ := strconv.Atoi(fields[5])
+		width, _ := strconv.Atoi(fields[7])
+		height, _ := strconv.Atoi(fields[8])
 
 		windowIndex := 0
-		if len(fields) >= 9 {
-			windowIndex, _ = strconv.Atoi(fields[8])
+		if len(fields) >= 11 {
+			windowIndex, _ = strconv.Atoi(fields[10])
 		}
 
 		panes = append(panes, Pane{
+			Session:     fields[0],
+			ID:          fields[1],
 			Index:       index,
 			WindowIndex: windowIndex,
 			Active:      active,
-			Command:     fields[2],
+			Command:     fields[4],
 			PID:         pid,
-			Dir:         fields[4],
+			Dir:         fields[6],
 			Width:       width,
 			Height:      height,
-			Title:       fields[7],
+			Title:       fields[9],
 		})
 	}
 
@@ -132,8 +186,8 @@ func parseWindows(output string) ([]Window, error) {
 	windows := make([]Window, 0, len(lines))
 
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 

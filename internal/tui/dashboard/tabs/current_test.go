@@ -51,9 +51,9 @@ func newTestCurrentTab(t *testing.T) (*CurrentTab, *tmux.MockRunner, *workspace.
 	}
 	mock.Panes = map[string][]tmux.Pane{
 		"dev": {
-			{Index: 0, WindowIndex: 1, Active: true, Command: "nvim", PID: 1234, Dir: "/home/user/work", Width: 80, Height: 24},
-			{Index: 0, WindowIndex: 2, Active: true, Command: "node", PID: 1235, Dir: "/home/user/work", Width: 80, Height: 24},
-			{Index: 0, WindowIndex: 3, Active: true, Command: "bash", PID: 1236, Dir: "/home/user/work", Width: 80, Height: 24},
+			{ID: "%11", Index: 1, WindowIndex: 1, Active: true, Command: "nvim", PID: 1234, Dir: "/home/user/work", Width: 80, Height: 24, Title: "editor-pane"},
+			{ID: "%12", Index: 1, WindowIndex: 2, Active: true, Command: "node", PID: 1235, Dir: "/home/user/work", Width: 80, Height: 24, Title: "server-pane"},
+			{ID: "%13", Index: 1, WindowIndex: 3, Active: true, Command: "bash", PID: 1236, Dir: "/home/user/work", Width: 80, Height: 24, Title: "git-pane"},
 		},
 	}
 
@@ -180,9 +180,11 @@ func TestCurrentTabActivateLoadsData(t *testing.T) {
 func TestCurrentTabRowCount(t *testing.T) {
 	tab, _, _ := newTestCurrentTab(t)
 	tab = simulateCurrentActivate(tab)
-	// 1 workspace header + 1 current session + 3 windows + 1 sibling = 6
-	if got := len(tab.tree.Rows); got != 6 {
-		t.Errorf("expected 6 rows, got %d: %+v", got, tab.tree.Rows)
+	// Layout (all tabs expanded):
+	//   workspace banner + sep + current session + 3 windows + 3 panes + sep +
+	//   sibling session + 1 sibling window = 12 rows
+	if got := len(tab.tree.Rows); got != 12 {
+		t.Errorf("expected 12 rows, got %d: %+v", got, tab.tree.Rows)
 	}
 }
 
@@ -665,6 +667,19 @@ func TestCurrentTabViewShowsWindowCount(t *testing.T) {
 	view := tab.View()
 	if !strings.Contains(view, "3 tabs") {
 		t.Error("expected view to contain '3 tabs'")
+	}
+}
+
+func TestCurrentTabViewShowsPaneRows(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+	_, _ = tab.enterWindowLevel()
+
+	view := tab.View()
+	for _, want := range []string{"%11", "editor-pane", "80x24"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("expected pane row to contain %q, got:\n%s", want, view)
+		}
 	}
 }
 

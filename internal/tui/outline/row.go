@@ -36,6 +36,10 @@ const (
 	// Session tab's depth-3 tree.
 	RowWindow
 
+	// RowPane is a tmux pane (child of a window), used by the Session tab
+	// when a window has one or more panes.
+	RowPane
+
 	// RowExternalGroup is the header row for an external source group
 	// (e.g. an overmind instance, a tmux socket).
 	RowExternalGroup
@@ -56,12 +60,12 @@ const (
 // callers need different payloads; typed accessors live in the consuming
 // package. The pointer is stable for the lifetime of one build.
 type Row struct {
-	ID       string  // stable across rebuilds (see ID constructors below)
+	ID       string // stable across rebuilds (see ID constructors below)
 	Kind     RowKind
-	Depth    int     // 0 = top-level, 1 = child, 2 = grandchild
-	ParentID string  // empty if top-level
-	Label    string  // primary display label (renderers may enrich)
-	Data     any     // caller-owned payload (cast in per-package renderers)
+	Depth    int    // 0 = top-level, 1 = child, 2 = grandchild
+	ParentID string // empty if top-level
+	Label    string // primary display label (renderers may enrich)
+	Data     any    // caller-owned payload (cast in per-package renderers)
 
 	// Visual flags decoupled from Kind so a renderer can style without
 	// re-switching on the kind.
@@ -94,6 +98,11 @@ func SessionID(name string) string { return "session:" + name }
 // WindowID is the stable ID of a window row under a session.
 func WindowID(sessionName string, index int) string {
 	return fmt.Sprintf("window:%s:%d", sessionName, index)
+}
+
+// PaneID is the stable ID of a pane row under a window.
+func PaneID(sessionName, paneID string) string {
+	return fmt.Sprintf("pane:%s:%s", sessionName, paneID)
 }
 
 // ExternalGroupID is the stable ID of an external source group header.

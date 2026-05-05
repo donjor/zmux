@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/tablabel"
+	"github.com/donjor/zmux/internal/terminalmeta"
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -22,9 +24,11 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	// General settings
 	writeSection(&b, "General")
 	b.WriteString("set -g default-terminal \"tmux-256color\"\n")
-	b.WriteString("set -ga terminal-overrides \",tmux-256color:Tc\"\n")
 	b.WriteString("set -g extended-keys on\n")
-	b.WriteString("set -ga terminal-features \",tmux-256color:extkeys\"\n")
+	b.WriteString("# zmux owns terminal-features[90..99] to keep repeated apply idempotent.\n")
+	b.WriteString("set -g terminal-features[90] \"xterm-256color:RGB:extkeys\"\n")
+	b.WriteString("set -g terminal-features[91] \"xterm-ghostty:RGB:extkeys\"\n")
+	b.WriteString("set -g terminal-features[92] \"tmux-256color:RGB:extkeys\"\n")
 	b.WriteString("set -g mouse on\n")
 	b.WriteString("set -g history-limit 50000\n")
 	b.WriteString("set -g escape-time 10\n")
@@ -32,8 +36,19 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set -g base-index 1\n")
 	b.WriteString("setw -g pane-base-index 1\n")
 	b.WriteString("set -g renumber-windows on\n")
+	// Use tmux's normal command-based auto naming. zmux marks duplicate names
+	// separately so the status bar can add a cwd suffix only when needed.
+	b.WriteString("setw -g automatic-rename on\n")
+	b.WriteString("setw -g automatic-rename-format \"#{?pane_in_mode,[tmux],#{pane_current_command}}\"\n")
+	// Keep the tab visible when its last foreground command exits by failure or
+	// signal (for example Ctrl+C spam killing a full-tab Pi session). Clean status
+	// 0 exits close normally instead of leaving a confusing dead pane.
+	b.WriteString("setw -g remain-on-exit failed\n")
+	b.WriteString("setw -g remain-on-exit-format \"Pane stopped unexpectedly#{?#{!=:#{pane_dead_status},}, (status #{pane_dead_status}),}#{?#{!=:#{pane_dead_signal},}, (signal #{pane_dead_signal}),} — press prefix+x to close the tab\"\n")
 	b.WriteString("set -g set-clipboard on\n")
 	b.WriteString("set -g status-position top\n")
+	b.WriteString("set -g set-titles on\n")
+	fmt.Fprintf(&b, "set -g set-titles-string \"%s\"\n", terminalmeta.TmuxTitleFormat)
 	b.WriteString("set -g status-interval 5\n")
 	b.WriteString("set -g status-left-length 40\n")
 	b.WriteString("set -g status-right-length 100\n")
@@ -55,6 +70,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("setw -g mode-keys vi\n")
 	b.WriteString("\n")
 	b.WriteString("bind v copy-mode\n")
+	b.WriteString("bind R respawn-pane -k\n")
 	b.WriteString("bind -T copy-mode-vi v send -X begin-selection\n")
 	b.WriteString("bind -T copy-mode-vi Escape send -X cancel\n")
 	b.WriteString("bind -T copy-mode-vi C-v send -X rectangle-toggle\n")
@@ -73,10 +89,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("bind c new-window -c \"#{pane_current_path}\"\n")
 	b.WriteString("bind n next-window\n")
 	b.WriteString("bind N previous-window\n")
-	b.WriteString("bind . command-prompt -p \"rename tab:\" \"rename-window '%%'\"\n")
+	b.WriteString("bind . command-prompt -p \"label tab (blank clears):\" \"set-option -w -t #{window_id} @zmux_label '%%' \\; set-option -w -t #{window_id} @zmux_label_source manual\"\n")
 	b.WriteString("bind < swap-window -t -1 \\; select-window -t -1\n")
 	b.WriteString("bind > swap-window -t +1 \\; select-window -t +1\n")
-	b.WriteString("bind x confirm-before -p \"close tab #W? (y/n)\" kill-window\n")
+	fmt.Fprintf(&b, "bind x confirm-before -p \"close tab %s? (y/n)\" kill-window\n", tablabel.PlainFormat())
 	b.WriteString("\n")
 
 	// Alt+1-9 tab switching (no prefix)
@@ -92,16 +108,34 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	}
 	b.WriteString("\n")
 
+	// No-prefix pane focus. Ghostty and Hyprland leave Alt+Shift+Arrow free,
+	// making this a fast path for Pi ↔ sidecar movement without stealing
+	// Neovim's Ctrl+h/j/k/l window navigation.
+	b.WriteString("# Alt+Shift+Arrow pane focus (no prefix)\n")
+	b.WriteString("bind -n M-S-Left select-pane -L\n")
+	b.WriteString("bind -n M-S-Right select-pane -R\n")
+	b.WriteString("bind -n M-S-Up select-pane -U\n")
+	b.WriteString("bind -n M-S-Down select-pane -D\n")
+	b.WriteString("\n")
+
 	// Sessions
 	writeSection(&b, "Sessions")
 	b.WriteString("bind , command-prompt -p \"rename session:\" \"rename-session '%%'\"\n")
+	if zmuxBin != "" {
+		// prefix+C (shift-c): create new session in current workspace.
+		fmt.Fprintf(&b, "bind C command-prompt -p \"new session:\" \"run-shell '%s workspace new-session %%%%'\"\n", zmuxBin)
+	}
 	b.WriteString("\n")
 
 	// Session navigation (workspace-scoped)
 	writeSection(&b, "Session navigation")
 	if zmuxBin != "" {
-		// prefix+w: workspace session picker
+		// prefix+w / prefix+s: workspace+session picker. Both keys open
+		// the same picker — aliases that match user muscle memory
+		// (w = workspace, s = session). The picker is hierarchical so
+		// either entry point works.
 		fmt.Fprintf(&b, "bind w display-popup -w 60%% -h 50%% -E \"%s --picker\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind s display-popup -w 60%% -h 50%% -E \"%s --picker\"\n", zmuxBin)
 		// prefix+[ / prefix+]: cycle prev/next session in workspace
 		fmt.Fprintf(&b, "bind [ run-shell \"%s workspace prev\"\n", zmuxBin)
 		fmt.Fprintf(&b, "bind ] run-shell \"%s workspace next\"\n", zmuxBin)
@@ -161,12 +195,33 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set-hook -g window-linked \"refresh-client -S\"\n")
 	b.WriteString("set-hook -g window-renamed \"refresh-client -S\"\n")
 	b.WriteString("set-hook -g session-renamed \"refresh-client -S\"\n")
+	if zmuxBin != "" {
+		// Clear older generated hook slots before installing the current silent,
+		// best-effort hooks. In particular, a legacy unindexed window-unlinked hook
+		// could surface noisy "returned 1" messages from old binaries.
+		b.WriteString("set-hook -gu window-unlinked[0]\n")
+		b.WriteString("set-hook -gu window-linked[1]\n")
+		b.WriteString("set-hook -gu window-unlinked[1]\n")
+		b.WriteString("set-hook -gu window-renamed[1]\n")
+		refreshNamesCmd := fmt.Sprintf("%s tab refresh-names #{session_name} >/dev/null 2>&1 || true", zmuxBin)
+		fmt.Fprintf(&b, "set-hook -g window-linked[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
+		fmt.Fprintf(&b, "set-hook -g window-unlinked[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
+		fmt.Fprintf(&b, "set-hook -g window-renamed[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
+	}
+
+	// Two-line bar hooks — adjust status line count when sessions appear/disappear.
+	// No -b flag: run synchronously so the status count is correct before redraw.
+	if zmuxBin != "" {
+		fmt.Fprintf(&b, "set-hook -g session-created \"run-shell '%s bar-adjust'\"\n", zmuxBin)
+		fmt.Fprintf(&b, "set-hook -g session-closed \"run-shell '%s bar-adjust'\"\n", zmuxBin)
+		fmt.Fprintf(&b, "set-hook -g client-session-changed[1] \"run-shell '%s bar-adjust'\"\n", zmuxBin)
+	}
 	b.WriteString("\n")
 
 	// Bootstrap: apply theme + bar on tmux start
 	writeSection(&b, "Bootstrap")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "run-shell \"%s apply\"\n", zmuxBin)
+		fmt.Fprintf(&b, "run-shell \"%s apply --bootstrap\"\n", zmuxBin)
 	}
 
 	return b.String()

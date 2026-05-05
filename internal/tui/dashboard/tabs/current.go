@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/donjor/zmux/internal/session"
@@ -22,12 +23,24 @@ import (
 type currentMode int
 
 const (
-	currentModeList                 currentMode = iota // browsing the tree
-	currentModeRename                                  // inline rename (ws / session / window)
-	currentModeCreate                                  // inline "new session in workspace" input
-	currentModeConfirmKill                             // y/N confirmation
-	currentModeConfirmKillAttached                     // second-step confirm for killing attached ws
-	currentModeMoveWindow                              // session picker for moving a window
+	currentModeList                currentMode = iota // browsing the tree
+	currentModeRename                                 // inline rename (ws / session / window)
+	currentModeCreate                                 // inline "new session in workspace" input
+	currentModeConfirmKill                            // y/N confirmation
+	currentModeConfirmKillAttached                    // second-step confirm for killing attached ws
+	currentModeMoveWindow                             // session picker for moving a window
+)
+
+// currentNavLevel tracks the two-level cursor model. In sessionLevel,
+// the cursor hops session-to-session (window rows are rendered for
+// context but aren't selectable). Press l/right to descend into
+// windowLevel where the cursor navigates the expanded session's
+// windows; press h/left to return.
+type currentNavLevel int
+
+const (
+	navLevelSession currentNavLevel = iota
+	navLevelWindow
 )
 
 // windowDetail combines a window with its pane details and process stats.
@@ -51,15 +64,16 @@ type currentMoveTarget struct {
 
 // currentDataMsg carries fetched session + workspace data for the tab.
 type currentDataMsg struct {
-	reqID       int64
-	wsName      string
-	sessionName string
-	sessionDir  string
-	attached    int
-	windows     []windowDetail
-	siblings    []session.SessionInfo
-	wsModel     *tui.WorkspaceViewModel // enriched workspace view for header actions
-	err         error
+	reqID          int64
+	wsName         string
+	sessionName    string
+	sessionDir     string
+	attached       int
+	windows        []windowDetail           // current session: full detail with CPU/mem
+	siblings       []session.SessionInfo    // other sessions in the workspace
+	siblingWindows map[string][]tmux.Window // sibling session name → basic windows
+	wsModel        *tui.WorkspaceViewModel
+	err            error
 }
 
 func (m currentDataMsg) TargetTab() dashboard.TabID { return dashboard.TabSession }
@@ -91,20 +105,27 @@ type CurrentTab struct {
 	tree *outline.Tree
 
 	// Snapshot data.
-	wsName      string
-	sessionName string
-	sessionDir  string
-	attached    int
-	windows     []windowDetail
-	siblings    []session.SessionInfo
-	wsModel     *tui.WorkspaceViewModel
+	wsName         string
+	sessionName    string
+	sessionDir     string
+	attached       int
+	windows        []windowDetail
+	siblings       []session.SessionInfo
+	siblingWindows map[string][]tmux.Window
+	wsModel        *tui.WorkspaceViewModel
 
-	// Viewport.
+	// Viewport — handles scrolling automatically. Content is set on
+	// each render; the viewport clips to height and manages YOffset.
+	vp     viewport.Model
 	width  int
 	height int
 
 	// Interaction mode.
 	mode currentMode
+
+	// Two-level cursor navigation.
+	navLevel          currentNavLevel // session vs window cursor scope
+	expandedSessionID string          // outline ID of the session whose windows are navigable
 
 	// Inputs / overlay state.
 	renameInput textinput.Model
@@ -153,6 +174,11 @@ func (t *CurrentTab) Title() string       { return "Session & Workspace" }
 func (t *CurrentTab) Init() tea.Cmd       { return nil }
 
 func (t *CurrentTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
+	// Fresh activation always starts at session level so session-hopping
+	// is one keystroke away. Callers that re-enter window level do so
+	// via the l/tab keybinding.
+	t.navLevel = navLevelSession
+	t.expandedSessionID = ""
 	t.reqID = dashboard.NextReqID()
 	return t.fetchData(t.reqID)
 }
@@ -170,6 +196,8 @@ func (t *CurrentTab) Deactivate() {
 func (t *CurrentTab) Resize(width, height int) {
 	t.width = width
 	t.height = height
+	t.vp.Width = width
+	t.vp.Height = height
 }
 
 // Update processes messages for the session tab.
@@ -242,6 +270,7 @@ func (t *CurrentTab) applyData(msg currentDataMsg) {
 	t.attached = msg.attached
 	t.windows = msg.windows
 	t.siblings = msg.siblings
+	t.siblingWindows = msg.siblingWindows
 	t.wsModel = msg.wsModel
 	rows := t.buildRows()
 	if t.pendingJumpTo != "" {
@@ -289,25 +318,36 @@ func (t *CurrentTab) ShortHelp() string {
 	case outline.RowWorkspaceHeader:
 		return strings.Join([]string{"r:rename", "x:kill", "n:new session"}, "  ")
 	case outline.RowSession:
-		return strings.Join([]string{"enter:switch", "r:rename", "x:kill", "n:new window"}, "  ")
+		// Session-level cursor: show session ops + the "l:tabs" hint to
+		// descend into window navigation. "n" creates a new tab in the
+		// session (mirrors the behavior on window rows).
+		return strings.Join([]string{"enter:switch", "l:tabs", "r:rename", "x:kill", "n:new tab"}, "  ")
+	case outline.RowPane:
+		return strings.Join([]string{"enter:focus", "h:back", "x:kill pane"}, "  ")
 	case outline.RowWindow:
-		return strings.Join([]string{"enter:focus", "r:rename", "x:kill", "m:move", "</>:reorder", "n:new"}, "  ")
+		// Window-level cursor: differentiate current-session windows
+		// (full action set) from sibling-session windows (move + reorder
+		// aren't wired for those yet).
+		if _, ok := outline.RowData[windowDetail](row); ok {
+			return strings.Join([]string{"enter:focus", "h:back", "r:rename", "x:kill", "m:move", "</>:reorder", "n:new"}, "  ")
+		}
+		return strings.Join([]string{"enter:switch", "h:back", "r:rename", "x:kill", "n:new"}, "  ")
 	}
 	return "r:rename  x:kill  n:new"
 }
 
 // ── View ──
 
-// View renders the session tab content.
+// View renders the session tab content. All rows are rendered into a
+// full content string; the viewport handles clipping and scrolling.
 func (t *CurrentTab) View() string {
 	if t.mode == currentModeMoveWindow {
 		return t.viewMove()
 	}
 
 	var b strings.Builder
-	b.WriteString(t.renderHeader())
 
-	// Overlays render above the list.
+	// Overlays render above the scrollable content.
 	switch t.mode {
 	case currentModeRename:
 		b.WriteString(t.renderRenameOverlay())
@@ -325,48 +365,26 @@ func (t *CurrentTab) View() string {
 		return b.String()
 	}
 
+	// Render ALL rows — viewport handles clipping.
 	rows := t.tree.Rows
-	listHeight := t.height - 8
-	if listHeight < 5 {
-		listHeight = 12
-	}
-	start, end := outline.ComputeWindow(t.tree.Cursor, len(rows), listHeight)
-
-	if start > 0 {
-		b.WriteString(t.styles.Dim.Render(fmt.Sprintf("  ↑ %d more", start)) + "\n")
-	}
-	for i := start; i < end; i++ {
-		b.WriteString(t.renderRow(&rows[i], i == t.tree.Cursor))
-	}
-	if end < len(rows) {
-		b.WriteString(t.styles.Dim.Render(fmt.Sprintf("  ↓ %d more", len(rows)-end)) + "\n")
+	cursorLine := 0
+	lineCount := 0
+	for i := range rows {
+		if i == t.tree.Cursor {
+			cursorLine = lineCount
+		}
+		rendered := t.renderRow(&rows[i], i == t.tree.Cursor)
+		b.WriteString(rendered)
+		lineCount += strings.Count(rendered, "\n")
 	}
 	if len(rows) == 0 {
 		b.WriteString(t.styles.Dim.Render("  (no rows)") + "\n")
 	}
-	return b.String()
-}
 
-// renderHeader renders the compact session metadata line above the tree.
-func (t *CurrentTab) renderHeader() string {
-	var b strings.Builder
-	b.WriteString("\n")
-
-	if t.sessionName == "" {
-		return b.String()
-	}
-
-	var metaParts []string
-	if t.sessionDir != "" {
-		metaParts = append(metaParts, shortenDir(t.sessionDir))
-	}
-	metaParts = append(metaParts, fmt.Sprintf("%d tabs", len(t.windows)))
-	if t.attached > 0 {
-		metaParts = append(metaParts, fmt.Sprintf("%d client", t.attached))
-	}
-
-	b.WriteString("  " + t.styles.Dim.Render(strings.Join(metaParts, "  ")) + "\n\n")
-	return b.String()
+	// Set content on viewport and scroll to keep cursor visible.
+	t.vp.SetContent(b.String())
+	ensureCursorVisible(&t.vp, cursorLine)
+	return renderScrollable(t.vp, t.styles)
 }
 
 // viewMove renders the window-move destination picker (full-screen overlay).

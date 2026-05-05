@@ -498,9 +498,13 @@ func (m PickerModel) ghostCmd() string {
 
 	switch row.Kind {
 	case outline.RowTopAction:
-		query := strings.TrimSpace(m.state.workspaceQuery)
-		if query != "" {
-			return "zmux new " + query
+		wsQuery := strings.TrimSpace(m.state.workspaceQuery)
+		sessQuery := strings.TrimSpace(m.state.sessionQuery)
+		if wsQuery != "" && sessQuery != "" {
+			return "zmux new " + wsQuery + " " + sessQuery
+		}
+		if wsQuery != "" {
+			return "zmux new " + wsQuery
 		}
 		return "zmux new  # tmp-N session"
 	case outline.RowWorkspaceHeader:
@@ -511,17 +515,14 @@ func (m PickerModel) ghostCmd() string {
 		if ws.IsPseudo {
 			return "# " + ws.Name
 		}
+		// Session query present → "zmux new <ws> <session>".
+		if m.state.sessionQuery != "" {
+			return "zmux new " + ws.Name + " " + m.state.sessionQuery
+		}
 		if len(ws.LiveSessions) == 0 {
-			return "zmux new " + ws.Name + "  # + main session"
+			return "zmux new " + ws.Name
 		}
-		target := ws.LastActiveSession
-		if target == "" {
-			target = ws.LiveSessions[0].Name
-		}
-		if target != "" {
-			return "zmux " + ws.Name + " " + target
-		}
-		return "zmux " + ws.Name
+		return "zmux " + ws.Name + "  # choose session"
 	case outline.RowSession:
 		s, _ := outline.RowData[session.SessionInfo](row)
 		if s == nil {

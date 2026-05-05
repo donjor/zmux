@@ -49,7 +49,7 @@ func TestDownload_Success(t *testing.T) {
 	entries := map[string]string{
 		"iTerm2-Color-Schemes-master/Ghostty/Dracula": "background = #282a36\nforeground = #f8f8f2\n",
 		"iTerm2-Color-Schemes-master/Ghostty/Nord":    "background = #2e3440\nforeground = #d8dee9\n",
-		"iTerm2-Color-Schemes-master/other/README.md":  "# iterm2 color schemes\n",
+		"iTerm2-Color-Schemes-master/other/README.md": "# iterm2 color schemes\n",
 	}
 	tarball := buildTarGz(entries)
 
@@ -140,8 +140,8 @@ func TestDownload_EmptyTarball(t *testing.T) {
 
 func TestDownload_SkipsSubdirectories(t *testing.T) {
 	entries := map[string]string{
-		"iTerm2-Color-Schemes-master/Ghostty/Theme1":        "bg = #000000\n",
-		"iTerm2-Color-Schemes-master/Ghostty/sub/Theme2":    "bg = #111111\n",
+		"iTerm2-Color-Schemes-master/Ghostty/Theme1":     "bg = #000000\n",
+		"iTerm2-Color-Schemes-master/Ghostty/sub/Theme2": "bg = #111111\n",
 	}
 	tarball := buildTarGz(entries)
 

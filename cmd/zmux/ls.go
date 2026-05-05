@@ -122,6 +122,7 @@ func lsWorkspaceSessions(wsName string) error {
 	currentTab := ""
 	if app.Runner.IsInsideTmux() {
 		currentSession, _ = app.Runner.DisplayMessage("", "#{session_name}")
+		currentSession = session.RootName(currentSession)
 		currentTab, _ = app.Runner.DisplayMessage("", "#{window_name}")
 	}
 
@@ -175,6 +176,7 @@ func lsSessionsFlat() error {
 	currentTab := ""
 	if app.Runner.IsInsideTmux() {
 		currentSession, _ = app.Runner.DisplayMessage("", "#{session_name}")
+		currentSession = session.RootName(currentSession)
 		currentTab, _ = app.Runner.DisplayMessage("", "#{window_name}")
 	}
 

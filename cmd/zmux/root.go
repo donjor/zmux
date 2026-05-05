@@ -27,12 +27,12 @@ var paletteFlag bool
 var tabPickerFlag bool
 
 var rootCmd = &cobra.Command{
-	Use:   "zmux",
-	Short: "An opinionated, all-in-one tmux management wrapper",
-	Long:  "zmux replaces tmux's sharp edges with a beautiful, interactive experience.",
+	Use:           "zmux",
+	Short:         "An opinionated, all-in-one tmux management wrapper",
+	Long:          "zmux replaces tmux's sharp edges with a beautiful, interactive experience.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
-	Args: cobra.ArbitraryArgs,
+	Args:          cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if tabPickerFlag {
 			return runTabPicker()
@@ -86,8 +86,9 @@ func resolveDashboardTab(flag string) dashboard.TabID {
 
 // resolveShorthand handles `zmux <name>` and `zmux <ws> <session>` dispatch.
 //
-// Two-arg form is strict: the workspace must exist and contain the session,
-// otherwise it errors with a helpful hint.
+// Two-arg form: the workspace must exist. If the session exists, attach.
+// If not, create the session in the workspace and attach — equivalent to
+// `zmux new <ws> <session>`.
 //
 // Single-arg form is workspace-first: checks if <name> is a workspace and
 // attaches to its last-active session. Falls back to session attach/create
@@ -104,7 +105,17 @@ func resolveShorthand(args []string) error {
 			_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
 			return session.Attach(app.Runner, sessName)
 		}
-		return fmt.Errorf("session %q not found in workspace %q", sessName, wsName)
+		// Session doesn't exist → create it in the workspace and attach.
+		dir, _ := os.Getwd()
+		if dir == "" {
+			dir = os.Getenv("HOME")
+		}
+		if err := session.Create(app.Runner, sessName, dir); err != nil {
+			return err
+		}
+		_ = app.WorkspaceStore.AddSession(wsName, sessName)
+		_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
+		return session.Attach(app.Runner, sessName)
 	}
 
 	// Single arg: workspace-first, then session fallback.
@@ -185,11 +196,12 @@ func runNewDashboard() error {
 		return tui.BuildWorkspaceViewModels(workspaces, sessions)
 	}
 
-	// Build tabs (order: Session, Workspaces, Themes, Settings, Help).
+	// Build tabs (order: Session, Workspaces, Themes, Bar, Settings, Help).
 	tabImpls := []dashboard.Tab{
 		tabs.NewCurrentTab(app.Runner, styles, wsLoader, app.WorkspaceStore),
 		tabs.NewSessionsTab(app.Runner, styles, wsLoader, app.WorkspaceStore),
 		tabs.NewThemesTab(resolver, app.FS, app.Runner, styles),
+		tabs.NewBarTab(resolver, app.FS, app.Runner, styles),
 		tabs.NewSettingsTab(resolver, app.FS, app.Runner, styles),
 		tabs.NewHelpTab(styles),
 	}
@@ -266,6 +278,7 @@ func runTabPicker() error {
 	if err != nil {
 		return fmt.Errorf("not inside a tmux session")
 	}
+	sessionName = session.RootName(sessionName)
 
 	styles, _, _ := loadActiveStyles()
 	model := tui.NewTabPickerModel(app.Runner, sessionName, styles)
@@ -434,10 +447,15 @@ func runSessionPicker() error {
 		if err := app.WorkspaceStore.CreateWorkspace(wsName, dir); err != nil {
 			return err
 		}
-		// Create "main" session in the new workspace. If "main" is taken,
-		// use workspace-qualified fallback.
-		sessName := "main"
-		if app.Runner.HasSession(sessName) {
+		// Use the session name from the picker result if provided
+		// (e.g. "myapp dev" → Name="dev"), otherwise default to "main".
+		// For the default "main", use the workspace name as the tmux
+		// session name so multiple workspaces can each have a "main"
+		// without global tmux collisions.
+		sessName := res.Name
+		if sessName == "" {
+			sessName = wsName
+		} else if app.Runner.HasSession(sessName) {
 			sessName = nextSessionName(sessName, wsName)
 		}
 		if err := session.Create(app.Runner, sessName, dir); err != nil {

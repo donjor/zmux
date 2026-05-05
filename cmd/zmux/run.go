@@ -161,13 +161,16 @@ func writeCommandScript(command string) (string, func(), error) {
 
 	// The script self-deletes (rm -f at the end), so cleanup is a no-op.
 	// But provide a fallback cleanup in case it never runs.
+	// Capture the package-level timeout before launching the delayed cleanup
+	// goroutine; tests and future commands may mutate runTimeout after return.
+	cleanupDelay := time.Duration(runTimeout+10) * time.Second
 	cleanup := func() {
 		// Give it time to execute before cleaning up.
 		// The script self-deletes, so this is just a safety net.
-		go func() {
-			time.Sleep(time.Duration(runTimeout+10) * time.Second)
+		go func(delay time.Duration) {
+			time.Sleep(delay)
 			os.Remove(f.Name())
-		}()
+		}(cleanupDelay)
 	}
 
 	return f.Name(), cleanup, nil

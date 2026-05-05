@@ -2,7 +2,9 @@ package bar
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -11,10 +13,48 @@ type TmuxOption struct {
 	Key, Value string
 }
 
+// BarLayoutConfig holds the multi-session layout settings.
+type BarLayoutConfig struct {
+	Layout    string // "single", "two-line", "split"
+	Indicator string // "none", "numbers", "dots"
+	TopBar    string // "tabs", "dots", "minimal"
+}
+
+// barRenderArgs are the tmux format tokens passed to zmux bar-render
+// subcommands. Tmux expands these per-client before executing #().
+const barRenderArgs = "--session '#S'" +
+	" --prefix '#{client_prefix}'" +
+	" --group '#{session_group}'" +
+	" --group-size '#{session_group_size}'" +
+	" --pane-cmd '#{pane_current_command}'" +
+	" --dir '#{pane_current_path}'"
+
+// TopBarFormatCmd returns the tmux #() command string for the top bar
+// status-format entry. Used by generate and by bar-render to
+// dynamically restore the top row when sessions appear.
+func TopBarFormatCmd(zmuxBin, topBar string) string {
+	if topBar == "" {
+		topBar = "tabs"
+	}
+	return fmt.Sprintf("#(%s bar-render top --top-bar '%s' %s)", zmuxBin, topBar, barRenderArgs)
+}
+
+// TmuxDefaultStatusFormat is the standard tmux status-format[0] template
+// that renders status-left, window tabs, and status-right. Used as
+// status-format[1] in two-line layouts (so the normal bar renders on the
+// bottom line) and to restore status-format[0] when switching back to
+// single. Matches the tmux 3.4 default.
+const TmuxDefaultStatusFormat = `#[align=left range=left #{E:status-left-style}]#[push-default]#{T;=/#{status-left-length}:status-left}#[pop-default]#[norange default]#[list=on align=#{status-justify}]#[list=left-marker]<#[list=right-marker]>#[list=on]#{W:#[range=window|#{window_index} #{E:window-status-style}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-format}#[pop-default]#[norange default]#{?window_end_flag,,#{window-status-separator}},#[range=window|#{window_index} list=focus #{?#{!=:#{E:window-status-current-style},default},#{E:window-status-current-style},#{E:window-status-style}}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-current-format}#[pop-default]#[norange list=on default]#{?window_end_flag,,#{window-status-separator}}}#[nolist align=right range=right #{E:status-right-style}]#[push-default]#{T;=/#{status-right-length}:status-right}#[pop-default]#[norange default]`
+
 // Generate produces the tmux status-line options for a given preset and palette.
 // If zmuxBin is provided, uses #(zmux bar-render) for dynamic left/right content
 // (git branch, workspace, prefix hints). Otherwise falls back to static tmux formats.
 func Generate(preset Preset, palette *theme.Palette, zmuxBin ...string) []TmuxOption {
+	return GenerateWithLayout(preset, palette, BarLayoutConfig{Layout: "single"}, zmuxBin...)
+}
+
+// GenerateWithLayout is Generate with explicit layout configuration.
+func GenerateWithLayout(preset Preset, palette *theme.Palette, layout BarLayoutConfig, zmuxBin ...string) []TmuxOption {
 	opts := sharedOptions(palette)
 
 	bin := ""
@@ -24,7 +64,7 @@ func Generate(preset Preset, palette *theme.Palette, zmuxBin ...string) []TmuxOp
 
 	// If zmux binary available, use dynamic rendering for left/right.
 	if bin != "" {
-		opts = append(opts, dynamicOptions(palette, bin, preset)...)
+		opts = append(opts, dynamicOptions(palette, bin, preset, layout)...)
 	} else {
 		switch preset {
 		case Minimal:
@@ -38,12 +78,23 @@ func Generate(preset Preset, palette *theme.Palette, zmuxBin ...string) []TmuxOp
 		}
 	}
 
+	return withTabLabelFormats(opts, palette)
+}
+
+func withTabLabelFormats(opts []TmuxOption, palette *theme.Palette) []TmuxOption {
+	name := tablabel.Format(palette.Dim.Hex())
+	for i := range opts {
+		switch opts[i].Key {
+		case "window-status-format", "window-status-current-format":
+			opts[i].Value = strings.ReplaceAll(opts[i].Value, "#W", name)
+		}
+	}
 	return opts
 }
 
 // dynamicOptions uses #(zmux bar-render) for left/right, keeping window
 // format strings as tmux-native (they're per-window and change with each tab).
-func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset) []TmuxOption {
+func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset, layout BarLayoutConfig) []TmuxOption {
 	// Status-left / status-right: #(zmux bar-render ...) so the live bar
 	// shares the Go render code path with the dashboard preview.
 	//
@@ -57,13 +108,8 @@ func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset) []TmuxOptio
 	// The expanded arguments also participate in tmux's #() cache key, so
 	// each distinct (session, prefix, dir, ...) tuple gets its own cached
 	// output and refreshes correctly per-client.
-	barArgs := "--session '#S'" +
-		" --prefix '#{client_prefix}'" +
-		" --group '#{session_group}'" +
-		" --pane-cmd '#{pane_current_command}'" +
-		" --dir '#{pane_current_path}'"
-	statusLeft := fmt.Sprintf("#(%s bar-render left %s)", zmuxBin, barArgs)
-	statusRight := fmt.Sprintf("#(%s bar-render right %s)", zmuxBin, barArgs)
+	statusLeft := fmt.Sprintf("#(%s bar-render left %s)", zmuxBin, barRenderArgs)
+	statusRight := fmt.Sprintf("#(%s bar-render right %s)", zmuxBin, barRenderArgs)
 
 	// Window formats stay tmux-native — they change per-window and are cheap.
 	var windowFmt, windowCurrentFmt, windowSep string
@@ -177,7 +223,7 @@ func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset) []TmuxOptio
 		barBG = p.BG.Hex()
 	}
 
-	return []TmuxOption{
+	opts := []TmuxOption{
 		{"status-style", fmt.Sprintf("bg=%s,fg=%s", barBG, p.Muted.Hex())},
 		{"status-left", statusLeft},
 		{"status-right", statusRight},
@@ -187,13 +233,37 @@ func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset) []TmuxOptio
 		{"status-left-length", "100"},
 		{"status-right-length", "80"},
 	}
+
+	// Multi-line layouts: add a top row with workspace + session info.
+	// tmux's `status 2` gives two rows sharing the same status-style bg.
+	// The top row renders empty when there's only 1 session, so single-
+	// session workspaces effectively get a single-line bar.
+	if zmuxBin != "" && (layout.Layout == "two-line" || layout.Layout == "split") {
+		opts = append(opts,
+			TmuxOption{"status", "2"},
+			TmuxOption{"status-format[0]", TopBarFormatCmd(zmuxBin, layout.TopBar)},
+			TmuxOption{"status-format[1]", TmuxDefaultStatusFormat},
+		)
+	} else if zmuxBin != "" {
+		// Single layout: restore in case we're switching from two-line.
+		opts = append(opts,
+			TmuxOption{"status", "on"},
+			TmuxOption{"status-format[0]", TmuxDefaultStatusFormat},
+		)
+	}
+
+	return opts
 }
 
 // sharedOptions returns options common to all presets.
 func sharedOptions(p *theme.Palette) []TmuxOption {
 	return []TmuxOption{
-		{"pane-border-style", fmt.Sprintf("fg=%s", p.Dim.Hex())},
-		{"pane-active-border-style", fmt.Sprintf("fg=%s", p.Accent.Hex())},
+		{"pane-border-status", "top"},
+		{"pane-border-lines", "single"},
+		{"pane-border-indicators", "both"},
+		{"pane-border-style", fmt.Sprintf("fg=%s,bg=default", p.Dim.Hex())},
+		{"pane-active-border-style", fmt.Sprintf("fg=%s,bg=default,bold", p.Accent.Hex())},
+		{"pane-border-format", paneBorderFormat(p)},
 		{"message-style", fmt.Sprintf("bg=%s,fg=%s", p.Surface.Hex(), p.FG.Hex())},
 		{"message-command-style", fmt.Sprintf("bg=%s,fg=%s", p.Surface.Hex(), p.FG.Hex())},
 		{"mode-style", fmt.Sprintf("bg=%s,fg=%s", p.Info.Hex(), p.BG.Hex())},
@@ -201,6 +271,23 @@ func sharedOptions(p *theme.Palette) []TmuxOption {
 		{"window-active-style", fmt.Sprintf("#{?client_prefix,bg=%s,bg=default}", p.BGPrefix.Hex())},
 		{"window-style", "bg=default"},
 	}
+}
+
+func paneBorderFormat(p *theme.Palette) string {
+	// Keep this as a single tmux format line: tmux pane chrome is limited to
+	// pane-border-status + pane-border-format, so the active pane gets the
+	// richest local context while inactive panes stay calm.
+	return fmt.Sprintf(
+		"#{?#{>:#{window_panes},1},"+
+			"#{?pane_active,"+
+			"#[fg=%s]#[bold] ● #{pane_id} #[fg=%s]#{pane_title} "+
+			"#[nobold]#[fg=%s]#{pane_current_command} #[fg=%s]#{pane_width}x#{pane_height} "+
+			"#[fg=%s]A-S arrows,"+
+			"#[fg=%s] ○ #{pane_index} #[fg=%s]#{pane_title}},"+
+			"}",
+		p.Accent.Hex(), p.FG.Hex(), p.Muted.Hex(), p.Dim.Hex(), p.Info.Hex(),
+		p.Dim.Hex(), p.Muted.Hex(),
+	)
 }
 
 // defaultOptions: Session pill (ACCENT bg, INFO on prefix), prefix hints, clock.

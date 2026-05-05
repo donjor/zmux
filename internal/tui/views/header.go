@@ -10,11 +10,11 @@ import (
 
 // HeaderStyles holds the lipgloss styles needed by the header renderer.
 type HeaderStyles struct {
-	Accent  lipgloss.Style
-	Normal  lipgloss.Style
-	Muted   lipgloss.Style
-	Dim     lipgloss.Style
-	Title   lipgloss.Style
+	Accent   lipgloss.Style
+	Normal   lipgloss.Style
+	Muted    lipgloss.Style
+	Dim      lipgloss.Style
+	Title    lipgloss.Style
 	Selected lipgloss.Style
 }
 

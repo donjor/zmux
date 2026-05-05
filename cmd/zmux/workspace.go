@@ -244,6 +244,50 @@ func switchToWorkspacePosition(pos int) error {
 	return app.Runner.SwitchClient(target)
 }
 
+var wsNewSessionCmd = &cobra.Command{
+	Use:    "new-session <name>",
+	Short:  "Create a new session in the current workspace",
+	Hidden: true, // used by prefix+C keybinding
+	Args:   cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		sessName := strings.TrimSpace(args[0])
+		if err := session.ValidateName(sessName); err != nil {
+			return err
+		}
+		if sessName == "" {
+			return fmt.Errorf("session name cannot be empty")
+		}
+
+		current, err := app.Runner.DisplayMessage("", "#{session_name}")
+		if err != nil {
+			return fmt.Errorf("not inside tmux")
+		}
+		root := session.RootName(strings.TrimSpace(current))
+
+		wsName, ok := app.WorkspaceStore.WorkspaceFor(root)
+		if !ok {
+			return fmt.Errorf("current session is not in a workspace")
+		}
+
+		if app.Runner.HasSession(sessName) {
+			return fmt.Errorf("session %q already exists", sessName)
+		}
+
+		dir, _ := app.Runner.DisplayMessage("", "#{pane_current_path}")
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			dir = "."
+		}
+
+		if err := session.Create(app.Runner, sessName, dir); err != nil {
+			return err
+		}
+		_ = app.WorkspaceStore.AddSession(wsName, sessName)
+		_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
+		return app.Runner.SwitchClient(sessName)
+	},
+}
+
 func init() {
 	workspaceCmd.AddCommand(wsListCmd)
 	workspaceCmd.AddCommand(wsAddCmd)
@@ -253,18 +297,6 @@ func init() {
 	workspaceCmd.AddCommand(wsNextCmd)
 	workspaceCmd.AddCommand(wsPrevCmd)
 	workspaceCmd.AddCommand(wsSwitchToCmd)
+	workspaceCmd.AddCommand(wsNewSessionCmd)
 	rootCmd.AddCommand(workspaceCmd)
-}
-
-// FormatWorkspaceList produces a simple text listing of workspaces for CLI output.
-func FormatWorkspaceList(groups map[string][]session.SessionInfo, order []string) string {
-	var b strings.Builder
-	for _, ws := range order {
-		sessions := groups[ws]
-		b.WriteString(fmt.Sprintf("  %s\n", ws))
-		for _, s := range sessions {
-			b.WriteString(fmt.Sprintf("    %s\n", s.Name))
-		}
-	}
-	return b.String()
 }

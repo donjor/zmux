@@ -21,10 +21,19 @@ func TestGenerateConfContainsGeneral(t *testing.T) {
 		`set -g base-index 1`,
 		`setw -g pane-base-index 1`,
 		`set -g renumber-windows on`,
+		`setw -g automatic-rename on`,
+		`setw -g automatic-rename-format "#{?pane_in_mode,[tmux],#{pane_current_command}}"`,
+		`setw -g remain-on-exit failed`,
+		`setw -g remain-on-exit-format "Pane stopped unexpectedly#{?#{!=:#{pane_dead_status},}, (status #{pane_dead_status}),}#{?#{!=:#{pane_dead_signal},}, (signal #{pane_dead_signal}),} — press prefix+x to close the tab"`,
 		`set -g set-clipboard on`,
 		`set -g status-position top`,
+		`set -g set-titles on`,
+		`set -g set-titles-string "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{session_name}:#{window_index}:#{window_name}"`,
 		`set -g focus-events on`,
 		`set -g extended-keys on`,
+		`set -g terminal-features[90] "xterm-256color:RGB:extkeys"`,
+		`set -g terminal-features[91] "xterm-ghostty:RGB:extkeys"`,
+		`set -g terminal-features[92] "tmux-256color:RGB:extkeys"`,
 	}
 
 	for _, want := range checks {
@@ -72,6 +81,7 @@ func TestGenerateConfContainsVimCopyMode(t *testing.T) {
 	checks := []string{
 		"setw -g mode-keys vi",
 		"bind v copy-mode",
+		"bind R respawn-pane -k",
 		"bind -T copy-mode-vi v send -X begin-selection",
 		"bind -T copy-mode-vi Escape send -X cancel",
 		"bind -T copy-mode-vi C-v send -X rectangle-toggle",
@@ -105,12 +115,33 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 	checks := []string{
 		`bind c new-window -c "#{pane_current_path}"`,
 		"bind n next-window",
-		`bind . command-prompt -p "rename tab:"`,
+		`bind . command-prompt -p "label tab (blank clears):"`,
+		`set-option -w -t #{window_id} @zmux_label`,
+		`bind x confirm-before`,
+		`#{?@zmux_label,#{?#{==:#{@zmux_label},#W},#W,#{@zmux_label} [#W]},#W#{?@zmux_duplicate_name,[#{b:pane_current_path}],}}`,
 	}
 
 	for _, want := range checks {
 		if !strings.Contains(conf, want) {
 			t.Errorf("conf missing window binding: %q", want)
+		}
+	}
+}
+
+func TestGenerateConfContainsNoPrefixPaneFocusBindings(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	checks := []string{
+		"bind -n M-S-Left select-pane -L",
+		"bind -n M-S-Right select-pane -R",
+		"bind -n M-S-Up select-pane -U",
+		"bind -n M-S-Down select-pane -D",
+	}
+	for _, want := range checks {
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing pane focus binding: %q", want)
 		}
 	}
 }
@@ -210,6 +241,26 @@ func TestGenerateConfContainsReload(t *testing.T) {
 
 	if !strings.Contains(conf, "bind r run-shell") {
 		t.Error("conf missing reload binding")
+	}
+}
+
+func TestGenerateConfContainsDuplicateNameRefreshHooks(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	for _, want := range []string{
+		`set-hook -gu window-unlinked[0]`,
+		`set-hook -gu window-linked[1]`,
+		`set-hook -gu window-unlinked[1]`,
+		`set-hook -gu window-renamed[1]`,
+		`set-hook -g window-linked[1] "run-shell -b '/usr/local/bin/zmux tab refresh-names #{session_name} >/dev/null 2>&1 || true'"`,
+		`set-hook -g window-unlinked[1] "run-shell -b '/usr/local/bin/zmux tab refresh-names #{session_name} >/dev/null 2>&1 || true'"`,
+		`set-hook -g window-renamed[1] "run-shell -b '/usr/local/bin/zmux tab refresh-names #{session_name} >/dev/null 2>&1 || true'"`,
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing duplicate-name hook: %q", want)
+		}
 	}
 }
 

@@ -143,6 +143,7 @@ func TestHelpCommand(t *testing.T) {
 	// section headers rendered by cmd/zmux/help.go.
 	sections := []string{
 		"Session Management",
+		"Workspace Management",
 		"Terminal Commands",
 		"Theming",
 		"Configuration",

@@ -11,11 +11,11 @@ import (
 
 // Exit codes for zmux. Using a central place ensures consistency.
 const (
-	ExitOK          = 0
-	ExitGeneral     = 1
-	ExitUsage       = 2
-	ExitConfig      = 3
-	ExitDependency  = 4
+	ExitOK            = 0
+	ExitGeneral       = 1
+	ExitUsage         = 2
+	ExitConfig        = 3
+	ExitDependency    = 4
 	ExitThemeNotFound = 5
 )
 

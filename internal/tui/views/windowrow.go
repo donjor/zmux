@@ -23,8 +23,8 @@ type WindowRow struct {
 
 // RenderWindowRow renders a two-line window entry in premium format:
 //
-//	  ▸ 1: claude  ●                              1h 38m
-//	    claude (claude code)  ~/project  2.0%  566MB
+//	▸ 1: claude  ●                              1h 38m
+//	  claude (claude code)  ~/project  2.0%  566MB
 func RenderWindowRow(row WindowRow, styles SessionRowStyles, width int) string {
 	var b strings.Builder
 

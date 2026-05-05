@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/spf13/cobra"
 )
 
@@ -52,6 +53,37 @@ var tabMoveCmd = &cobra.Command{
 		src := current + ":" + tabName
 		dst := destSession + ":"
 		return app.Runner.MoveWindow(src, dst)
+	},
+}
+
+var tabLabelTarget string
+var tabLabelClear bool
+
+var tabLabelCmd = &cobra.Command{
+	Use:   "label [label]",
+	Short: "Set or clear a stable zmux label for the current tab",
+	Long:  "Set a stable zmux label overlay for the current tab. The tmux auto-name remains visible as label [auto]. Pass an empty label or --clear to clear.",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		label := ""
+		if len(args) > 0 {
+			label = args[0]
+		}
+		return setTabLabel(cmd, tabLabelTarget, label, tabLabelClear)
+	},
+}
+
+var tabRefreshNamesCmd = &cobra.Command{
+	Use:    "refresh-names [session]",
+	Short:  "Refresh duplicate tab-name markers",
+	Hidden: true,
+	Args:   cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		sessionName := ""
+		if len(args) > 0 {
+			sessionName = strings.TrimSpace(args[0])
+		}
+		return refreshDuplicateWindowNameMarkers(sessionName)
 	},
 }
 
@@ -122,8 +154,81 @@ var sessionKillCmd = &cobra.Command{
 	},
 }
 
+func refreshDuplicateWindowNameMarkers(sessionName string) error {
+	if sessionName == "" {
+		if app.Runner.IsInsideTmux() {
+			name, err := app.Runner.DisplayMessage("", "#{session_name}")
+			if err != nil {
+				return fmt.Errorf("current session: %w", err)
+			}
+			sessionName = strings.TrimSpace(name)
+		}
+	}
+	if sessionName != "" {
+		return refreshDuplicateWindowNameMarkersForSession(sessionName)
+	}
+
+	sessions, err := app.Runner.ListSessions()
+	if err != nil {
+		return err
+	}
+	for _, s := range sessions {
+		_ = refreshDuplicateWindowNameMarkersForSession(s.Name)
+	}
+	return nil
+}
+
+func refreshDuplicateWindowNameMarkersForSession(sessionName string) error {
+	windows, err := app.Runner.ListWindows(sessionName)
+	if err != nil {
+		// This command is primarily called from tmux hooks. Hooks must never become
+		// user-visible noise if a session disappears mid-hook or a dead pane reports
+		// incomplete metadata; the next successful refresh will repair markers.
+		return nil
+	}
+	counts := make(map[string]int, len(windows))
+	for _, w := range windows {
+		counts[w.Name]++
+	}
+	for _, w := range windows {
+		target := fmt.Sprintf("%s:%d", sessionName, w.Index)
+		if counts[w.Name] > 1 {
+			_ = app.Runner.SetWindowOption(target, tablabel.DuplicateNameOption, "1")
+		} else {
+			_ = app.Runner.UnsetWindowOption(target, tablabel.DuplicateNameOption)
+		}
+	}
+	return nil
+}
+
+func setTabLabel(cmd *cobra.Command, target, label string, clear bool) error {
+	label = strings.TrimSpace(label)
+	if clear || label == "" {
+		if err := app.Runner.UnsetWindowOption(target, tablabel.Option); err != nil {
+			return fmt.Errorf("clear tab label: %w", err)
+		}
+		if err := app.Runner.UnsetWindowOption(target, tablabel.SourceOption); err != nil {
+			return fmt.Errorf("clear tab label source: %w", err)
+		}
+		fmt.Fprintln(cmd.OutOrStdout(), "cleared tab label")
+		return nil
+	}
+	if err := app.Runner.SetWindowOption(target, tablabel.Option, label); err != nil {
+		return fmt.Errorf("set tab label: %w", err)
+	}
+	if err := app.Runner.SetWindowOption(target, tablabel.SourceOption, tablabel.SourceManual); err != nil {
+		return fmt.Errorf("set tab label source: %w", err)
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "tab label: %s\n", label)
+	return nil
+}
+
 func init() {
+	tabLabelCmd.Flags().StringVar(&tabLabelTarget, "target", "", "target tmux window (defaults to current)")
+	tabLabelCmd.Flags().BoolVar(&tabLabelClear, "clear", false, "clear the tab label")
 	tabCmd.AddCommand(tabMoveCmd)
+	tabCmd.AddCommand(tabLabelCmd)
+	tabCmd.AddCommand(tabRefreshNamesCmd)
 	tabCmd.AddCommand(tabKillCmd)
 	rootCmd.AddCommand(tabCmd)
 

@@ -510,15 +510,22 @@ func (m PickerModel) handleExternalEntryEnter(row *outline.Row) (tea.Model, tea.
 }
 
 func (m PickerModel) handleTopActionEnter() (tea.Model, tea.Cmd) {
-	name := strings.TrimSpace(m.state.workspaceQuery)
-	if name == "" {
+	wsName := strings.TrimSpace(m.state.workspaceQuery)
+	if wsName == "" {
 		// Empty input → create tmp session (no workspace).
 		m.Result = PickerResult{Action: "new"}
 		m.Quitting = true
 		return m, tea.Quit
 	}
-	// Typed name → create workspace (+ main session + attach).
-	m.Result = PickerResult{Action: "workspace-create", Workspace: name}
+	// Typed workspace name → create workspace. If a session name was
+	// also typed (e.g. "myapp dev"), pass it through so root.go creates
+	// that session instead of the default "main".
+	sessName := strings.TrimSpace(m.state.sessionQuery)
+	m.Result = PickerResult{
+		Action:    "workspace-create",
+		Workspace: wsName,
+		Name:      sessName, // "" → root.go defaults to "main"
+	}
 	m.Quitting = true
 	return m, tea.Quit
 }
@@ -528,33 +535,48 @@ func (m PickerModel) handleWorkspaceEnter(ws *WorkspaceViewModel) (tea.Model, te
 		return m, nil
 	}
 
-	// No live sessions → create "main" and attach.
-	if len(ws.LiveSessions) == 0 {
+	// Session query present → user typed "workspace session" in the
+	// search bar. This means "create a new session named <session> in
+	// this workspace", equivalent to `zmux new <ws> <session>`.
+	if m.state.sessionQuery != "" {
 		m.Result = PickerResult{
 			Action:    "new",
-			Name:      "main",
+			Name:      m.state.sessionQuery,
 			Workspace: ws.Name,
 		}
 		m.Quitting = true
 		return m, tea.Quit
 	}
 
-	// Has sessions → attach to last-active, or first if unset/stale.
-	target := ""
-	if ws.LastActiveSession != "" {
-		for _, s := range ws.LiveSessions {
-			if session.RootName(s.Name) == ws.LastActiveSession {
-				target = s.Name
-				break
-			}
+	// No live sessions → create default session (named after workspace).
+	if len(ws.LiveSessions) == 0 {
+		m.Result = PickerResult{
+			Action:    "new",
+			Name:      ws.Name,
+			Workspace: ws.Name,
+		}
+		m.Quitting = true
+		return m, tea.Quit
+	}
+
+	// Has sessions, no session query → drill into the workspace and require the
+	// user to pick an explicit session row. This avoids surprising auto-attach to
+	// last-active when a workspace contains multiple sessions.
+	return m.drillIntoWorkspaceSessions(ws.Name), nil
+}
+
+func (m PickerModel) drillIntoWorkspaceSessions(workspaceName string) PickerModel {
+	wsID := outline.WorkspaceID(workspaceName)
+	m.buildOutlineWithFocus(wsID)
+	for i := range m.tree.Rows {
+		row := &m.tree.Rows[i]
+		if row.Kind == outline.RowSession && row.ParentID == wsID {
+			m.tree.Cursor = i
+			return m
 		}
 	}
-	if target == "" {
-		target = ws.LiveSessions[0].Name
-	}
-	m.Result = PickerResult{Action: "attach", Session: target, Workspace: ws.Name}
-	m.Quitting = true
-	return m, tea.Quit
+	_ = m.tree.JumpToID(wsID)
+	return m
 }
 
 func (m PickerModel) handleSessionEnter(s *session.SessionInfo) (tea.Model, tea.Cmd) {

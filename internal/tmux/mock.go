@@ -11,6 +11,7 @@ type MockCall struct {
 // MockRunner implements Runner with configurable return data and call recording.
 type MockRunner struct {
 	Sessions    []Session
+	Clients     []ClientInfo
 	Windows     map[string][]Window // keyed by session name
 	Panes       map[string][]Pane   // keyed by session name
 	InsideTmux  bool
@@ -54,6 +55,12 @@ func (m *MockRunner) ListSessions() ([]Session, error) {
 	return m.Sessions, m.Err
 }
 
+// ListClients returns the configured clients.
+func (m *MockRunner) ListClients() ([]ClientInfo, error) {
+	m.record("ListClients")
+	return m.Clients, m.Err
+}
+
 // HasSession returns true if a session with the given name is in the configured list.
 func (m *MockRunner) HasSession(name string) bool {
 	m.record("HasSession", name)
@@ -92,6 +99,12 @@ func (m *MockRunner) AttachSession(name string) error {
 // AttachSessionDetach records the call.
 func (m *MockRunner) AttachSessionDetach(name string) error {
 	m.record("AttachSessionDetach", name)
+	return m.Err
+}
+
+// RefreshClient records the call.
+func (m *MockRunner) RefreshClient(targetClient, session string) error {
+	m.record("RefreshClient", targetClient, session)
 	return m.Err
 }
 
@@ -155,9 +168,52 @@ func (m *MockRunner) ListPanes(session string) ([]Pane, error) {
 	return m.Panes[session], m.Err
 }
 
+// ListWindowPanes returns the configured panes for a target window/pane.
+func (m *MockRunner) ListWindowPanes(target string) ([]Pane, error) {
+	m.record("ListWindowPanes", target)
+	return m.Panes[target], m.Err
+}
+
+// ListAllPanes returns all configured panes.
+func (m *MockRunner) ListAllPanes() ([]Pane, error) {
+	m.record("ListAllPanes")
+	var panes []Pane
+	for _, group := range m.Panes {
+		panes = append(panes, group...)
+	}
+	return panes, m.Err
+}
+
 // SplitWindow records the call.
 func (m *MockRunner) SplitWindow(target, direction string) error {
 	m.record("SplitWindow", target, direction)
+	return m.Err
+}
+
+// SplitPane records the call and returns a deterministic pane id.
+func (m *MockRunner) SplitPane(opts SplitPaneOptions) (string, error) {
+	m.record("SplitPane", opts.Target, string(opts.Direction), opts.Size, opts.CWD, opts.Title, fmt.Sprintf("%q", opts.Command))
+	if m.Err != nil {
+		return "", m.Err
+	}
+	return "%57", nil
+}
+
+// KillPane records the call.
+func (m *MockRunner) KillPane(target string) error {
+	m.record("KillPane", target)
+	return m.Err
+}
+
+// SelectPane records the call.
+func (m *MockRunner) SelectPane(target string) error {
+	m.record("SelectPane", target)
+	return m.Err
+}
+
+// ResizePane records the call.
+func (m *MockRunner) ResizePane(target, axis, size string) error {
+	m.record("ResizePane", target, axis, size)
 	return m.Err
 }
 
@@ -185,6 +241,24 @@ func (m *MockRunner) CapturePane(target string, lines int) (string, error) {
 // SetOption records the call.
 func (m *MockRunner) SetOption(scope, key, value string) error {
 	m.record("SetOption", scope, key, value)
+	return m.Err
+}
+
+// SetSessionOption records the call.
+func (m *MockRunner) SetSessionOption(target, key, value string) error {
+	m.record("SetSessionOption", target, key, value)
+	return m.Err
+}
+
+// SetWindowOption records the call.
+func (m *MockRunner) SetWindowOption(target, key, value string) error {
+	m.record("SetWindowOption", target, key, value)
+	return m.Err
+}
+
+// UnsetWindowOption records the call.
+func (m *MockRunner) UnsetWindowOption(target, key string) error {
+	m.record("UnsetWindowOption", target, key)
 	return m.Err
 }
 

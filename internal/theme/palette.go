@@ -25,15 +25,15 @@ func (t Theme) SemanticPalette() Palette {
 	p := Palette{
 		BG:        t.Background,
 		FG:        t.Foreground,
-		Surface:   t.Palette[0],  // black
-		Error:     t.Palette[1],  // red
-		Success:   t.Palette[2],  // green
-		Accent:    t.Palette[3],  // yellow
-		Info:      t.Palette[4],  // blue
-		Special:   t.Palette[5],  // magenta
-		Meta:      t.Palette[6],  // cyan
-		Muted:     t.Palette[7],  // white
-		Dim:       t.Palette[8],  // bright black
+		Surface:   t.Palette[0], // black
+		Error:     t.Palette[1], // red
+		Success:   t.Palette[2], // green
+		Accent:    t.Palette[3], // yellow
+		Info:      t.Palette[4], // blue
+		Special:   t.Palette[5], // magenta
+		Meta:      t.Palette[6], // cyan
+		Muted:     t.Palette[7], // white
+		Dim:       t.Palette[8], // bright black
 		Highlight: t.Cursor,
 	}
 

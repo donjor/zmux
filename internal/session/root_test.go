@@ -15,10 +15,10 @@ func TestRootName(t *testing.T) {
 		{"my-app", "my-app"},   // -a is not in b-z range
 		{"my-app-b", "my-app"}, // nested: strips last -b
 		{"a-b", "a"},
-		{"b", "b"},             // single char, no suffix
-		{"x-b-c", "x-b"},      // only last suffix stripped
+		{"b", "b"},       // single char, no suffix
+		{"x-b-c", "x-b"}, // only last suffix stripped
 		{"", ""},
-		{"dev-a", "dev-a"},     // -a is not a group suffix
+		{"dev-a", "dev-a"}, // -a is not a group suffix
 	}
 
 	for _, tt := range tests {

@@ -39,6 +39,16 @@ func TestRenderPreviewContainsSampleData(t *testing.T) {
 	}
 }
 
+func TestDefaultPrefixHintsIncludeRename(t *testing.T) {
+	p := testPalette()
+	hints := prefixHints(p)
+	for _, want := range []string{"dash", "etach", "tab", "session", "rename", "close", "help"} {
+		if !strings.Contains(hints, want) {
+			t.Errorf("prefix hints should include %q, got %q", want, hints)
+		}
+	}
+}
+
 // Disabling the clock segment must hide both the time pill AND the date pill
 // in every preset that renders them. Regression test for the bug where pills
 // rendered as empty chrome (icon only) when ctx.Time/Date were cleared.

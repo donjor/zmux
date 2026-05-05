@@ -177,26 +177,30 @@ fi
 
 printf "\n"
 
-# ── Step 5: Install Claude Code skill ──
-SKILL_SRC="${ZMUX_SRC}/skills/zmux/SKILL.md"
-CLAUDE_SKILLS_DIR="$HOME/.claude/skills/zmux"
+# ── Step 5: Install Pi agent integration ──
+SKILL_SRC="${ZMUX_SRC}/skills/zmux"
+EXTENSION_SRC="${ZMUX_SRC}/pi-extension"
+PI_SKILLS_DIR="$HOME/.pi/agent/skills"
+PI_EXTENSIONS_DIR="$HOME/.pi/agent/extensions"
 
-if [ -f "$SKILL_SRC" ]; then
-    printf "  ${bold}Claude Code integration${reset}\n\n"
-    printf "  Install the zmux skill for Claude Code?\n"
-    printf "  This teaches Claude how to use zmux for terminal management:\n"
-    printf "  ${dim}• Run commands in named tabs (zmux run)${reset}\n"
-    printf "  ${dim}• Read terminal output (zmux watch)${reset}\n"
-    printf "  ${dim}• Share terminals between you and Claude${reset}\n"
-    printf "  ${dim}• Wait for commands to finish with exit codes${reset}\n\n"
+if [ -d "$SKILL_SRC" ] && [ -d "$EXTENSION_SRC" ]; then
+    printf "  ${bold}Pi agent integration${reset}\n\n"
+    printf "  Link the zmux Pi skill and extension?\n"
+    printf "  This teaches Pi agents how to manage persistent runtimes deterministically:\n"
+    printf "  ${dim}• Use stable zmux tabs for servers/workers/watchers${reset}\n"
+    printf "  ${dim}• Read logs from existing runtime tabs${reset}\n"
+    printf "  ${dim}• Route sudo/interactive commands to shared tabs${reset}\n"
+    printf "  ${dim}• Guard against hidden background jobs${reset}\n\n"
     printf "  ${dim}[Y/n]${reset} "
     read -r response
     if [[ ! "$response" =~ ^[Nn]$ ]]; then
-        mkdir -p "$CLAUDE_SKILLS_DIR"
-        cp "$SKILL_SRC" "$CLAUDE_SKILLS_DIR/SKILL.md"
-        success "Installed Claude skill to ~/.claude/skills/zmux/"
+        mkdir -p "$PI_SKILLS_DIR" "$PI_EXTENSIONS_DIR"
+        rm -rf "$PI_SKILLS_DIR/zmux" "$PI_EXTENSIONS_DIR/pi-zmux"
+        ln -s "$SKILL_SRC" "$PI_SKILLS_DIR/zmux"
+        ln -s "$EXTENSION_SRC" "$PI_EXTENSIONS_DIR/pi-zmux"
+        success "Linked Pi skill and extension to ~/.pi/agent/"
     else
-        info "Skipped — copy skills/zmux/SKILL.md to ~/.claude/skills/zmux/ manually"
+        info "Skipped — see docs/pi-zmux-extension.md for manual symlink commands"
     fi
     printf "\n"
 fi

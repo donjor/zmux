@@ -73,12 +73,12 @@ type fakeFileInfo struct {
 	isDir bool
 }
 
-func (f fakeFileInfo) Name() string      { return f.name }
-func (f fakeFileInfo) Size() int64       { return 0 }
-func (f fakeFileInfo) Mode() os.FileMode { return 0o644 }
+func (f fakeFileInfo) Name() string       { return f.name }
+func (f fakeFileInfo) Size() int64        { return 0 }
+func (f fakeFileInfo) Mode() os.FileMode  { return 0o644 }
 func (f fakeFileInfo) ModTime() time.Time { return time.Time{} }
-func (f fakeFileInfo) IsDir() bool       { return f.isDir }
-func (f fakeFileInfo) Sys() any          { return nil }
+func (f fakeFileInfo) IsDir() bool        { return f.isDir }
+func (f fakeFileInfo) Sys() any           { return nil }
 
 // Ensure memFS satisfies config.FS
 var _ config.FS = (*memFS)(nil)
@@ -247,7 +247,7 @@ func TestParseHexColor(t *testing.T) {
 		{"#000000", Color{0, 0, 0}},
 		{"#ffffff", Color{255, 255, 255}},
 		{"#0b0e14", Color{0x0b, 0x0e, 0x14}},
-		{"0b0e14", Color{0x0b, 0x0e, 0x14}},   // without #
+		{"0b0e14", Color{0x0b, 0x0e, 0x14}},    // without #
 		{" #0b0e14 ", Color{0x0b, 0x0e, 0x14}}, // with whitespace
 	}
 

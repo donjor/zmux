@@ -119,4 +119,3 @@ func bundledThemeNames() []string {
 	}
 	return names
 }
-

@@ -4,7 +4,7 @@ import "time"
 
 // Workspace is a first-class project container.
 type Workspace struct {
-	Name              string    `toml:"-"`                              // populated from map key
+	Name              string    `toml:"-"` // populated from map key
 	RootDir           string    `toml:"root_dir,omitempty"`
 	LastActiveSession string    `toml:"last_active_session,omitempty"`
 	Sessions          []string  `toml:"sessions"`

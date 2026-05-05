@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/donjor/zmux/internal/debug"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -97,7 +98,9 @@ func Attach(runner tmux.Runner, name string) error {
 				}
 				err := runner.AttachSession(groupName)
 				// Clean up grouped session after detach.
-				_ = runner.KillSession(groupName)
+				if killErr := runner.KillSession(groupName); killErr != nil {
+					debug.Log("cleanup grouped session %s: %v", groupName, killErr)
+				}
 				return err
 			}
 		}

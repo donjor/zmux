@@ -27,7 +27,7 @@ func newStubTab(id TabID, title string) *stubTab {
 	return &stubTab{id: id, title: title, viewText: "content:" + string(id), helpText: "help:" + string(id)}
 }
 
-func (t *stubTab) ID() TabID        { return t.id }
+func (t *stubTab) ID() TabID         { return t.id }
 func (t *stubTab) Title() string     { return t.title }
 func (t *stubTab) Init() tea.Cmd     { t.initCalled = true; return nil }
 func (t *stubTab) View() string      { return t.viewText }
@@ -143,8 +143,8 @@ func TestDashboardResize(t *testing.T) {
 func TestDashboardTabSwitchByNumber(t *testing.T) {
 	app, stubs := newTestApp()
 
-	// Switch to sessions (tab 2).
-	app = sendKey(app, "2")
+	// Switch to sessions (tab 2) via Alt+2.
+	app = sendKey(app, "alt+2")
 	if app.activeTab != TabWorkspaces {
 		t.Errorf("expected active tab Sessions, got %s", app.activeTab)
 	}
@@ -155,14 +155,14 @@ func TestDashboardTabSwitchByNumber(t *testing.T) {
 		t.Error("expected sessions tab to be activated")
 	}
 
-	// Switch to help (tab 4).
-	app = sendKey(app, "4")
+	// Switch to help (tab 4) via Alt+4.
+	app = sendKey(app, "alt+4")
 	if app.activeTab != TabHelp {
 		t.Errorf("expected active tab Help, got %s", app.activeTab)
 	}
 
-	// Switch to current (tab 1).
-	app = sendKey(app, "1")
+	// Switch to current (tab 1) via Alt+1.
+	app = sendKey(app, "alt+1")
 	if app.activeTab != TabSession {
 		t.Errorf("expected active tab Current, got %s", app.activeTab)
 	}
@@ -337,7 +337,7 @@ func TestDashboardSwitchTabClearsStatus(t *testing.T) {
 	app, _ := newTestApp()
 	app.statusText = "some status"
 
-	app = sendKey(app, "2")
+	app = sendKey(app, "alt+2")
 
 	if app.statusText != "" {
 		t.Errorf("expected status cleared on tab switch, got %q", app.statusText)

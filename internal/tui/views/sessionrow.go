@@ -11,14 +11,14 @@ import (
 // Both the session picker and sessions tab map their models into this struct,
 // then hand it to the shared renderer.
 type SessionRow struct {
-	Name          string
-	Age           string // e.g. "2h", "5m"
-	StatusText    string // e.g. "attached", ""
-	WindowsText   string // e.g. "[editor, server, git]"
-	DirectoryText string // e.g. "~/work"
-	IsCurrent     bool
-	IsAttached    bool
-	IsTmp         bool
+	Name            string
+	Age             string // e.g. "2h", "5m"
+	StatusText      string // e.g. "attached", ""
+	WindowsText     string // e.g. "[editor, server, git]"
+	DirectoryText   string // e.g. "~/work"
+	IsCurrent       bool
+	IsAttached      bool
+	IsTmp           bool
 	IsSelected      bool // cursor is on this row
 	Index           int  // 1-based quick-select index (0 = no index)
 	AttachedClients int  // total attached clients (including grouped copies)
@@ -35,8 +35,8 @@ type SessionRowStyles struct {
 
 // RenderSessionRow renders a two-line session entry in the premium format:
 //
-//	  ▸ dev                                  2h ago
-//	    ● attached  [editor, server, git]   ~/work
+//	▸ dev                                  2h ago
+//	  ● attached  [editor, server, git]   ~/work
 func RenderSessionRow(row SessionRow, styles SessionRowStyles, width int) string {
 	var b strings.Builder
 

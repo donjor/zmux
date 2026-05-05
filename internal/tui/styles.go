@@ -113,4 +113,3 @@ func DefaultStyles() Styles {
 			Foreground(lipgloss.Color("8")),
 	}
 }
-

@@ -36,17 +36,17 @@ func (m *memFS) Stat(path string) (os.FileInfo, error) {
 	}
 	return nil, &os.PathError{Op: "stat", Path: path, Err: os.ErrNotExist}
 }
-func (m *memFS) UserHomeDir() (string, error) { return m.homeDir, nil }
+func (m *memFS) UserHomeDir() (string, error)    { return m.homeDir, nil }
 func (m *memFS) Glob(_ string) ([]string, error) { return nil, nil }
 
 type fakeInfo struct{ name string }
 
-func (f fakeInfo) Name() string      { return f.name }
-func (f fakeInfo) Size() int64       { return 0 }
-func (f fakeInfo) Mode() os.FileMode { return 0o644 }
+func (f fakeInfo) Name() string       { return f.name }
+func (f fakeInfo) Size() int64        { return 0 }
+func (f fakeInfo) Mode() os.FileMode  { return 0o644 }
 func (f fakeInfo) ModTime() time.Time { return time.Time{} }
-func (f fakeInfo) IsDir() bool       { return false }
-func (f fakeInfo) Sys() any          { return nil }
+func (f fakeInfo) IsDir() bool        { return false }
+func (f fakeInfo) Sys() any           { return nil }
 
 func newTestStore() (*Store, *memFS) {
 	fs := newMemFS("/home/user")

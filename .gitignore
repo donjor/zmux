@@ -1,5 +1,6 @@
 # Build output
 /zmux
+/uiproto
 
 # Downloaded themes cache
 themes/iterm2/
@@ -16,3 +17,7 @@ themes/iterm2/
 # Environment
 .env
 .env.*
+
+# Pi extension local deps
+/pi-extension/node_modules
+/pi-extension/node_modules/

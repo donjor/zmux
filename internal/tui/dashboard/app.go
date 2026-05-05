@@ -177,25 +177,14 @@ func (m *DashboardApp) View() string {
 	b.WriteString(tabBar)
 	b.WriteString("\n")
 
-	// Active tab content — clipped to available height.
+	// Active tab content — clamped to rect.Height as a safety net
+	// so no tab can push the dashboard taller than the terminal.
 	if tab, ok := m.tabs[m.activeTab]; ok {
 		content := tab.View()
-
-		// Clip content to available height so the top doesn't get pushed off screen.
-		maxLines := m.rect.Height
-		if maxLines > 0 {
-			lines := strings.Split(content, "\n")
-			if len(lines) > maxLines {
-				lines = lines[:maxLines]
-			}
-			content = strings.Join(lines, "\n")
-		}
-
-		// Pad the content area.
+		content = clampHeight(content, m.rect.Height)
 		padded := lipgloss.NewStyle().
 			Padding(0, 2).
 			Render(content)
-
 		b.WriteString(padded)
 	}
 
@@ -228,12 +217,14 @@ func (m *DashboardApp) handleGlobalKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 // handleTabSwitchKey handles tab navigation keys.
-// Digits 1–9 map to m.tabOrder[0..8]; extend naturally if TabOrder grows.
+// Alt+1–9 map to m.tabOrder[0..8] (consistent with tmux Alt+N tab switching,
+// and avoids stealing plain digit keys from text inputs).
 // Returns (true, cmd) if the key was a tab switch, (false, nil) otherwise.
 func (m *DashboardApp) handleTabSwitchKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	s := msg.String()
-	if len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
-		idx := int(s[0] - '1')
+	// Alt+1 through Alt+9.
+	if len(s) == 5 && s[:4] == "alt+" && s[4] >= '1' && s[4] <= '9' {
+		idx := int(s[4] - '1')
 		if idx < len(m.tabOrder) {
 			return true, m.switchToIndex(idx)
 		}
@@ -292,6 +283,19 @@ func (m *DashboardApp) activeIndex() int {
 		}
 	}
 	return -1
+}
+
+// clampHeight truncates content to at most h lines. Safety net so no tab
+// can accidentally push the dashboard taller than the terminal.
+func clampHeight(content string, h int) string {
+	if h <= 0 {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) > h {
+		return strings.Join(lines[:h], "\n")
+	}
+	return content
 }
 
 func (m *DashboardApp) handleIntent(intent AppIntentMsg) (tea.Model, tea.Cmd) {

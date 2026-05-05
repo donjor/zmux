@@ -36,7 +36,7 @@ The installer:
 2. Builds the binary
 3. Installs to `~/.local/bin/zmux`
 4. Optionally adds shell integration (auto-start on terminal open)
-5. Optionally installs the Claude Code skill
+5. Optionally links the Pi agent skill and extension
 6. Runs `zmux init` setup wizard
 
 ### Updating
@@ -131,6 +131,14 @@ zmux watch <tab> --until <pat> Wait for pattern match
 zmux watch <tab> -f            Follow output (tail -f)
 zmux send <tab> <keys>         Send keystrokes to tab
 zmux type <tab> '<text>'       Type text + Enter
+
+zmux pane open <name> -r 40 -- <cmd>  Open right pane, print pane id
+zmux pane toggle <name> -r 40 -- <cmd> Toggle named pane (close/open)
+zmux pane current [--json]            Print current pane id/details
+zmux pane list / zmux panes           List panes in current window
+zmux pane focus <pane>                Focus pane by id/title/index
+zmux pane resize <pane> --size 40%    Resize pane width
+zmux pane close <pane>                Close pane by id/title/index
 ```
 
 ### Theming
@@ -178,15 +186,56 @@ Prefix: `Ctrl+Space` (configurable)
 | prefix + n / N | Next / previous tab |
 | prefix + < / > | Move tab left / right |
 | prefix + x | Close tab (with confirm) |
-| prefix + . | Rename tab |
+| prefix + R | Respawn stopped/dead pane |
+| prefix + . | Label tab (blank clears label) |
 | prefix + , | Rename session |
 | prefix + w | Workspace session picker |
 | prefix + [ / ] | Prev / next session in workspace |
 | prefix + r | Reload config (zmux apply) |
 | prefix + v | Enter copy mode (vi keys) |
+| prefix + ← / → / ↑ / ↓ | Focus pane in direction (tmux default) |
+| prefix + Ctrl+← / → / ↑ / ↓ | Resize pane by one cell (tmux default) |
+| prefix + Alt+← / → / ↑ / ↓ | Resize pane by five cells (tmux default) |
+| prefix + q | Show pane numbers/ids (tmux default) |
+| prefix + z | Toggle pane zoom (tmux default) |
+| prefix + o / ; | Next / previous pane (tmux default) |
+| prefix + % / " | Split pane right / below (tmux default) |
 | Alt+1-9 | Switch to tab (no prefix) |
 | Shift+Alt+1-9 | Switch to session N in workspace (no prefix) |
+| Alt+Shift+← / → / ↑ / ↓ | Focus pane in direction (no prefix) |
 | Alt+` | Tab switcher (no prefix) |
+
+Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
+borders resizes them. Failed or signalled foreground commands stay visible as
+dead panes, so Ctrl+C spam cannot silently delete the tab; clean exits close
+normally. Use `prefix+x` / `zmux tab kill` when you mean to close a stopped tab.
+Split windows render
+pane-border headers with active pane id, title, command, size, and the
+`A-S arrows` focus hint; inactive panes stay
+subtle with index/title only. Split indicators and active-border color make the
+focused pane visible around the divider/bottom edge while pane backgrounds stay
+transparent/default. Single-pane windows keep the border header blank.
+Auto-named tabs normally use tmux's command name (`pi`, `bash`, etc.). When
+multiple tabs in the same session share that name, zmux marks them as
+`name[cwd]` in the bar (for example `pi[zmux]`) with the cwd suffix dimmed.
+`zmux panes` lists the current window by default;
+use `zmux panes --session` for all panes in the current/target session or
+`zmux panes --all` for every session. `zmux tab label [label]` sets a stable
+zmux label overlay for a tab while preserving tmux's automatic window name;
+blank label clears it, and labeled tabs render as `label [auto-name]`. For
+sidecars, `zmux pane open --label-tab ...` snapshots the current tab name as
+a label before the sidecar pane can change tmux's auto-name.
+`zmux terminal current --json` resolves the visible desktop terminal window
+for the invoking tmux client so visual tooling can safely capture screenshots;
+see [docs/terminal-current.md](docs/terminal-current.md). `zmux terminal
+capabilities` diagnoses the outer tmux client color path and reports whether
+RGB/truecolor is active; `zmux refresh` applies zmux config and replaces the
+current tmux client with a freshly attached RGB-capable client when capabilities
+were changed without a manual detach/reattach. zmux configures
+`xterm-256color`, `xterm-ghostty`, and nested `tmux-256color` clients for RGB
+so Ghostty panes can render smooth truecolor gradients. Local Ghostty passes
+terminal pane keys through, and Hyprland uses `Super+...` window-management
+bindings, so the pane keys do not collide with the terminal or WM setup.
 
 ### Picker (outside tmux)
 
@@ -194,7 +243,7 @@ Prefix: `Ctrl+Space` (configurable)
 |-----|--------|
 | ↑ / ↓ | Navigate workspaces and sessions (tree traversal) |
 | enter (top action) | Create tmp session (empty input) or workspace+main (typed) |
-| enter (workspace) | Attach to last-active, or create main session if empty |
+| enter (workspace) | Drill into sessions, or create default session if empty |
 | enter (session) | Attach |
 | tab | Accept ghost autocompletion |
 | ctrl+x | Delete workspace or session under cursor (with confirm) |
@@ -308,27 +357,33 @@ Preview them: `zmux bar` (live carousel inside tmux, static ANSI outside)
 ## Agent Integration
 
 zmux includes terminal commands (`run`, `watch`, `send`, `type`) designed for
-AI agent workflows. These let agents manage long-running processes without
-blocking their own shell.
+AI agent workflows. These let agents manage long-running runtimes without
+blocking their own shell or hiding process state.
 
 **Key principles:**
-- Never run dev servers in the agent's shell — use `zmux run -n server -d`
-- Never use `&` for background tasks — use `zmux run`
-- Wait for commands with `zmux run 'make build' -n build` (waits by default)
-- Read output with `zmux watch`, don't re-run commands to check status
-- For sudo/interactive commands, use `zmux type admin 'sudo ...'`
+- Use normal agent shell tools for bounded one-shot checks.
+- Never run servers/watchers/long-lived runtimes in the agent shell — use zmux.
+- Never use `&`, `nohup`, or `disown` — use a stable zmux tab.
+- Read output with `zmux watch`, don't start duplicate processes to check state.
+- For sudo/interactive commands, use `zmux type admin 'sudo ...'` or Pi's typed
+  `zmux_interactive_type` tool.
 
 **Example workflow:**
 ```bash
 zmux run 'npm test' -n test               # waits for completion, returns exit code
-zmux run 'npm run dev' -n server -d       # detach for servers
+zmux run 'npm run dev' -n server -d       # detach for runtimes
 zmux watch server --until "listening"     # wait for ready signal
 zmux watch server -l 20                   # peek at output
 zmux send server C-c                      # stop server
 ```
 
-A Claude Code skill is installed automatically by `./install.sh` or `./dev.sh`
-to `~/.claude/skills/zmux/`. Source: `skills/zmux/SKILL.md`.
+Pi integration lives in this repo:
+- `skills/zmux/SKILL.md` teaches Pi agents when/how to use zmux.
+- `pi-extension/` registers typed tools and bash guardrails for deterministic
+  runtime, tab/pane/send, sidecar, interactive-command, and terminal-capability
+  orchestration.
+
+See [docs/pi-zmux-extension.md](docs/pi-zmux-extension.md).
 
 ## Development
 

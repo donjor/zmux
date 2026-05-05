@@ -17,9 +17,9 @@ import (
 type tabPickerMode int
 
 const (
-	tpModeList tabPickerMode = iota
-	tpModeNew                // text input for new tab name
-	tpModeRename             // text input for rename
+	tpModeList   tabPickerMode = iota
+	tpModeNew                  // text input for new tab name
+	tpModeRename               // text input for rename
 )
 
 // TabPickerResult holds the outcome.

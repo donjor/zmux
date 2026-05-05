@@ -14,6 +14,23 @@ type Session struct {
 	Group        string // session group name (empty if ungrouped)
 }
 
+// ClientInfo represents an attached tmux client and its current view.
+type ClientInfo struct {
+	TTY          string // client_tty, e.g. /dev/pts/13
+	SessionName  string // client_session / raw tmux session name
+	SessionID    string // session_id, e.g. $28
+	SessionGroup string // session_group, empty if ungrouped
+	WindowID     string // window_id, e.g. @50
+	WindowIndex  int
+	WindowName   string
+	PaneID       string // current pane for this client, e.g. %139
+	PID          int    // client_pid
+	ControlMode  bool   // client_control_mode
+	TermName     string // client_termname, e.g. xterm-256color
+	TermFeatures string // client_termfeatures, comma-delimited resolved features
+	Flags        string // client_flags, comma-delimited flags such as attached,focused,UTF-8
+}
+
 // Window represents a tmux window.
 type Window struct {
 	Index  int
@@ -24,8 +41,10 @@ type Window struct {
 
 // Pane represents a tmux pane within a window.
 type Pane struct {
+	Session     string // session_name
+	ID          string // opaque tmux pane id, e.g. %57
 	Index       int
-	WindowIndex int    // which window this pane belongs to
+	WindowIndex int // which window this pane belongs to
 	Active      bool
 	Command     string // pane_current_command
 	PID         int    // pane_pid

@@ -1,0 +1,22 @@
+{
+  "name": "pi-zmux",
+  "version": "0.1.0",
+  "description": "Pi extension for deterministic zmux runtime and interactive terminal orchestration.",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "scripts": {
+    "test": "node test/run.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-ai": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^6.0.2"
+  }
+}

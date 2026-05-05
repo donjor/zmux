@@ -90,6 +90,16 @@ func (c *Client) ListSessions() ([]Session, error) {
 	return parseSessions(out)
 }
 
+// ListClients lists attached tmux clients and their current view.
+func (c *Client) ListClients() ([]ClientInfo, error) {
+	out, err := c.run("list-clients", "-F",
+		"#{client_tty}\t#{client_session}\t#{session_id}\t#{session_group}\t#{window_id}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{client_pid}\t#{client_control_mode}\t#{client_termname}\t#{client_termfeatures}\t#{client_flags}")
+	if err != nil {
+		return nil, err
+	}
+	return parseClients(out)
+}
+
 // HasSession returns true if a session with the given name exists.
 func (c *Client) HasSession(name string) bool {
 	err := exec.Command(c.bin, c.buildArgs("has-session", "-t", name)...).Run()
@@ -129,6 +139,20 @@ func (c *Client) AttachSessionDetach(name string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// RefreshClient replaces an attached client with a freshly attached tmux client.
+// This forces tmux to re-resolve terminal features without a manual detach/reattach.
+func (c *Client) RefreshClient(targetClient, session string) error {
+	if targetClient == "" {
+		return fmt.Errorf("target client is required")
+	}
+	if session == "" {
+		return fmt.Errorf("session is required")
+	}
+	attachArgs := c.buildArgs("-T", "RGB,extkeys", "attach-session", "-t", session)
+	attachCmd := shellCommand(append([]string{c.bin}, attachArgs...))
+	return c.runSilent("detach-client", "-t", targetClient, "-E", attachCmd)
 }
 
 // SwitchClient switches the current client to a different session.
@@ -186,10 +210,39 @@ func (c *Client) SwapWindow(session string, idx1, idx2 int) error {
 	return c.runSilent("swap-window", "-s", src, "-t", dst)
 }
 
-// ListPanes lists all panes across all windows in a session.
-func (c *Client) ListPanes(session string) ([]Pane, error) {
-	out, err := c.run("list-panes", "-t", session, "-s", "-F",
-		"#{pane_index}\t#{pane_active}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_width}\t#{pane_height}\t#{pane_title}\t#{window_index}")
+const paneListFormat = "#{session_name}\t#{pane_id}\t#{pane_index}\t#{pane_active}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_width}\t#{pane_height}\t#{pane_title}\t#{window_index}"
+
+// ListPanes lists all panes across all windows in a target session. Empty target uses tmux's current session.
+func (c *Client) ListPanes(target string) ([]Pane, error) {
+	args := []string{"list-panes"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, "-s", "-F", paneListFormat)
+	out, err := c.run(args...)
+	if err != nil {
+		return nil, err
+	}
+	return parsePanes(out)
+}
+
+// ListWindowPanes lists panes in a target window/pane. Empty target uses tmux's current window.
+func (c *Client) ListWindowPanes(target string) ([]Pane, error) {
+	args := []string{"list-panes"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, "-F", paneListFormat)
+	out, err := c.run(args...)
+	if err != nil {
+		return nil, err
+	}
+	return parsePanes(out)
+}
+
+// ListAllPanes lists panes across all tmux sessions.
+func (c *Client) ListAllPanes() ([]Pane, error) {
+	out, err := c.run("list-panes", "-a", "-F", paneListFormat)
 	if err != nil {
 		return nil, err
 	}
@@ -199,6 +252,92 @@ func (c *Client) ListPanes(session string) ([]Pane, error) {
 // SplitWindow splits the target window/pane. direction is "-h" or "-v".
 func (c *Client) SplitWindow(target, direction string) error {
 	return c.runSilent("split-window", direction, "-t", target)
+}
+
+// SplitPane creates a pane and returns tmux's opaque pane id, e.g. %57.
+func (c *Client) SplitPane(opts SplitPaneOptions) (string, error) {
+	args, err := buildSplitPaneArgs(opts)
+	if err != nil {
+		return "", err
+	}
+	paneID, err := c.run(args...)
+	if err != nil {
+		return "", err
+	}
+	if opts.Title != "" {
+		if err := c.runSilent("select-pane", "-t", paneID, "-T", opts.Title); err != nil {
+			return "", err
+		}
+	}
+	return paneID, nil
+}
+
+func buildSplitPaneArgs(opts SplitPaneOptions) ([]string, error) {
+	args := []string{"split-window", "-P", "-F", "#{pane_id}"}
+	switch opts.Direction {
+	case "", SplitRight:
+		args = append(args, "-h")
+	case SplitLeft:
+		args = append(args, "-h", "-b")
+	case SplitDown:
+		args = append(args, "-v")
+	case SplitUp:
+		args = append(args, "-v", "-b")
+	default:
+		return nil, fmt.Errorf("unknown split direction %q", opts.Direction)
+	}
+	if opts.Size != "" {
+		args = append(args, "-l", opts.Size)
+	}
+	if opts.CWD != "" {
+		args = append(args, "-c", opts.CWD)
+	}
+	if opts.Target != "" {
+		args = append(args, "-t", opts.Target)
+	}
+	if len(opts.Command) > 0 {
+		args = append(args, shellCommand(opts.Command))
+	}
+	return args, nil
+}
+
+func shellCommand(argv []string) string {
+	parts := make([]string, 0, len(argv))
+	for _, arg := range argv {
+		parts = append(parts, shellQuote(arg))
+	}
+	return strings.Join(parts, " ")
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if strings.IndexFunc(s, func(r rune) bool {
+		return !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || strings.ContainsRune("_+-=.,/:@%", r))
+	}) == -1 {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// KillPane kills a pane by target.
+func (c *Client) KillPane(target string) error {
+	return c.runSilent("kill-pane", "-t", target)
+}
+
+// SelectPane focuses a pane by target.
+func (c *Client) SelectPane(target string) error {
+	return c.runSilent("select-pane", "-t", target)
+}
+
+// ResizePane sets a pane's width or height. Axis must be "width" or "height".
+func (c *Client) ResizePane(target, axis, size string) error {
+	flag := "-x"
+	if axis == "height" {
+		flag = "-y"
+	}
+	return c.runSilent("resize-pane", "-t", target, flag, size)
 }
 
 // SendKeys sends keys to a target pane/window.
@@ -223,6 +362,31 @@ func (c *Client) SetOption(scope, key, value string) error {
 		return c.runSilent("set-option", scope, key, value)
 	}
 	return c.runSilent("set-option", key, value)
+}
+
+// SetSessionOption sets a tmux option for a specific session target.
+func (c *Client) SetSessionOption(target, key, value string) error {
+	return c.runSilent("set-option", "-t", target, key, value)
+}
+
+// SetWindowOption sets a tmux window option for a specific window target.
+func (c *Client) SetWindowOption(target, key, value string) error {
+	args := []string{"set-option", "-w"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, key, value)
+	return c.runSilent(args...)
+}
+
+// UnsetWindowOption unsets a tmux window option for a specific window target.
+func (c *Client) UnsetWindowOption(target, key string) error {
+	args := []string{"set-option", "-w", "-u"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, key)
+	return c.runSilent(args...)
 }
 
 // SetEnvironment sets a global environment variable in tmux.

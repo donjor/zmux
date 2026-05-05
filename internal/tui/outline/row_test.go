@@ -7,9 +7,9 @@ import (
 
 func TestRowIDConstructors(t *testing.T) {
 	tests := []struct {
-		name  string
-		id    string
-		want  string
+		name string
+		id   string
+		want string
 	}{
 		{"top action", TopActionID(), "top"},
 		{"workspace", WorkspaceID("myapp"), "ws:myapp"},

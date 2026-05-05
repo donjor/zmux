@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dev.sh — build, install zmux, and sync skill for local testing
+# dev.sh — build, install zmux, and link Pi integration for local testing
 # Usage: ./dev.sh
 
 set -euo pipefail
@@ -22,13 +22,10 @@ rm -f ~/.local/bin/zmux 2>/dev/null || true
 cp zmux ~/.local/bin/zmux
 printf "${green}ok${reset}  ${dim}~/.local/bin/zmux${reset}\n"
 
-# Sync Claude skill (repo → ~/.claude/skills/zmux/)
-SKILL_SRC="${ZMUX_ROOT}/skills/zmux/SKILL.md"
-SKILL_DST="$HOME/.claude/skills/zmux/SKILL.md"
-if [ -f "$SKILL_SRC" ]; then
-    if ! cmp -s "$SKILL_SRC" "$SKILL_DST" 2>/dev/null; then
-        mkdir -p "$HOME/.claude/skills/zmux"
-        cp "$SKILL_SRC" "$SKILL_DST"
-        printf "${dim}skill synced${reset}  ${dim}~/.claude/skills/zmux/${reset}\n"
-    fi
-fi
+# Link Pi skill and extension (repo is source of truth)
+printf "${dim}linking pi integration...${reset} "
+mkdir -p "$HOME/.pi/agent/skills" "$HOME/.pi/agent/extensions"
+rm -rf "$HOME/.pi/agent/skills/zmux" "$HOME/.pi/agent/extensions/pi-zmux"
+ln -s "$ZMUX_ROOT/skills/zmux" "$HOME/.pi/agent/skills/zmux"
+ln -s "$ZMUX_ROOT/pi-extension" "$HOME/.pi/agent/extensions/pi-zmux"
+printf "${green}ok${reset}  ${dim}~/.pi/agent/{skills/zmux,extensions/pi-zmux}${reset}\n"

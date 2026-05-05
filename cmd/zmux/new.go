@@ -97,8 +97,10 @@ func runNewInWorkspace(wsName string, sessionNames []string, dir string) error {
 				wsName, wsName, wsName,
 			)
 		}
-		// New workspace — create with "main" session.
-		sessionNames = []string{"main"}
+		// New workspace — default session name matches workspace name
+		// to avoid global tmux collisions (every workspace can have
+		// its own primary session without naming conflicts).
+		sessionNames = []string{wsName}
 	}
 
 	// Ensure workspace exists.

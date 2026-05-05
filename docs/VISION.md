@@ -468,7 +468,7 @@ target the same window.
 | d | detach |
 | ? | help popup |
 | , | rename session |
-| . | rename tab |
+| . | label tab (blank clears) |
 | w | workspace session picker |
 | [ / ] | prev / next session in workspace |
 | c | new tab |

@@ -2,17 +2,21 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/donjor/zmux/internal/bar"
+	"github.com/donjor/zmux/internal/session"
 	"github.com/spf13/cobra"
 )
 
 var (
-	barRenderDir     string
-	barRenderSession string
-	barRenderPaneCmd string
-	barRenderPrefix  string
-	barRenderGroup   string
+	barRenderDir       string
+	barRenderSession   string
+	barRenderPaneCmd   string
+	barRenderPrefix    string
+	barRenderGroup     string
+	barRenderGroupSize string
+	barRenderTopBar    string
 )
 
 var barRenderCmd = &cobra.Command{
@@ -34,6 +38,25 @@ var barRenderCmd = &cobra.Command{
 		if sessionName == "" {
 			sessionName, _ = app.Runner.DisplayMessage("", "#{session_name}")
 		}
+		groupID := barRenderGroup
+		if groupID == "" {
+			groupID, _ = app.Runner.DisplayMessage("", "#{session_group}")
+		}
+
+		// Resolve grouped session clones (e.g. "dev-b") to their root
+		// name ("dev") so the bar displays the real session, not the
+		// multi-viewport clone. Extract the viewport letter first.
+		var viewportID string
+		if groupID != "" {
+			root := session.RootName(sessionName)
+			if sessionName == root {
+				viewportID = "a"
+			} else {
+				viewportID = string(sessionName[len(sessionName)-1])
+			}
+			sessionName = root
+		}
+
 		paneCmd := barRenderPaneCmd
 		if paneCmd == "" {
 			paneCmd, _ = app.Runner.DisplayMessage("", "#{pane_current_command}")
@@ -41,10 +64,6 @@ var barRenderCmd = &cobra.Command{
 		prefixStr := barRenderPrefix
 		if prefixStr == "" {
 			prefixStr, _ = app.Runner.DisplayMessage("", "#{client_prefix}")
-		}
-		groupID := barRenderGroup
-		if groupID == "" {
-			groupID, _ = app.Runner.DisplayMessage("", "#{session_group}")
 		}
 		paneDir := barRenderDir
 		if paneDir == "" {
@@ -73,13 +92,44 @@ var barRenderCmd = &cobra.Command{
 		ctx.ShowProcess = cfg.Bar.Segments.Process
 		ctx.ShowGroup = cfg.Bar.Segments.Group
 
+		// Group: viewport letter + attached count.
+		ctx.ViewportID = viewportID
+		if n, err := strconv.Atoi(barRenderGroupSize); err == nil {
+			ctx.Attached = n
+		}
+
+		// Apply session indicator from config.
+		switch cfg.Bar.Indicator {
+		case "dots":
+			if workspace != "" {
+				sessions := app.WorkspaceStore.SessionsIn(workspace)
+				ctx.SessionIndicator = bar.CompactDots(sessions, sessionName)
+			}
+		case "none":
+			ctx.WorkspaceCount = 1 // suppress N/M in SessionLabel
+			// "numbers": default behavior — SessionLabel adds N/M
+		}
+
 		switch side {
 		case "left":
 			fmt.Print(bar.RenderLeft(palette, ctx, preset))
 		case "right":
 			fmt.Print(bar.RenderRight(palette, ctx, preset))
+		case "top":
+			// Fetch workspace sessions for the top row.
+			if workspace != "" {
+				ctx.WorkspaceSessions = app.WorkspaceStore.SessionsIn(workspace)
+			}
+			topVariant := barRenderTopBar
+			if topVariant == "" {
+				topVariant = cfg.Bar.TopBar
+			}
+			if topVariant == "" {
+				topVariant = "tabs"
+			}
+			fmt.Print(bar.RenderTopRow(palette, ctx, preset, topVariant))
 		default:
-			return fmt.Errorf("unknown side %q (use 'left' or 'right')", side)
+			return fmt.Errorf("unknown side %q (use 'left', 'right', or 'top')", side)
 		}
 
 		return nil
@@ -92,6 +142,8 @@ func init() {
 	barRenderCmd.Flags().StringVar(&barRenderPaneCmd, "pane-cmd", "", "current pane command (passed from tmux #{pane_current_command})")
 	barRenderCmd.Flags().StringVar(&barRenderPrefix, "prefix", "", "client prefix state 0|1 (passed from tmux #{client_prefix})")
 	barRenderCmd.Flags().StringVar(&barRenderGroup, "group", "", "session group id (passed from tmux #{session_group})")
+	barRenderCmd.Flags().StringVar(&barRenderGroupSize, "group-size", "", "session group size (passed from tmux #{session_group_size})")
+	barRenderCmd.Flags().StringVar(&barRenderTopBar, "top-bar", "", "top bar variant: tabs, dots, minimal (passed from generate.go)")
 	rootCmd.AddCommand(barRenderCmd)
 
 	var barRenderDebug = &cobra.Command{

@@ -210,7 +210,7 @@ func (t *SessionsTab) View() string {
 	b.WriteString("\n")
 	b.WriteString("  " + t.styles.Dim.Render(header) + "\n\n")
 
-	// Overlays render above the list.
+	// Overlays render above the scrollable content.
 	switch t.mode {
 	case sessionsModeRename:
 		b.WriteString(t.renderRenameOverlay())
@@ -222,31 +222,25 @@ func (t *SessionsTab) View() string {
 		b.WriteString(t.renderConfirmOverlay(2))
 	}
 
-	// Compute scroll window.
+	// Render ALL rows — viewport handles clipping and scrolling.
 	rows := t.tree.Rows
-	listHeight := t.height - 8
-	if listHeight < 5 {
-		listHeight = 12
+	cursorLine := 0
+	lineCount := 0
+	for i := range rows {
+		if i == t.tree.Cursor {
+			cursorLine = lineCount
+		}
+		rendered := t.renderRow(&rows[i], i == t.tree.Cursor)
+		b.WriteString(rendered)
+		lineCount += strings.Count(rendered, "\n")
 	}
-	start, end := outline.ComputeWindow(t.tree.Cursor, len(rows), listHeight)
-
-	if start > 0 {
-		b.WriteString(t.styles.Dim.Render(fmt.Sprintf("  ↑ %d more", start)) + "\n")
-	}
-
-	for i := start; i < end; i++ {
-		b.WriteString(t.renderRow(&rows[i], i == t.tree.Cursor))
-	}
-
-	if end < len(rows) {
-		b.WriteString(t.styles.Dim.Render(fmt.Sprintf("  ↓ %d more", len(rows)-end)) + "\n")
-	}
-
 	if len(rows) == 0 {
 		b.WriteString(t.styles.Dim.Render("  (no rows)") + "\n")
 	}
 
-	return b.String()
+	t.vp.SetContent(b.String())
+	ensureCursorVisible(&t.vp, cursorLine)
+	return renderScrollable(t.vp, t.styles)
 }
 
 // renderRow paints a single row with kind-specific formatting.
@@ -314,7 +308,11 @@ func (t *SessionsTab) renderSessionRowView(row *outline.Row, selected bool) stri
 		line += "  " + t.styles.Dim.Render(fmt.Sprintf("%dw", s.Windows))
 	}
 	if row.Attached {
-		line += "  " + t.styles.Info.Render("attached")
+		if s, ok2 := outline.RowData[session.SessionInfo](row); ok2 && s != nil && s.AttachedClients > 1 {
+			line += "  " + t.styles.Info.Render(fmt.Sprintf("attached ×%d", s.AttachedClients))
+		} else {
+			line += "  " + t.styles.Info.Render("attached")
+		}
 	}
 	if row.Badge != "" {
 		line += "  " + t.styles.Info.Render(row.Badge)

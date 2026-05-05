@@ -127,7 +127,7 @@ func (t *SettingsTab) buildConfigRows() []configRow {
 			key:      "prefix",
 			kind:     configRowText,
 			getValue: func(c config.Config) string { return c.Prefix },
-			setValue:  func(c *config.Config, v string) { c.Prefix = v },
+			setValue: func(c *config.Config, v string) { c.Prefix = v },
 		},
 		{
 			label:    "Sync Target",
@@ -135,19 +135,19 @@ func (t *SettingsTab) buildConfigRows() []configRow {
 			kind:     configRowCycle,
 			options:  []string{"none", "ghostty", "nvim"},
 			getValue: func(c config.Config) string { return c.Sync.Target },
-			setValue:  func(c *config.Config, v string) { c.Sync.Target = v },
+			setValue: func(c *config.Config, v string) { c.Sync.Target = v },
 		},
 		{
 			label:    "Ghostty Config",
 			key:      "sync.ghostty_config",
 			kind:     configRowText,
 			getValue: func(c config.Config) string { return c.Sync.GhosttyConfig },
-			setValue:  func(c *config.Config, v string) { c.Sync.GhosttyConfig = v },
+			setValue: func(c *config.Config, v string) { c.Sync.GhosttyConfig = v },
 		},
 		{
-			label:   "Auto Cleanup Tmp",
-			key:     "sessions.auto_cleanup_tmp",
-			kind:    configRowToggle,
+			label: "Auto Cleanup Tmp",
+			key:   "sessions.auto_cleanup_tmp",
+			kind:  configRowToggle,
 			getValue: func(c config.Config) string {
 				if c.Sessions.AutoCleanupTmp {
 					return "true"
@@ -162,8 +162,8 @@ func (t *SettingsTab) buildConfigRows() []configRow {
 }
 
 func (t *SettingsTab) ID() dashboard.TabID { return dashboard.TabSettings }
-func (t *SettingsTab) Title() string        { return "Settings" }
-func (t *SettingsTab) Init() tea.Cmd        { return nil }
+func (t *SettingsTab) Title() string       { return "Settings" }
+func (t *SettingsTab) Init() tea.Cmd       { return nil }
 
 func (t *SettingsTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	t.reqID = dashboard.NextReqID()

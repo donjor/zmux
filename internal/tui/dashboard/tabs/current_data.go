@@ -24,7 +24,7 @@ func (t *CurrentTab) fetchData(reqID int64) tea.Cmd {
 		if err != nil {
 			return currentDataMsg{reqID: reqID, err: err}
 		}
-		sessionName = strings.TrimSpace(sessionName)
+		sessionName = session.RootName(strings.TrimSpace(sessionName))
 
 		if sessionName == "" {
 			return currentDataMsg{reqID: reqID, err: fmt.Errorf("no active session")}
@@ -69,15 +69,25 @@ func (t *CurrentTab) fetchData(reqID int64) tea.Cmd {
 			}
 		}
 
+		// Fetch basic windows for each sibling (no pane/process detail —
+		// keep it cheap; current session gets the full treatment).
+		siblingWindows := make(map[string][]tmux.Window, len(siblings))
+		for _, s := range siblings {
+			if ws, err := runner.ListWindows(s.Name); err == nil {
+				siblingWindows[s.Name] = ws
+			}
+		}
+
 		return currentDataMsg{
-			reqID:       reqID,
-			wsName:      wsName,
-			sessionName: sessionName,
-			sessionDir:  sessionDir,
-			attached:    attached,
-			windows:     windows,
-			siblings:    siblings,
-			wsModel:     wsModel,
+			reqID:          reqID,
+			wsName:         wsName,
+			sessionName:    sessionName,
+			sessionDir:     sessionDir,
+			attached:       attached,
+			windows:        windows,
+			siblings:       siblings,
+			siblingWindows: siblingWindows,
+			wsModel:        wsModel,
 		}
 	}
 }
@@ -182,12 +192,11 @@ func (t *CurrentTab) renameSession(oldName, newName string) tea.Cmd {
 	}
 }
 
-// renameWindow renames a window; index stays the same, jump to same ID.
-// (Window renames are tab-specific and have no shared helper.)
-func (t *CurrentTab) renameWindow(oldName, newName string, idx int) tea.Cmd {
+// renameWindow renames a window in the given session. The session arg
+// allows renaming sibling-session windows, not just the current one.
+func (t *CurrentTab) renameWindow(sessionName, oldName, newName string, idx int) tea.Cmd {
 	runner := t.runner
 	reqID := t.reqID
-	sessionName := t.sessionName
 	t.pendingJumpTo = outline.WindowID(sessionName, idx)
 	return func() tea.Msg {
 		_ = runner.RenameWindow(sessionName, oldName, newName)
@@ -224,13 +233,23 @@ func (t *CurrentTab) killSession(name string) tea.Cmd {
 	}
 }
 
-// killWindow kills a window by index in the current session.
-func (t *CurrentTab) killWindow(idx int) tea.Cmd {
+// killWindow kills a window by index in the given session. The session
+// arg allows killing sibling-session windows.
+func (t *CurrentTab) killWindow(sessionName string, idx int) tea.Cmd {
 	runner := t.runner
-	sessionName := t.sessionName
 	reqID := t.reqID
 	return func() tea.Msg {
 		_ = runner.KillWindow(sessionName, idx)
+		return currentMutationDoneMsg{reqID: reqID}
+	}
+}
+
+// killPane kills a pane by id.
+func (t *CurrentTab) killPane(paneID string) tea.Cmd {
+	runner := t.runner
+	reqID := t.reqID
+	return func() tea.Msg {
+		_ = runner.KillPane(paneID)
 		return currentMutationDoneMsg{reqID: reqID}
 	}
 }

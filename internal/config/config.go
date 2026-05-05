@@ -16,8 +16,11 @@ type Config struct {
 
 // BarConfig holds status bar settings.
 type BarConfig struct {
-	Preset    string         `toml:"preset"`
-	Segments  BarSegments    `toml:"segments"`
+	Preset    string      `toml:"preset"`
+	Layout    string      `toml:"layout"`    // "single", "two-line", "split"
+	Indicator string      `toml:"indicator"` // "none", "numbers", "dots"
+	TopBar    string      `toml:"top_bar"`   // "tabs", "dots", "minimal"
+	Segments  BarSegments `toml:"segments"`
 }
 
 // BarSegments controls which segments are shown in the status bar.
@@ -44,7 +47,7 @@ type TemplatesConfig struct {
 
 // SyncConfig holds theme sync settings.
 type SyncConfig struct {
-	Target       string `toml:"target"`
+	Target        string `toml:"target"`
 	GhosttyConfig string `toml:"ghostty_config"`
 }
 
@@ -54,7 +57,10 @@ func DefaultConfig() Config {
 		Theme:  "ayu-dark",
 		Prefix: "C-Space",
 		Bar: BarConfig{
-			Preset: "default",
+			Preset:    "default",
+			Layout:    "two-line",
+			Indicator: "dots",
+			TopBar:    "tabs",
 			Segments: BarSegments{
 				Workspace: true,
 				Git:       true,

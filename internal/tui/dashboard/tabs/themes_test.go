@@ -105,12 +105,6 @@ func TestNewThemesTabDefaults(t *testing.T) {
 	if tab.Title() != "Themes" {
 		t.Errorf("Title = %q, want Themes", tab.Title())
 	}
-	if tab.section != themesSectionColors {
-		t.Errorf("default section = %v, want Colors", tab.section)
-	}
-	if len(tab.barPresets) == 0 {
-		t.Error("expected bar presets populated")
-	}
 	if len(tab.editSlots) == 0 {
 		t.Error("expected editor slots populated")
 	}
@@ -130,40 +124,8 @@ func TestThemesActivateLoadsData(t *testing.T) {
 	if tab.currentTheme != "ayu-dark" {
 		t.Errorf("currentTheme = %q, want ayu-dark", tab.currentTheme)
 	}
-	if tab.currentBar != "default" {
-		t.Errorf("currentBar = %q, want default", tab.currentBar)
-	}
 	if len(tab.filtered) == 0 {
 		t.Error("filtered should be populated after applyFilter")
-	}
-}
-
-// ── Section switching ──
-
-func TestThemesSectionSwitch(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-
-	if tab.section != themesSectionColors {
-		t.Fatalf("start section = %v, want Colors", tab.section)
-	}
-
-	// 'l' → next section (Bar)
-	tab, _ = sendThemesKey(tab, "l")
-	if tab.section != themesSectionBar {
-		t.Errorf("after l: section = %v, want Bar", tab.section)
-	}
-
-	// 'l' again wraps to Colors
-	tab, _ = sendThemesKey(tab, "l")
-	if tab.section != themesSectionColors {
-		t.Errorf("after second l: section = %v, want Colors (wrap)", tab.section)
-	}
-
-	// 'h' → prev (wraps back to Bar)
-	tab, _ = sendThemesKey(tab, "h")
-	if tab.section != themesSectionBar {
-		t.Errorf("after h from Colors: section = %v, want Bar (wrap)", tab.section)
 	}
 }
 
@@ -171,26 +133,19 @@ func TestThemesShortHelpChangesPerMode(t *testing.T) {
 	tab, _, _ := newTestThemesTab(t)
 	tab = activateTheme(t, tab)
 
-	// List mode, Colors section.
+	// List mode.
 	if h := tab.ShortHelp(); !strings.Contains(h, "enter:apply") {
-		t.Errorf("colors list help missing enter:apply, got %q", h)
-	}
-
-	// Bar section.
-	tab.section = themesSectionBar
-	if h := tab.ShortHelp(); !strings.Contains(h, "h/l:section") {
-		t.Errorf("bar help missing h/l:section, got %q", h)
+		t.Errorf("list help missing enter:apply, got %q", h)
 	}
 
 	// Editing mode.
-	tab.section = themesSectionColors
 	tab.editing = true
 	if h := tab.ShortHelp(); !strings.Contains(h, "enter:edit color") {
 		t.Errorf("editing help missing enter:edit color, got %q", h)
 	}
 }
 
-// ── Colors section cursor navigation ──
+// ── Cursor navigation ──
 
 func TestThemesColorsCursor(t *testing.T) {
 	tab, _, _ := newTestThemesTab(t)
@@ -329,98 +284,6 @@ func TestBuildEditorSlotsRoundTrip(t *testing.T) {
 	}
 }
 
-// ── Bar section cursor + preset apply ──
-
-func TestThemesBarCursor(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-
-	tab.section = themesSectionBar
-	if tab.barCursor != 0 {
-		t.Fatalf("barCursor = %d, want 0", tab.barCursor)
-	}
-
-	tab, _ = sendThemesKey(tab, "j")
-	if tab.barCursor != 1 || tab.barInSegments {
-		t.Errorf("j: cursor=%d inSeg=%v, want cursor=1 inSeg=false", tab.barCursor, tab.barInSegments)
-	}
-
-	tab, _ = sendThemesKey(tab, "k")
-	if tab.barCursor != 0 {
-		t.Errorf("k back to top: cursor=%d", tab.barCursor)
-	}
-
-	// Walk off the bottom of presets into segments.
-	for range tab.barPresets {
-		tab, _ = sendThemesKey(tab, "j")
-	}
-	if !tab.barInSegments {
-		t.Errorf("walking past presets should enter segments, barCursor=%d inSeg=%v",
-			tab.barCursor, tab.barInSegments)
-	}
-}
-
-func TestThemesBarPresetApplyReturnsCmd(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-
-	tab.section = themesSectionBar
-	tab.barCursor = 1 // point at second preset
-	tab.barInSegments = false
-
-	// Enter on a preset should emit t.saveConfig() as a cmd.
-	_, cmd := sendThemesKey(tab, "enter")
-	if cmd == nil {
-		t.Fatal("enter on preset should return a cmd (saveConfig)")
-	}
-
-	// Drain the cmd — it should produce a themesConfigSaveMsg targeting
-	// TabThemes (regardless of whether save succeeds against memFS).
-	msg := cmd()
-	if msg == nil {
-		t.Fatal("saveConfig cmd produced nil msg")
-	}
-	if _, ok := msg.(themesConfigSaveMsg); !ok {
-		t.Errorf("expected themesConfigSaveMsg, got %T", msg)
-	}
-}
-
-func TestThemesBarSegmentToggle(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-
-	tab.section = themesSectionBar
-	tab.barInSegments = true
-	tab.barCursor = len(tab.barPresets) // first segment
-
-	before := tab.barSegments.Git
-
-	_, cmd := sendThemesKey(tab, " ") // space toggles
-	if cmd == nil {
-		t.Fatal("space on segment should return a cmd")
-	}
-
-	if tab.barSegments.Git == before {
-		t.Errorf("segment git did not toggle: before=%v after=%v", before, tab.barSegments.Git)
-	}
-}
-
-func TestThemesToggleSegmentFields(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-
-	// Flip every known field and verify.
-	fields := []string{"git", "workspace", "clock", "lang", "directory", "process", "group"}
-	tab.barSegments = config.BarSegments{} // all false
-	for _, f := range fields {
-		tab.toggleSegment(f)
-	}
-	if !tab.barSegments.Git || !tab.barSegments.Workspace || !tab.barSegments.Clock ||
-		!tab.barSegments.Lang || !tab.barSegments.Directory || !tab.barSegments.Process ||
-		!tab.barSegments.Group {
-		t.Errorf("toggleSegment did not flip all fields: %+v", tab.barSegments)
-	}
-}
-
 // ── Message handlers ──
 
 func TestThemesStaleDataMsgIgnored(t *testing.T) {
@@ -494,24 +357,6 @@ func TestThemesApplyMsgStaleIgnored(t *testing.T) {
 	}
 }
 
-func TestThemesConfigSaveMsgSuccessFlashes(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab.reqID = 7
-
-	_, cmd := tab.Update(themesConfigSaveMsg{reqID: 7})
-	if cmd == nil {
-		t.Fatal("expected cmd from successful config save")
-	}
-	msg := cmd()
-	intent, ok := msg.(dashboard.SetStatusIntent)
-	if !ok {
-		t.Fatalf("expected SetStatusIntent, got %T", msg)
-	}
-	if intent.IsError {
-		t.Error("success flash should have IsError=false")
-	}
-}
-
 func TestThemesSaveThemeMsgExitsEditing(t *testing.T) {
 	tab, _, _ := newTestThemesTab(t)
 	tab = activateTheme(t, tab)
@@ -532,27 +377,13 @@ func TestThemesSaveThemeMsgExitsEditing(t *testing.T) {
 
 // ── View rendering smoke tests ──
 
-func TestThemesViewContainsSectionHeaders(t *testing.T) {
+func TestThemesViewRendersContent(t *testing.T) {
 	tab, _, _ := newTestThemesTab(t)
 	tab = activateTheme(t, tab)
-
-	view := tab.View()
-	if !strings.Contains(view, "Colors") {
-		t.Error("view should contain 'Colors' header")
-	}
-	if !strings.Contains(view, "Bar") {
-		t.Error("view should contain 'Bar' header")
-	}
-}
-
-func TestThemesViewBarSection(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-	tab.section = themesSectionBar
 
 	view := tab.View()
 	if !strings.Contains(view, "Current") {
-		t.Error("bar view should show 'Current' label")
+		t.Error("view should contain 'Current' label")
 	}
 }
 

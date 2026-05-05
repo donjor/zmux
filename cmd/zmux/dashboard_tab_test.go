@@ -16,14 +16,15 @@ func TestResolveDashboardTabDeprecatedAliases(t *testing.T) {
 		flag string
 		want dashboard.TabID
 	}{
-		{"", dashboard.TabSession},               // empty → default
-		{"current", dashboard.TabSession},        // deprecated alias
-		{"sessions", dashboard.TabWorkspaces},    // deprecated alias
-		{"session", dashboard.TabSession},        // new canonical
-		{"workspaces", dashboard.TabWorkspaces},  // new canonical
-		{"themes", dashboard.TabThemes},          // pass-through
-		{"settings", dashboard.TabSettings},      // pass-through
-		{"help", dashboard.TabHelp},              // pass-through
+		{"", dashboard.TabSession},              // empty → default
+		{"current", dashboard.TabSession},       // deprecated alias
+		{"sessions", dashboard.TabWorkspaces},   // deprecated alias
+		{"session", dashboard.TabSession},       // new canonical
+		{"workspaces", dashboard.TabWorkspaces}, // new canonical
+		{"themes", dashboard.TabThemes},         // pass-through
+		{"bar", dashboard.TabBar},               // pass-through
+		{"settings", dashboard.TabSettings},     // pass-through
+		{"help", dashboard.TabHelp},             // pass-through
 	}
 	for _, tt := range tests {
 		t.Run(tt.flag, func(t *testing.T) {
