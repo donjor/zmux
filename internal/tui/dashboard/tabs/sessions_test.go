@@ -6,15 +6,27 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/donjor/zmux/internal/tui/tkey"
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/styles"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/donjor/zmux/internal/workspace"
 )
+
+// noopOvermind is an inert overmind.Client for tab tests that don't exercise
+// the overmind restart/stop paths.
+type noopOvermind struct{}
+
+func (noopOvermind) Connect(string, string) error        { return nil }
+func (noopOvermind) Restart(string, string) error        { return nil }
+func (noopOvermind) Stop(string, string) error           { return nil }
+func (noopOvermind) StopAll(string) error                { return nil }
+func (noopOvermind) Logs(string, string) (string, error) { return "", nil }
 
 // ── memFS for an in-process workspace store ──
 
@@ -34,6 +46,7 @@ func (m *sessionsMemFS) ReadFile(path string) ([]byte, error) {
 	}
 	return data, nil
 }
+
 func (m *sessionsMemFS) WriteFile(path string, data []byte, _ os.FileMode) error {
 	m.files[path] = data
 	return nil
@@ -107,13 +120,13 @@ func newTestSessionsTab(t *testing.T) (*SessionsTab, *tmux.MockRunner, *workspac
 		t.Fatalf("add api session: %v", err)
 	}
 
-	loader := func() []tui.WorkspaceViewModel {
+	loader := func() []workspaceview.WorkspaceViewModel {
 		ws, _ := store.ListWorkspaces()
 		live, _ := session.ListSessions(mock)
-		return tui.BuildWorkspaceViewModels(ws, live)
+		return workspaceview.BuildWorkspaceViewModels(ws, live)
 	}
 
-	tab := NewSessionsTab(mock, tui.DefaultStyles(), loader, store)
+	tab := NewSessionsTab(mock, styles.DefaultStyles(), loader, store, noopOvermind{})
 	tab.Resize(80, 40)
 	return tab, mock, store
 }
@@ -169,15 +182,15 @@ func sendKey(tab *SessionsTab, keyStr string) (*SessionsTab, tea.Cmd) {
 	var msg tea.KeyMsg
 	switch keyStr {
 	case "enter":
-		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		msg = tkey.Enter()
 	case "esc":
-		msg = tea.KeyMsg{Type: tea.KeyEscape}
+		msg = tkey.Esc()
 	case "up":
-		msg = tea.KeyMsg{Type: tea.KeyUp}
+		msg = tkey.Up()
 	case "down":
-		msg = tea.KeyMsg{Type: tea.KeyDown}
+		msg = tkey.Down()
 	default:
-		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
+		msg = tkey.Type(keyStr)
 	}
 	result, cmd := tab.Update(msg)
 	return result.(*SessionsTab), cmd
@@ -489,7 +502,7 @@ func TestSessionsTabStagesDataDuringRename(t *testing.T) {
 	// Inject a new data message while in rename mode.
 	staged := sessionsDataMsg{
 		reqID:      tab.reqID,
-		workspaces: []tui.WorkspaceViewModel{{Workspace: workspace.Workspace{Name: "fresh"}}},
+		workspaces: []workspaceview.WorkspaceViewModel{{Workspace: workspace.Workspace{Name: "fresh"}}},
 	}
 	result, _ := tab.Update(staged)
 	tab = result.(*SessionsTab)
@@ -524,7 +537,7 @@ func TestSessionsTabDropsStaleAfterDeactivate(t *testing.T) {
 	rowsBefore := len(tab.tree.Rows)
 	stale := sessionsDataMsg{
 		reqID: staleID,
-		workspaces: []tui.WorkspaceViewModel{
+		workspaces: []workspaceview.WorkspaceViewModel{
 			{Workspace: workspace.Workspace{Name: "ghost"}},
 		},
 	}

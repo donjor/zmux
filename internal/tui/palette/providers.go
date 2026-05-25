@@ -235,10 +235,14 @@ type OvermindStopPayload struct {
 
 // OvermindProvider generates actions for overmind process management.
 // It runs discovery each time the palette opens.
-type OvermindProvider struct{}
+type OvermindProvider struct {
+	// Local is the active profile's server endpoint, so discovery treats the
+	// invoking binary's own server as local (default for zmux, -L zzmux for zzmux).
+	Local tmux.Endpoint
+}
 
 func (p *OvermindProvider) Actions() ([]Action, error) {
-	cat, err := source.Discover()
+	cat, err := source.Discover(p.Local)
 	if err != nil || cat == nil {
 		return nil, nil
 	}
@@ -301,6 +305,6 @@ func NewDefaultRegistry(runner tmux.Runner, resolver *theme.Resolver, _ config.F
 		&BarProvider{},
 		&DashboardProvider{},
 		&HelpProvider{},
-		&OvermindProvider{},
+		&OvermindProvider{Local: runner.Endpoint()},
 	)
 }

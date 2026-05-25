@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -60,9 +61,35 @@ func (c *Client) runSilent(args ...string) error {
 	return err
 }
 
-// IsInsideTmux returns true if we're running inside a tmux session.
+// IsInsideTmux reports whether we're running inside a tmux session that this
+// client's endpoint actually owns. For the default endpoint it preserves the
+// historical "$TMUX is set" check. For a named/path endpoint (e.g. the zzmux
+// profile's -L zzmux) it additionally requires the $TMUX socket to match the
+// endpoint — so a `zzmux` invocation nested inside the live `zmux` server reports
+// false instead of doing current-client work against a server it doesn't own.
 func (c *Client) IsInsideTmux() bool {
-	return os.Getenv("TMUX") != ""
+	tmuxEnv := os.Getenv("TMUX")
+	if tmuxEnv == "" {
+		return false
+	}
+	switch c.endpoint.Mode {
+	case SocketNamed:
+		return tmuxSocketName(tmuxEnv) == c.endpoint.Value
+	case SocketPath:
+		return tmuxSocketName(tmuxEnv) == filepath.Base(c.endpoint.Value)
+	default:
+		return true
+	}
+}
+
+// tmuxSocketName extracts the socket basename from $TMUX, which tmux formats as
+// "<socket-path>,<pid>,<session-id>".
+func tmuxSocketName(tmuxEnv string) string {
+	sock := tmuxEnv
+	if i := strings.IndexByte(sock, ','); i >= 0 {
+		sock = sock[:i]
+	}
+	return filepath.Base(sock)
 }
 
 // ServerRunning returns true if a tmux server is active.
@@ -314,6 +341,8 @@ func shellQuote(s string) string {
 		return "''"
 	}
 	if strings.IndexFunc(s, func(r rune) bool {
+		//nolint:staticcheck // QF1001: negation-of-allowed-set ("not a safe char")
+		// reads clearer than the De Morgan expansion into negated ranges.
 		return !(r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || strings.ContainsRune("_+-=.,/:@%", r))
 	}) == -1 {
 		return s
@@ -351,9 +380,30 @@ func (c *Client) DisplayMessage(target, format string) (string, error) {
 	return c.run("display-message", "-t", target, "-p", format)
 }
 
-// CapturePane captures pane content.
+// CapturePaneOptions configures a capture-pane invocation.
+type CapturePaneOptions struct {
+	Lines int  // history lines to include (captures from -Lines to the bottom)
+	ANSI  bool // include escape sequences so colours/styling survive (-e)
+	Join  bool // join wrapped lines into single logical lines (-J)
+}
+
+// CapturePane captures pane content as plain text. Retained with stable plain
+// semantics because run/watch depend on it; richer captures use CapturePaneOpts.
 func (c *Client) CapturePane(target string, lines int) (string, error) {
 	return c.run("capture-pane", "-t", target, "-p", "-S", strconv.Itoa(-lines))
+}
+
+// CapturePaneOpts captures pane content with options (ANSI escapes, line join).
+func (c *Client) CapturePaneOpts(target string, opts CapturePaneOptions) (string, error) {
+	args := []string{"capture-pane", "-t", target, "-p"}
+	if opts.ANSI {
+		args = append(args, "-e")
+	}
+	if opts.Join {
+		args = append(args, "-J")
+	}
+	args = append(args, "-S", strconv.Itoa(-opts.Lines))
+	return c.run(args...)
 }
 
 // SetOption sets a tmux option. scope is e.g. "-g", "-s", "-w", etc.

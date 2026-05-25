@@ -239,14 +239,16 @@ func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset, layout BarL
 	// The top row renders empty when there's only 1 session, so single-
 	// session workspaces effectively get a single-line bar.
 	if zmuxBin != "" && (layout.Layout == "two-line" || layout.Layout == "split") {
-		opts = append(opts,
+		opts = append(
+			opts,
 			TmuxOption{"status", "2"},
 			TmuxOption{"status-format[0]", TopBarFormatCmd(zmuxBin, layout.TopBar)},
 			TmuxOption{"status-format[1]", TmuxDefaultStatusFormat},
 		)
 	} else if zmuxBin != "" {
 		// Single layout: restore in case we're switching from two-line.
-		opts = append(opts,
+		opts = append(
+			opts,
 			TmuxOption{"status", "on"},
 			TmuxOption{"status-format[0]", TmuxDefaultStatusFormat},
 		)

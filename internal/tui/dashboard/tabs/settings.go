@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // ── Shared config row types ──
@@ -79,7 +79,7 @@ func (m settingsConfigSaveMsg) TargetTab() dashboard.TabID { return dashboard.Ta
 type SettingsTab struct {
 	fs     config.FS
 	runner tmux.Runner
-	styles tui.Styles
+	styles styles.Styles
 
 	// Data.
 	reqID int64
@@ -106,7 +106,7 @@ type SettingsTab struct {
 
 // NewSettingsTab creates a new settings tab.
 // The resolver parameter is accepted for backward compatibility but unused.
-func NewSettingsTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, styles tui.Styles) *SettingsTab {
+func NewSettingsTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, styles styles.Styles) *SettingsTab {
 	editInput := textinput.New()
 	editInput.CharLimit = 256
 
@@ -279,8 +279,8 @@ func (t *SettingsTab) handleGeneralKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) 
 }
 
 func (t *SettingsTab) handleEditKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+	switch msg.String() {
+	case "enter":
 		row := t.configRows[t.cfgCursor]
 		newVal := strings.TrimSpace(t.editInput.Value())
 		if newVal != "" {
@@ -290,7 +290,7 @@ func (t *SettingsTab) handleEditKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		t.editInput.Blur()
 		return t, nil
 
-	case tea.KeyEscape:
+	case "esc":
 		t.mode = settingsModeList
 		t.editInput.Blur()
 		return t, nil

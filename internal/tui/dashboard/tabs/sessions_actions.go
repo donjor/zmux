@@ -3,14 +3,14 @@ package tabs
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
 
 // handleKey dispatches key presses based on the current mode.
@@ -137,7 +137,7 @@ func (t *SessionsTab) enterCreateMode() (dashboard.Tab, tea.Cmd) {
 func (t *SessionsTab) handleRenameRequest(row *outline.Row) (dashboard.Tab, tea.Cmd) {
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
-		ws, _ := outline.RowData[tui.WorkspaceViewModel](row)
+		ws, _ := outline.RowData[workspaceview.WorkspaceViewModel](row)
 		if ws == nil || ws.IsPseudo {
 			return t, nil
 		}
@@ -171,7 +171,7 @@ func (t *SessionsTab) handleRenameRequest(row *outline.Row) (dashboard.Tab, tea.
 		cs := g.Source.Overmind.ControlSocket
 		proc := entry.Session
 		return t, func() tea.Msg {
-			_ = source.Restart(cs, proc)
+			_ = t.overmind.Restart(cs, proc)
 			return dashboard.SetStatusIntent{Text: "Restarted " + proc}
 		}
 	}
@@ -183,7 +183,7 @@ func (t *SessionsTab) handleRenameRequest(row *outline.Row) (dashboard.Tab, tea.
 func (t *SessionsTab) handleKillRequest(row *outline.Row) (dashboard.Tab, tea.Cmd) {
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
-		ws, _ := outline.RowData[tui.WorkspaceViewModel](row)
+		ws, _ := outline.RowData[workspaceview.WorkspaceViewModel](row)
 		if ws == nil || ws.IsPseudo {
 			return t, nil
 		}
@@ -212,7 +212,7 @@ func (t *SessionsTab) handleKillRequest(row *outline.Row) (dashboard.Tab, tea.Cm
 		cs := g.Source.Overmind.ControlSocket
 		proc := entry.Session
 		return t, func() tea.Msg {
-			_ = source.Stop(cs, proc)
+			_ = t.overmind.Stop(cs, proc)
 			return dashboard.SetStatusIntent{Text: "Stopped " + proc}
 		}
 	}
@@ -231,7 +231,7 @@ func (t *SessionsTab) handleMoveRequest(row *outline.Row) (dashboard.Tab, tea.Cm
 	parent := row.ParentID
 	originName := ""
 	if parentRow, _ := t.tree.FindByID(parent); parentRow != nil {
-		if ws, ok := outline.RowData[tui.WorkspaceViewModel](parentRow); ok && ws != nil {
+		if ws, ok := outline.RowData[workspaceview.WorkspaceViewModel](parentRow); ok && ws != nil {
 			originName = ws.Name
 		}
 	}
@@ -265,8 +265,8 @@ func (t *SessionsTab) snapCursorToWorkspace(prefer string) {
 // ── Mode key handlers ──
 
 func (t *SessionsTab) handleRenameKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+	switch msg.String() {
+	case "enter":
 		newName := strings.TrimSpace(t.renameInput.Value())
 		if newName == "" || t.rename == nil || newName == t.rename.oldName {
 			t.exitMode()
@@ -286,7 +286,7 @@ func (t *SessionsTab) handleRenameKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		t.pendingJumpTo = jumpTo
 		return t, cmd
 
-	case tea.KeyEscape:
+	case "esc":
 		t.exitMode()
 		return t, nil
 	}
@@ -297,8 +297,8 @@ func (t *SessionsTab) handleRenameKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 }
 
 func (t *SessionsTab) handleCreateKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
+	switch msg.String() {
+	case "enter":
 		name := strings.TrimSpace(t.createInput.Value())
 		if name == "" {
 			t.exitMode()
@@ -311,7 +311,7 @@ func (t *SessionsTab) handleCreateKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		t.pendingJumpTo = outline.WorkspaceID(name)
 		return t, cmd
 
-	case tea.KeyEscape:
+	case "esc":
 		t.exitMode()
 		return t, nil
 	}
@@ -370,7 +370,7 @@ func (t *SessionsTab) handleMoveKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		if row == nil || row.Kind != outline.RowWorkspaceHeader {
 			return t, nil
 		}
-		ws, _ := outline.RowData[tui.WorkspaceViewModel](row)
+		ws, _ := outline.RowData[workspaceview.WorkspaceViewModel](row)
 		if ws == nil || ws.IsPseudo || t.moveSt == nil {
 			return t, nil
 		}

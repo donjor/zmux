@@ -19,8 +19,9 @@ type MockRunner struct {
 	TmuxVersion string
 	Calls       []MockCall
 
-	// Endpoint is the tmux server endpoint this mock is associated with.
-	Endpoint Endpoint
+	// Endpt is the tmux server endpoint this mock is associated with, returned
+	// by the Endpoint() method (Runner interface).
+	Endpt Endpoint
 
 	// DisplayMessageResult is the content returned by DisplayMessage.
 	DisplayMessageResult string
@@ -30,6 +31,9 @@ type MockRunner struct {
 
 	// CapturePaneFunc, if set, overrides CapturedPaneContent with dynamic responses.
 	CapturePaneFunc func(target string, lines int) (string, error)
+
+	// CapturePaneOptsFunc, if set, overrides CapturedPaneContent for CapturePaneOpts.
+	CapturePaneOptsFunc func(target string, opts CapturePaneOptions) (string, error)
 
 	// Optional error to return from any method.
 	Err error
@@ -238,6 +242,18 @@ func (m *MockRunner) CapturePane(target string, lines int) (string, error) {
 	return m.CapturedPaneContent, m.Err
 }
 
+// CapturePaneOpts records the call and returns the configured content.
+func (m *MockRunner) CapturePaneOpts(target string, opts CapturePaneOptions) (string, error) {
+	m.record("CapturePaneOpts", target, fmt.Sprintf("lines=%d ansi=%t join=%t", opts.Lines, opts.ANSI, opts.Join))
+	if m.CapturePaneOptsFunc != nil {
+		return m.CapturePaneOptsFunc(target, opts)
+	}
+	if m.CapturePaneFunc != nil {
+		return m.CapturePaneFunc(target, opts.Lines)
+	}
+	return m.CapturedPaneContent, m.Err
+}
+
 // SetOption records the call.
 func (m *MockRunner) SetOption(scope, key, value string) error {
 	m.record("SetOption", scope, key, value)
@@ -290,6 +306,12 @@ func (m *MockRunner) IsInsideTmux() bool {
 func (m *MockRunner) ServerRunning() bool {
 	m.record("ServerRunning")
 	return m.ServerUp
+}
+
+// Endpoint returns the configured endpoint (default zero value = default server).
+func (m *MockRunner) Endpoint() Endpoint {
+	m.record("Endpoint")
+	return m.Endpt
 }
 
 // Version returns the configured version string.

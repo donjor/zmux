@@ -110,6 +110,8 @@
 - [ ] Save session layout (windows, panes, working dirs)
 - [ ] Restore session layout on tmux restart
 - [ ] Layout-only — no command re-execution
+- [ ] Smarter disconnect handling — survive client drops / network blips more
+      gracefully than the current approach
 
 ### Workspaces
 - [x] Auto-grouped sessions — attaching to an attached session creates an
@@ -142,6 +144,8 @@
 - [ ] Remote session discovery — show remote sessions in local picker
 - [ ] Remote session management — create, rename, kill from local zmux
 - [ ] Transparent local/remote session switching
+- [ ] World-class nested-zmux — connecting into a host that *itself* runs zmux
+      (prefix/keytable, bar, and theme coordination across the outer/inner layer)
 
 ### Contextual Status Bar
 - [x] Git branch display with dirty/ahead/behind indicators
@@ -174,3 +178,62 @@
 - [ ] Homebrew tap
 - [ ] AUR package
 - [ ] Nix flake
+
+## Engineering & internals
+
+> **Next up (queued, in order):** (1) Charm v2 stack upgrade → (2) `zzmux` edge
+> binary → (3) world-class SSH / nested-zmux (see SSH Remote Support above).
+
+### Architecture refactor — done (2026-05-24)
+
+Full record in `docs/reafactor/` (plans `016`/`017`, `RUNDOWN-LIGHT-LOG.md`).
+
+- [x] Omega ideal restructure — package-boundary split + DI repeal
+      (`internal/app` + `NewRootCmd`), `internal/keys` + `internal/setup`
+      registries, `cmd/zmux` → `internal/cli` thin-main, gofumpt +
+      golangci-lint v2 tooling. Merged `26dc7a9` / `83e13a9` / `f8cd74a`.
+- [x] followup-03 — B-purity seams (2026-05-25): `overmind.Client` injected via
+      `App.Overmind` (7 call sites rewired, package wrappers deleted); terminal
+      adapter/process injected as cmd params (package globals gone); cli test
+      apps use in-memory FS.
+- [x] followup-04 — C3 source-discovery prober (2026-05-25): `source.prober`
+      seam (`systemProber`/`fakeProber`); `Discover()` → `discoverWith(prober)`
+      with orchestration tests.
+- [x] `docs/architecture.md` refresh (2026-05-25): stale file-size table (no prod
+      file >500 now), seams table (added `source.prober`, noted overmind/terminal
+      injection), picker tree nit.
+
+### Charm v2 stack upgrade — done (2026-05-25)
+
+Plan + evidence in `.dump/plans/018_2026-05-25_charm-v2-upgrade/`.
+
+- [x] bubbletea v1.3.10 → v2.0.6 (`charm.land/bubbletea/v2`)
+- [x] lipgloss v1.1.0 → v2.0.3 (`charm.land/lipgloss/v2`)
+- [x] bubbles v1.0.0 → v2.1.0 (`charm.land/bubbles/v2`) — coupled, migrated together
+- [x] Adopt `charmbracelet/log` for structured logging (slog backend in
+      `internal/debug`; pins `x/cellbuf v0.0.15` — see `go.mod` note)
+- [ ] Follow-up: textinput light-theme styling via `textinput.DefaultStyles(isDark)`
+      (all bundled themes are dark today, so v2 dark defaults = parity; this is an
+      enhancement, not a regression)
+
+### Dev / dogfooding
+- [x] `zzmux` edge binary — separate build + install (`./dev.sh zzmux` /
+      `make install-zzmux`) so dev work doesn't clobber the live `zmux` running
+      active Claude sessions
+- [x] `zzmux` full isolation (2026-05-26) — binary-name profile (`config.Profile`
+      keyed off `argv[0]`): own tmux socket (`-L zzmux`) + config (`~/.zzmux.toml`)
+      + conf (`~/.zzmux.conf`) + state (`~/.zzmux/`) + source discovery, so
+      `zzmux apply`/`init`/workspace ops never touch live `zmux`. Plan + verify:
+      `.dump/plans/019_2026-05-26_zzmux-isolation/`. Deferred follow-ups (all
+      read-only / benign): (1) resolver read-fallback to the shared `~/.zmux/themes`
+      + `~/.zmux/templates` libraries — zzmux gets bundled themes + its own profile
+      dirs today, not user-custom shared ones (incl. `DefaultConfig()` templates
+      path); (2) `zzmux` symlinked to the `zmux` binary is unsupported — the
+      generated conf embeds `os.Executable()`, so install by copy (`./dev.sh zzmux`
+      / `make install-zzmux` already copy).
+
+### Skills & docs
+- [ ] Rewrite a clean, focused, claude/codex-valid zmux skill — the generic
+      `skills/zmux/SKILL.md` got poisoned with pi-specific content
+- [ ] Move pi-specific content out into the pi-extension
+      (`docs/pi-zmux-extension.md`)

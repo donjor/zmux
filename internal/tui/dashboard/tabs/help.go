@@ -3,24 +3,25 @@ package tabs
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 
-	"github.com/donjor/zmux/internal/tui"
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // HelpTab displays a static, scrollable keybinding reference.
 type HelpTab struct {
-	styles tui.Styles
+	styles styles.Styles
 	vp     viewport.Model
 	width  int
 	height int
 }
 
 // NewHelpTab creates a new help tab.
-func NewHelpTab(styles tui.Styles) *HelpTab {
+func NewHelpTab(styles styles.Styles) *HelpTab {
 	return &HelpTab{styles: styles}
 }
 
@@ -36,9 +37,9 @@ func (t *HelpTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch {
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
-			t.vp.LineUp(1)
+			t.vp.ScrollUp(1)
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("down", "j"))):
-			t.vp.LineDown(1)
+			t.vp.ScrollDown(1)
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("g"))):
 			t.vp.GotoTop()
 		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("G"))):
@@ -58,8 +59,8 @@ func (t *HelpTab) View() string {
 func (t *HelpTab) Resize(width, height int) {
 	t.width = width
 	t.height = height
-	t.vp.Width = width
-	t.vp.Height = height
+	t.vp.SetWidth(width)
+	t.vp.SetHeight(height)
 }
 
 func (t *HelpTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
@@ -80,8 +81,18 @@ func (t *HelpTab) helpLines() []string {
 	section := func(title string) string {
 		return accent.Bold(true).Render(title)
 	}
-	binding := func(keys, desc string) string {
-		return "  " + normal.Bold(true).Render(keys) + dim.Render("  "+desc)
+	binding := func(keyLabel, desc string) string {
+		return "  " + normal.Bold(true).Render(keyLabel) + dim.Render("  "+desc)
+	}
+	// registryLines renders a keys-registry slice into a single newline-joined
+	// block so the tmux/no-prefix/copy-mode sections share one source of truth
+	// with conf.go and the generated docs.
+	registryLines := func(bindings []keys.Binding) string {
+		out := make([]string, 0, len(bindings))
+		for _, kb := range bindings {
+			out = append(out, binding(kb.Humanize(), kb.Help))
+		}
+		return strings.Join(out, "\n")
 	}
 
 	return []string{
@@ -132,26 +143,13 @@ func (t *HelpTab) helpLines() []string {
 		binding("Esc", "Cancel editing"),
 		"",
 		section("tmux Prefix Keys (Ctrl+Space)"),
-		binding("Space", "Open dashboard"),
-		binding("p", "Open command palette"),
-		binding("d", "Detach from session"),
-		binding("?", "Help popup"),
-		binding("w", "Workspace session picker"),
-		binding("[ / ]", "Previous / next session in workspace"),
-		binding("c", "New tab"),
-		binding("n / N", "Next / previous tab"),
-		binding("< / >", "Move tab left / right"),
-		binding("x", "Close tab (with confirm)"),
-		binding(".", "Label tab (blank clears)"),
-		binding(",", "Rename session"),
-		binding("r", "Reload zmux config (zmux apply)"),
-		binding("v", "Enter vi copy mode"),
-		binding("P", "Paste buffer"),
+		registryLines(keys.PrefixBindings),
+		"",
+		section("Inherited tmux Defaults (Ctrl+Space)"),
+		registryLines(keys.InheritedBindings),
 		"",
 		section("No-Prefix Keys"),
-		binding("Alt+1-9", "Switch to tab N directly"),
-		binding("Shift+Alt+1-9", "Switch to session N in workspace"),
-		binding("Alt+`", "Tab switcher popup"),
+		registryLines(keys.NoPrefixBindings),
 		"",
 		section("Tab Picker (Alt+`)"),
 		binding("Enter", "Switch to selected tab"),
@@ -168,12 +166,7 @@ func (t *HelpTab) helpLines() []string {
 		binding("j / k", "Navigate action list"),
 		"",
 		section("Copy Mode (vi keys)"),
-		binding("v", "Begin selection"),
-		binding("Ctrl+v", "Toggle rectangle selection"),
-		binding("y", "Yank selection to clipboard"),
-		binding("Escape", "Cancel copy mode"),
-		binding("/", "Search forward"),
-		binding("?", "Search backward"),
+		registryLines(keys.CopyModeBindings),
 		"",
 		section("Session Behavior"),
 		"  " + dim.Render("Attaching to an already-attached session creates a"),

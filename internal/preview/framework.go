@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // Page is one previewable UI surface.
@@ -136,7 +136,13 @@ func (a *App) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model.
-func (a *App) View() string {
+func (a *App) View() tea.View {
+	v := tea.NewView(a.view())
+	v.AltScreen = true
+	return v
+}
+
+func (a *App) view() string {
 	if len(a.pages) == 0 {
 		return "no pages registered"
 	}

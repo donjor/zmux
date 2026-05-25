@@ -3,21 +3,21 @@ package dashboard
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // Services bundles the dependencies tabs need.
 type Services struct {
 	Runner   tmux.Runner
 	FS       config.FS
-	Styles   tui.Styles
+	Styles   styles.Styles
 	Palette  *theme.Palette  // Theme palette (nil if unresolved).
 	Resolver *theme.Resolver // Theme resolver for lookups.
 }
@@ -155,7 +155,13 @@ func (m *DashboardApp) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View renders chrome + active tab content.
-func (m *DashboardApp) View() string {
+func (m *DashboardApp) View() tea.View {
+	v := tea.NewView(m.view())
+	v.AltScreen = true
+	return v
+}
+
+func (m *DashboardApp) view() string {
 	if m.Quitting {
 		return ""
 	}
@@ -319,6 +325,8 @@ func (m *DashboardApp) handleIntent(intent AppIntentMsg) (tea.Model, tea.Cmd) {
 		// The recursive call worked only because the two structs happened
 		// to share the same field shape — any future drift on either
 		// side would silently miscompile at runtime.
+		//nolint:staticcheck // S1016: intentional explicit-field copy, not a type
+		// conversion — guards against silent breakage if the two structs drift.
 		changed := ThemeChangedMsg{Palette: it.Palette, Styles: it.Styles}
 		return m, func() tea.Msg { return changed }
 	}

@@ -25,6 +25,7 @@ func (m *memFS) ReadFile(path string) ([]byte, error) {
 	}
 	return data, nil
 }
+
 func (m *memFS) WriteFile(path string, data []byte, _ os.FileMode) error {
 	m.files[path] = data
 	return nil

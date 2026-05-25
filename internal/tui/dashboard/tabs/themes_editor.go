@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tui/dashboard"
@@ -64,8 +64,8 @@ func buildEditorSlots() []editorSlot {
 func (t *ThemesTab) handleEditorKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	// Clone/save-as name input.
 	if t.namingActive {
-		switch msg.Type {
-		case tea.KeyEnter:
+		switch msg.String() {
+		case "enter":
 			name := strings.TrimSpace(t.nameInput.Value())
 			if name != "" {
 				t.editName = name
@@ -77,7 +77,7 @@ func (t *ThemesTab) handleEditorKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 			t.namingActive = false
 			t.nameInput.Blur()
 			return t, nil
-		case tea.KeyEscape:
+		case "esc":
 			t.namingActive = false
 			t.nameInput.Blur()
 			return t, nil

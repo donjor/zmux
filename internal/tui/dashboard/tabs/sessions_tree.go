@@ -6,8 +6,8 @@ import (
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
 
 // buildRows constructs the flat outline rows from the current snapshot data.
@@ -39,7 +39,7 @@ func (t *SessionsTab) buildRows() []outline.Row {
 // buildWorkspaceRow returns the workspace header row plus its session rows
 // when expanded. Pseudo workspaces (e.g. "temporary") are emitted but never
 // participate in mutations.
-func (t *SessionsTab) buildWorkspaceRow(ws *tui.WorkspaceViewModel) []outline.Row {
+func (t *SessionsTab) buildWorkspaceRow(ws *workspaceview.WorkspaceViewModel) []outline.Row {
 	wsID := outline.WorkspaceID(ws.Name)
 	expanded := t.tree.IsExpanded(wsID)
 
@@ -154,7 +154,7 @@ func (t *SessionsTab) buildExternalRows() []outline.Row {
 
 // formatSessionsWorkspaceLabel renders the workspace header label with
 // session count and attached marker.
-func formatSessionsWorkspaceLabel(ws *tui.WorkspaceViewModel) string {
+func formatSessionsWorkspaceLabel(ws *workspaceview.WorkspaceViewModel) string {
 	if ws == nil {
 		return ""
 	}

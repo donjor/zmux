@@ -4,15 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
-
-func dim(s string) string  { return DimStyle.Render(s) }
-func bold(s string) string { return lipgloss.NewStyle().Bold(true).Render(s) }
-func highlightActive(s string) string {
-	return lipgloss.NewStyle().Bold(true).Foreground(Teal).Render(s)
-}
-func dimActive(s string) string { return lipgloss.NewStyle().Foreground(Teal).Render(s) }
 
 // renderHero draws the app-level design-lab heading.
 func renderHero(width int) string {

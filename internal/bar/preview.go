@@ -284,7 +284,7 @@ func hexToANSI(prefix, hex string) string {
 		return prefix + ";2;128;128;128"
 	}
 	var r, g, b int
-	fmt.Sscanf(hex, "%02x%02x%02x", &r, &g, &b)
+	_, _ = fmt.Sscanf(hex, "%02x%02x%02x", &r, &g, &b)
 	return fmt.Sprintf("%s;2;%d;%d;%d", prefix, r, g, b)
 }
 

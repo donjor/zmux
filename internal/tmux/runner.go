@@ -62,6 +62,7 @@ type Runner interface {
 	SendKeys(target string, keys ...string) error
 	DisplayMessage(target, format string) (string, error)
 	CapturePane(target string, lines int) (string, error)
+	CapturePaneOpts(target string, opts CapturePaneOptions) (string, error)
 
 	// Config
 	SetOption(scope, key, value string) error
@@ -78,4 +79,8 @@ type Runner interface {
 	IsInsideTmux() bool
 	ServerRunning() bool
 	Version() (string, error)
+	// Endpoint reports the tmux server socket this runner targets (default,
+	// -L name, or -S path). Used by source discovery to treat the runner's own
+	// server as "local" rather than hardcoding the default socket.
+	Endpoint() Endpoint
 }

@@ -3,7 +3,7 @@ package views
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // TabBarEntry holds display data for a single tab in the tab bar.

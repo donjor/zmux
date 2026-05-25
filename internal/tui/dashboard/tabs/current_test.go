@@ -5,13 +5,15 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/donjor/zmux/internal/tui/tkey"
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/styles"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/donjor/zmux/internal/workspace"
 )
 
@@ -75,13 +77,13 @@ func newTestCurrentTab(t *testing.T) (*CurrentTab, *tmux.MockRunner, *workspace.
 		t.Fatalf("add api session: %v", err)
 	}
 
-	loader := func() []tui.WorkspaceViewModel {
+	loader := func() []workspaceview.WorkspaceViewModel {
 		ws, _ := store.ListWorkspaces()
 		live, _ := session.ListSessions(mock)
-		return tui.BuildWorkspaceViewModels(ws, live)
+		return workspaceview.BuildWorkspaceViewModels(ws, live)
 	}
 
-	tab := NewCurrentTab(mock, tui.DefaultStyles(), loader, store)
+	tab := NewCurrentTab(mock, styles.DefaultStyles(), loader, store)
 	tab.Resize(80, 40)
 	return tab, mock, store
 }
@@ -117,15 +119,15 @@ func sendCurrentKey(tab *CurrentTab, keyStr string) (*CurrentTab, tea.Cmd) {
 	var msg tea.KeyMsg
 	switch keyStr {
 	case "enter":
-		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		msg = tkey.Enter()
 	case "esc":
-		msg = tea.KeyMsg{Type: tea.KeyEscape}
+		msg = tkey.Esc()
 	case "up":
-		msg = tea.KeyMsg{Type: tea.KeyUp}
+		msg = tkey.Up()
 	case "down":
-		msg = tea.KeyMsg{Type: tea.KeyDown}
+		msg = tkey.Down()
 	default:
-		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
+		msg = tkey.Type(keyStr)
 	}
 	result, cmd := tab.Update(msg)
 	return result.(*CurrentTab), cmd

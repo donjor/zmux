@@ -1,9 +1,9 @@
 package views
 
 import (
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // InputDoneMsg signals that the user has confirmed text input.
@@ -67,13 +67,13 @@ func (m InputModel) Update(msg tea.Msg) (InputModel, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEnter:
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "enter":
 			val := m.input.Value()
 			m.Blur()
 			return m, func() tea.Msg { return InputDoneMsg{Value: val} }
-		case tea.KeyEscape:
+		case "esc":
 			m.Blur()
 			return m, func() tea.Msg { return InputCancelMsg{} }
 		}

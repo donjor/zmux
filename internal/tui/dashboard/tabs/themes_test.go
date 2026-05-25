@@ -4,13 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/donjor/zmux/internal/tui/tkey"
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // ── Test helpers ──
@@ -47,7 +48,7 @@ func newTestThemesTab(t *testing.T) (*ThemesTab, *tmux.MockRunner, *sessionsMemF
 	// Resolver with no user/iterm2 dirs — returns bundled themes only.
 	resolver := theme.NewResolver(fs, "", "")
 
-	tab := NewThemesTab(resolver, fs, mock, tui.DefaultStyles())
+	tab := NewThemesTab(resolver, fs, mock, styles.DefaultStyles())
 	tab.Resize(120, 40)
 	return tab, mock, fs
 }
@@ -74,21 +75,21 @@ func sendThemesKey(tab *ThemesTab, k string) (*ThemesTab, tea.Cmd) {
 	var msg tea.KeyMsg
 	switch k {
 	case "enter":
-		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		msg = tkey.Enter()
 	case "esc":
-		msg = tea.KeyMsg{Type: tea.KeyEscape}
+		msg = tkey.Esc()
 	case "up":
-		msg = tea.KeyMsg{Type: tea.KeyUp}
+		msg = tkey.Up()
 	case "down":
-		msg = tea.KeyMsg{Type: tea.KeyDown}
+		msg = tkey.Down()
 	case "left":
-		msg = tea.KeyMsg{Type: tea.KeyLeft}
+		msg = tkey.Left()
 	case "right":
-		msg = tea.KeyMsg{Type: tea.KeyRight}
+		msg = tkey.Right()
 	case " ":
-		msg = tea.KeyMsg{Type: tea.KeySpace}
+		msg = tkey.Space()
 	default:
-		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
+		msg = tkey.Type(k)
 	}
 	out, cmd := tab.Update(msg)
 	return out.(*ThemesTab), cmd

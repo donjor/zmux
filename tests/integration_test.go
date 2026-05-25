@@ -140,7 +140,7 @@ func TestHelpCommand(t *testing.T) {
 	}
 
 	// Should contain the main help sections. Kept in sync with the
-	// section headers rendered by cmd/zmux/help.go.
+	// section headers rendered by internal/cli/help.go.
 	sections := []string{
 		"Session Management",
 		"Workspace Management",

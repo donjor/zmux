@@ -107,15 +107,18 @@ func renderTopWorkspacePill(p *theme.Palette, workspace string, preset Preset) s
 	case Powerline:
 		return fmt.Sprintf(
 			"#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s,bold] %s #[nobold]",
-			p.BG.Hex(), p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label)
+			p.BG.Hex(), p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label,
+		)
 	case Rpowerline:
 		return fmt.Sprintf(
 			"#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] %s #[nobold,fg=%s,bg=default]\ue0b4",
-			p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label, p.Special.Hex())
+			p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label, p.Special.Hex(),
+		)
 	case Rounded:
 		return fmt.Sprintf(
 			"#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] %s #[fg=%s,bg=default]\ue0b4",
-			p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label, p.Special.Hex())
+			p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label, p.Special.Hex(),
+		)
 	case Blocks:
 		return fmt.Sprintf("#[fg=%s,bold] [%s] #[nobold]", p.Special.Hex(), label)
 	case Hacker:
@@ -129,6 +132,7 @@ func renderTopWorkspacePill(p *theme.Palette, workspace string, preset Preset) s
 	default:
 		return fmt.Sprintf(
 			"#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] %s #[fg=%s,bg=default]\ue0b4",
-			p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label, p.Special.Hex())
+			p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), label, p.Special.Hex(),
+		)
 	}
 }

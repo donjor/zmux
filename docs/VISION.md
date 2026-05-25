@@ -24,7 +24,7 @@ who wants a polished experience without deep tmux knowledge.
 ### v0 — bash + gum prototype (complete, archived as `zmux0`)
 - Bash scripts + charmbracelet/gum for UI
 - Proved out the UX, feature set, and config format
-- Still available as `bin/zmux0` and `zmux0` command
+- Still available under [`legacy/v0/`](../legacy/v0/) and as the `zmux0` command after `./legacy/v0/install.sh`
 
 ### v1 — Go rewrite (current)
 - Clean-room rewrite in Go (bubbletea + lipgloss + cobra)

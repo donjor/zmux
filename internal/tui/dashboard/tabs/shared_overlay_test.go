@@ -4,15 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/textinput"
-
-	"github.com/donjor/zmux/internal/tui"
+	"charm.land/bubbles/v2/textinput"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 func TestRenderRenameOverlaySharedShowsKindLabel(t *testing.T) {
 	in := textinput.New()
 	in.SetValue("foo")
-	out := renderRenameOverlayShared(tui.DefaultStyles(), "session", in)
+	out := renderRenameOverlayShared(styles.DefaultStyles(), "session", in)
 	if !strings.Contains(out, "rename session") {
 		t.Errorf("expected 'rename session' label, got %q", out)
 	}
@@ -33,11 +32,11 @@ func renderRenameOverlaySharedNoCrash(t *testing.T, kind string, in textinput.Mo
 			t.Fatalf("renderRenameOverlayShared panicked: %v", r)
 		}
 	}()
-	return renderRenameOverlayShared(tui.DefaultStyles(), kind, in)
+	return renderRenameOverlayShared(styles.DefaultStyles(), kind, in)
 }
 
 func TestRenderConfirmOverlaySharedNilReturnsEmpty(t *testing.T) {
-	out := renderConfirmOverlayShared(tui.DefaultStyles(), nil, 1)
+	out := renderConfirmOverlayShared(styles.DefaultStyles(), nil, 1)
 	if out != "" {
 		t.Errorf("expected empty output for nil confirm, got %q", out)
 	}
@@ -45,7 +44,7 @@ func TestRenderConfirmOverlaySharedNilReturnsEmpty(t *testing.T) {
 
 func TestRenderConfirmOverlaySharedStep1ShowsKindAndName(t *testing.T) {
 	c := &confirmState{kind: "workspace", name: "myapp"}
-	out := renderConfirmOverlayShared(tui.DefaultStyles(), c, 1)
+	out := renderConfirmOverlayShared(styles.DefaultStyles(), c, 1)
 	if !strings.Contains(out, "Kill workspace") {
 		t.Errorf("expected 'Kill workspace', got %q", out)
 	}
@@ -59,7 +58,7 @@ func TestRenderConfirmOverlaySharedStep1ShowsKindAndName(t *testing.T) {
 
 func TestRenderConfirmOverlaySharedStep2ShowsDetachWarning(t *testing.T) {
 	c := &confirmState{kind: "workspace", name: "myapp", attached: true}
-	out := renderConfirmOverlayShared(tui.DefaultStyles(), c, 2)
+	out := renderConfirmOverlayShared(styles.DefaultStyles(), c, 2)
 	if !strings.Contains(out, "detach") {
 		t.Errorf("expected detach warning, got %q", out)
 	}

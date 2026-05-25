@@ -2,27 +2,21 @@
 package views
 
 import (
-	"io"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 
 	"github.com/donjor/zmux/internal/theme"
 )
 
-// swatchRenderer forces TrueColor output for consistent rendering.
-var swatchRenderer = newSwatchRenderer()
-
-func newSwatchRenderer() *lipgloss.Renderer {
-	r := lipgloss.NewRenderer(io.Discard)
-	r.SetColorProfile(termenv.TrueColor)
-	return r
-}
-
-// swatchStyle creates a new style bound to the TrueColor renderer.
+// swatchStyle creates a new style for rendering a swatch block.
+//
+// Lip Gloss v2 removed the per-renderer color-profile override
+// (`NewRenderer(...).SetColorProfile(TrueColor)`); v2 renders full-fidelity and
+// the output writer downsamples to the terminal's profile. See Phase 4b in
+// plan 018 for whether forced TrueColor needs reinstating via colorprofile.
 func swatchStyle() lipgloss.Style {
-	return swatchRenderer.NewStyle()
+	return lipgloss.NewStyle()
 }
 
 // swatchEntry pairs a semantic role name with its color.

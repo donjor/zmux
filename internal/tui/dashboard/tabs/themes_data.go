@@ -3,13 +3,13 @@ package tabs
 import (
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // Data + mutation commands for the ThemesTab. Split out of themes.go
@@ -99,7 +99,7 @@ func (t *ThemesTab) applyTheme(name string) tea.Cmd {
 
 		// Hot-reload: apply theme env vars + bar colors.
 		var pal *theme.Palette
-		var sty *tui.Styles
+		var sty *styles.Styles
 		if runner != nil && resolver != nil {
 			resolved, resolveErr := resolver.Resolve(name)
 			if resolveErr == nil {
@@ -113,7 +113,7 @@ func (t *ThemesTab) applyTheme(name string) tea.Cmd {
 				}
 				_ = bar.Apply(runner, preset, &p, lc)
 				pal = &p
-				s := tui.NewStyles(&p)
+				s := styles.NewStyles(&p)
 				sty = &s
 			}
 		}
@@ -161,7 +161,7 @@ func (t *ThemesTab) saveThemeFile() tea.Cmd {
 		}
 
 		dir := home + "/.zmux/themes"
-		_ = fs.MkdirAll(dir, 0755)
+		_ = fs.MkdirAll(dir, 0o755)
 
 		path := dir + "/" + editName
 		if err := theme.WriteFile(fs, path, editTheme); err != nil {

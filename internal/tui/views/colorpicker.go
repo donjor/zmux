@@ -5,10 +5,10 @@ import (
 	"math"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/muesli/termenv"
 
 	"github.com/donjor/zmux/internal/theme"
@@ -106,9 +106,9 @@ func (p *ColorPicker) updateSlider(msg tea.Msg) (*ColorPicker, tea.Cmd) {
 }
 
 func (p *ColorPicker) updateHex(msg tea.Msg) (*ColorPicker, tea.Cmd) {
-	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		switch keyMsg.Type {
-		case tea.KeyEnter:
+	if keyMsg, ok := msg.(tea.KeyPressMsg); ok {
+		switch keyMsg.String() {
+		case "enter":
 			hex := strings.TrimSpace(p.HexInput.Value())
 			c, err := theme.ParseHexColor(hex)
 			if err == nil {
@@ -117,7 +117,7 @@ func (p *ColorPicker) updateHex(msg tea.Msg) (*ColorPicker, tea.Cmd) {
 			p.Mode = PickerSlider
 			p.HexInput.Blur()
 			return p, nil
-		case tea.KeyEscape:
+		case "esc":
 			p.Mode = PickerSlider
 			p.HexInput.Blur()
 			return p, nil
@@ -147,7 +147,7 @@ func (p *ColorPicker) View() string {
 	color := p.Value()
 
 	// Title line: slot name + hex value.
-	b.WriteString(fmt.Sprintf("  %s (%s)\n", p.Slot, color.Hex()))
+	fmt.Fprintf(&b, "  %s (%s)\n", p.Slot, color.Hex())
 
 	if p.Mode == PickerHex {
 		b.WriteString("  Hex: " + p.HexInput.View() + "\n")
@@ -195,7 +195,7 @@ func (p *ColorPicker) View() string {
 		}
 
 		valueStr := fmt.Sprintf(" %3.0f%s", ch.value, ch.unit)
-		b.WriteString(fmt.Sprintf("  %s%s %s%s\n", cursor, ch.label, bar.String(), valueStr))
+		fmt.Fprintf(&b, "  %s%s %s%s\n", cursor, ch.label, bar.String(), valueStr)
 	}
 
 	// Preview swatch.
@@ -204,7 +204,7 @@ func (p *ColorPicker) View() string {
 		Background(lipgloss.Color(hexColor)).
 		Foreground(lipgloss.Color(hexColor))
 	swatch := swatchStyle.Render("      ")
-	b.WriteString(fmt.Sprintf("  [%s] preview\n", swatch))
+	fmt.Fprintf(&b, "  [%s] preview\n", swatch)
 
 	return b.String()
 }

@@ -1,16 +1,16 @@
 package tabs
 
 import (
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/views"
 )
 
@@ -31,7 +31,7 @@ type themesApplyMsg struct {
 	reqID     int64
 	themeName string
 	palette   *theme.Palette
-	styles    *tui.Styles
+	styles    *styles.Styles
 	err       error
 }
 
@@ -67,7 +67,7 @@ type ThemesTab struct {
 	resolver *theme.Resolver
 	fs       config.FS
 	runner   tmux.Runner
-	styles   tui.Styles
+	styles   styles.Styles
 
 	mode themesMode
 
@@ -93,7 +93,7 @@ type ThemesTab struct {
 	// Preview state (ephemeral).
 	savedTheme   string
 	savedPalette *theme.Palette
-	savedStyles  *tui.Styles
+	savedStyles  *styles.Styles
 	previewing   bool
 
 	// Request tracking.
@@ -105,7 +105,7 @@ type ThemesTab struct {
 }
 
 // NewThemesTab creates a new themes tab.
-func NewThemesTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, styles tui.Styles) *ThemesTab {
+func NewThemesTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, styles styles.Styles) *ThemesTab {
 	filterInput := textinput.New()
 	filterInput.Placeholder = "filter themes..."
 	filterInput.CharLimit = 64
@@ -154,8 +154,8 @@ func (t *ThemesTab) Deactivate() {
 func (t *ThemesTab) Resize(w, h int) {
 	t.width = w
 	t.height = h
-	t.vp.Width = w
-	t.vp.Height = h
+	t.vp.SetWidth(w)
+	t.vp.SetHeight(h)
 }
 
 func (t *ThemesTab) ShortHelp() string {

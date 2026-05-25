@@ -3,9 +3,8 @@ package palette
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/donjor/zmux/internal/tui"
+	"github.com/donjor/zmux/internal/tui/styles"
+	"github.com/donjor/zmux/internal/tui/tkey"
 )
 
 // newTestModel returns a PaletteModel populated with a fixed set of
@@ -19,7 +18,7 @@ func newTestModel() *PaletteModel {
 		{ID: "bar:set:default", Group: "Bar", Title: "Set bar: default"},
 	}
 	reg := NewRegistry(&stubProvider{actions: actions})
-	return NewPaletteModel(reg, tui.DefaultStyles())
+	return NewPaletteModel(reg, styles.DefaultStyles())
 }
 
 func TestNewPaletteModelPopulatesFromRegistry(t *testing.T) {
@@ -37,7 +36,7 @@ func TestNewPaletteModelPopulatesFromRegistry(t *testing.T) {
 
 func TestPaletteEscSetsQuitting(t *testing.T) {
 	m := newTestModel()
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	out, _ := m.Update(tkey.Esc())
 	mOut := out.(*PaletteModel)
 	if !mOut.Quitting {
 		t.Error("esc should set Quitting")
@@ -46,7 +45,7 @@ func TestPaletteEscSetsQuitting(t *testing.T) {
 
 func TestPaletteCtrlCSetsQuitting(t *testing.T) {
 	m := newTestModel()
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	out, _ := m.Update(tkey.Ctrl('c'))
 	mOut := out.(*PaletteModel)
 	if !mOut.Quitting {
 		t.Error("ctrl+c should set Quitting")
@@ -57,7 +56,7 @@ func TestPaletteCursorNavigationClamps(t *testing.T) {
 	m := newTestModel()
 
 	// Up from 0 stays at 0.
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	out, _ := m.Update(tkey.Up())
 	m = out.(*PaletteModel)
 	if m.cursor != 0 {
 		t.Errorf("after up from 0: cursor = %d, want 0", m.cursor)
@@ -65,7 +64,7 @@ func TestPaletteCursorNavigationClamps(t *testing.T) {
 
 	// Down walks through all filtered entries.
 	for i := 1; i < len(m.filtered); i++ {
-		out, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		out, _ := m.Update(tkey.Down())
 		m = out.(*PaletteModel)
 		if m.cursor != i {
 			t.Errorf("step %d: cursor = %d", i, m.cursor)
@@ -73,7 +72,7 @@ func TestPaletteCursorNavigationClamps(t *testing.T) {
 	}
 
 	// Down at bottom stays at bottom.
-	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	out, _ = m.Update(tkey.Down())
 	m = out.(*PaletteModel)
 	if m.cursor != len(m.filtered)-1 {
 		t.Errorf("after down at bottom: cursor = %d, want %d", m.cursor, len(m.filtered)-1)
@@ -85,7 +84,7 @@ func TestPaletteEnterSelectsAndQuits(t *testing.T) {
 	m.cursor = 2 // the ayu-dark theme
 	expected := m.filtered[2].ID
 
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	out, _ := m.Update(tkey.Enter())
 	m = out.(*PaletteModel)
 
 	if !m.Quitting {
@@ -110,7 +109,7 @@ func TestPaletteEnterWithEmptyFilteredIsNoop(t *testing.T) {
 		t.Fatalf("want empty filtered, got %d", len(m.filtered))
 	}
 
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	out, _ := m.Update(tkey.Enter())
 	m = out.(*PaletteModel)
 	if m.Quitting {
 		t.Error("enter on empty should not quit")
@@ -165,7 +164,7 @@ func TestPaletteViewRendersTitleAndHelp(t *testing.T) {
 	m := newTestModel()
 	m.width = 80
 	m.height = 24
-	view := m.View()
+	view := m.view()
 	if view == "" {
 		t.Error("View() returned empty string")
 	}
@@ -178,7 +177,7 @@ func TestPaletteViewEmptyFilterShowsNoMatchMessage(t *testing.T) {
 	m.filter.SetValue("notarealquery")
 	m.applyFilter()
 
-	view := m.View()
+	view := m.view()
 	if view == "" {
 		t.Error("View() returned empty when no matches")
 	}

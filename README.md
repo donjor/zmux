@@ -36,8 +36,9 @@ The installer:
 2. Builds the binary
 3. Installs to `~/.local/bin/zmux`
 4. Optionally adds shell integration (auto-start on terminal open)
-5. Optionally links the Pi agent skill and extension
-6. Runs `zmux init` setup wizard
+5. Optionally links the Claude Code skill
+6. Optionally links the Pi agent skill and extension
+7. Runs `zmux init` setup wizard
 
 ### Updating
 
@@ -61,11 +62,13 @@ zmux init           # interactive setup wizard (first time only)
 
 ### Legacy v0 (bash+gum)
 
-The original bash prototype is still in the repo as `bin/zmux0`:
+The original bash prototype lives under [`legacy/v0/`](legacy/v0/) — preserved but unsupported:
 
 ```bash
-./install-v0.sh     # links zmux0 to ~/.local/bin/zmux0
+./legacy/v0/install.sh    # links zmux0 to ~/.local/bin/zmux0
 ```
+
+See [`legacy/v0/README.md`](legacy/v0/README.md) for details and migration notes.
 
 ## Quick start
 
@@ -180,6 +183,7 @@ Prefix: `Ctrl+Space` (configurable)
 |-----|--------|
 | prefix + Space | Dashboard |
 | prefix + p | Command palette |
+| prefix + ! | Scratch shell popup ($SHELL, cwd from active pane) |
 | prefix + d | Detach |
 | prefix + ? | Help popup |
 | prefix + c | New tab |
@@ -377,9 +381,12 @@ zmux watch server -l 20                   # peek at output
 zmux send server C-c                      # stop server
 ```
 
-Pi integration lives in this repo:
-- `skills/zmux/SKILL.md` teaches Pi agents when/how to use zmux.
-- `pi-extension/` registers typed tools and bash guardrails for deterministic
+Agent integration lives in this repo:
+- `skills/zmux/SKILL.md` is the canonical skill — taught to both Claude Code
+  (via `~/.claude/skills/zmux`) and Pi agents (via `~/.pi/agent/skills/zmux`).
+  `./install.sh` and `./dev.sh` symlink it into both locations so updates flow
+  automatically.
+- `pi-extension/` registers typed Pi tools and bash guardrails for deterministic
   runtime, tab/pane/send, sidecar, interactive-command, and terminal-capability
   orchestration.
 
@@ -390,11 +397,18 @@ See [docs/pi-zmux-extension.md](docs/pi-zmux-extension.md).
 ```bash
 make build            # build binary
 make test             # run unit tests
-make test-integration # run integration tests (needs tmux)
-make lint             # go vet + staticcheck
+make test-race        # unit tests with the race detector (mirrors CI)
+make test-integration # run integration tests (exercises the built CLI; no tmux needed)
+make vuln             # govulncheck vulnerability scan
+make lint             # go vet + golangci-lint (incl. gofumpt)
 make clean            # remove build output
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor guide and [docs/architecture.md](docs/architecture.md) for the codebase map.
+
 ## License
 
-MIT
+TBD — license has not been finalized for this repo yet. If you need to use or
+redistribute this code, please open an issue or contact the maintainer first.

@@ -1,185 +1,245 @@
 ---
 name: zmux
-description: Pi-native terminal/session orchestration with zmux, the local tmux wrapper. Use when managing long-running processes, dev servers, watchers, interactive/sudo commands, shared terminal panes, tmux/zmux sessions, sidecars, or terminal capability diagnostics from a Pi agent.
+description: "Terminal/session orchestration via zmux, a tmux wrapper. TRIGGER when: managing long-running or interactive terminal processes (dev servers, watchers, queues, REPLs), the user mentions zmux/tmux sessions or tabs, sharing a terminal pane with the user, or diagnosing terminal/truecolor capabilities. Provides rules for running commands and managing tabs/panes/sessions while keeping work visible to the user."
 ---
 
-# zmux — Pi Terminal Orchestration
+# zmux — Terminal & Session Orchestration
 
-zmux is the local tmux wrapper for persistent, user-visible terminal work. In Pi,
-use it deliberately: Pi's `bash` tool is still best for bounded one-shot file,
-build, test, and inspection commands; zmux is for processes or terminal state
-that should outlive one tool call, be visible to the user, or need interactive
-control.
+zmux is a tmux wrapper for persistent, user-visible terminal work. Use it for any
+process or terminal state that should **outlive a single command**, be **visible to
+the user**, or need **interactive control**. For bounded one-shot reads, builds, and
+tests whose captured output is the whole artifact, your normal shell is fine.
 
-## Quick detection
+You are likely working inside a zmux-managed session. Drive zmux through its CLI —
+every example below is a shell command.
+
+## Am I in zmux?
 
 ```bash
-[ -n "$TMUX" ] && echo inside-tmux
-zmux pane current --json      # current pane/session details when inside zmux
-zmux ls                       # workspaces/sessions
-zmux tabs                     # tabs/windows in the current session
+[ -n "$TMUX" ] && echo inside-tmux   # inside a session — commands work without -s
+zmux ls                              # workspaces / sessions (works even outside tmux)
+zmux tabs                            # tabs in the current session
+zmux pane current --json            # current pane/session details
 ```
 
-If multiple sessions/workspaces are attached, do not guess. Inspect with `zmux
-ls`, `zmux tabs`, or `zmux pane current --json` and target commands explicitly
-when the command supports it.
+If `$TMUX` is unset but `zmux ls` shows sessions, you can still drive them — pass
+`-s <session>` on the commands that accept it (`run`, `watch`, `send`, `type`,
+`tabs`); `open` takes the workspace/session positionally and `pane` uses `--target`.
+**Never fall back to running processes directly just because you're not inside tmux.**
 
-## Decision rules for Pi agents
+When multiple sessions/workspaces are attached, **do not guess** — inspect with `zmux
+ls` / `zmux tabs` / `zmux pane current --json` and target explicitly.
 
-Use **Pi `bash` directly** for:
+## When to use zmux vs. your shell
+
+Use your **shell directly** for:
 
 - quick reads/searches (`rg`, `ls`, `cat`, `git diff`);
-- bounded builds/tests/checks that should finish in this turn;
+- bounded builds/tests/checks that finish within this turn;
 - scripts where the captured stdout/stderr is the artifact.
 
 Use **zmux** for:
 
-- dev servers, file watchers, queues, REPLs, or anything that keeps running;
-- commands requiring user input, passwords, sudo confirmation, or manual control;
+- dev servers, file watchers, queues, REPLs — anything that keeps running;
+- commands needing user input, passwords, sudo, or manual control;
 - shared visibility with the user in a named tab/pane;
 - stopping/restarting or inspecting an existing long-running process;
-- sidecars/panels/persistent UI panes;
-- terminal capability/truecolor diagnosis.
+- sidecars / persistent UI panes;
+- terminal capability / truecolor diagnosis.
 
-Do not use `&`, `nohup`, `disown`, or ad-hoc background shell jobs. Use zmux so
-processes are named, visible, and controllable.
+**Never** use `&`, `nohup`, `disown`, or ad-hoc background jobs — use zmux so
+processes are named, visible, and controllable. **Never** create unnamed tabs
+(always `-n`). **Never** use raw `tmux` for app-level actions; zmux wrappers carry
+the labels and session/workspace bookkeeping tmux doesn't.
 
-Prefer typed Pi zmux tools over shelling out to `zmux ...` when a tool exists
-(`zmux_tabs`, `zmux_tab_kill`, `zmux_tab_focus`, `zmux_send_keys`, `zmux_type`, `zmux_pane_*`,
-`zmux_runtime_*`, `zmux_interactive_type`, `zmux_pi_respawn`). Shelling out to `zmux` is acceptable
-only for bounded diagnostics or CLI surface not yet covered by a typed tool. If
-a typed tool is broken and an emergency bypass is needed, add `PI_ZMUX_ALLOW=1`
-or `# pi-zmux: allow` to the bash command and explain why. After verified Pi
-extension/tooling changes that require reloading and no soft reload tool is
-available, use `zmux_pi_respawn` instead of asking the user to manually reload;
-if autonomous follow-up is expected, pass `continuationPrompt` with exact next
-smoke/validation steps before respawning; pi-zmux will resume via a custom
-follow-up message, not a user-authored prompt. Skip respawn when unsent user input or
-manual validation may be in progress. Prefer zmux wrappers over raw `tmux` for
-app-level actions. Raw `tmux` is okay only for low-level diagnostics not exposed
-by zmux.
+## Run & observe (core)
 
-## Core commands
-
-### Run finite commands in named tabs
+### Run commands in named tabs
 
 ```bash
-zmux run 'npm test' -n test
+zmux run '<cmd>' -n <name>              # run + wait for completion (DEFAULT)
+zmux run '<cmd>' -n <name> -T 180       # wait, 180s timeout (default 120)
+zmux run '<cmd>' -n <name> -d           # detach — for servers that don't exit
+zmux run '<cmd>' -n <name> -f           # follow output live (Ctrl+C to stop)
+zmux run '<cmd>' -n <name> -s <session> # target a specific session
+```
+
+`zmux run` **waits by default**: it streams output live, then returns the command's
+exit code. It injects its own completion sentinel internally — **do not add your own
+`echo ":::DONE:::"` markers**. If the tab already exists, the command is sent to it
+(reused, not recreated). Use `-d` **only** for processes expected to run forever.
+
+### Read tab output
+
+```bash
+zmux watch <tab>                              # last 50 lines
+zmux watch <tab> -l 200                       # last 200 lines
+zmux watch <tab> -f                           # follow (tail -f style)
+zmux watch <tab> --until 'ready|listening' -T 60   # wait for regex, 60s timeout
+```
+
+`zmux watch --until` snapshots the buffer when it starts and matches only **new**
+output after that baseline — stale "ready" text from a prior run won't cause a false
+match. Use `zmux watch` to read state instead of re-running probes that disturb it.
+
+### Send keys / type
+
+```bash
+zmux send <tab> C-c          # raw keys (C-c, Enter, Escape, ...)
+zmux type <tab> '<text>'     # type text + press Enter
+```
+
+`send`/`type` target an **existing** tab — create it first with `zmux run … -n <tab>`
+(use `-d` for a persistent shell you'll drive interactively).
+
+### Common patterns
+
+```bash
+# One-shot (anything that exits — fast or slow)
 zmux run 'go test ./...' -n test -T 180
-zmux run 'npm run build' -n build -T 120
-```
 
-`zmux run` waits by default, streams output, and returns the command exit code.
-Do not add your own sentinel/marker output.
-
-### Start and observe servers/watchers
-
-```bash
-zmux run 'npm run dev' -n server -d
-zmux watch server --until 'ready|listening|started' -T 60
-zmux watch server -l 120
-zmux send server C-c
-```
-
-Use `-d` only for processes expected not to exit. Use `zmux watch` to read
-output instead of rerunning probes that disturb state.
-
-### Interactive or privileged commands
-
-```bash
-zmux type admin 'sudo apt update'
-```
-
-Then tell the user what tab/pane needs their input. Do not attempt to automate
-password entry. In Pi, prefer `zmux_interactive_type` with `focus: false`; if it
-returns `needsUserInput`, call `ask_user` before switching focus with
-`zmux_tab_focus` or rerunning with `focus: true`.
-
-### Panes and sidecars
-
-```bash
-zmux pane current --json
-zmux pane list
-zmux pane open sidecar -r 35 -- some-sidecar-command
-zmux pane open --label-tab sidecar -r 35 -- some-sidecar-command
-zmux pane toggle sidecar -r 35 -- some-sidecar-command
-zmux pane focus sidecar
-zmux pane close sidecar
-```
-
-Use `--label-tab` for sidecars that may change tmux's automatic window name; it
-preserves the conceptual tab label while still showing the auto-name overlay.
-
-### Tab labels
-
-```bash
-zmux tab label 'pi'
-zmux tab label ''       # clear label
-```
-
-Labels are zmux overlays (`label [auto-name]`) and do not disable tmux automatic
-renaming.
-
-### Config and terminal capability refresh
-
-```bash
-zmux apply                    # non-disruptive config apply
-zmux refresh                  # apply config + reattach current client
-zmux terminal capabilities    # diagnose RGB/truecolor path
-zmux terminal current --json  # visible terminal target for screenshots
-```
-
-`zmux refresh` replaces/redraws the current tmux client. Do not run it from an
-automated Pi harness unless the user asked for it or disruption is acceptable;
-it can disturb the active agent connection. Prefer telling the user to run it
-when the current session must stay stable.
-
-## Naming conventions
-
-Use stable, descriptive names:
-
-- `server` for dev servers;
-- `test` for test runners/watchers;
-- `build` for builds;
-- `logs` for log tails;
-- `admin` for sudo/interactive commands;
-- `<tool>-sidecar` for UI sidecars.
-
-## Good Pi patterns
-
-### Bounded verification
-
-```bash
-go test ./...
-```
-
-Run directly through Pi `bash` unless it is slow enough to need shared visibility
-or the user asked to watch it.
-
-### Long-running server
-
-```bash
+# Dev server (runs forever)
 zmux run 'npm run dev' -n server -d
 zmux watch server --until 'Local:|ready|listening' -T 90
-```
 
-### User-visible restart
-
-```bash
+# Restart
 zmux send server C-c
 zmux run 'npm run dev' -n server -d
 zmux watch server --until 'ready|listening' -T 90
+
+# Interactive / privileged — run it in a named tab (creates the tab), then ask the user
+zmux run 'sudo apt update' -n admin -d
+# → tell the user: "sudo command is in the 'admin' tab — enter your password."
 ```
+
+Do not attempt to automate password entry.
+
+## Sessions & workspaces
+
+```bash
+zmux ls [workspace]              # list workspaces, or sessions within one
+zmux ls -s                       # flat list of all sessions
+zmux new <workspace> [session…] # create workspace + sessions, attach (alias: n)
+zmux new -t <template> <ws>     # create from a template
+zmux open <ws> [session]         # open/attach a workspace session (aliases: attach, a)
+zmux open <ws> <session> --hijack   # take over a session attached elsewhere (advanced)
+zmux kill <name>                 # smart kill, workspace-first (alias: k)
+zmux session kill <session>      # kill a single session explicitly
+
+zmux ws list                     # workspaces and their sessions
+zmux ws add <workspace> <session>   # tag a session to a workspace
+zmux ws remove <session>         # untag a session
+zmux ws show <workspace>         # sessions in a workspace
+zmux ws kill <workspace>         # kill a workspace and all its sessions
+```
+
+## Tabs
+
+```bash
+zmux tabs [session]              # list tabs (alias: t)
+zmux tab move <tab> <dest-session>  # move a tab to another session in the workspace
+zmux tab label '<label>'         # set a stable zmux label for the current tab
+zmux tab label ''                # clear the label
+zmux tab kill <tab>              # kill a tab in the current session
+```
+
+Labels are zmux overlays (`label [auto-name]`); they don't disable tmux's automatic
+window renaming.
+
+## Panes & sidecars
+
+```bash
+zmux pane current --json         # current pane id + details
+zmux pane list --json            # panes in current window (also --session, --all, -q)
+zmux pane open <name> -r 35 -- <cmd>   # split right at 35%; also -l/-d/-u, --size
+zmux pane open --label-tab <name> -r 35 -- <cmd>   # preserve tab label across split
+zmux pane toggle <name> -r 35 -- <cmd> # open if absent, close if present (--focus/--replace)
+zmux pane focus <pane>           # focus by id/title/index
+zmux pane close <pane>           # close by id/title/index
+zmux pane resize <pane> --size 40%
+```
+
+Split direction: `-r` right, `-l` left, `-d` down, `-u` up (each takes a size).
+Use `--label-tab` for sidecars that would otherwise let tmux's auto-rename clobber
+the conceptual tab label.
+
+## Terminal capabilities
+
+```bash
+zmux terminal current --json       # the visible desktop terminal target (e.g. for screenshots)
+zmux terminal capabilities --json  # diagnose RGB/truecolor path (alias: caps)
+zmux terminal refresh              # reattach current client to re-resolve RGB features
+```
+
+`zmux terminal refresh` (and `zmux refresh` below) **reattaches/redraws the current
+client** — it can disturb an active agent connection. Don't run it from an automated
+session unless the user asked or disruption is acceptable; otherwise tell the user to
+run it.
+
+## Visual snapshots
+
+Capture terminal/TUI evidence when the *visual* state matters — debugging a TUI,
+showing a render, or grounding work on another app you're driving in a pane.
+
+```bash
+zmux snapshot                       # all panes in current window: text + ANSI + PNG
+zmux snapshot --no-png              # text + ANSI only (no screenshot)
+zmux snapshot --pane %5 --pane %6   # specific panes (PNG only if both are current-window)
+zmux snapshot --lines 400 --json    # more scrollback; print result as JSON
+zmux snapshot --out /tmp/run1       # custom output dir
+```
+
+Each run writes a bundle to `~/.zmux/snapshots/<timestamp>/` (override with `--out`):
+`<pane>.txt`, `<pane>.ansi` (colour-preserving), `<pane>.meta.json`, an optional
+`terminal.png`, and `snapshot.json` + `manifest.json` + `README.md`. Read `.ansi`
+with `less -R`, `.txt` for plain parsing; `snapshot.json` lists every artifact,
+the `modalities` captured, and any `warnings`.
+
+The PNG only ever covers the **current** terminal window (zmux resolves its geometry
+strictly and refuses hidden/ambiguous windows rather than screenshotting the wrong
+one). It's captured only when every requested pane is in the current window; target
+a pane elsewhere with `--pane` and the PNG is skipped (text/ANSI still captured).
+Check `warnings` and report blind spots rather than trusting a missing screenshot
+as evidence.
+
+## Config & maintenance
+
+```bash
+zmux status                      # current theme, bar, prefix, sync target, session count
+zmux apply                       # regenerate tmux.conf + apply theme/bar (non-disruptive)
+zmux refresh                     # apply config + reattach current client (disruptive — see above)
+zmux keys                        # keybinding help
+```
+
+Cosmetic/user-facing surfaces — drive these only when the user explicitly asks or
+for config troubleshooting, not as part of agent ops:
+
+```bash
+zmux theme set <name>            # set theme directly (also: list, sync, pull <target>)
+zmux bar [preset]                # list presets, or set one (also: bar show)
+zmux init                        # interactive setup wizard — MUST be run outside tmux
+```
+
+## Naming conventions
+
+Stable, descriptive tab names:
+
+- `server` — dev servers
+- `test` — test runners/watchers
+- `build` — builds
+- `logs` — log tails
+- `admin` — sudo/interactive commands
+- `<tool>-sidecar` — UI sidecars
 
 ## Avoid
 
-- Starting servers/watchers in Pi `bash`.
-- Using `&`, `nohup`, or `disown`.
-- Creating unnamed terminals.
-- Guessing existing process state instead of `zmux_runtime_logs`, `zmux_tabs`,
-  or `zmux_current`.
-- Running `zmux refresh` from an agent session without considering that it
-  reattaches the current client.
-- Using `bash` to run direct `zmux` or stateful `tmux` commands when an equivalent typed tool exists.
-- Using raw `tmux` for ordinary zmux-managed actions. For sidecar pane ids, use
-  `zmux_pane_send_keys` / `zmux_pane_type` instead of `tmux send-keys`.
+- Starting servers/watchers in your own shell — use `zmux run -d`.
+- `&`, `nohup`, `disown`, or any ad-hoc background job.
+- Creating unnamed tabs — always `-n`.
+- Guessing process state instead of reading it with `zmux watch` / `zmux tabs`.
+- Adding your own `:::DONE:::` markers — `zmux run` handles sentinels.
+- `sleep N && zmux watch` — `zmux run` already waits.
+- Raw `tmux` for ordinary zmux-managed actions.
+- `zmux refresh` / `zmux terminal refresh` from an agent session without weighing the
+  client-reattach disruption.
+- `zmux init` inside tmux — it refuses; exit the session first.

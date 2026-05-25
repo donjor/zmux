@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // ── ChoiceControl ──
@@ -45,7 +45,7 @@ func (c *ChoiceControl) Handle(msg tea.KeyMsg) bool {
 	case "left", "h":
 		c.cursor = (c.cursor - 1 + len(c.options)) % len(c.options)
 		return true
-	case "right", "l", " ":
+	case "right", "l", "space":
 		c.cursor = (c.cursor + 1) % len(c.options)
 		return true
 	}
@@ -105,7 +105,7 @@ func (c *IntControl) Handle(msg tea.KeyMsg) bool {
 			c.val--
 		}
 		return true
-	case "right", "l", "+", " ":
+	case "right", "l", "+", "space":
 		if c.val < c.max {
 			c.val++
 		}
@@ -155,7 +155,7 @@ func (c *ToggleControl) Value() any    { return c.val }
 
 func (c *ToggleControl) Handle(msg tea.KeyMsg) bool {
 	switch msg.String() {
-	case " ", "enter", "left", "right", "h", "l":
+	case "space", "enter", "left", "right", "h", "l":
 		c.val = !c.val
 		return true
 	}

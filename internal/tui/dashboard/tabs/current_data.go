@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
 
 // fetchData gathers the current session, its windows, sibling sessions
@@ -35,7 +35,7 @@ func (t *CurrentTab) fetchData(reqID int64) tea.Cmd {
 
 		attachedStr, _ := runner.DisplayMessage("", "#{session_attached}")
 		attached := 0
-		fmt.Sscanf(strings.TrimSpace(attachedStr), "%d", &attached)
+		_, _ = fmt.Sscanf(strings.TrimSpace(attachedStr), "%d", &attached)
 
 		// Workspace name for the current session.
 		wsName := ""
@@ -52,7 +52,7 @@ func (t *CurrentTab) fetchData(reqID int64) tea.Cmd {
 		windows := fetchWindowDetails(runner, sessionName)
 
 		var siblings []session.SessionInfo
-		var wsModel *tui.WorkspaceViewModel
+		var wsModel *workspaceview.WorkspaceViewModel
 		if wsLoader != nil {
 			all := wsLoader()
 			for i := range all {

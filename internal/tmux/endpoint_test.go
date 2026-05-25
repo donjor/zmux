@@ -4,6 +4,31 @@ import (
 	"testing"
 )
 
+func TestIsInsideTmuxEndpointAware(t *testing.T) {
+	cases := []struct {
+		name    string
+		tmuxEnv string
+		client  *Client
+		want    bool
+	}{
+		{"unset env, default", "", NewClient(), false},
+		{"unset env, named", "", NewClientFor(NamedEndpoint("zzmux")), false},
+		{"set env, default endpoint always true", "/tmp/tmux-1000/default,1,0", NewClient(), true},
+		{"named matches socket", "/tmp/tmux-1000/zzmux,1,0", NewClientFor(NamedEndpoint("zzmux")), true},
+		{"named mismatches default socket", "/tmp/tmux-1000/default,1,0", NewClientFor(NamedEndpoint("zzmux")), false},
+		{"default-named zmux inside zzmux socket still true (historical)", "/tmp/tmux-1000/zzmux,1,0", NewClient(), true},
+		{"path endpoint matches basename", "/tmp/tmux-1000/zzmux,1,0", NewClientFor(PathEndpoint("/tmp/tmux-1000/zzmux")), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("TMUX", tc.tmuxEnv)
+			if got := tc.client.IsInsideTmux(); got != tc.want {
+				t.Errorf("IsInsideTmux() = %v, want %v (TMUX=%q)", got, tc.want, tc.tmuxEnv)
+			}
+		})
+	}
+}
+
 func TestDefaultEndpointArgs(t *testing.T) {
 	ep := DefaultEndpoint()
 	args := ep.Args()

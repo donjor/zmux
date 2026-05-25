@@ -4,13 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/donjor/zmux/internal/tui/tkey"
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // ── Test helpers ──
@@ -40,7 +41,7 @@ func newTestBarTab(t *testing.T) (*BarTab, *tmux.MockRunner, *sessionsMemFS) {
 
 	resolver := theme.NewResolver(fs, "", "")
 
-	tab := NewBarTab(resolver, fs, mock, tui.DefaultStyles())
+	tab := NewBarTab(resolver, fs, mock, styles.DefaultStyles())
 	tab.Resize(120, 40)
 	return tab, mock, fs
 }
@@ -63,17 +64,17 @@ func sendBarKey(tab *BarTab, k string) (*BarTab, tea.Cmd) {
 	var msg tea.KeyMsg
 	switch k {
 	case "enter":
-		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		msg = tkey.Enter()
 	case "esc":
-		msg = tea.KeyMsg{Type: tea.KeyEscape}
+		msg = tkey.Esc()
 	case "up":
-		msg = tea.KeyMsg{Type: tea.KeyUp}
+		msg = tkey.Up()
 	case "down":
-		msg = tea.KeyMsg{Type: tea.KeyDown}
+		msg = tkey.Down()
 	case " ":
-		msg = tea.KeyMsg{Type: tea.KeySpace}
+		msg = tkey.Space()
 	default:
-		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(k)}
+		msg = tkey.Type(k)
 	}
 	out, cmd := tab.Update(msg)
 	return out.(*BarTab), cmd

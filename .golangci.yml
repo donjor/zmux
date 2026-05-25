@@ -1,0 +1,30 @@
+# golangci-lint v2 config — see https://golangci-lint.run
+# Conservative starting set; expand deliberately (followup-02 rationale).
+version: "2"
+
+linters:
+  # "standard" = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - misspell # doc/comment typos
+    - unconvert # redundant type conversions
+  exclusions:
+    # generated-file & common false-positive presets shipped by golangci-lint v2
+    presets:
+      - comments
+      - std-error-handling
+    paths:
+      - legacy # archived v0 prototype — never lint (currently no .go files)
+
+formatters:
+  enable:
+    - gofumpt # stricter gofmt superset (adopted in this pass)
+  exclusions:
+    paths:
+      - legacy
+
+issues:
+  # Report everything — the defaults (3 same / 50 per linter) hide findings,
+  # which is dangerous in CI. We want the full picture per run.
+  max-same-issues: 0
+  max-issues-per-linter: 0

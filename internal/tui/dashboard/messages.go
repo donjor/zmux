@@ -2,7 +2,7 @@ package dashboard
 
 import (
 	"github.com/donjor/zmux/internal/theme"
-	"github.com/donjor/zmux/internal/tui"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // SwitchTabIntent requests the app switch to a specific tab.
@@ -33,14 +33,14 @@ func (QuitIntent) AppIntent() {}
 // Not a TargetedMsg — the dashboard intercepts and forwards to every tab.
 type ThemeChangedMsg struct {
 	Palette theme.Palette
-	Styles  tui.Styles
+	Styles  styles.Styles
 }
 
 // ThemeChangeIntent is emitted by a tab to request a theme change.
 // The dashboard converts it to ThemeChangedMsg and broadcasts.
 type ThemeChangeIntent struct {
 	Palette theme.Palette
-	Styles  tui.Styles
+	Styles  styles.Styles
 }
 
 func (ThemeChangeIntent) AppIntent() {}

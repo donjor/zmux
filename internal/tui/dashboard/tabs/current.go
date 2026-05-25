@@ -7,15 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/styles"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/donjor/zmux/internal/workspace"
 )
 
@@ -72,7 +73,7 @@ type currentDataMsg struct {
 	windows        []windowDetail           // current session: full detail with CPU/mem
 	siblings       []session.SessionInfo    // other sessions in the workspace
 	siblingWindows map[string][]tmux.Window // sibling session name → basic windows
-	wsModel        *tui.WorkspaceViewModel
+	wsModel        *workspaceview.WorkspaceViewModel
 	err            error
 }
 
@@ -97,8 +98,8 @@ func (m currentMoveDestMsg) TargetTab() dashboard.TabID { return dashboard.TabSe
 // "Session & Workspace" view.
 type CurrentTab struct {
 	runner   tmux.Runner
-	styles   tui.Styles
-	wsLoader tui.WorkspaceDataLoader
+	styles   styles.Styles
+	wsLoader workspaceview.WorkspaceDataLoader
 	wsStore  *workspace.Store
 
 	// Tree owns row data + cursor.
@@ -112,7 +113,7 @@ type CurrentTab struct {
 	windows        []windowDetail
 	siblings       []session.SessionInfo
 	siblingWindows map[string][]tmux.Window
-	wsModel        *tui.WorkspaceViewModel
+	wsModel        *workspaceview.WorkspaceViewModel
 
 	// Viewport — handles scrolling automatically. Content is set on
 	// each render; the viewport clips to height and manages YOffset.
@@ -147,7 +148,7 @@ type CurrentTab struct {
 // NewCurrentTab creates a new "Session & Workspace" tab.
 // wsLoader returns enriched workspace view models; wsStore is required for
 // workspace CRUD mutations from inside the tab.
-func NewCurrentTab(runner tmux.Runner, styles tui.Styles, wsLoader tui.WorkspaceDataLoader, wsStore *workspace.Store) *CurrentTab {
+func NewCurrentTab(runner tmux.Runner, styles styles.Styles, wsLoader workspaceview.WorkspaceDataLoader, wsStore *workspace.Store) *CurrentTab {
 	ri := textinput.New()
 	ri.Placeholder = "new name..."
 	ri.CharLimit = 64
@@ -196,8 +197,8 @@ func (t *CurrentTab) Deactivate() {
 func (t *CurrentTab) Resize(width, height int) {
 	t.width = width
 	t.height = height
-	t.vp.Width = width
-	t.vp.Height = height
+	t.vp.SetWidth(width)
+	t.vp.SetHeight(height)
 }
 
 // Update processes messages for the session tab.

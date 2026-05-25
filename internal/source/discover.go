@@ -29,50 +29,66 @@ type socketInfo struct {
 	Path string // full path to the socket file
 }
 
-// Discover scans for tmux sockets and returns a Catalog of all sessions
-// across default and external servers. It performs:
-//  1. Socket directory scan
-//  2. Single ps call for process correlation
-//  3. Overmind correlation
+// Discover scans for tmux sockets and returns a Catalog of all sessions across
+// the active profile's server (local) and external servers, using real host I/O.
+// local is the endpoint of the invoking binary's own server (default for zmux,
+// -L zzmux for the edge profile) so that server is treated as "local" and every
+// other server — including the live zmux server when running as zzmux — shows up
+// as external rather than being silently attached.
+func Discover(local tmux.Endpoint) (*Catalog, error) {
+	return discoverWith(systemProber{}, local)
+}
+
+// localSocketName returns the socket basename for an endpoint: "default" for the
+// default server, the -L name, or the -S path basename.
+func localSocketName(ep tmux.Endpoint) string {
+	switch ep.Mode {
+	case tmux.SocketNamed:
+		return ep.Value
+	case tmux.SocketPath:
+		return filepath.Base(ep.Value)
+	default:
+		return "default"
+	}
+}
+
+// discoverWith is the orchestration core, parameterized over a prober for
+// testability. It performs:
+//  1. Local default-server sessions
+//  2. Socket directory scan
+//  3. Single ps call for process correlation + overmind correlation
 //  4. Live probe of each candidate socket
 //
 // Errors in external discovery are handled gracefully; the local catalog
 // is always populated when possible.
-func Discover() (*Catalog, error) {
+func discoverWith(p prober, local tmux.Endpoint) (*Catalog, error) {
 	cat := &Catalog{}
 
-	// Always populate local sessions first.
-	localClient := tmux.NewClient()
-	if localClient.ServerRunning() {
-		sessions, err := localClient.ListSessions()
-		if err == nil {
-			localSource := &Source{
-				ID:       "local",
-				Kind:     SourceLocal,
-				Label:    "default",
-				Health:   HealthOK,
-				Endpoint: tmux.DefaultEndpoint(),
-			}
-			for _, s := range sessions {
-				cat.Local = append(cat.Local, CatalogEntry{
-					Source:   localSource,
-					Session:  s.Name,
-					Windows:  s.Windows,
-					Attached: s.Attached,
-				})
-			}
-		}
+	// Always populate the active profile's own server first.
+	if localEntries, ok := p.localSessions(local); ok {
+		cat.Local = localEntries
 	}
 
 	// Discover external sockets.
-	sockets, err := findTmuxSockets()
+	sockets, err := p.listSockets()
 	if err != nil {
 		// Socket scan failed — return local-only catalog.
 		return cat, nil
 	}
 
+	// Exclude the local server's own socket so it isn't double-listed as
+	// external (for zmux that's "default"; for zzmux that's "zzmux").
+	localSock := localSocketName(local)
+	filtered := sockets[:0]
+	for _, s := range sockets {
+		if s.Name != localSock {
+			filtered = append(filtered, s)
+		}
+	}
+	sockets = filtered
+
 	// Build process table for correlation.
-	procs, psErr := buildProcessTable()
+	procs, psErr := p.processTable()
 
 	// Correlate sockets to known owners.
 	var sources []Source
@@ -93,7 +109,7 @@ func Discover() (*Catalog, error) {
 
 	// Probe each source and collect sessions.
 	for _, src := range sources {
-		entries, health, probeErr := probeSocket(src.Endpoint)
+		entries, health, probeErr := p.probeSocket(src.Endpoint)
 		src.Health = health
 		if probeErr != nil {
 			src.Error = probeErr.Error()
@@ -136,10 +152,9 @@ func findTmuxSockets() ([]socketInfo, error) {
 			continue
 		}
 		name := e.Name()
-		// Skip the "default" socket — that's the local server.
-		if name == "default" {
-			continue
-		}
+		// The active profile's own socket is excluded by discoverWith (which
+		// knows the local endpoint); everything else — including the default
+		// "zmux" server when running as zzmux — is a candidate external source.
 		sockets = append(sockets, socketInfo{
 			Name: name,
 			Path: filepath.Join(dir, name),

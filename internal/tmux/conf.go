@@ -7,8 +7,9 @@ import (
 	"strings"
 
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/tablabel"
-	"github.com/donjor/zmux/internal/terminalmeta"
+	"github.com/donjor/zmux/internal/termtitle"
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -48,7 +49,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set -g set-clipboard on\n")
 	b.WriteString("set -g status-position top\n")
 	b.WriteString("set -g set-titles on\n")
-	fmt.Fprintf(&b, "set -g set-titles-string \"%s\"\n", terminalmeta.TmuxTitleFormat)
+	fmt.Fprintf(&b, "set -g set-titles-string \"%s\"\n", termtitle.TmuxTitleFormat)
 	b.WriteString("set -g status-interval 5\n")
 	b.WriteString("set -g status-left-length 40\n")
 	b.WriteString("set -g status-right-length 100\n")
@@ -69,13 +70,13 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	writeSection(&b, "Vim copy mode")
 	b.WriteString("setw -g mode-keys vi\n")
 	b.WriteString("\n")
-	b.WriteString("bind v copy-mode\n")
-	b.WriteString("bind R respawn-pane -k\n")
-	b.WriteString("bind -T copy-mode-vi v send -X begin-selection\n")
-	b.WriteString("bind -T copy-mode-vi Escape send -X cancel\n")
-	b.WriteString("bind -T copy-mode-vi C-v send -X rectangle-toggle\n")
-	b.WriteString("bind -T copy-mode-vi / command-prompt -p \"search down:\" \"send -X search-forward '%%'\"\n")
-	b.WriteString("bind -T copy-mode-vi ? command-prompt -p \"search up:\" \"send -X search-backward '%%'\"\n")
+	fmt.Fprintf(&b, "bind %s copy-mode\n", keys.CopyModeKey.Key)
+	fmt.Fprintf(&b, "bind %s respawn-pane -k\n", keys.PaneRespawn.Key)
+	fmt.Fprintf(&b, "bind -T copy-mode-vi %s send -X begin-selection\n", keys.CopyBeginSelection.Key)
+	fmt.Fprintf(&b, "bind -T copy-mode-vi %s send -X cancel\n", keys.CopyCancel.Key)
+	fmt.Fprintf(&b, "bind -T copy-mode-vi %s send -X rectangle-toggle\n", keys.CopyRectangle.Key)
+	fmt.Fprintf(&b, "bind -T copy-mode-vi %s command-prompt -p \"search down:\" \"send -X search-forward '%%%%'\"\n", keys.CopySearchForward.Key)
+	fmt.Fprintf(&b, "bind -T copy-mode-vi %s command-prompt -p \"search up:\" \"send -X search-backward '%%%%'\"\n", keys.CopySearchBackward.Key)
 	b.WriteString("\n")
 
 	// Clipboard
@@ -86,13 +87,13 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 
 	// Windows (tabs)
 	writeSection(&b, "Windows")
-	b.WriteString("bind c new-window -c \"#{pane_current_path}\"\n")
-	b.WriteString("bind n next-window\n")
-	b.WriteString("bind N previous-window\n")
-	b.WriteString("bind . command-prompt -p \"label tab (blank clears):\" \"set-option -w -t #{window_id} @zmux_label '%%' \\; set-option -w -t #{window_id} @zmux_label_source manual\"\n")
-	b.WriteString("bind < swap-window -t -1 \\; select-window -t -1\n")
-	b.WriteString("bind > swap-window -t +1 \\; select-window -t +1\n")
-	fmt.Fprintf(&b, "bind x confirm-before -p \"close tab %s? (y/n)\" kill-window\n", tablabel.PlainFormat())
+	fmt.Fprintf(&b, "bind %s new-window -c \"#{pane_current_path}\"\n", keys.NewTab.Key)
+	fmt.Fprintf(&b, "bind %s next-window\n", keys.TabNext.Key)
+	fmt.Fprintf(&b, "bind %s previous-window\n", keys.TabPrev.Key)
+	fmt.Fprintf(&b, "bind %s command-prompt -p \"label tab (blank clears):\" \"set-option -w -t #{window_id} @zmux_label '%%%%' \\; set-option -w -t #{window_id} @zmux_label_source manual\"\n", keys.LabelTab.Key)
+	fmt.Fprintf(&b, "bind %s swap-window -t -1 \\; select-window -t -1\n", keys.TabReorderLeft.Key)
+	fmt.Fprintf(&b, "bind %s swap-window -t +1 \\; select-window -t +1\n", keys.TabReorderRight.Key)
+	fmt.Fprintf(&b, "bind %s confirm-before -p \"close tab %s? (y/n)\" kill-window\n", keys.TabKill.Key, tablabel.PlainFormat())
 	b.WriteString("\n")
 
 	// Alt+1-9 tab switching (no prefix)
@@ -104,7 +105,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 
 	// Alt+` tab switcher for current session (no prefix)
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind -n M-` display-popup -w 60%% -h 40%% -E \"%s --tab-picker\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind -n %s display-popup -w 60%% -h 40%% -E \"%s --tab-picker\"\n", keys.TabSwitch.Key, zmuxBin)
 	}
 	b.WriteString("\n")
 
@@ -112,18 +113,18 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	// making this a fast path for Pi ↔ sidecar movement without stealing
 	// Neovim's Ctrl+h/j/k/l window navigation.
 	b.WriteString("# Alt+Shift+Arrow pane focus (no prefix)\n")
-	b.WriteString("bind -n M-S-Left select-pane -L\n")
-	b.WriteString("bind -n M-S-Right select-pane -R\n")
-	b.WriteString("bind -n M-S-Up select-pane -U\n")
-	b.WriteString("bind -n M-S-Down select-pane -D\n")
+	fmt.Fprintf(&b, "bind -n %s select-pane -L\n", keys.PaneFocusL.Key)
+	fmt.Fprintf(&b, "bind -n %s select-pane -R\n", keys.PaneFocusR.Key)
+	fmt.Fprintf(&b, "bind -n %s select-pane -U\n", keys.PaneFocusU.Key)
+	fmt.Fprintf(&b, "bind -n %s select-pane -D\n", keys.PaneFocusD.Key)
 	b.WriteString("\n")
 
 	// Sessions
 	writeSection(&b, "Sessions")
-	b.WriteString("bind , command-prompt -p \"rename session:\" \"rename-session '%%'\"\n")
+	fmt.Fprintf(&b, "bind %s command-prompt -p \"rename session:\" \"rename-session '%%%%'\"\n", keys.RenameSession.Key)
 	if zmuxBin != "" {
 		// prefix+C (shift-c): create new session in current workspace.
-		fmt.Fprintf(&b, "bind C command-prompt -p \"new session:\" \"run-shell '%s workspace new-session %%%%'\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind %s command-prompt -p \"new session:\" \"run-shell '%s workspace new-session %%%%'\"\n", keys.NewSession.Key, zmuxBin)
 	}
 	b.WriteString("\n")
 
@@ -134,11 +135,12 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		// the same picker — aliases that match user muscle memory
 		// (w = workspace, s = session). The picker is hierarchical so
 		// either entry point works.
-		fmt.Fprintf(&b, "bind w display-popup -w 60%% -h 50%% -E \"%s --picker\"\n", zmuxBin)
-		fmt.Fprintf(&b, "bind s display-popup -w 60%% -h 50%% -E \"%s --picker\"\n", zmuxBin)
+		for _, k := range append([]string{keys.SessionPicker.Key}, keys.SessionPicker.Aliases...) {
+			fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 50%% -E \"%s --picker\"\n", k, zmuxBin)
+		}
 		// prefix+[ / prefix+]: cycle prev/next session in workspace
-		fmt.Fprintf(&b, "bind [ run-shell \"%s workspace prev\"\n", zmuxBin)
-		fmt.Fprintf(&b, "bind ] run-shell \"%s workspace next\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace prev\"\n", keys.SessionPrev.Key, zmuxBin)
+		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace next\"\n", keys.SessionNext.Key, zmuxBin)
 		// Shift+Alt+1-9: direct session switching within workspace
 		for i := 1; i <= 9; i++ {
 			fmt.Fprintf(&b, "bind -n M-S-%d run-shell \"%s workspace switch-to %d\"\n", i, zmuxBin, i)
@@ -150,40 +152,46 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 
 	// Pasting
 	writeSection(&b, "Pasting")
-	b.WriteString("bind P paste-buffer\n")
+	fmt.Fprintf(&b, "bind %s paste-buffer\n", keys.Paste.Key)
 	b.WriteString("\n")
 
 	// Command Palette popup (prefix+p)
 	writeSection(&b, "Command Palette")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind p display-popup -w 60%% -h 50%% -E \"%s --palette\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 50%% -E \"%s --palette\"\n", keys.Palette.Key, zmuxBin)
 	} else {
-		b.WriteString("bind p display-popup -w 60% -h 50% -E \"zmux --palette\"\n")
+		fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 50%% -E \"zmux --palette\"\n", keys.Palette.Key)
 	}
 	b.WriteString("\n")
 
 	// Dashboard popup (prefix+Space — "double-tap" zmux)
 	writeSection(&b, "Dashboard")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind Space display-popup -w 80%% -h 80%% -E \"%s --dashboard\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind %s display-popup -w 80%% -h 80%% -E \"%s --dashboard\"\n", keys.Dashboard.Key, zmuxBin)
 	} else {
-		b.WriteString("bind Space display-popup -w 80% -h 80% -E \"zmux --dashboard\"\n")
+		fmt.Fprintf(&b, "bind %s display-popup -w 80%% -h 80%% -E \"zmux --dashboard\"\n", keys.Dashboard.Key)
 	}
 	b.WriteString("\n")
 
 	// Help popup (prefix+?)
 	b.WriteString("# Help\n")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind ? display-popup -w 60%% -h 60%% -E \"%s help\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 60%% -E \"%s help\"\n", keys.Help.Key, zmuxBin)
 	}
+	b.WriteString("\n")
+
+	// Scratch shell popup (prefix+!) — throwaway $SHELL in a popup, cwd
+	// inherits from the calling pane, closes on exit.
+	writeSection(&b, "Scratch shell")
+	fmt.Fprintf(&b, "bind %s display-popup -E -w 80%% -h 70%% -T \" scratch shell \" -d \"#{pane_current_path}\" \"$SHELL\"\n", keys.ScratchShell.Key)
 	b.WriteString("\n")
 
 	// Reload (prefix+r runs full zmux apply — regenerates conf + applies everything)
 	writeSection(&b, "Reload")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind r run-shell \"%s apply\" \\; display \"zmux reloaded\"\n", zmuxBin)
+		fmt.Fprintf(&b, "bind %s run-shell \"%s apply\" \\; display \"zmux reloaded\"\n", keys.Reload.Key, zmuxBin)
 	} else {
-		b.WriteString("bind r source-file ~/.tmux.conf \\; display \"Config reloaded\"\n")
+		fmt.Fprintf(&b, "bind %s source-file ~/.tmux.conf \\; display \"Config reloaded\"\n", keys.Reload.Key)
 	}
 	b.WriteString("\n")
 

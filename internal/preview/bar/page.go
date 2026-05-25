@@ -196,7 +196,8 @@ func (p *Page) loadPalette() *theme.Palette {
 	// Walk ~/.zmux.toml's theme if present.
 	fs := config.RealFS{}
 	if home, err := fs.UserHomeDir(); err == nil {
-		userResolver := theme.NewResolver(fs,
+		userResolver := theme.NewResolver(
+			fs,
 			home+"/.zmux/themes",
 			home+"/.zmux/themes/iterm2",
 		)
@@ -320,26 +321,6 @@ func mockEditorContent(pal *theme.Palette, width int) string {
 		"  " + fgDim + "}" + reset,
 	}
 	return strings.Join(lines, "\n")
-}
-
-// visualLen strips ANSI escape sequences to count visible characters.
-func visualLen(s string) int {
-	n := 0
-	inEsc := false
-	for _, r := range s {
-		if inEsc {
-			if r == 'm' {
-				inEsc = false
-			}
-			continue
-		}
-		if r == 0x1b {
-			inEsc = true
-			continue
-		}
-		n++
-	}
-	return n
 }
 
 // Dump renders one frame of a representative mode×variant grid to w

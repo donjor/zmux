@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/overmind"
 	"github.com/donjor/zmux/internal/session"
-	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -30,13 +30,14 @@ type PostAction struct {
 
 // Executor runs a chosen Action against the real tmux/config backends.
 type Executor struct {
-	Runner tmux.Runner
-	FS     config.FS
+	Runner   tmux.Runner
+	FS       config.FS
+	Overmind overmind.Client
 }
 
 // NewExecutor creates an executor with the given dependencies.
-func NewExecutor(runner tmux.Runner, fs config.FS) *Executor {
-	return &Executor{Runner: runner, FS: fs}
+func NewExecutor(runner tmux.Runner, fs config.FS, om overmind.Client) *Executor {
+	return &Executor{Runner: runner, FS: fs, Overmind: om}
 }
 
 // Run executes the given action and returns what the caller should do next.
@@ -98,19 +99,19 @@ func (e *Executor) Run(action Action) PostAction {
 		return PostAction{Kind: PostOpenDashboard, Tab: payload.Tab}
 
 	case OvermindConnectPayload:
-		if err := source.Connect(payload.ControlSocket, payload.Process); err != nil {
+		if err := e.Overmind.Connect(payload.ControlSocket, payload.Process); err != nil {
 			return PostAction{Kind: PostError, Err: fmt.Errorf("overmind connect: %w", err)}
 		}
 		return PostAction{Kind: PostClose}
 
 	case OvermindRestartPayload:
-		if err := source.Restart(payload.ControlSocket, payload.Process); err != nil {
+		if err := e.Overmind.Restart(payload.ControlSocket, payload.Process); err != nil {
 			return PostAction{Kind: PostError, Err: fmt.Errorf("overmind restart: %w", err)}
 		}
 		return PostAction{Kind: PostClose}
 
 	case OvermindStopPayload:
-		if err := source.Stop(payload.ControlSocket, payload.Process); err != nil {
+		if err := e.Overmind.Stop(payload.ControlSocket, payload.Process); err != nil {
 			return PostAction{Kind: PostError, Err: fmt.Errorf("overmind stop: %w", err)}
 		}
 		return PostAction{Kind: PostClose}

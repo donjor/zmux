@@ -10,21 +10,21 @@ import (
 // WriteFile serializes a Theme to a file in ghostty format.
 func WriteFile(fs config.FS, path string, t Theme) error {
 	content := Serialize(t)
-	return fs.WriteFile(path, []byte(content), 0644)
+	return fs.WriteFile(path, []byte(content), 0o644)
 }
 
 // Serialize converts a Theme to ghostty format string.
 func Serialize(t Theme) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("background = %s\n", t.Background.Hex()))
-	b.WriteString(fmt.Sprintf("foreground = %s\n", t.Foreground.Hex()))
-	b.WriteString(fmt.Sprintf("cursor-color = %s\n", t.Cursor.Hex()))
+	fmt.Fprintf(&b, "background = %s\n", t.Background.Hex())
+	fmt.Fprintf(&b, "foreground = %s\n", t.Foreground.Hex())
+	fmt.Fprintf(&b, "cursor-color = %s\n", t.Cursor.Hex())
 
-	b.WriteString(fmt.Sprintf("selection-background = %s\n", t.Selection.Hex()))
+	fmt.Fprintf(&b, "selection-background = %s\n", t.Selection.Hex())
 
 	for i := 0; i < 16; i++ {
-		b.WriteString(fmt.Sprintf("palette = %d=%s\n", i, t.Palette[i].Hex()))
+		fmt.Fprintf(&b, "palette = %d=%s\n", i, t.Palette[i].Hex())
 	}
 
 	return b.String()

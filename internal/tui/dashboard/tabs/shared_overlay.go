@@ -3,16 +3,15 @@ package tabs
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-
-	"github.com/donjor/zmux/internal/tui"
+	"charm.land/bubbles/v2/textinput"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // renderRenameOverlayShared renders the inline rename input prompt used by
 // both the Session & Workspace tab and the Workspaces tab. The kind label
 // (e.g. "workspace", "session", "window") is appended to the prompt verb so
 // users can see what they're renaming.
-func renderRenameOverlayShared(styles tui.Styles, kind string, input textinput.Model) string {
+func renderRenameOverlayShared(styles styles.Styles, kind string, input textinput.Model) string {
 	verb := "rename"
 	if kind != "" {
 		verb = "rename " + kind
@@ -25,7 +24,7 @@ func renderRenameOverlayShared(styles tui.Styles, kind string, input textinput.M
 // normal confirmation; step 2 is the red "this will detach you" warning
 // shown when killing an attached workspace. Both tabs render this exactly
 // the same way.
-func renderConfirmOverlayShared(styles tui.Styles, c *confirmState, step int) string {
+func renderConfirmOverlayShared(styles styles.Styles, c *confirmState, step int) string {
 	if c == nil {
 		return ""
 	}

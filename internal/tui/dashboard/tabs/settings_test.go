@@ -4,18 +4,19 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/donjor/zmux/internal/tui/tkey"
 
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 func newTestSettingsTab() *SettingsTab {
 	resolver := theme.NewResolver(config.RealFS{}, "", "")
-	styles := tui.DefaultStyles()
+	styles := styles.DefaultStyles()
 	mock := tmux.NewMockRunner()
 	tab := NewSettingsTab(resolver, config.RealFS{}, mock, styles)
 	tab.Resize(80, 40)
@@ -35,20 +36,20 @@ func simulateSettingsActivate(tab *SettingsTab) *SettingsTab {
 }
 
 func sendSettingsKey(tab *SettingsTab, keyStr string) (*SettingsTab, tea.Cmd) {
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
+	msg := tkey.Type(keyStr)
 	switch keyStr {
 	case "enter":
-		msg = tea.KeyMsg{Type: tea.KeyEnter}
+		msg = tkey.Enter()
 	case "esc":
-		msg = tea.KeyMsg{Type: tea.KeyEscape}
+		msg = tkey.Esc()
 	case "up":
-		msg = tea.KeyMsg{Type: tea.KeyUp}
+		msg = tkey.Up()
 	case "down":
-		msg = tea.KeyMsg{Type: tea.KeyDown}
+		msg = tkey.Down()
 	case "left":
-		msg = tea.KeyMsg{Type: tea.KeyLeft}
+		msg = tkey.Left()
 	case "right":
-		msg = tea.KeyMsg{Type: tea.KeyRight}
+		msg = tkey.Right()
 	}
 
 	result, cmd := tab.Update(msg)
@@ -73,10 +74,11 @@ func TestSettingsTabActivateLoadsConfig(t *testing.T) {
 	tab := newTestSettingsTab()
 	tab = simulateSettingsActivate(tab)
 
-	// Config should be loaded (either from disk or defaults).
+	// Activation should load config (from disk or defaults). The default
+	// prefix is non-empty ("C-Space"), so an entirely-zeroed config means
+	// activation failed to load anything.
 	if tab.cfg.Prefix == "" && tab.cfg.Sync.Target == "" {
-		// Default config should still have some non-zero values.
-		// Just verify activation didn't panic.
+		t.Error("activation left config unpopulated")
 	}
 }
 

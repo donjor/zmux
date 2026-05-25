@@ -3,7 +3,7 @@ package views
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ActionHint represents a single action with a hotkey for display in the action bar.

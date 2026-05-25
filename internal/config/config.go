@@ -1,9 +1,5 @@
 package config
 
-import (
-	"path/filepath"
-)
-
 // Config represents the full zmux configuration from ~/.zmux.toml.
 type Config struct {
 	Theme     string          `toml:"theme"`
@@ -85,13 +81,14 @@ func DefaultConfig() Config {
 	}
 }
 
-// ConfigPath returns the default config file path (~/.zmux.toml).
+// ConfigPath returns the active profile's config file path (~/.zmux.toml, or
+// ~/.zzmux.toml when invoked as zzmux). Profile-aware so every caller — including
+// app-less TUI components that only hold an FS — inherits isolation for free.
 func ConfigPath(fs FS) (string, error) {
-	home, err := fs.UserHomeDir()
-	if err != nil {
+	if _, err := fs.UserHomeDir(); err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".zmux.toml"), nil
+	return ActiveProfile(fs).ConfigFile, nil
 }
 
 // ConfigExists returns true if the config file exists at the default path.

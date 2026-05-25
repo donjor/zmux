@@ -7,6 +7,16 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
+// noopOvermind is an inert overmind.Client for tests that don't exercise the
+// overmind action paths.
+type noopOvermind struct{}
+
+func (noopOvermind) Connect(string, string) error        { return nil }
+func (noopOvermind) Restart(string, string) error        { return nil }
+func (noopOvermind) Stop(string, string) error           { return nil }
+func (noopOvermind) StopAll(string) error                { return nil }
+func (noopOvermind) Logs(string, string) (string, error) { return "", nil }
+
 func newTestExecutor(t *testing.T) (*Executor, *tmux.MockRunner, *fakeFS) {
 	t.Helper()
 	mock := tmux.NewMockRunner()
@@ -19,7 +29,7 @@ func newTestExecutor(t *testing.T) (*Executor, *tmux.MockRunner, *fakeFS) {
 		t.Fatalf("seed config: %v", err)
 	}
 
-	return NewExecutor(mock, fs), mock, fs
+	return NewExecutor(mock, fs, noopOvermind{}), mock, fs
 }
 
 func TestExecutorSessionSwitch(t *testing.T) {

@@ -209,18 +209,18 @@ func renderTabsPowerline(pal *theme.Palette, sessions []Session, currentIdx int)
 		idx := fmt.Sprintf("%d", s.Index)
 		if s.Index == currentIdx {
 			parts = append(parts,
-				fgonlybg(pal.BG, pal.Accent, "\ue0b0")+
+				fgonlybg(pal.BG, pal.Accent, "")+
 					fgbg(pal.BG, pal.Accent, bold(" "+idx+" "))+
-					fgonlybg(pal.Accent, pal.Surface, "\ue0b0")+
+					fgonlybg(pal.Accent, pal.Surface, "")+
 					fgbg(pal.FG, pal.Surface, bold(" "+s.Name+" "))+
-					fgonly(pal.Surface, "\ue0b0"))
+					fgonly(pal.Surface, ""))
 		} else {
 			parts = append(parts,
-				fgonlybg(pal.BG, pal.Dim, "\ue0b0")+
+				fgonlybg(pal.BG, pal.Dim, "")+
 					fgbg(pal.Surface, pal.Dim, " "+idx+" ")+
-					fgonlybg(pal.Dim, pal.Surface, "\ue0b0")+
+					fgonlybg(pal.Dim, pal.Surface, "")+
 					fgbg(pal.Muted, pal.Surface, " "+s.Name+" ")+
-					fgonly(pal.Surface, "\ue0b0"))
+					fgonly(pal.Surface, ""))
 		}
 	}
 	return strings.Join(parts, "")
@@ -238,129 +238,21 @@ func renderTabsRpowerline(pal *theme.Palette, sessions []Session, currentIdx int
 		}
 		if s.Index == currentIdx {
 			parts = append(parts,
-				fgonly(pal.Accent, "\ue0b6")+
-					fgbg(pal.BG, pal.Accent, " "+icon+"\u2009")+
-					fgonlybg(pal.Accent, pal.Surface, "\ue0b0")+
+				fgonly(pal.Accent, "")+
+					fgbg(pal.BG, pal.Accent, " "+icon+" ")+
+					fgonlybg(pal.Accent, pal.Surface, "")+
 					fgbg(pal.FG, pal.Surface, bold(" "+s.Name+" "))+
-					fgonly(pal.Surface, "\ue0b4"))
+					fgonly(pal.Surface, ""))
 		} else {
 			parts = append(parts,
-				fgonly(pal.Dim, "\ue0b6")+
-					fgbg(pal.Surface, pal.Dim, " "+icon+"\u2009")+
-					fgonlybg(pal.Dim, pal.Surface, "\ue0b0")+
+				fgonly(pal.Dim, "")+
+					fgbg(pal.Surface, pal.Dim, " "+icon+" ")+
+					fgonlybg(pal.Dim, pal.Surface, "")+
 					fgbg(pal.Muted, pal.Surface, " "+s.Name+" ")+
-					fgonly(pal.Surface, "\ue0b4"))
+					fgonly(pal.Surface, ""))
 		}
 	}
 	return strings.Join(parts, "")
-}
-
-// renderChainedRpowerline renders a continuous rpowerline chain:
-//
-//	╭ 󱂬 myapp ▸ main ▸ feat-auth* ▸ two ╮
-//
-// The workspace pill flows into the session list with powerline arrows
-// between each segment — same visual feel as the single-line left section.
-func renderChainedRpowerline(pal *theme.Palette, workspace string, sessions []Session, currentIdx int) string {
-	var b strings.Builder
-
-	// ── Workspace section (Special bg) ──
-	b.WriteString(fgonly(pal.Special, "\ue0b6"))
-	b.WriteString(fgbg(pal.BG, pal.Special, bold(" 󱂬 "+workspace+" ")))
-
-	if len(sessions) == 0 {
-		b.WriteString(fgonly(pal.Special, "\ue0b4"))
-		return b.String()
-	}
-
-	// Arrow from workspace → first session.
-	first := sessions[0]
-	firstBg := pal.Dim
-	if first.Index == currentIdx {
-		firstBg = pal.Accent
-	}
-	b.WriteString(fgonlybg(pal.Special, firstBg, "\ue0b0"))
-
-	// ── Session sections ──
-	for i, s := range sessions {
-		bg := pal.Dim
-		fgc := pal.Muted
-		if s.Index == currentIdx {
-			bg = pal.Accent
-			fgc = pal.BG
-		}
-
-		name := " " + s.Name + " "
-		if s.Index == currentIdx {
-			b.WriteString(fgbg(fgc, bg, bold(name)))
-		} else {
-			b.WriteString(fgbg(fgc, bg, name))
-		}
-
-		// Arrow to next session or rounded-right cap.
-		if i < len(sessions)-1 {
-			next := sessions[i+1]
-			nextBg := pal.Dim
-			if next.Index == currentIdx {
-				nextBg = pal.Accent
-			}
-			b.WriteString(fgonlybg(bg, nextBg, "\ue0b0"))
-		} else {
-			b.WriteString(fgonly(bg, "\ue0b4"))
-		}
-	}
-
-	return b.String()
-}
-
-// renderChainedPowerline is the sharp-arrow equivalent.
-func renderChainedPowerline(pal *theme.Palette, workspace string, sessions []Session, currentIdx int) string {
-	var b strings.Builder
-
-	// ── Workspace section ──
-	b.WriteString(fgonlybg(pal.BG, pal.Special, "\ue0b0"))
-	b.WriteString(fgbg(pal.BG, pal.Special, bold(" 󱂬 "+workspace+" ")))
-
-	if len(sessions) == 0 {
-		b.WriteString(fgonly(pal.Special, "\ue0b0"))
-		return b.String()
-	}
-
-	first := sessions[0]
-	firstBg := pal.Dim
-	if first.Index == currentIdx {
-		firstBg = pal.Accent
-	}
-	b.WriteString(fgonlybg(pal.Special, firstBg, "\ue0b0"))
-
-	for i, s := range sessions {
-		bg := pal.Dim
-		fgc := pal.Muted
-		if s.Index == currentIdx {
-			bg = pal.Accent
-			fgc = pal.BG
-		}
-
-		name := " " + s.Name + " "
-		if s.Index == currentIdx {
-			b.WriteString(fgbg(fgc, bg, bold(name)))
-		} else {
-			b.WriteString(fgbg(fgc, bg, name))
-		}
-
-		if i < len(sessions)-1 {
-			next := sessions[i+1]
-			nextBg := pal.Dim
-			if next.Index == currentIdx {
-				nextBg = pal.Accent
-			}
-			b.WriteString(fgonlybg(bg, nextBg, "\ue0b0"))
-		} else {
-			b.WriteString(fgonly(bg, "\ue0b0"))
-		}
-	}
-
-	return b.String()
 }
 
 func renderTabsRounded(pal *theme.Palette, sessions []Session, currentIdx int) string {
@@ -368,14 +260,14 @@ func renderTabsRounded(pal *theme.Palette, sessions []Session, currentIdx int) s
 	for _, s := range sessions {
 		if s.Index == currentIdx {
 			parts = append(parts,
-				fgonly(pal.Accent, "\ue0b6")+
+				fgonly(pal.Accent, "")+
 					fgbg(pal.BG, pal.Accent, bold(" "+s.Name+" "))+
-					fgonly(pal.Accent, "\ue0b4"))
+					fgonly(pal.Accent, ""))
 		} else {
 			parts = append(parts,
-				fgonly(pal.Surface, "\ue0b6")+
+				fgonly(pal.Surface, "")+
 					fgbg(pal.Dim, pal.Surface, " "+s.Name+" ")+
-					fgonly(pal.Surface, "\ue0b4"))
+					fgonly(pal.Surface, ""))
 		}
 	}
 	return strings.Join(parts, " ")
@@ -430,18 +322,6 @@ func renderTabsMinimal(pal *theme.Palette, sessions []Session, currentIdx int) s
 	return strings.Join(parts, "  ")
 }
 
-func renderTabsStarship(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	var parts []string
-	for _, s := range sessions {
-		if s.Index == currentIdx {
-			parts = append(parts, fg(pal.Accent, bold(s.Name))+fg(pal.Accent, "❯"))
-		} else {
-			parts = append(parts, fg(pal.Dim, s.Name))
-		}
-	}
-	return strings.Join(parts, "  ")
-}
-
 // ── Workspace pill (preset-matched) ─────────────────────────────────
 //
 // These approximate each preset's workspace pill chrome so the top row
@@ -460,17 +340,17 @@ func renderWorkspacePill(pal *theme.Palette, workspace string, preset bar.Preset
 	label := "󱂬 " + workspace
 	switch preset {
 	case bar.Powerline:
-		return fgonlybg(pal.BG, pal.Special, "\ue0b0") +
+		return fgonlybg(pal.BG, pal.Special, "") +
 			fgbg(pal.BG, pal.Special, bold(" "+label+" ")) +
-			fgonly(pal.Special, "\ue0b0")
+			fgonly(pal.Special, "")
 	case bar.Rpowerline:
-		return fgonly(pal.Special, "\ue0b6") +
+		return fgonly(pal.Special, "") +
 			fgbg(pal.BG, pal.Special, bold(" "+label+" ")) +
-			fgonly(pal.Special, "\ue0b4")
+			fgonly(pal.Special, "")
 	case bar.Rounded:
-		return fgonly(pal.Special, "\ue0b6") +
+		return fgonly(pal.Special, "") +
 			fgbg(pal.BG, pal.Special, bold(" "+label+" ")) +
-			fgonly(pal.Special, "\ue0b4")
+			fgonly(pal.Special, "")
 	case bar.Blocks:
 		return fg(pal.Special, bold("["+label+"]"))
 	case bar.Hacker:
@@ -483,9 +363,9 @@ func renderWorkspacePill(pal *theme.Palette, workspace string, preset bar.Preset
 		return fg(pal.Special, bold(label))
 	default:
 		// Default: rounded pill with special color (matches renderLeftDefault).
-		return fgonly(pal.Special, "\ue0b6") +
+		return fgonly(pal.Special, "") +
 			fgbg(pal.BG, pal.Special, bold(" "+label+" ")) +
-			fgonly(pal.Special, "\ue0b4")
+			fgonly(pal.Special, "")
 	}
 }
 
@@ -563,10 +443,6 @@ func bold(s string) string {
 
 // VisualLen returns the visible character count, stripping ANSI.
 func VisualLen(s string) int {
-	return visualLen(s)
-}
-
-func visualLen(s string) int {
 	n := 0
 	inEsc := false
 	for _, r := range s {
@@ -583,12 +459,4 @@ func visualLen(s string) int {
 		n++
 	}
 	return n
-}
-
-func padToWidth(left, right string, width int) string {
-	pad := width - visualLen(left) - visualLen(right)
-	if pad < 1 {
-		pad = 1
-	}
-	return left + strings.Repeat(" ", pad) + right
 }

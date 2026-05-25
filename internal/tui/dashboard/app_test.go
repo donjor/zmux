@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/donjor/zmux/internal/tui"
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/donjor/zmux/internal/tui/styles"
+	"github.com/donjor/zmux/internal/tui/tkey"
 )
 
 // stubTab is a minimal Tab implementation for testing the app shell.
@@ -65,23 +66,23 @@ func newTestApp() (*DashboardApp, []*stubTab) {
 	}
 
 	services := Services{
-		Styles: tui.DefaultStyles(),
+		Styles: styles.DefaultStyles(),
 	}
 	app := NewDashboardApp(services, tabImpls, TabSession)
 	return app, stubs
 }
 
 func sendKey(app *DashboardApp, keyStr string) *DashboardApp {
-	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(keyStr)}
+	msg := tkey.Type(keyStr)
 	switch keyStr {
 	case "esc":
-		msg = tea.KeyMsg{Type: tea.KeyEscape}
+		msg = tkey.Esc()
 	case "ctrl+c":
-		msg = tea.KeyMsg{Type: tea.KeyCtrlC}
+		msg = tkey.Ctrl('c')
 	case "tab":
-		msg = tea.KeyMsg{Type: tea.KeyTab}
+		msg = tkey.Tab()
 	case "shift+tab":
-		msg = tea.KeyMsg{Type: tea.KeyShiftTab}
+		msg = tkey.ShiftTab()
 	}
 
 	result, _ := app.Update(msg)
@@ -228,7 +229,7 @@ func TestDashboardViewContainsTabBar(t *testing.T) {
 	app.height = 40
 	app.rect = ComputeContentRect(80, 40)
 
-	view := app.View()
+	view := ansi.Strip(app.view())
 
 	if !strings.Contains(view, "Workspaces") {
 		t.Error("expected view to contain Workspaces tab label")
@@ -247,7 +248,7 @@ func TestDashboardViewContainsActiveTabContent(t *testing.T) {
 	app.height = 40
 	app.rect = ComputeContentRect(80, 40)
 
-	view := app.View()
+	view := app.view()
 
 	if !strings.Contains(view, "content:session") {
 		t.Error("expected view to contain session tab content")
@@ -260,7 +261,7 @@ func TestDashboardViewContainsHelpBar(t *testing.T) {
 	app.height = 40
 	app.rect = ComputeContentRect(80, 40)
 
-	view := app.View()
+	view := app.view()
 
 	if !strings.Contains(view, "help:session") {
 		t.Error("expected view to contain session help text")
@@ -271,7 +272,7 @@ func TestDashboardViewQuittingEmpty(t *testing.T) {
 	app, _ := newTestApp()
 	app.Quitting = true
 
-	view := app.View()
+	view := app.view()
 	if view != "" {
 		t.Errorf("expected empty view when quitting, got %q", view)
 	}
@@ -282,7 +283,7 @@ func TestDashboardViewTooSmall(t *testing.T) {
 	app.width = 40
 	app.height = 10
 
-	view := app.View()
+	view := app.view()
 	if !strings.Contains(view, "too small") {
 		t.Error("expected too-small warning")
 	}
@@ -350,7 +351,7 @@ func TestDashboardInvalidInitialTab(t *testing.T) {
 	}
 	tabImpls := []Tab{stubs[0]}
 
-	services := Services{Styles: tui.DefaultStyles()}
+	services := Services{Styles: styles.DefaultStyles()}
 	app := NewDashboardApp(services, tabImpls, "nonexistent")
 
 	if app.activeTab != TabWorkspaces {

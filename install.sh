@@ -109,77 +109,41 @@ fi
 
 printf "\n"
 
-# ── Step 4: Shell integration (optional) ──
-printf "  ${bold}Shell integration${reset}\n"
-
-SHELL_NAME=$(basename "${SHELL:-/bin/bash}")
-RC_FILE=""
-
-case "$SHELL_NAME" in
-    bash) RC_FILE="$HOME/.bashrc" ;;
-    zsh)  RC_FILE="$HOME/.zshrc" ;;
-    fish) RC_FILE="$HOME/.config/fish/config.fish" ;;
-    *)    RC_FILE="" ;;
-esac
-
-ZMUX_MARKER="# zmux — auto-start tmux session picker"
-
-add_shell_integration() {
-    local rc="$1"
-
-    # Don't add if already present
-    if grep -qF "$ZMUX_MARKER" "$rc" 2>/dev/null; then
-        success "Shell integration already in $(basename "$rc")"
-        return
-    fi
-
-    local snippet=""
-    if [ "$SHELL_NAME" = "fish" ]; then
-        snippet="
-${ZMUX_MARKER}
-if command -v tmux >/dev/null 2>&1; and not set -q TMUX
-    zmux
-end"
-    else
-        snippet="
-${ZMUX_MARKER}
-if command -v tmux &>/dev/null && [ -z \"\$TMUX\" ]; then
-    zmux
-fi"
-    fi
-
-    printf "\n" >> "$rc"
-    printf "%s\n" "$snippet" >> "$rc"
-    success "Added auto-start to $(basename "$rc")"
-    info "Opens the session picker when you open a terminal"
-}
-
-if [ -n "$RC_FILE" ]; then
-    printf "\n"
-    printf "  Add zmux auto-start to ${bold}$(basename "$RC_FILE")${reset}?\n"
-    printf "  This launches the session picker when you open a terminal.\n\n"
-    printf "  ${dim}[y/N]${reset} "
-    read -r response
-    if [[ "$response" =~ ^[Yy]$ ]]; then
-        add_shell_integration "$RC_FILE"
-    else
-        info "Skipped — you can add it manually later:"
-        if [ "$SHELL_NAME" = "fish" ]; then
-            info "  echo 'if command -v tmux >/dev/null 2>&1; and not set -q TMUX; zmux; end' >> $RC_FILE"
-        else
-            info "  Add to $RC_FILE:"
-            info "  if command -v tmux &>/dev/null && [ -z \"\$TMUX\" ]; then zmux; fi"
-        fi
-    fi
-else
-    warn "Unknown shell '${SHELL_NAME}' — add zmux to your rc file manually"
-fi
+# ── Step 4: Shell integration ──
+# Delegated to `zmux setup shell` (internal/setup) — a managed, idempotent,
+# backed-up rc edit. This is the Go-native replacement for the old bash here.
+printf "  ${bold}Shell integration${reset}\n\n"
+"$ZMUX_BIN" setup shell || warn "shell integration skipped — run 'zmux setup shell' later"
 
 printf "\n"
 
-# ── Step 5: Install Pi agent integration ──
+# ── Step 5: Install Claude Code skill ──
 SKILL_SRC="${ZMUX_SRC}/skills/zmux"
 EXTENSION_SRC="${ZMUX_SRC}/pi-extension"
+CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+
+if [ -d "$SKILL_SRC" ]; then
+    printf "  ${bold}Claude Code integration${reset}\n\n"
+    printf "  Link the zmux skill for Claude Code?\n"
+    printf "  This teaches Claude how to use zmux for terminal management:\n"
+    printf "  ${dim}• Run commands in named tabs (zmux run)${reset}\n"
+    printf "  ${dim}• Read terminal output (zmux watch)${reset}\n"
+    printf "  ${dim}• Share terminals between you and Claude${reset}\n"
+    printf "  ${dim}• Wait for commands to finish with exit codes${reset}\n\n"
+    printf "  ${dim}[Y/n]${reset} "
+    read -r response
+    if [[ ! "$response" =~ ^[Nn]$ ]]; then
+        mkdir -p "$CLAUDE_SKILLS_DIR"
+        rm -rf "$CLAUDE_SKILLS_DIR/zmux"
+        ln -s "$SKILL_SRC" "$CLAUDE_SKILLS_DIR/zmux"
+        success "Linked Claude skill to ~/.claude/skills/zmux"
+    else
+        info "Skipped — symlink skills/zmux to ~/.claude/skills/zmux manually"
+    fi
+    printf "\n"
+fi
+
+# ── Step 6: Install Pi agent integration ──
 PI_SKILLS_DIR="$HOME/.pi/agent/skills"
 PI_EXTENSIONS_DIR="$HOME/.pi/agent/extensions"
 
@@ -205,7 +169,7 @@ if [ -d "$SKILL_SRC" ] && [ -d "$EXTENSION_SRC" ]; then
     printf "\n"
 fi
 
-# ── Step 6: Run zmux init ──
+# ── Step 7: Run zmux init ──
 printf "  ${bold}Setup${reset}\n\n"
 printf "  Run ${gold}zmux init${reset} now to configure themes, bar preset, and tmux.conf?\n\n"
 printf "  ${dim}[Y/n]${reset} "

@@ -3,7 +3,7 @@
 // Charm CLI-aesthetic interface for session, theme, and config management.
 package dashboard
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // TabID identifies a dashboard tab.
 type TabID string
@@ -19,7 +19,7 @@ const (
 
 // CLI back-compat for the --dashboard-tab flag (and the corresponding
 // palette action arguments) is handled as a string-level alias by
-// cmd/zmux/root.go:resolveDashboardTab. The old Go constants
+// internal/cli/root.go:resolveDashboardTab. The old Go constants
 // (TabCurrent / TabSessions) have been removed — call sites in the
 // tree were all audited and none relied on them.
 

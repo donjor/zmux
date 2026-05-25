@@ -1,0 +1,45 @@
+#!/bin/sh
+# zmux pre-push quality gate (local-first — this repo rarely hits GitHub CI).
+#
+# Scope: only pushes that update `master` (the protected branch) are gated.
+# Feature / wip branch pushes stay cheap — wip commits are allowed to be
+# unverified; iterate and push freely. This mirrors the repo's git philosophy
+# (master = high bar; other branches = easy reverting/referencing).
+#
+# When gated, runs the fast, offline, deterministic checks:
+#   - make lint       (go vet + golangci-lint, incl. gofumpt format check)
+#   - make test-race   (full unit suite with the race detector)
+# (Not run, to keep the gate fast + offline: `make vuln` — needs network + a
+#  Go >=1.25 toolchain fetch; and `make test-integration` — execs the built CLI.
+#  Run both periodically by hand; CI also covers them.)
+#
+# Force the gate on ANY push:  GATE_ALL=1 git push ...
+# Bypass the gate for one push: git push --no-verify
+#
+# Installed via `make hooks` (sets core.hooksPath=scripts/hooks).
+
+set -e
+
+# git feeds one line per pushed ref on stdin:
+#   <local-ref> <local-sha> <remote-ref> <remote-sha>
+# Gate if any pushed ref updates refs/heads/master (or GATE_ALL=1).
+should_gate() {
+	[ "${GATE_ALL:-}" = "1" ] && return 0
+	while read -r _local_ref _local_sha remote_ref _remote_sha; do
+		[ "$remote_ref" = "refs/heads/master" ] && return 0
+	done
+	return 1
+}
+
+if ! should_gate; then
+	echo "▶ pre-push: not updating master — skipping gate (GATE_ALL=1 to force)"
+	exit 0
+fi
+
+echo "▶ pre-push (master): make lint"
+make lint
+
+echo "▶ pre-push (master): make test-race"
+make test-race
+
+echo "✓ pre-push (master) checks passed"

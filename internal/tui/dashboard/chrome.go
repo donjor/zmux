@@ -3,12 +3,12 @@ package dashboard
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/donjor/zmux/internal/tui"
+	"charm.land/lipgloss/v2"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // RenderTabBar renders the top tab bar with the active tab highlighted.
-func RenderTabBar(tabs []TabID, active TabID, styles tui.Styles, width int) string {
+func RenderTabBar(tabs []TabID, active TabID, styles styles.Styles, width int) string {
 	var parts []string
 
 	for _, id := range tabs {
@@ -38,7 +38,7 @@ func RenderTabBar(tabs []TabID, active TabID, styles tui.Styles, width int) stri
 }
 
 // RenderHelpBar renders the bottom help bar with contextual hints.
-func RenderHelpBar(tabHelp string, styles tui.Styles, width int) string {
+func RenderHelpBar(tabHelp string, styles styles.Styles, width int) string {
 	// Global keys always shown.
 	globalHelp := "alt+1-6:tabs  tab/shift+tab:cycle  esc:quit"
 
@@ -55,7 +55,7 @@ func RenderHelpBar(tabHelp string, styles tui.Styles, width int) string {
 }
 
 // RenderStatusFlash renders a status message in the tab bar area.
-func RenderStatusFlash(text string, isError bool, styles tui.Styles) string {
+func RenderStatusFlash(text string, isError bool, styles styles.Styles) string {
 	if text == "" {
 		return ""
 	}
@@ -66,7 +66,7 @@ func RenderStatusFlash(text string, isError bool, styles tui.Styles) string {
 }
 
 // RenderTooSmall renders the minimum-size warning.
-func RenderTooSmall(styles tui.Styles) string {
+func RenderTooSmall(styles styles.Styles) string {
 	msg := styles.Dim.Render("Terminal too small. Resize to at least 60x16.")
 	return "\n\n" + msg
 }

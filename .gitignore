@@ -1,9 +1,21 @@
 # Build output
 /zmux
+/zzmux
 /uiproto
 
 # Downloaded themes cache
 themes/iterm2/
+
+# Local agent / scratch state
+.dump/
+.claude/
+.codetree/
+docs/NOTES.MD
+
+# Demo / capture artifacts
+*.cast
+*.tape
+demo.gif
 
 # OS
 .DS_Store
@@ -21,3 +33,6 @@ themes/iterm2/
 # Pi extension local deps
 /pi-extension/node_modules
 /pi-extension/node_modules/
+
+# v0 downloaded theme cache (if v0 init is ever run)
+legacy/v0/themes/iterm2/

@@ -234,6 +234,22 @@ func TestGenerateConfContainsPaletteBinding(t *testing.T) {
 	}
 }
 
+func TestGenerateConfContainsScratchShell(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	if !strings.Contains(conf, "bind ! display-popup") {
+		t.Error("conf missing scratch shell popup binding (prefix+!)")
+	}
+	if !strings.Contains(conf, `-d "#{pane_current_path}"`) {
+		t.Error("conf missing pane cwd start dir for scratch shell")
+	}
+	if !strings.Contains(conf, `"$SHELL"`) {
+		t.Error("conf missing $SHELL invocation in scratch shell popup")
+	}
+}
+
 func TestGenerateConfContainsReload(t *testing.T) {
 	cfg := config.DefaultConfig()
 	palette := testPalette()

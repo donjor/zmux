@@ -4,16 +4,18 @@ package tabs
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 
+	"github.com/donjor/zmux/internal/overmind"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/tui"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/styles"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/donjor/zmux/internal/workspace"
 )
 
@@ -37,7 +39,7 @@ const (
 // sessionsDataMsg carries fetched workspace + external data.
 type sessionsDataMsg struct {
 	reqID      int64
-	workspaces []tui.WorkspaceViewModel
+	workspaces []workspaceview.WorkspaceViewModel
 	current    string // current session name (for "current" marker)
 	catalog    *source.Catalog
 	err        error
@@ -55,15 +57,16 @@ func (m sessionsMutationDoneMsg) TargetTab() dashboard.TabID { return dashboard.
 // SessionsTab implements the Tab interface for global workspace management.
 type SessionsTab struct {
 	runner   tmux.Runner
-	styles   tui.Styles
-	wsLoader tui.WorkspaceDataLoader
+	styles   styles.Styles
+	wsLoader workspaceview.WorkspaceDataLoader
 	wsStore  *workspace.Store
+	overmind overmind.Client
 
 	// Tree owns row data, cursor, and expansion state.
 	tree *outline.Tree
 
 	// Snapshot data.
-	workspaces []tui.WorkspaceViewModel
+	workspaces []workspaceview.WorkspaceViewModel
 	current    string
 	catalog    *source.Catalog
 
@@ -90,8 +93,8 @@ type SessionsTab struct {
 
 // NewSessionsTab creates a new workspaces tab.
 // wsLoader returns enriched workspace view models; wsStore is required for
-// CRUD mutations from inside the dashboard.
-func NewSessionsTab(runner tmux.Runner, styles tui.Styles, wsLoader tui.WorkspaceDataLoader, wsStore *workspace.Store) *SessionsTab {
+// CRUD mutations from inside the dashboard; om drives overmind restart/stop.
+func NewSessionsTab(runner tmux.Runner, styles styles.Styles, wsLoader workspaceview.WorkspaceDataLoader, wsStore *workspace.Store, om overmind.Client) *SessionsTab {
 	ri := textinput.New()
 	ri.Placeholder = "new name..."
 	ri.CharLimit = 64
@@ -105,6 +108,7 @@ func NewSessionsTab(runner tmux.Runner, styles tui.Styles, wsLoader tui.Workspac
 		styles:      styles,
 		wsLoader:    wsLoader,
 		wsStore:     wsStore,
+		overmind:    om,
 		tree:        outline.NewTree(),
 		renameInput: ri,
 		createInput: ci,
@@ -136,8 +140,8 @@ func (t *SessionsTab) Deactivate() {
 func (t *SessionsTab) Resize(width, height int) {
 	t.width = width
 	t.height = height
-	t.vp.Width = width
-	t.vp.Height = height
+	t.vp.SetWidth(width)
+	t.vp.SetHeight(height)
 }
 
 // Update processes messages for the workspaces tab.
@@ -227,7 +231,7 @@ func (t *SessionsTab) fetchData(reqID int64) tea.Cmd {
 	runner := t.runner
 	wsLoader := t.wsLoader
 	return func() tea.Msg {
-		var workspaces []tui.WorkspaceViewModel
+		var workspaces []workspaceview.WorkspaceViewModel
 		if wsLoader != nil {
 			workspaces = wsLoader()
 		}
@@ -236,7 +240,7 @@ func (t *SessionsTab) fetchData(reqID int64) tea.Cmd {
 		current = session.RootName(strings.TrimSpace(current))
 
 		// External sources are best-effort. Failures fall back to empty.
-		cat, _ := source.Discover()
+		cat, _ := source.Discover(runner.Endpoint())
 
 		return sessionsDataMsg{
 			reqID:      reqID,

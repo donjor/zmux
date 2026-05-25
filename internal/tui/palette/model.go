@@ -3,12 +3,11 @@ package palette
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/sahilm/fuzzy"
-
-	"github.com/donjor/zmux/internal/tui"
 )
 
 // PaletteModel is the bubbletea model for the spotlight-style command palette.
@@ -18,7 +17,7 @@ type PaletteModel struct {
 	filtered []Action
 	cursor   int
 	filter   textinput.Model
-	styles   tui.Styles
+	styles   styles.Styles
 	width    int
 	height   int
 
@@ -28,7 +27,7 @@ type PaletteModel struct {
 }
 
 // NewPaletteModel creates a new command palette model.
-func NewPaletteModel(registry *Registry, styles tui.Styles) *PaletteModel {
+func NewPaletteModel(registry *Registry, styles styles.Styles) *PaletteModel {
 	ti := textinput.New()
 	ti.Placeholder = "type to search actions..."
 	ti.CharLimit = 128
@@ -132,7 +131,13 @@ func (m *PaletteModel) applyFilter() {
 }
 
 // View renders the command palette UI.
-func (m *PaletteModel) View() string {
+func (m *PaletteModel) View() tea.View {
+	v := tea.NewView(m.view())
+	v.AltScreen = true
+	return v
+}
+
+func (m *PaletteModel) view() string {
 	if m.Quitting {
 		return ""
 	}
