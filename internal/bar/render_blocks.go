@@ -56,7 +56,7 @@ func renderTopBlocks(p *theme.Palette, ctx BarContext) string {
 	fmt.Fprintf(&b, "#[fg=%s,bold] [󱂬 %s] ", p.Special.Hex(), ctx.Workspace)
 	for _, sess := range ctx.WorkspaceSessions {
 		if sess == ctx.Session {
-			fmt.Fprintf(&b, "#[fg=%s,bold][%s]#[nobold] ", p.Accent.Hex(), sess)
+			fmt.Fprintf(&b, "#[fg=%s,bold][%s]#[nobold] ", p.Accent.Hex(), topSessionLabel(ctx, sess))
 		} else {
 			fmt.Fprintf(&b, "#[fg=%s][%s] ", p.Dim.Hex(), sess)
 		}

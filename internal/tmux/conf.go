@@ -53,6 +53,8 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set -g status-interval 5\n")
 	b.WriteString("set -g status-left-length 40\n")
 	b.WriteString("set -g status-right-length 100\n")
+	// Rounded popup chrome for dashboard, pickers, scratch — quieter framing.
+	b.WriteString("set -g popup-border-lines rounded\n")
 	b.WriteString("\n")
 
 	// Prefix
@@ -105,7 +107,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 
 	// Alt+` tab switcher for current session (no prefix)
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind -n %s display-popup -w 60%% -h 40%% -E \"%s --tab-picker\"\n", keys.TabSwitch.Key, zmuxBin)
+		popupBind(&b, true, keys.TabSwitch.Key, 60, 40, zmuxBin, "--tab-picker")
+		// Alt+w workspace switcher (no prefix). Parallels Alt+`.
+		// Caveat: shadows Emacs/readline Meta-w (copy-region) inside inner shells.
+		popupBind(&b, true, keys.WorkspaceSwitch.Key, 50, 50, zmuxBin, "--workspace-picker")
 	}
 	b.WriteString("\n")
 
@@ -136,15 +141,16 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		// (w = workspace, s = session). The picker is hierarchical so
 		// either entry point works.
 		for _, k := range append([]string{keys.SessionPicker.Key}, keys.SessionPicker.Aliases...) {
-			fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 50%% -E \"%s --picker\"\n", k, zmuxBin)
+			popupBind(&b, false, k, 60, 50, zmuxBin, "--picker")
 		}
 		// prefix+[ / prefix+]: cycle prev/next session in workspace
 		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace prev\"\n", keys.SessionPrev.Key, zmuxBin)
 		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace next\"\n", keys.SessionNext.Key, zmuxBin)
-		// Shift+Alt+1-9: direct session switching within workspace
-		for i := 1; i <= 9; i++ {
-			fmt.Fprintf(&b, "bind -n M-S-%d run-shell \"%s workspace switch-to %d\"\n", i, zmuxBin, i)
-		}
+		// No direct Alt+<digit> session jump: terminals fold Shift+<digit>
+		// into the shifted symbol (Alt+Shift+2 → M-@, which readline owns as
+		// complete-hostname), so a per-digit bind is both layout-fragile and
+		// a footgun. Session switching lives in the Alt+` picker and the
+		// prefix+[ / prefix+] cycle instead.
 	} else {
 		b.WriteString("bind s choose-tree -s\n")
 	}
@@ -158,32 +164,36 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	// Command Palette popup (prefix+p)
 	writeSection(&b, "Command Palette")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 50%% -E \"%s --palette\"\n", keys.Palette.Key, zmuxBin)
-	} else {
-		fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 50%% -E \"zmux --palette\"\n", keys.Palette.Key)
+		popupBind(&b, false, keys.Palette.Key, 60, 50, zmuxBin, "--palette")
 	}
 	b.WriteString("\n")
 
 	// Dashboard popup (prefix+Space — "double-tap" zmux)
 	writeSection(&b, "Dashboard")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind %s display-popup -w 80%% -h 80%% -E \"%s --dashboard\"\n", keys.Dashboard.Key, zmuxBin)
-	} else {
-		fmt.Fprintf(&b, "bind %s display-popup -w 80%% -h 80%% -E \"zmux --dashboard\"\n", keys.Dashboard.Key)
+		popupBind(&b, false, keys.Dashboard.Key, 80, 80, zmuxBin, "--dashboard")
 	}
 	b.WriteString("\n")
 
 	// Help popup (prefix+?)
 	b.WriteString("# Help\n")
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind %s display-popup -w 60%% -h 60%% -E \"%s help\"\n", keys.Help.Key, zmuxBin)
+		popupBind(&b, false, keys.Help.Key, 60, 60, zmuxBin, "help")
 	}
 	b.WriteString("\n")
 
 	// Scratch shell popup (prefix+!) — throwaway $SHELL in a popup, cwd
-	// inherits from the calling pane, closes on exit.
+	// inherits from the calling pane, closes on exit. Run `<bin> scratch
+	// extract` from inside to promote the cwd into a real tab. The title
+	// advertises the active profile's binary (zmux | zzmux) so following the
+	// hint never crosses profiles — under zzmux, `zmux scratch extract` would
+	// silently act on the wrong server.
 	writeSection(&b, "Scratch shell")
-	fmt.Fprintf(&b, "bind %s display-popup -E -w 80%% -h 70%% -T \" scratch shell \" -d \"#{pane_current_path}\" \"$SHELL\"\n", keys.ScratchShell.Key)
+	scratchBin := "zmux"
+	if zmuxBin != "" {
+		scratchBin = filepath.Base(zmuxBin)
+	}
+	fmt.Fprintf(&b, "bind %s display-popup -E -w 80%% -h 70%% -T \" scratch · %s scratch extract → tab \" -d \"#{pane_current_path}\" \"$SHELL\"\n", keys.ScratchShell.Key, scratchBin)
 	b.WriteString("\n")
 
 	// Reload (prefix+r runs full zmux apply — regenerates conf + applies everything)
@@ -197,12 +207,27 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 
 	// Status bar refresh hooks — force immediate refresh on context change
 	// so the bar doesn't show stale session/window info for 5 seconds.
+	//
+	// Each refresh is guarded by `if-shell -F '#{client_tty}'`: bare
+	// `refresh-client -S` errors "(null):0: no current client" when a hook
+	// fires with no client to refresh — e.g. a zmux CLI command run from a
+	// shell that isn't attached to any session triggers session-created/closed.
+	// Gating on the hook's current client tty (empty ⟹ tmux has no client
+	// here) skips the refresh silently in that case while still firing it when
+	// a client is present. client_tty over session_attached because the latter
+	// would gate session-closed on the dying session's attach count (always 0)
+	// and wrongly skip a refresh another client still wants.
 	writeSection(&b, "Status refresh hooks")
-	b.WriteString("set-hook -g client-session-changed \"refresh-client -S\"\n")
-	b.WriteString("set-hook -g session-window-changed \"refresh-client -S\"\n")
-	b.WriteString("set-hook -g window-linked \"refresh-client -S\"\n")
-	b.WriteString("set-hook -g window-renamed \"refresh-client -S\"\n")
-	b.WriteString("set-hook -g session-renamed \"refresh-client -S\"\n")
+	const refresh = "if-shell -F '#{client_tty}' 'refresh-client -S'"
+	fmt.Fprintf(&b, "set-hook -g client-session-changed \"%s\"\n", refresh)
+	fmt.Fprintf(&b, "set-hook -g session-window-changed \"%s\"\n", refresh)
+	fmt.Fprintf(&b, "set-hook -g window-linked \"%s\"\n", refresh)
+	fmt.Fprintf(&b, "set-hook -g window-renamed \"%s\"\n", refresh)
+	fmt.Fprintf(&b, "set-hook -g session-renamed \"%s\"\n", refresh)
+	// session-created/closed share an index 0 slot with bar-adjust below, so
+	// the refresh lives at index [2] to keep both concerns visible.
+	fmt.Fprintf(&b, "set-hook -g session-created[2] \"%s\"\n", refresh)
+	fmt.Fprintf(&b, "set-hook -g session-closed[2] \"%s\"\n", refresh)
 	if zmuxBin != "" {
 		// Clear older generated hook slots before installing the current silent,
 		// best-effort hooks. In particular, a legacy unindexed window-unlinked hook
@@ -217,8 +242,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		fmt.Fprintf(&b, "set-hook -g window-renamed[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
 	}
 
-	// Two-line bar hooks — adjust status line count when sessions appear/disappear.
-	// No -b flag: run synchronously so the status count is correct before redraw.
+	// Two-line bar hooks — reconcile per-session status lines to the configured
+	// layout (always-2-line for two-line/split; no count-based collapse, so the
+	// bar never reflows). No -b flag: run synchronously so the status count is
+	// correct before redraw.
 	if zmuxBin != "" {
 		fmt.Fprintf(&b, "set-hook -g session-created \"run-shell '%s bar-adjust'\"\n", zmuxBin)
 		fmt.Fprintf(&b, "set-hook -g session-closed \"run-shell '%s bar-adjust'\"\n", zmuxBin)
@@ -250,4 +277,17 @@ func WriteConf(fs config.FS, path, content string) error {
 
 func writeSection(b *strings.Builder, name string) {
 	fmt.Fprintf(b, "# --- %s ---\n", name)
+}
+
+// popupBind writes a `display-popup` keybind that re-invokes the zmux binary
+// (selfBin) with the given args. noPrefix emits a root-table (-n) bind; the
+// default is a prefix-table bind. Callers guard on selfBin != "", so a missing
+// binary path omits the bind entirely rather than falling back to a hardcoded
+// "zmux" — which would break profile isolation for the zzmux edge binary.
+func popupBind(b *strings.Builder, noPrefix bool, key string, w, h int, selfBin, args string) {
+	table := ""
+	if noPrefix {
+		table = "-n "
+	}
+	fmt.Fprintf(b, "bind %s%s display-popup -w %d%% -h %d%% -E \"%s %s\"\n", table, key, w, h, selfBin, args)
 }

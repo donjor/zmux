@@ -37,6 +37,10 @@ type Window struct {
 	Name   string
 	Active bool
 	Dir    string
+	// Label is the @zmux_label overlay — a stable name zmux assigns that
+	// survives tmux's automatic-rename (which retitles the window to the
+	// running process). Empty when unset.
+	Label string
 }
 
 // Pane represents a tmux pane within a window.

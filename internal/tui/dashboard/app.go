@@ -216,6 +216,13 @@ func (m *DashboardApp) handleGlobalKey(msg tea.KeyMsg) tea.Cmd {
 		m.Quitting = true
 		return tea.Quit
 	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+		// A tab in a capturing mode (inline rename/create/search/edit input,
+		// a y/N confirm) owns Esc — let it cancel that mode rather than
+		// closing the dashboard. Returning nil here lets Update fall through
+		// to forwarding the key to the active tab.
+		if tab, ok := m.tabs[m.activeTab]; ok && tab.CapturesEscape() {
+			return nil
+		}
 		m.Quitting = true
 		return tea.Quit
 	}

@@ -1,6 +1,8 @@
 package tabs
 
 import (
+	"fmt"
+
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/workspace"
@@ -28,14 +30,18 @@ func renameWorkspaceMutation(wsStore *workspace.Store, oldName, newName string) 
 }
 
 // renameSessionMutation renames a tmux session and updates the workspace
-// store mapping (best-effort: store errors are intentionally swallowed to
-// match prior behaviour, since the tmux rename has already happened).
+// store mapping. The store error surfaces because the bar/picker read from
+// the store; silent divergence here is how the "rename feels fragile" UX
+// report happened — tmux renamed, store didn't, and nothing was visible
+// to the user.
 func renameSessionMutation(runner tmux.Runner, wsStore *workspace.Store, oldName, newName string) error {
 	if err := session.Rename(runner, oldName, newName); err != nil {
 		return err
 	}
 	if wsStore != nil {
-		_ = wsStore.RenameSession(session.RootName(oldName), session.RootName(newName))
+		if err := wsStore.RenameSession(session.RootName(oldName), session.RootName(newName)); err != nil {
+			return fmt.Errorf("workspace metadata: %w", err)
+		}
 	}
 	return nil
 }
@@ -54,7 +60,8 @@ func killWorkspaceMutation(runner tmux.Runner, wsStore *workspace.Store, name st
 	return nil
 }
 
-// killSessionMutation kills a single tmux session.
-func killSessionMutation(runner tmux.Runner, name string) error {
-	return session.Kill(runner, name)
+// killSessionMutation kills a single tmux session and removes it from
+// workspace membership when appropriate (see workspace.KillSession).
+func killSessionMutation(runner tmux.Runner, wsStore *workspace.Store, name string) error {
+	return workspace.KillSession(runner, wsStore, name)
 }

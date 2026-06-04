@@ -134,6 +134,30 @@ func TestParseWindows(t *testing.T) {
 	}
 }
 
+func TestParseWindowsLabelField(t *testing.T) {
+	// 5th field is the @zmux_label overlay; absent/empty must yield "".
+	input := "0\tnode\t1\t/home/user\tserver\n" + // labeled (auto-renamed away)
+		"1\teditor\t0\t/home/user\t\n" + // present-but-empty label
+		"2\tshell\t0\t/home/user\n" // legacy 4-field line
+
+	windows, err := parseWindows(input)
+	if err != nil {
+		t.Fatalf("parseWindows: unexpected error: %v", err)
+	}
+	if len(windows) != 3 {
+		t.Fatalf("expected 3 windows, got %d", len(windows))
+	}
+	if windows[0].Name != "node" || windows[0].Label != "server" {
+		t.Errorf("window[0] = {Name:%q Label:%q}, want {node server}", windows[0].Name, windows[0].Label)
+	}
+	if windows[1].Label != "" {
+		t.Errorf("window[1].Label = %q, want empty", windows[1].Label)
+	}
+	if windows[2].Label != "" {
+		t.Errorf("window[2].Label = %q, want empty (legacy 4-field)", windows[2].Label)
+	}
+}
+
 func TestParseClients(t *testing.T) {
 	input := "/dev/pts/13\tpi\t$28\tpi\t@50\t1\tparley\t%139\t2028292\t0\txterm-256color\tbpaste,RGB,title\tattached,focused,UTF-8\n" +
 		"/dev/pts/26\tbridge-b\t$21\tbridge\t@36\t3\tbash\t%36\t3055165\t1\txterm-ghostty\tbpaste,title\tattached,UTF-8\n"

@@ -222,6 +222,36 @@ func TestCorrelateSourcesNoProcs(t *testing.T) {
 	}
 }
 
+func TestExternalLabel(t *testing.T) {
+	cases := map[string]string{
+		"default":  "zmux",         // the live zmux server, seen from a sibling
+		"zzmux":    "zzmux (edge)", // the edge profile, seen from zmux
+		"tmate":    "tmate",        // unknown socket → raw name
+		"overmind": "overmind",     // overmind sockets relabel elsewhere; raw here
+	}
+	for sock, want := range cases {
+		if got := externalLabel(sock); got != want {
+			t.Errorf("externalLabel(%q) = %q, want %q", sock, got, want)
+		}
+	}
+}
+
+// A zmux-family sibling socket keeps its raw socket as the Source ID but gets a
+// friendly Label: socket "default" (the live zmux server) reads as "zmux".
+func TestCorrelateSourcesSiblingLabel(t *testing.T) {
+	sockets := []socketInfo{{Name: "default", Path: "/tmp/tmux-1000/default"}}
+	sources := correlateSources(sockets, nil)
+	if len(sources) != 1 {
+		t.Fatalf("expected 1 source, got %d", len(sources))
+	}
+	if sources[0].ID != "default" {
+		t.Errorf("ID = %q, want raw socket %q (dedup/expansion key)", sources[0].ID, "default")
+	}
+	if sources[0].Label != "zmux" {
+		t.Errorf("Label = %q, want friendly %q", sources[0].Label, "zmux")
+	}
+}
+
 func TestCatalogTypes(t *testing.T) {
 	// Verify the catalog can be constructed with proper types.
 	src := &Source{

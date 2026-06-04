@@ -26,3 +26,9 @@ func (t *SessionsTab) renderCreateOverlay() string {
 func (t *SessionsTab) renderConfirmOverlay(step int) string {
 	return renderConfirmOverlayShared(t.styles, t.confirm, step)
 }
+
+// renderSearchOverlay renders the inline `/` search input prompt.
+func (t *SessionsTab) renderSearchOverlay() string {
+	prompt := t.styles.Accent.Render("  search ▸ ")
+	return prompt + t.searchInput.View() + "\n\n"
+}

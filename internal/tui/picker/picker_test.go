@@ -1,10 +1,12 @@
 package picker
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/donjor/zmux/internal/tui/tkey"
 
@@ -342,7 +344,6 @@ func TestPickerEnterOnEmptyWorkspaceCreatesMain(t *testing.T) {
 		{Name: "empty-ws", Sessions: []string{}},
 	}
 	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, nil)
-	model.state.showEmpty = true // ensure visible
 	model.filteredWorkspaces = model.workspaces
 	model.buildOutline()
 
@@ -398,6 +399,27 @@ func TestPickerEnterOnSessionAttaches(t *testing.T) {
 	}
 	if m.Result.Session == "" {
 		t.Error("expected session name in result")
+	}
+}
+
+// ── Input rendering ──
+
+// Regression: the search/name inputs must render their full placeholder text,
+// not just the first rune. bubbles v2 textinput renders only placeholder[0]
+// when Width()==0 (the "stray s" bug); the picker must carry a non-zero width
+// both by default and after a WindowSizeMsg.
+func TestPickerInputPlaceholderRendersFully(t *testing.T) {
+	m := newTestPickerWithWorkspaces()
+
+	// Default width (before any size msg) must already render the placeholder.
+	if out := ansi.Strip(m.viewList()); !strings.Contains(out, "search or create...") {
+		t.Errorf("default-width view dropped placeholder to a stray rune:\n%s", out)
+	}
+
+	// And after the program reports its size.
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	if out := ansi.Strip(updated.(PickerModel).viewList()); !strings.Contains(out, "search or create...") {
+		t.Errorf("post-WindowSizeMsg view dropped placeholder to a stray rune:\n%s", out)
 	}
 }
 
@@ -766,38 +788,222 @@ func TestPickerDeleteUnattachedWorkspaceSingleStep(t *testing.T) {
 	}
 }
 
-// ── Ctrl+H toggle ──
+// fakeWorkspaceStore records workspace mutations for delete-flow assertions.
+type fakeWorkspaceStore struct {
+	deleted []string
+}
 
-func TestPickerToggleEmptyVisibility(t *testing.T) {
-	workspaces := []workspace.Workspace{
-		{Name: "withSess", Sessions: []string{"live"}},
-		{Name: "empty1", Sessions: nil},
-		{Name: "empty2", Sessions: nil},
-	}
-	sessions := []session.SessionInfo{
-		{Name: "live", Activity: time.Now(), IsTmp: false},
-	}
+func (f *fakeWorkspaceStore) DeleteWorkspace(name string) error {
+	f.deleted = append(f.deleted, name)
+	return nil
+}
+
+func (f *fakeWorkspaceStore) RemoveSession(rootSession string) error { return nil }
+
+// An empty workspace (no live sessions) deletes immediately on ctrl+x — no
+// confirmation step.
+func TestPickerCtrlXEmptyWorkspaceDeletesImmediately(t *testing.T) {
+	workspaces := []workspace.Workspace{{Name: "ghost", Sessions: nil}}
 
 	mm := tmux.NewMockRunner()
-	styles := styles.DefaultStyles()
-	model := NewPickerModel(mm, styles)
+	store := &fakeWorkspaceStore{}
+	model := NewPickerModel(mm, styles.DefaultStyles())
+	model.SetWorkspaceStore(store)
+	model.width = 120
+	model.height = 40
+	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, nil)
+
+	result, _ := model.Update(workspacesLoadedMsg{workspaces: model.workspaces})
+	model = result.(PickerModel)
+
+	idx := findRowIndex(model, func(it outline.Row) bool {
+		ws := rowWorkspace(it)
+		return ws != nil && ws.Name == "ghost"
+	})
+	if idx < 0 {
+		t.Fatal("ghost workspace not found")
+	}
+	model.tree.Cursor = idx
+
+	result, _ = model.Update(tkey.Ctrl('x'))
+	model = result.(PickerModel)
+
+	if model.mode != modeNormal {
+		t.Errorf("empty workspace should skip confirm, got mode %v", model.mode)
+	}
+	if model.confirm != nil {
+		t.Errorf("expected confirm cleared, got %+v", model.confirm)
+	}
+	if len(store.deleted) != 1 || store.deleted[0] != "ghost" {
+		t.Errorf("expected DeleteWorkspace(ghost), got %v", store.deleted)
+	}
+}
+
+// ctrl+x again confirms a pending delete, exactly like y.
+func TestPickerCtrlXAgainConfirmsDelete(t *testing.T) {
+	workspaces := []workspace.Workspace{{Name: "webapp", Sessions: []string{"main"}}}
+	sessions := []session.SessionInfo{{Name: "main", Activity: time.Now(), Attached: false}}
+
+	mm := tmux.NewMockRunner()
+	model := NewPickerModel(mm, styles.DefaultStyles())
 	model.width = 120
 	model.height = 40
 	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
 
-	// Simulate initial load.
+	result, _ := model.Update(workspacesLoadedMsg{workspaces: model.workspaces})
+	model = result.(PickerModel)
+	idx := findRowIndex(model, func(it outline.Row) bool {
+		ws := rowWorkspace(it)
+		return ws != nil && ws.Name == "webapp"
+	})
+	model.tree.Cursor = idx
+
+	// First ctrl+x → confirm mode (has a live session, so it asks).
+	result, _ = model.Update(tkey.Ctrl('x'))
+	model = result.(PickerModel)
+	if model.mode != modeConfirmDelete {
+		t.Fatalf("expected modeConfirmDelete after first ctrl+x, got %v", model.mode)
+	}
+
+	// Second ctrl+x → confirms (unattached single step).
+	result, _ = model.Update(tkey.Ctrl('x'))
+	model = result.(PickerModel)
+	if model.mode != modeNormal {
+		t.Errorf("expected modeNormal after ctrl+x confirm, got %v", model.mode)
+	}
+	killed := false
+	for _, call := range mm.Calls {
+		if call.Method == "KillSession" && len(call.Args) > 0 && call.Args[0] == "main" {
+			killed = true
+		}
+	}
+	if !killed {
+		t.Errorf("ctrl+x confirm did not kill main; calls=%+v", mm.Calls)
+	}
+}
+
+// The delete confirmation renders inline on the cursor row (not a detached
+// overlay) and advertises the ctrl+x confirm affordance.
+func TestPickerInlineConfirmRendersOnRow(t *testing.T) {
+	workspaces := []workspace.Workspace{{Name: "webapp", Sessions: []string{"main"}}}
+	sessions := []session.SessionInfo{{Name: "main", Activity: time.Now(), Attached: false}}
+
+	mm := tmux.NewMockRunner()
+	model := NewPickerModel(mm, styles.DefaultStyles())
+	model.width = 120
+	model.height = 40
+	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
+
+	result, _ := model.Update(workspacesLoadedMsg{workspaces: model.workspaces})
+	model = result.(PickerModel)
+	idx := findRowIndex(model, func(it outline.Row) bool {
+		ws := rowWorkspace(it)
+		return ws != nil && ws.Name == "webapp"
+	})
+	model.tree.Cursor = idx
+
+	result, _ = model.Update(tkey.Ctrl('x'))
+	model = result.(PickerModel)
+
+	out := ansi.Strip(model.viewList())
+	if !strings.Contains(out, "delete workspace webapp") {
+		t.Errorf("expected inline delete prompt on cursor row, got:\n%s", out)
+	}
+	if !strings.Contains(out, "ctrl+x to confirm") {
+		t.Errorf("expected ctrl+x confirm affordance, got:\n%s", out)
+	}
+}
+
+// ── Ctrl+H toggle ──
+
+// Empty workspaces are always listed by default (grayed by the renderer); the
+// browse view caps the count at maxBrowseWorkspaces, and ctrl+h reveals the
+// rest (show-all).
+func TestPickerShowAllToggle(t *testing.T) {
+	total := maxBrowseWorkspaces + 3
+	var workspaces []workspace.Workspace
+	for i := 0; i < total; i++ {
+		// All empty (no sessions) — they sort alphabetically and must still
+		// be listed by default, capped at maxBrowseWorkspaces.
+		workspaces = append(workspaces, workspace.Workspace{Name: fmt.Sprintf("ws%02d", i)})
+	}
+
+	mm := tmux.NewMockRunner()
+	model := NewPickerModel(mm, styles.DefaultStyles())
+	model.width = 120
+	model.height = 40
+	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, nil)
+
+	// Initial load: capped to maxBrowseWorkspaces even though all are empty.
 	result, _ := model.Update(workspacesLoadedMsg{workspaces: model.workspaces})
 	mm2 := result.(PickerModel)
 
-	if len(mm2.filteredWorkspaces) != 1 {
-		t.Errorf("expected 1 visible workspace (empty hidden), got %d", len(mm2.filteredWorkspaces))
+	if len(mm2.filteredWorkspaces) != maxBrowseWorkspaces {
+		t.Errorf("expected %d workspaces shown by default (capped), got %d", maxBrowseWorkspaces, len(mm2.filteredWorkspaces))
+	}
+	// The cap is surfaced, not silent: footer + help advertise the remainder.
+	if list := ansi.Strip(mm2.viewList()); !strings.Contains(list, fmt.Sprintf("+ %d more (ctrl+h)", total-maxBrowseWorkspaces)) {
+		t.Errorf("expected '+N more' footer when capped, got:\n%s", list)
+	}
+	if help := ansi.Strip(mm2.viewHelp()); !strings.Contains(help, fmt.Sprintf("ctrl+h:show-all (+%d)", total-maxBrowseWorkspaces)) {
+		t.Errorf("expected show-all (+N) help hint, got:\n%s", help)
 	}
 
+	// ctrl+h → show-all reveals every workspace.
 	result, _ = mm2.Update(tkey.Ctrl('h'))
 	mm2 = result.(PickerModel)
 
-	if len(mm2.filteredWorkspaces) != 3 {
-		t.Errorf("expected 3 visible workspaces after toggle, got %d", len(mm2.filteredWorkspaces))
+	if len(mm2.filteredWorkspaces) != total {
+		t.Errorf("expected all %d workspaces after show-all, got %d", total, len(mm2.filteredWorkspaces))
+	}
+	// Show-all: footer gone, help flips to collapse.
+	if list := ansi.Strip(mm2.viewList()); strings.Contains(list, "more (ctrl+h)") {
+		t.Errorf("expected no '+N more' footer under show-all, got:\n%s", list)
+	}
+	if help := ansi.Strip(mm2.viewHelp()); !strings.Contains(help, "ctrl+h:show-less") {
+		t.Errorf("expected show-less help hint under show-all, got:\n%s", help)
+	}
+
+	// ctrl+h again collapses back to the cap.
+	result, _ = mm2.Update(tkey.Ctrl('h'))
+	mm2 = result.(PickerModel)
+	if len(mm2.filteredWorkspaces) != maxBrowseWorkspaces {
+		t.Errorf("expected re-collapse to %d, got %d", maxBrowseWorkspaces, len(mm2.filteredWorkspaces))
+	}
+}
+
+// Pseudo "temporary" (live tmp sessions) is exempt from the cap so active
+// sessions are never hidden behind show-all.
+func TestPickerCapKeepsTmpPseudo(t *testing.T) {
+	var workspaces []workspace.Workspace
+	for i := 0; i < maxBrowseWorkspaces+2; i++ {
+		workspaces = append(workspaces, workspace.Workspace{Name: fmt.Sprintf("ws%02d", i)})
+	}
+	sessions := []session.SessionInfo{
+		{Name: "tmp-1", Activity: time.Now(), IsTmp: true},
+	}
+
+	mm := tmux.NewMockRunner()
+	model := NewPickerModel(mm, styles.DefaultStyles())
+	model.width = 120
+	model.height = 40
+	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
+
+	result, _ := model.Update(workspacesLoadedMsg{workspaces: model.workspaces})
+	mm2 := result.(PickerModel)
+
+	// maxBrowseWorkspaces real + the temporary pseudo.
+	if len(mm2.filteredWorkspaces) != maxBrowseWorkspaces+1 {
+		t.Fatalf("expected %d (cap + pseudo), got %d", maxBrowseWorkspaces+1, len(mm2.filteredWorkspaces))
+	}
+	found := false
+	for _, ws := range mm2.filteredWorkspaces {
+		if ws.IsPseudo {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected temporary pseudo-workspace to survive the cap")
 	}
 }
 

@@ -176,7 +176,8 @@ func parsePanes(output string) ([]Pane, error) {
 }
 
 // parseWindows parses tab-delimited list-windows output into []Window.
-// Expected format per line: index\tname\tactive\tdir
+// Expected format per line: index\tname\tactive\tdir[\tlabel]
+// The label (@zmux_label) field is optional for backward compatibility.
 func parseWindows(output string) ([]Window, error) {
 	if output == "" {
 		return nil, nil
@@ -191,9 +192,9 @@ func parseWindows(output string) ([]Window, error) {
 			continue
 		}
 
-		fields := strings.SplitN(line, "\t", 4)
+		fields := strings.SplitN(line, "\t", 5)
 		if len(fields) < 4 {
-			return nil, fmt.Errorf("expected 4 tab-delimited fields, got %d: %q", len(fields), line)
+			return nil, fmt.Errorf("expected at least 4 tab-delimited fields, got %d: %q", len(fields), line)
 		}
 
 		index, err := strconv.Atoi(fields[0])
@@ -203,11 +204,17 @@ func parseWindows(output string) ([]Window, error) {
 
 		active := fields[2] == "1"
 
+		label := ""
+		if len(fields) > 4 {
+			label = fields[4]
+		}
+
 		windows = append(windows, Window{
 			Index:  index,
 			Name:   fields[1],
 			Active: active,
 			Dir:    fields[3],
+			Label:  label,
 		})
 	}
 

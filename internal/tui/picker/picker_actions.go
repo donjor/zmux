@@ -9,6 +9,7 @@ import (
 	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
+	"github.com/donjor/zmux/internal/workspace"
 )
 
 // handleEnter dispatches based on the row under the cursor.
@@ -166,7 +167,7 @@ func (m PickerModel) applyConfirmedDelete() {
 	}
 	switch m.confirm.kind {
 	case "session":
-		_ = session.Kill(m.runner, m.confirm.name)
+		_ = workspace.KillSession(m.runner, m.wsStore, m.confirm.name)
 
 	case "workspace":
 		// Re-resolve the workspace from the live snapshot so we act on

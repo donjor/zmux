@@ -22,19 +22,25 @@ type stubTab struct {
 	viewText    string
 	helpText    string
 	initCalled  bool
+	capturesEsc bool // when true, the tab claims Esc (modal-esc routing)
+	sawEsc      bool // recorded when an Esc key reaches Update
 }
 
 func newStubTab(id TabID, title string) *stubTab {
 	return &stubTab{id: id, title: title, viewText: "content:" + string(id), helpText: "help:" + string(id)}
 }
 
-func (t *stubTab) ID() TabID         { return t.id }
-func (t *stubTab) Title() string     { return t.title }
-func (t *stubTab) Init() tea.Cmd     { t.initCalled = true; return nil }
-func (t *stubTab) View() string      { return t.viewText }
-func (t *stubTab) ShortHelp() string { return t.helpText }
+func (t *stubTab) ID() TabID            { return t.id }
+func (t *stubTab) Title() string        { return t.title }
+func (t *stubTab) Init() tea.Cmd        { t.initCalled = true; return nil }
+func (t *stubTab) View() string         { return t.viewText }
+func (t *stubTab) ShortHelp() string    { return t.helpText }
+func (t *stubTab) CapturesEscape() bool { return t.capturesEsc }
 
 func (t *stubTab) Update(msg tea.Msg) (Tab, tea.Cmd) {
+	if k, ok := msg.(tea.KeyMsg); ok && k.String() == "esc" {
+		t.sawEsc = true
+	}
 	return t, nil
 }
 
@@ -223,6 +229,33 @@ func TestDashboardCtrlCQuits(t *testing.T) {
 	}
 }
 
+// Modal-esc routing: when the active tab captures Esc (inline rename/search/
+// confirm), Esc must reach the tab to cancel that mode, NOT close the dashboard.
+func TestDashboardEscRoutedToCapturingTab(t *testing.T) {
+	app, stubs := newTestApp()
+	stubs[0].capturesEsc = true // active tab (Session) is in a capturing mode
+
+	app = sendKey(app, "esc")
+
+	if app.Quitting {
+		t.Error("esc must not quit while the active tab captures escape")
+	}
+	if !stubs[0].sawEsc {
+		t.Error("esc must be routed to the capturing active tab so it can cancel its mode")
+	}
+}
+
+// Ctrl+C is a hard quit even when the active tab captures Esc.
+func TestDashboardCtrlCQuitsEvenWhenTabCapturesEsc(t *testing.T) {
+	app, stubs := newTestApp()
+	stubs[0].capturesEsc = true
+
+	app = sendKey(app, "ctrl+c")
+	if !app.Quitting {
+		t.Error("expected Quitting after ctrl+c regardless of capture state")
+	}
+}
+
 func TestDashboardViewContainsTabBar(t *testing.T) {
 	app, _ := newTestApp()
 	app.width = 80
@@ -311,6 +344,24 @@ func TestDashboardHandlesSetStatusIntent(t *testing.T) {
 	}
 	if app.statusIsError {
 		t.Error("expected statusIsError false")
+	}
+}
+
+// The flash must actually appear in View() output, not just set statusText.
+// Regression for the bug-#4 live-test where the SetStatusIntent reached the
+// dashboard but didn't render visibly.
+func TestDashboardSetStatusIntentRendersInView(t *testing.T) {
+	app, _ := newTestApp()
+	app.width = 80
+	app.height = 24
+	app.rect = ComputeContentRect(80, 24)
+
+	result, _ := app.Update(SetStatusIntent{Text: "rename failed: name taken", IsError: true})
+	app = result.(*DashboardApp)
+
+	view := ansi.Strip(app.view())
+	if !strings.Contains(view, "rename failed: name taken") {
+		t.Errorf("expected flash text in view, got:\n%s", view)
 	}
 }
 

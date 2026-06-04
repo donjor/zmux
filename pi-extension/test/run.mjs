@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -45,6 +45,31 @@ try {
   for (const [command, want] of cases) {
     assert.equal(classifyBash(command, cfg).kind, want, command);
   }
+
+  // Shared-corpus parity (the cross-impl drift gate). The corpus at
+  // testdata/zmux-guard-corpus.jsonl is the source of truth for KIND, which is
+  // agent-invariant — pi must agree with the Go classifier and the Claude hook.
+  // Two documented divergences are excluded because they stem from pi's richer
+  // surface, not a classification disagreement (see the corpus README):
+  //   - `zmux ...` CLI calls: safe on the shell surface, but pi nudges to a typed
+  //     tool (direct_zmux). pi-only, tested via the direct_zmux cases above.
+  //   - socket-scoped tmux (`-L`): pi folds the exemption into `safe` (its block
+  //     decision is kind-derived; the Go side keeps kind=direct_tmux + allow).
+  const corpusPath = join(root, '..', 'testdata', 'zmux-guard-corpus.jsonl');
+  const corpus = readFileSync(corpusPath, 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
+  let corpusChecked = 0;
+  for (const row of corpus) {
+    if (/^\s*zmux\s/u.test(row.command)) continue; // pi direct_zmux territory
+    // Socket-scoped tmux that the Go side classifies direct_tmux+allow is folded
+    // into `safe` by pi (kind-derived decision) — skip only *those* rows, not any
+    // row that merely mentions `-L`. A `tmux -L … && npm run dev` row is kind
+    // `runtime` and MUST stay gated (pi still catches the dev server).
+    if (row.kind === 'direct_tmux' && /(^|\s)-L(\s|=)/u.test(row.command)) continue;
+    assert.equal(classifyBash(row.command, cfg).kind, row.kind, `corpus kind for ${JSON.stringify(row.command)} [${row.note}]`);
+    corpusChecked++;
+  }
+  assert.ok(corpusChecked >= 60, `expected to check most corpus rows, got ${corpusChecked}`);
+  console.log(`pi corpus parity: ${corpusChecked} rows matched`);
   assert.equal(stripQuotedSegments('rg -n "sudo|ssh|zmux tabs" src').includes('sudo'), false);
   assert.equal(stripQuotedSegments('rg -n "sudo|ssh|zmux tabs" src').includes('zmux tabs'), false);
   assert.equal(hasExplicitBypass('PI_ZMUX_ALLOW=1 zmux tabs'), true);

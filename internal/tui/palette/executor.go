@@ -7,6 +7,7 @@ import (
 	"github.com/donjor/zmux/internal/overmind"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/workspace"
 )
 
 // PostActionKind classifies what should happen after executing an action.
@@ -33,11 +34,13 @@ type Executor struct {
 	Runner   tmux.Runner
 	FS       config.FS
 	Overmind overmind.Client
+	WSStore  workspace.MembershipRemover
 }
 
-// NewExecutor creates an executor with the given dependencies.
-func NewExecutor(runner tmux.Runner, fs config.FS, om overmind.Client) *Executor {
-	return &Executor{Runner: runner, FS: fs, Overmind: om}
+// NewExecutor creates an executor with the given dependencies. wsStore may
+// be nil; kill-session actions fall back to a plain tmux kill in that case.
+func NewExecutor(runner tmux.Runner, fs config.FS, om overmind.Client, wsStore workspace.MembershipRemover) *Executor {
+	return &Executor{Runner: runner, FS: fs, Overmind: om, WSStore: wsStore}
 }
 
 // Run executes the given action and returns what the caller should do next.
@@ -60,7 +63,7 @@ func (e *Executor) Run(action Action) PostAction {
 		return PostAction{Kind: PostClose}
 
 	case SessionKillPayload:
-		if err := session.Kill(e.Runner, payload.Name); err != nil {
+		if err := workspace.KillSession(e.Runner, e.WSStore, payload.Name); err != nil {
 			return PostAction{Kind: PostError, Err: fmt.Errorf("kill session: %w", err)}
 		}
 		return PostAction{Kind: PostClose}

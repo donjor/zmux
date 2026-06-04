@@ -41,7 +41,7 @@ func newTestBarTab(t *testing.T) (*BarTab, *tmux.MockRunner, *sessionsMemFS) {
 
 	resolver := theme.NewResolver(fs, "", "")
 
-	tab := NewBarTab(resolver, fs, mock, styles.DefaultStyles())
+	tab := NewBarTab(resolver, fs, mock, "zmux", styles.DefaultStyles())
 	tab.Resize(120, 40)
 	return tab, mock, fs
 }
@@ -223,13 +223,13 @@ func TestBarLayoutCycle(t *testing.T) {
 		t.Errorf("after l: layout = %q, want split", tab.layout)
 	}
 
-	// Cycle forward again: split → single.
+	// Cycle forward again: split → two-line (wraps; "single" was removed).
 	sendBarKey(tab, "l")
-	if tab.layout != "single" {
-		t.Errorf("after l: layout = %q, want single", tab.layout)
+	if tab.layout != "two-line" {
+		t.Errorf("after l: layout = %q, want two-line", tab.layout)
 	}
 
-	// Cycle backward: single → split.
+	// Cycle backward: two-line → split.
 	sendBarKey(tab, "h")
 	if tab.layout != "split" {
 		t.Errorf("after h: layout = %q, want split", tab.layout)

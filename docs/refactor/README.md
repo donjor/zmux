@@ -1,7 +1,7 @@
-# docs/reafactor — the architecture-refactor record
+# docs/refactor — the architecture-refactor record
 
-> Directory name keeps its original spelling (`reafactor`) on purpose — it's
-> referenced by ROADMAP, commits, and this log. Renaming would rewrite history.
+> Was `docs/reafactor/` (a typo) until 2026-06-04. Older commit messages and
+> log entries reference the old spelling; the snapshots below keep it verbatim.
 
 The complete record of zmux's architecture restructure: the planning artifacts,
 the per-phase follow-up plans, and a chronological log. It doubles as the worked

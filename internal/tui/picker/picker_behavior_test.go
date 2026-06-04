@@ -61,7 +61,6 @@ func newBehaviorPicker(t *testing.T) PickerModel {
 	model.width = 120
 	model.height = 40
 	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
-	model.state.showEmpty = true // show empty workspaces for test visibility
 
 	// Load workspaces into the picker.
 	result, _ := model.Update(workspacesLoadedMsg{workspaces: model.workspaces})
@@ -459,6 +458,36 @@ func TestPickerBehavior_WorkspaceNoSessionsEnterCreatesMain(t *testing.T) {
 	}
 	if m.Result.Workspace != "empty" {
 		t.Errorf("workspace = %q, want 'empty'", m.Result.Workspace)
+	}
+}
+
+// TestPickerBehavior_WorkspaceHintDiscoverability verifies the help bar
+// surfaces the `<ws> <session>` create grammar when the cursor is on a
+// workspace row and no session name has been typed yet. The grammar itself
+// is enforced by TestPickerBehavior_TypedSessionInExistingWorkspace —
+// this test only guards the discoverability hint.
+func TestPickerBehavior_WorkspaceHintDiscoverability(t *testing.T) {
+	m := newBehaviorPicker(t)
+
+	m = moveCursorTo(m, func(r outline.Row) bool {
+		ws := rowWorkspace(r)
+		return ws != nil && ws.Name == "myapp"
+	})
+	if m.state.sessionQuery != "" {
+		t.Fatalf("sessionQuery = %q, want empty", m.state.sessionQuery)
+	}
+
+	help := m.viewHelp()
+	if !strings.Contains(help, "new-session") {
+		t.Errorf("help = %q, want contains 'new-session' hint", help)
+	}
+
+	// Once a session name has been typed, the hint should disappear because
+	// the action is now in flight via the ghost prompt.
+	m = typeInPicker(m, " dev")
+	help = m.viewHelp()
+	if strings.Contains(help, "space+name:new-session") {
+		t.Errorf("help = %q, hint should not appear once sessionQuery is set", help)
 	}
 }
 

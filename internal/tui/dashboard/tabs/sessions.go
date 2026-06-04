@@ -2,6 +2,7 @@
 package tabs
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -29,6 +30,7 @@ const (
 	sessionsModeConfirmKill                             // y/N confirm
 	sessionsModeConfirmKillAttached                     // second-step confirm for attached ws
 	sessionsModeMove                                    // inline move-session destination picker
+	sessionsModeSearch                                  // inline `/` search input over the tree
 )
 
 // confirmState / renameState / moveState live in mode_state.go and are
@@ -81,9 +83,15 @@ type SessionsTab struct {
 	// Inputs / overlay state.
 	renameInput textinput.Model
 	createInput textinput.Model
+	searchInput textinput.Model
 	rename      *renameState
 	confirm     *confirmState
 	moveSt      *moveState
+
+	// searchQuery is the active filter over the tree. It is independent of
+	// sessionsModeSearch: editing the query lives in that mode, but a
+	// committed query keeps filtering while the user browses in list mode.
+	searchQuery string
 
 	// Async-correctness primitives.
 	reqID         int64
@@ -103,6 +111,10 @@ func NewSessionsTab(runner tmux.Runner, styles styles.Styles, wsLoader workspace
 	ci.Placeholder = "workspace name..."
 	ci.CharLimit = 64
 
+	si := textinput.New()
+	si.Placeholder = "search workspaces & sessions..."
+	si.CharLimit = 64
+
 	return &SessionsTab{
 		runner:      runner,
 		styles:      styles,
@@ -112,6 +124,7 @@ func NewSessionsTab(runner tmux.Runner, styles styles.Styles, wsLoader workspace
 		tree:        outline.NewTree(),
 		renameInput: ri,
 		createInput: ci,
+		searchInput: si,
 	}
 }
 
@@ -120,6 +133,14 @@ func NewSessionsTab(runner tmux.Runner, styles styles.Styles, wsLoader workspace
 func (t *SessionsTab) ID() dashboard.TabID { return dashboard.TabWorkspaces }
 func (t *SessionsTab) Title() string       { return "Workspaces" }
 func (t *SessionsTab) Init() tea.Cmd       { return nil }
+
+// CapturesEscape reports that Esc should be handled by the tab rather than
+// close the dashboard: while in a capturing mode (rename/create/move/confirm/
+// search), or while a committed search filter is active in list mode (Esc
+// clears it).
+func (t *SessionsTab) CapturesEscape() bool {
+	return t.mode != sessionsModeList || t.searchQuery != ""
+}
 
 func (t *SessionsTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	t.tree.ResetExpansion()
@@ -135,6 +156,10 @@ func (t *SessionsTab) Deactivate() {
 	t.pendingJumpTo = ""
 	t.renameInput.Blur()
 	t.createInput.Blur()
+	// Drop any active search filter so the tab is fresh on re-entry.
+	t.searchQuery = ""
+	t.searchInput.SetValue("")
+	t.searchInput.Blur()
 }
 
 func (t *SessionsTab) Resize(width, height int) {
@@ -176,6 +201,10 @@ func (t *SessionsTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 		var cmd tea.Cmd
 		t.createInput, cmd = t.createInput.Update(msg)
 		return t, cmd
+	case sessionsModeSearch:
+		var cmd tea.Cmd
+		t.searchInput, cmd = t.searchInput.Update(msg)
+		return t, cmd
 	}
 	return t, nil
 }
@@ -204,6 +233,15 @@ func (t *SessionsTab) applyData(msg sessionsDataMsg) {
 	t.catalog = msg.catalog
 	rows := t.buildRows()
 	if t.pendingJumpTo != "" {
+		// If a committed search filter would hide the row we just acted on
+		// (rename/create/move target), drop the filter and rebuild — otherwise
+		// SetRowsAndJumpTo's silent fallback chain lands the cursor on an
+		// unrelated row. Kills set no pendingJumpTo, so they keep the filter.
+		if t.searchQuery != "" && !rowsContain(rows, t.pendingJumpTo) {
+			t.searchQuery = ""
+			t.searchInput.SetValue("")
+			rows = t.buildRows()
+		}
 		t.tree.SetRowsAndJumpTo(rows, t.pendingJumpTo)
 		t.pendingJumpTo = ""
 	} else {
@@ -219,6 +257,7 @@ func (t *SessionsTab) exitMode() {
 	t.moveSt = nil
 	t.renameInput.Blur()
 	t.createInput.Blur()
+	t.searchInput.Blur()
 	if t.pending != nil {
 		t.applyData(*t.pending)
 		t.pending = nil
@@ -284,20 +323,28 @@ func (t *SessionsTab) killWorkspace(name string) tea.Cmd {
 // killSession kills a single session.
 func (t *SessionsTab) killSession(name string) tea.Cmd {
 	runner := t.runner
+	wsStore := t.wsStore
 	reqID := t.reqID
 	return func() tea.Msg {
-		_ = killSessionMutation(runner, name)
+		_ = killSessionMutation(runner, wsStore, name)
 		return sessionsMutationDoneMsg{reqID: reqID}
 	}
 }
 
 // renameWorkspace renames a workspace and queues a jump-to on the new ID.
+// Errors surface as a status flash; silent failure is what the user hit
+// when reporting the rename flow as "fragile".
 func (t *SessionsTab) renameWorkspace(oldName, newName string) tea.Cmd {
 	wsStore := t.wsStore
 	reqID := t.reqID
 	t.pendingJumpTo = outline.WorkspaceID(newName)
 	return func() tea.Msg {
-		_ = renameWorkspaceMutation(wsStore, oldName, newName)
+		if err := renameWorkspaceMutation(wsStore, oldName, newName); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("rename workspace failed: %v", err),
+				IsError: true,
+			}
+		}
 		return sessionsMutationDoneMsg{reqID: reqID}
 	}
 }
@@ -309,7 +356,12 @@ func (t *SessionsTab) renameSession(oldName, newName string) tea.Cmd {
 	reqID := t.reqID
 	t.pendingJumpTo = outline.SessionID(newName)
 	return func() tea.Msg {
-		_ = renameSessionMutation(runner, wsStore, oldName, newName)
+		if err := renameSessionMutation(runner, wsStore, oldName, newName); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("rename session failed: %v", err),
+				IsError: true,
+			}
+		}
 		return sessionsMutationDoneMsg{reqID: reqID}
 	}
 }
@@ -352,25 +404,34 @@ func (t *SessionsTab) ShortHelp() string {
 		return "y:confirm  any:cancel"
 	case sessionsModeMove:
 		return "↑↓:workspace  enter:move  esc:cancel"
+	case sessionsModeSearch:
+		return "type:filter  ↑↓:move  enter:apply  esc:cancel"
+	}
+
+	// List mode: the trailing hint advertises search, plus esc:clear when a
+	// filter is active.
+	tail := "  /:search"
+	if t.searchQuery != "" {
+		tail += "  esc:clear"
 	}
 
 	row := t.tree.Current()
 	if row == nil {
-		return "n:new"
+		return "n:new" + tail
 	}
 
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
-		return strings.Join([]string{"enter:expand", "n:new", "r:rename", "x:kill"}, "  ")
+		return strings.Join([]string{"enter:expand", "n:new", "r:rename", "x:kill"}, "  ") + tail
 	case outline.RowSession:
-		return strings.Join([]string{"enter:switch", "n:new", "r:rename", "x:kill", "m:move"}, "  ")
+		return strings.Join([]string{"enter:switch", "n:new", "r:rename", "x:kill", "m:move"}, "  ") + tail
 	case outline.RowExternalGroup:
-		return "enter:toggle  n:new"
+		return "enter:toggle  n:new" + tail
 	case outline.RowExternalEntry:
 		if g, ok := externalGroupForRow(t.catalog, row); ok && g != nil && g.Source.Kind == source.SourceOvermind {
-			return "enter:connect  r:restart  x:stop  n:new"
+			return "enter:connect  r:restart  x:stop  n:new" + tail
 		}
-		return "enter:attach  n:new"
+		return "enter:attach  n:new" + tail
 	}
-	return "n:new"
+	return "n:new" + tail
 }

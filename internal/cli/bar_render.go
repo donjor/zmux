@@ -103,7 +103,8 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			case "dots":
 				if workspace != "" {
 					sessions := app.WorkspaceStore.SessionsIn(workspace)
-					ctx.SessionIndicator = bar.CompactDots(sessions, sessionName)
+					states := workspaceAttachStates(app, sessions, sessionName)
+					ctx.SessionIndicator = bar.CompactDots(sessions, sessionName, states)
 				}
 			case "none":
 				ctx.WorkspaceCount = 1 // suppress N/M in SessionLabel
@@ -112,13 +113,22 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 
 			switch side {
 			case "left":
+				// In two-line mode the top row owns workspace/session identity,
+				// so the bottom-left renders compact aux only (plan 024).
+				ctx.TopRowActive = cfg.Bar.Layout == "two-line" || cfg.Bar.Layout == "split"
 				fmt.Print(bar.RenderLeft(palette, ctx, preset))
 			case "right":
 				fmt.Print(bar.RenderRight(palette, ctx, preset))
 			case "top":
-				// Fetch workspace sessions for the top row.
+				// Fetch workspace sessions for the top row. Untracked
+				// sessions (no workspace) still get a one-session top row
+				// so always-2-line never shows a blank top (plan 024).
 				if workspace != "" {
 					ctx.WorkspaceSessions = app.WorkspaceStore.SessionsIn(workspace)
+					ctx.WorkspaceSessionStates = workspaceAttachStates(app, ctx.WorkspaceSessions, sessionName)
+				}
+				if len(ctx.WorkspaceSessions) == 0 && sessionName != "" {
+					ctx.WorkspaceSessions = []string{sessionName}
 				}
 				topVariant := barRenderTopBar
 				if topVariant == "" {
@@ -128,6 +138,12 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 					topVariant = "tabs"
 				}
 				fmt.Print(bar.RenderTopRow(palette, ctx, preset, topVariant))
+				// Mark non-default profiles (e.g. the zzmux edge binary) with a
+				// right-aligned badge on the top row so it's obvious you're not
+				// on stable zmux, without crowding the de-duped bottom-left.
+				if app.Profile.Name != "" && app.Profile.Name != "zmux" {
+					fmt.Print("#[align=right]" + bar.EdgeBadge(palette, app.Profile.Name))
+				}
 			default:
 				return fmt.Errorf("unknown side %q (use 'left', 'right', or 'top')", side)
 			}
@@ -154,4 +170,41 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 	barCmd.AddCommand(barRenderDebug)
 
 	return cmd
+}
+
+// workspaceAttachStates returns a slice of attach states index-aligned with
+// the supplied workspace session names. Sessions matching `currentSession`
+// are returned as Unknown because the dots renderer marks the current pill
+// with `●` independently — the state field is for siblings. Any session
+// with one or more attached tmux clients (other than this one) maps to
+// AttachLocal; everything else is AttachUnknown.
+//
+// SSH-future: when remote sessions arrive, this helper will populate
+// AttachRemote for sessions sourced from a remote socket / SSH attach.
+func workspaceAttachStates(app *apppkg.App, sessions []string, currentSession string) []bar.AttachState {
+	if len(sessions) == 0 {
+		return nil
+	}
+	live, err := session.ListSessions(app.Runner)
+	if err != nil {
+		return nil
+	}
+	liveByName := make(map[string]session.SessionInfo, len(live))
+	for _, s := range live {
+		liveByName[s.Name] = s
+	}
+	states := make([]bar.AttachState, len(sessions))
+	for i, name := range sessions {
+		if name == currentSession {
+			continue // dots renderer paints `●` for current; leave Unknown
+		}
+		info, ok := liveByName[name]
+		if !ok {
+			continue
+		}
+		if info.Attached || info.AttachedClients > 0 {
+			states[i] = bar.AttachLocal
+		}
+	}
+	return states
 }

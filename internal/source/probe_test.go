@@ -149,6 +149,12 @@ func TestDiscoverWith_ZzmuxExcludesOwnSocketKeepsDefaultExternal(t *testing.T) {
 	if got := cat.External[0].Source.ID; got == "zzmux" {
 		t.Errorf("external source = %q, want the default server, not the local zzmux socket", got)
 	}
+	if got := cat.External[0].Source.ID; got != "default" {
+		t.Errorf("external source ID = %q, want raw socket %q", got, "default")
+	}
+	if got := cat.External[0].Source.Label; got != "zmux" {
+		t.Errorf("external source label = %q, want friendly %q (the live zmux server)", got, "zmux")
+	}
 }
 
 func TestLocalSocketName(t *testing.T) {

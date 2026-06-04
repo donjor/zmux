@@ -43,16 +43,21 @@ func RCFile(shell Shell, home string) (string, bool) {
 }
 
 // autoStartSnippet returns the shell-specific auto-start block (without markers)
-// that launches the zmux picker in a login shell when not already inside tmux.
-// Ported from install.sh.
-func autoStartSnippet(shell Shell) string {
+// that launches the active profile's picker in a login shell when not already
+// inside tmux. bin is the profile binary name (e.g. "zmux" or "zzmux"); an empty
+// bin defaults to "zmux" so the edge profile writes "zzmux" rather than silently
+// auto-launching the live binary. Ported from install.sh.
+func autoStartSnippet(shell Shell, bin string) string {
+	if bin == "" {
+		bin = "zmux"
+	}
 	if shell == Fish {
 		return "if command -v tmux >/dev/null 2>&1; and not set -q TMUX\n" +
-			"    zmux\n" +
+			"    " + bin + "\n" +
 			"end"
 	}
 	return "if command -v tmux &>/dev/null && [ -z \"$TMUX\" ]; then\n" +
-		"    zmux\n" +
+		"    " + bin + "\n" +
 		"fi"
 }
 
@@ -60,6 +65,9 @@ func autoStartSnippet(shell Shell) string {
 type ShellInput struct {
 	Shell Shell
 	Home  string
+	// Bin is the profile binary name to auto-launch (e.g. "zmux" | "zzmux").
+	// Empty defaults to "zmux".
+	Bin string
 	// Remove plans removal of the integration instead of adding it.
 	Remove bool
 }
@@ -79,7 +87,7 @@ func PlanShellIntegration(in ShellInput) (Plan, bool) {
 	return Plan{Edits: []Edit{{
 		File:   rc,
 		Label:  "shell auto-start (" + filepath.Base(rc) + ")",
-		Block:  autoStartSnippet(in.Shell),
+		Block:  autoStartSnippet(in.Shell, in.Bin),
 		Action: action,
 	}}}, true
 }

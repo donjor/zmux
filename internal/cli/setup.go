@@ -44,6 +44,7 @@ updated or removed, and the prior rc file is backed up to <rc>.bak.
 			plan, ok := setup.PlanShellIntegration(setup.ShellInput{
 				Shell:  shell,
 				Home:   home,
+				Bin:    app.Profile.Name,
 				Remove: remove,
 			})
 			if !ok {

@@ -67,6 +67,7 @@ type ThemesTab struct {
 	resolver *theme.Resolver
 	fs       config.FS
 	runner   tmux.Runner
+	selfBin  string // binary embedded in #(<bin> bar-render); config.SelfBin(profile)
 	styles   styles.Styles
 
 	mode themesMode
@@ -104,8 +105,9 @@ type ThemesTab struct {
 	width, height int
 }
 
-// NewThemesTab creates a new themes tab.
-func NewThemesTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, styles styles.Styles) *ThemesTab {
+// NewThemesTab creates a new themes tab. selfBin is the binary embedded in the
+// generated bar's #(<bin> bar-render) content — pass config.SelfBin(profile).
+func NewThemesTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, selfBin string, styles styles.Styles) *ThemesTab {
 	filterInput := textinput.New()
 	filterInput.Placeholder = "filter themes..."
 	filterInput.CharLimit = 64
@@ -118,6 +120,7 @@ func NewThemesTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, st
 		resolver:  resolver,
 		fs:        fs,
 		runner:    runner,
+		selfBin:   selfBin,
 		styles:    styles,
 		filter:    filterInput,
 		editSlots: buildEditorSlots(),
@@ -128,6 +131,13 @@ func NewThemesTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, st
 func (t *ThemesTab) ID() dashboard.TabID { return dashboard.TabThemes }
 func (t *ThemesTab) Title() string       { return "Themes" }
 func (t *ThemesTab) Init() tea.Cmd       { return nil }
+
+// CapturesEscape reports that Esc should exit the filter input, the color
+// editor, or clear a committed filter rather than close the dashboard. The
+// committed-filter case matches the "esc to clear" hint the list view shows.
+func (t *ThemesTab) CapturesEscape() bool {
+	return t.mode != themesModeList || t.editing || t.filter.Value() != ""
+}
 
 func (t *ThemesTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	t.reqID = dashboard.NextReqID()

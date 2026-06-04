@@ -29,7 +29,9 @@ import (
 // this stays testable.
 func Run(a *apppkg.App, version string) int {
 	if err := NewRootCmd(a, version).Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, formatError(err))
+		if m := formatError(err); m != "" {
+			fmt.Fprintln(os.Stderr, m)
+		}
 		return exitCodeForError(err)
 	}
 	return 0
@@ -42,6 +44,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 	var dashboardTabFlag string
 	var paletteFlag bool
 	var tabPickerFlag bool
+	var workspacePickerFlag bool
 	var pickerFlag bool
 
 	rootCmd := &cobra.Command{
@@ -54,6 +57,10 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if tabPickerFlag {
 				return runTabPicker(a)
+			}
+
+			if workspacePickerFlag {
+				return runWorkspacePicker(a)
 			}
 
 			if paletteFlag {
@@ -93,6 +100,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 	rootCmd.PersistentFlags().StringVar(&dashboardTabFlag, "dashboard-tab", "", "initial tab for dashboard (current, sessions, settings, help)")
 	rootCmd.PersistentFlags().BoolVar(&paletteFlag, "palette", false, "render command palette directly (used by popup)")
 	rootCmd.PersistentFlags().BoolVar(&tabPickerFlag, "tab-picker", false, "render tab picker directly (used by Alt+`)")
+	rootCmd.PersistentFlags().BoolVar(&workspacePickerFlag, "workspace-picker", false, "render workspace switcher directly (used by Alt+w)")
 	rootCmd.PersistentFlags().BoolVar(&pickerFlag, "picker", false, "render the workspace+session picker directly (used by prefix+w/s popup)")
 
 	// Override cobra's default -h/--help to show our styled help.
@@ -116,6 +124,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		barCmd,
 		barRenderCmd,
 		completionCmd,
+		newGuardCmd(a),
 		newHelpCmd(a),
 		newInitCmd(a, version),
 		newKeysCmd(),
@@ -128,6 +137,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newTopLevelPaneListCmd(a, "list-panes"),
 		newRefreshCmd(a),
 		newRunCmd(a),
+		newScratchCmd(a),
 		newSendCmd(a),
 		newSessionCmd(a),
 		newSetupCmd(a),

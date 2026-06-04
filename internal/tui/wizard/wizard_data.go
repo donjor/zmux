@@ -109,10 +109,7 @@ func (m WizardModel) writeConfig() tea.Msg {
 	}
 
 	// Generate and write tmux.conf.
-	zmuxBin, _ := os.Executable()
-	if zmuxBin == "" {
-		zmuxBin = "zmux"
-	}
+	zmuxBin := config.SelfBin(m.profile)
 
 	// Resolve theme palette for conf generation.
 	t, err := m.resolver.Resolve(m.chosenTheme)

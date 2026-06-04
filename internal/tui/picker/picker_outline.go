@@ -47,22 +47,47 @@ func (m *PickerModel) onInputChanged() {
 	}
 }
 
-// visibleWorkspaces returns workspaces respecting hide-empty + fuzzy filter.
-// Searches always show all matches (including empty).
+// maxBrowseWorkspaces caps the default (unfiltered) workspace list. Empty
+// workspaces are always listed (grayed by the renderer); the cap just keeps the
+// browse view short. The remainder is revealed with ctrl+h (show-all). Pseudo
+// workspaces (e.g. "temporary", which holds live tmp sessions) are exempt from
+// the cap so active sessions are never hidden behind show-all.
+const maxBrowseWorkspaces = 10
+
+// visibleWorkspaces returns the workspaces to render. A search shows every
+// fuzzy match; the default browse view shows all workspaces (empties included,
+// grayed) but caps the count at maxBrowseWorkspaces unless show-all is on.
 func (m *PickerModel) visibleWorkspaces(query string) []workspaceview.WorkspaceViewModel {
 	if query != "" {
 		return matchWorkspaces(query, m.workspaces)
 	}
-	if m.state.showEmpty {
+	if m.state.showAll {
 		return m.workspaces
 	}
-	var visible []workspaceview.WorkspaceViewModel
-	for _, ws := range m.workspaces {
-		if ws.LiveSessionCount > 0 {
-			visible = append(visible, ws)
+	return capWorkspaces(m.workspaces, maxBrowseWorkspaces)
+}
+
+// capWorkspaces returns at most `limit` real workspaces (in their existing MRU
+// order) followed by every pseudo workspace, so live tmp sessions stay visible
+// even when older workspaces are collapsed behind show-all.
+func capWorkspaces(all []workspaceview.WorkspaceViewModel, limit int) []workspaceview.WorkspaceViewModel {
+	if len(all) <= limit {
+		return all
+	}
+	capped := make([]workspaceview.WorkspaceViewModel, 0, limit+1)
+	real := 0
+	var pseudos []workspaceview.WorkspaceViewModel
+	for _, ws := range all {
+		if ws.IsPseudo {
+			pseudos = append(pseudos, ws)
+			continue
+		}
+		if real < limit {
+			capped = append(capped, ws)
+			real++
 		}
 	}
-	return visible
+	return append(capped, pseudos...)
 }
 
 // applyFilter recomputes filteredWorkspaces and rebuilds the outline.

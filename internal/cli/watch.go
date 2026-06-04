@@ -49,7 +49,7 @@ Examples:
 				}
 			}
 
-			target := fmt.Sprintf("%s:%s", sessionName, windowName)
+			target := resolveWindowTarget(app, sessionName, windowName)
 
 			if watchUntil != "" {
 				return watchUntilPattern(app, target, watchUntil, watchTimeout, watchLines)

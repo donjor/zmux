@@ -1,6 +1,7 @@
 package picker
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/donjor/zmux/internal/session"
@@ -13,9 +14,9 @@ import (
 func (m PickerModel) viewHelp() string {
 	switch m.mode {
 	case modeConfirmDelete:
-		return m.styles.Help.Render("  y:confirm  any:cancel")
+		return m.styles.Help.Render("  y / ctrl+x:confirm  any:cancel")
 	case modeConfirmDeleteAttached:
-		return m.styles.Help.Render("  y:confirm detach  any:cancel")
+		return m.styles.Help.Render("  y / ctrl+x:confirm detach  any:cancel")
 	case modeTemplateSelect:
 		return m.styles.Help.Render("  enter:select  esc:cancel")
 	case modeTemplateName:
@@ -41,6 +42,13 @@ func (m PickerModel) viewHelp() string {
 			} else {
 				parts = append(parts, "enter:attach")
 			}
+			// Discoverability: tell the user they can type a session name
+			// after the workspace to create one in it (the `<ws> <session>`
+			// grammar already handled in ghostCmd + handleWorkspaceEnter).
+			// Only hint when no session name has been typed yet.
+			if m.state.sessionQuery == "" {
+				parts = append(parts, "space+name:new-session")
+			}
 			parts = append(parts, "ctrl+x:kill")
 		case outline.RowSession:
 			parts = append(parts, "enter:attach")
@@ -53,9 +61,14 @@ func (m PickerModel) viewHelp() string {
 	}
 
 	parts = append(parts, "tab:complete")
-	toggleLabel := "ctrl+h:show-empty"
-	if m.state.showEmpty {
-		toggleLabel = "ctrl+h:hide-empty"
+	toggleLabel := "ctrl+h:show-all"
+	switch {
+	case m.state.showAll:
+		toggleLabel = "ctrl+h:show-less"
+	case m.state.workspaceQuery == "" && m.state.sessionQuery == "":
+		if hidden := len(m.workspaces) - len(m.filteredWorkspaces); hidden > 0 {
+			toggleLabel = fmt.Sprintf("ctrl+h:show-all (+%d)", hidden)
+		}
 	}
 	parts = append(parts, toggleLabel)
 	parts = append(parts, "ctrl+t:template")

@@ -39,6 +39,31 @@ func Discover(local tmux.Endpoint) (*Catalog, error) {
 	return discoverWith(systemProber{}, local)
 }
 
+// siblingLabels maps known zmux-family tmux socket names to friendly display
+// labels. The raw socket name stays as the Source ID (dedup/expansion keys off
+// it); only the human-facing Label changes, so a sibling server reads as
+// "zmux" / "zzmux (edge)" instead of the bare socket name nobody recognizes.
+//
+//	socket "default" (the live zmux server) → "zmux"
+//	socket "zzmux"   (the edge profile)      → "zzmux (edge)"
+//
+// The local server's own socket is filtered out before labeling, so a server
+// never relabels itself — this only fires for the *other* zmux-family server.
+var siblingLabels = map[string]string{
+	"default": "zmux",
+	"zzmux":   "zzmux (edge)",
+}
+
+// externalLabel returns the display label for an external tmux socket, mapping
+// known zmux-family sockets to recognizable names and falling back to the raw
+// socket name for everything else.
+func externalLabel(sockName string) string {
+	if l, ok := siblingLabels[sockName]; ok {
+		return l
+	}
+	return sockName
+}
+
 // localSocketName returns the socket basename for an endpoint: "default" for the
 // default server, the -L name, or the -S path basename.
 func localSocketName(ep tmux.Endpoint) string {
@@ -100,7 +125,7 @@ func discoverWith(p prober, local tmux.Endpoint) (*Catalog, error) {
 			sources = append(sources, Source{
 				ID:       sock.Name,
 				Kind:     SourceExternal,
-				Label:    sock.Name,
+				Label:    externalLabel(sock.Name),
 				Health:   HealthOK,
 				Endpoint: tmux.NamedEndpoint(sock.Name),
 			})
@@ -222,7 +247,7 @@ func correlateSources(sockets []socketInfo, procs []processEntry) []Source {
 			sources = append(sources, Source{
 				ID:       sock.Name,
 				Kind:     SourceExternal,
-				Label:    sock.Name,
+				Label:    externalLabel(sock.Name),
 				Health:   HealthOK,
 				Endpoint: tmux.NamedEndpoint(sock.Name),
 			})

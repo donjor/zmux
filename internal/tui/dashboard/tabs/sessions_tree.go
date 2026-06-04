@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/sahilm/fuzzy"
+
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tui/outline"
@@ -12,12 +14,21 @@ import (
 
 // buildRows constructs the flat outline rows from the current snapshot data.
 // Workspaces come first, followed by an external sources section (with a
-// divider) when the catalog has any external groups.
+// divider) when the catalog has any external groups. When a search filter is
+// active (t.searchQuery), rows are filtered across all kinds — see
+// buildWorkspaceRow / buildExternalRows.
 func (t *SessionsTab) buildRows() []outline.Row {
+	q := strings.TrimSpace(t.searchQuery)
+	// The move-target picker must list every workspace, so a committed filter
+	// is suspended (not cleared) for the duration of move mode — both exit
+	// paths rebuild once mode returns to list, restoring the filter.
+	if t.mode == sessionsModeMove {
+		q = ""
+	}
 	rows := make([]outline.Row, 0, 32)
 
 	// ── Workspaces ──
-	if len(t.workspaces) == 0 {
+	if len(t.workspaces) == 0 && q == "" {
 		rows = append(rows, outline.Row{
 			ID:    "placeholder:noworkspaces",
 			Kind:  outline.RowPlaceholder,
@@ -26,22 +37,73 @@ func (t *SessionsTab) buildRows() []outline.Row {
 	} else {
 		for i := range t.workspaces {
 			ws := &t.workspaces[i]
-			rows = append(rows, t.buildWorkspaceRow(ws)...)
+			rows = append(rows, t.buildWorkspaceRow(ws, q)...)
 		}
 	}
 
-	// ── External sources (kept from original implementation) ──
-	rows = append(rows, t.buildExternalRows()...)
+	// ── External sources ──
+	rows = append(rows, t.buildExternalRows(q)...)
+
+	if q != "" && len(rows) == 0 {
+		rows = append(rows, outline.Row{
+			ID:    "placeholder:nomatch",
+			Kind:  outline.RowPlaceholder,
+			Label: fmt.Sprintf("no matches for %q", q),
+		})
+	}
 
 	return rows
+}
+
+// matchQuery reports whether target fuzzy-matches the (non-empty) query.
+// Matching is on raw names/fields, never decorated labels (counts, glyphs).
+func matchQuery(query, target string) bool {
+	if query == "" {
+		return true
+	}
+	return len(fuzzy.Find(query, []string{target})) > 0
+}
+
+// rowsContain reports whether any row has the given ID. Used to detect a
+// jump target hidden by an active filter before SetRowsAndJumpTo.
+func rowsContain(rows []outline.Row, id string) bool {
+	for i := range rows {
+		if rows[i].ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // buildWorkspaceRow returns the workspace header row plus its session rows
 // when expanded. Pseudo workspaces (e.g. "temporary") are emitted but never
 // participate in mutations.
-func (t *SessionsTab) buildWorkspaceRow(ws *workspaceview.WorkspaceViewModel) []outline.Row {
+//
+// When q is non-empty the workspace is filtered: the header is kept if the
+// workspace name matches (then all its sessions show) or if any session name
+// matches (then only the matching sessions show); a workspace with no match
+// is dropped entirely. While filtering, children are force-expanded for
+// visibility without touching the tree's saved expansion state.
+func (t *SessionsTab) buildWorkspaceRow(ws *workspaceview.WorkspaceViewModel, q string) []outline.Row {
 	wsID := outline.WorkspaceID(ws.Name)
+
+	wsMatch := q == "" || matchQuery(q, ws.Name)
+	var matchingSessions []int
+	if q != "" && !wsMatch {
+		for j := range ws.LiveSessions {
+			if matchQuery(q, ws.LiveSessions[j].Name) {
+				matchingSessions = append(matchingSessions, j)
+			}
+		}
+		if len(matchingSessions) == 0 {
+			return nil
+		}
+	}
+
 	expanded := t.tree.IsExpanded(wsID)
+	if q != "" {
+		expanded = true
+	}
 
 	header := outline.Row{
 		ID:         wsID,
@@ -64,6 +126,10 @@ func (t *SessionsTab) buildWorkspaceRow(ws *workspaceview.WorkspaceViewModel) []
 	}
 
 	if len(ws.LiveSessions) == 0 {
+		if q != "" {
+			// Matched on workspace name but has no sessions — header only.
+			return rows
+		}
 		rows = append(rows, outline.Row{
 			ID:       "placeholder:" + ws.Name,
 			Kind:     outline.RowPlaceholder,
@@ -74,46 +140,68 @@ func (t *SessionsTab) buildWorkspaceRow(ws *workspaceview.WorkspaceViewModel) []
 		return rows
 	}
 
-	for j := range ws.LiveSessions {
-		s := &ws.LiveSessions[j]
-		row := outline.Row{
-			ID:         outline.SessionID(s.Name),
-			Kind:       outline.RowSession,
-			Depth:      1,
-			ParentID:   wsID,
-			Label:      s.Name,
-			Selectable: true,
-			Current:    s.Name == t.current,
-			Attached:   s.Attached,
-			Data:       s,
+	if q != "" && !wsMatch {
+		for _, j := range matchingSessions {
+			rows = append(rows, t.buildSessionRow(&ws.LiveSessions[j], wsID))
 		}
-		if t.mode == sessionsModeMove && t.moveSt != nil && s.Name == t.moveSt.sessionName {
-			row.Badge = "→ moving"
+	} else {
+		for j := range ws.LiveSessions {
+			rows = append(rows, t.buildSessionRow(&ws.LiveSessions[j], wsID))
 		}
-		rows = append(rows, row)
 	}
 
 	return rows
 }
 
+// buildSessionRow builds a single session row under the given workspace.
+func (t *SessionsTab) buildSessionRow(s *session.SessionInfo, wsID string) outline.Row {
+	row := outline.Row{
+		ID:         outline.SessionID(s.Name),
+		Kind:       outline.RowSession,
+		Depth:      1,
+		ParentID:   wsID,
+		Label:      s.Name,
+		Selectable: true,
+		Current:    s.Name == t.current,
+		Attached:   s.Attached,
+		Data:       s,
+	}
+	if t.mode == sessionsModeMove && t.moveSt != nil && s.Name == t.moveSt.sessionName {
+		row.Badge = "→ moving"
+	}
+	return row
+}
+
 // buildExternalRows constructs the external-source section of the outline.
-// Returns nil if there are no external groups.
-func (t *SessionsTab) buildExternalRows() []outline.Row {
+// Returns nil if there are no external groups (or none survive the filter).
+//
+// When q is non-empty a group is kept if its source label or kind matches
+// (then all its entries show) or if any entry matches (then only the matching
+// entries show). The divider is emitted only when at least one group survives.
+func (t *SessionsTab) buildExternalRows(q string) []outline.Row {
 	if t.catalog == nil || len(t.catalog.External) == 0 {
 		return nil
 	}
 
-	rows := []outline.Row{{
-		ID:    "divider:external",
-		Kind:  outline.RowDivider,
-		Label: "── external ──",
-	}}
-
+	var body []outline.Row
 	for i := range t.catalog.External {
 		g := &t.catalog.External[i]
 		kind := string(g.Source.Kind)
 		key := source.GroupKey(g)
 		groupID := outline.ExternalGroupID(kind, key)
+
+		groupMatch := q == "" || matchQuery(q, g.Source.Label) || matchQuery(q, kind)
+		var matchingEntries []int
+		if q != "" && !groupMatch {
+			for j := range g.Entries {
+				if matchQuery(q, g.Entries[j].Session) {
+					matchingEntries = append(matchingEntries, j)
+				}
+			}
+			if len(matchingEntries) == 0 {
+				continue
+			}
+		}
 
 		label := fmt.Sprintf("%s: %s", kind, g.Source.Label)
 		if n := len(g.Entries); n > 0 {
@@ -123,21 +211,27 @@ func (t *SessionsTab) buildExternalRows() []outline.Row {
 			label += "  [degraded]"
 		}
 
-		rows = append(rows, outline.Row{
+		expanded := t.tree.IsExpanded(groupID)
+		if q != "" {
+			expanded = true
+		}
+
+		body = append(body, outline.Row{
 			ID:         groupID,
 			Kind:       outline.RowExternalGroup,
 			Label:      label,
 			Selectable: true,
-			Expanded:   t.tree.IsExpanded(groupID),
+			Expanded:   expanded,
 			Data:       g,
 		})
 
-		if !t.tree.IsExpanded(groupID) {
+		if !expanded {
 			continue
 		}
-		for j := range g.Entries {
+
+		emit := func(j int) {
 			entry := g.Entries[j]
-			rows = append(rows, outline.Row{
+			body = append(body, outline.Row{
 				ID:         outline.ExternalEntryID(kind, entry.Session),
 				Kind:       outline.RowExternalEntry,
 				Label:      entry.Session,
@@ -148,8 +242,27 @@ func (t *SessionsTab) buildExternalRows() []outline.Row {
 				Data:       &entry,
 			})
 		}
+		if q != "" && !groupMatch {
+			for _, j := range matchingEntries {
+				emit(j)
+			}
+		} else {
+			for j := range g.Entries {
+				emit(j)
+			}
+		}
 	}
-	return rows
+
+	if len(body) == 0 {
+		return nil
+	}
+
+	rows := []outline.Row{{
+		ID:    "divider:external",
+		Kind:  outline.RowDivider,
+		Label: "── external ──",
+	}}
+	return append(rows, body...)
 }
 
 // formatSessionsWorkspaceLabel renders the workspace header label with
@@ -207,6 +320,10 @@ func (t *SessionsTab) View() string {
 	if t.current != "" {
 		header += "  " + t.styles.Dim.Render("|") + "  " + t.styles.Success.Render(t.current)
 	}
+	// Active-filter chip (shown while a committed filter narrows the tree).
+	if t.mode != sessionsModeSearch && t.searchQuery != "" {
+		header += "  " + t.styles.Dim.Render("|") + "  " + t.styles.Info.Render("filter: "+t.searchQuery)
+	}
 	b.WriteString("\n")
 	b.WriteString("  " + t.styles.Dim.Render(header) + "\n\n")
 
@@ -220,6 +337,8 @@ func (t *SessionsTab) View() string {
 		b.WriteString(t.renderConfirmOverlay(1))
 	case sessionsModeConfirmKillAttached:
 		b.WriteString(t.renderConfirmOverlay(2))
+	case sessionsModeSearch:
+		b.WriteString(t.renderSearchOverlay())
 	}
 
 	// Render ALL rows — viewport handles clipping and scrolling.

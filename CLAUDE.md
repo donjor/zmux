@@ -48,8 +48,13 @@ internal/overmind/       Overmind control client (Client interface)
 internal/keys/           Keybinding registry — single source for conf.go, help, docs
 internal/setup/          Shell-rc integration: plan/apply behind config.FS (markers, .bak)
 internal/termtitle/      tmux terminal-title format contract + parser (leaf, no deps)
+internal/tablabel/       Stable optional tab-label overlay format (leaf)
 internal/terminal/       Resolves screenshot target for the current tmux client
 internal/preview/        UI proto framework (Page, Controls, RenderContext)
+internal/snapshot/       Terminal/TUI evidence bundle (text/ANSI + strict PNG)
+internal/procfs/         Linux /proc process-tree inspection (Linux leaf)
+internal/wm/             Window manager adapters (Hyprland today)
+internal/guard/          Agent terminal-hygiene command classifier (shared corpus)
 internal/debug/          Opt-in debug logging (ZMUX_DEBUG=1)
 internal/tui/            No flat package — dissolved into focused surfaces/leaves:
 internal/tui/styles/        Shared lipgloss styles leaf

@@ -52,7 +52,7 @@ func renderTopZen(p *theme.Palette, ctx BarContext) string {
 	fmt.Fprintf(&b, "#[fg=%s]%s ", p.Dim.Hex(), ctx.Workspace)
 	for i, sess := range ctx.WorkspaceSessions {
 		if sess == ctx.Session {
-			fmt.Fprintf(&b, "#[fg=%s]%s", p.Muted.Hex(), sess)
+			fmt.Fprintf(&b, "#[fg=%s]%s", p.Muted.Hex(), topSessionLabel(ctx, sess))
 		} else {
 			fmt.Fprintf(&b, "#[fg=%s]%s", p.Dim.Hex(), sess)
 		}

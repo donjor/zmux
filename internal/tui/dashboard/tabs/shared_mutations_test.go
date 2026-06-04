@@ -101,12 +101,86 @@ func TestKillSessionMutationCallsRunner(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	mock.Sessions = []tmux.Session{{Name: "doomed", Windows: 1}}
 
-	if err := killSessionMutation(mock, "doomed"); err != nil {
+	if err := killSessionMutation(mock, nil, "doomed"); err != nil {
 		t.Fatalf("kill: %v", err)
 	}
 
 	if !mockHasCall(mock, "KillSession", "doomed") {
 		t.Errorf("expected KillSession(doomed), got: %v", mock.Calls)
+	}
+}
+
+// Killing a session that's tracked in a workspace removes it from the
+// store so the bar's sibling-pill render doesn't see a ghost entry.
+func TestKillSessionMutationRemovesWorkspaceMembership(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	fs := newSessionsMemFS("/home/user")
+	store := workspace.NewStore(fs)
+	if err := store.CreateWorkspace("ws", ""); err != nil {
+		t.Fatalf("create ws: %v", err)
+	}
+	if err := store.AddSession("ws", "doomed"); err != nil {
+		t.Fatalf("add session: %v", err)
+	}
+
+	if err := killSessionMutation(mock, store, "doomed"); err != nil {
+		t.Fatalf("kill: %v", err)
+	}
+
+	if sessions := store.SessionsIn("ws"); len(sessions) != 0 {
+		t.Errorf("expected workspace to be empty after kill, got %v", sessions)
+	}
+}
+
+// A grouped-clone detach (dev-b while dev still alive) must NOT remove the
+// root from workspace membership.
+func TestKillSessionMutationKeepsRootOnCloneDetach(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	mock.Sessions = []tmux.Session{{Name: "dev", Windows: 1}}
+	fs := newSessionsMemFS("/home/user")
+	store := workspace.NewStore(fs)
+	if err := store.CreateWorkspace("ws", ""); err != nil {
+		t.Fatalf("create ws: %v", err)
+	}
+	if err := store.AddSession("ws", "dev"); err != nil {
+		t.Fatalf("add session: %v", err)
+	}
+
+	if err := killSessionMutation(mock, store, "dev-b"); err != nil {
+		t.Fatalf("kill: %v", err)
+	}
+
+	got := store.SessionsIn("ws")
+	if len(got) != 1 || got[0] != "dev" {
+		t.Errorf("expected workspace to retain dev after dev-b detach, got %v", got)
+	}
+}
+
+// Killing the root session (dev) while a clone (dev-b) is still alive must
+// NOT remove the root from workspace membership — that would orphan the
+// surviving clone. Regression for the buddy-caught hole in the original
+// HasSession(root) check.
+func TestKillSessionMutationKeepsRootWhenCloneSurvives(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	// After "killing" dev, the mock still has dev-b alive — KillSession
+	// should see dev-b as a member of the dev group and keep the row.
+	mock.Sessions = []tmux.Session{{Name: "dev-b", Windows: 1}}
+	fs := newSessionsMemFS("/home/user")
+	store := workspace.NewStore(fs)
+	if err := store.CreateWorkspace("ws", ""); err != nil {
+		t.Fatalf("create ws: %v", err)
+	}
+	if err := store.AddSession("ws", "dev"); err != nil {
+		t.Fatalf("add session: %v", err)
+	}
+
+	if err := killSessionMutation(mock, store, "dev"); err != nil {
+		t.Fatalf("kill: %v", err)
+	}
+
+	got := store.SessionsIn("ws")
+	if len(got) != 1 || got[0] != "dev" {
+		t.Errorf("expected dev to remain in workspace while dev-b alive, got %v", got)
 	}
 }
 

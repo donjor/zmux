@@ -143,16 +143,32 @@ func TestRenderRight_NonEmptyForEveryPreset(t *testing.T) {
 	}
 }
 
-// ── RenderTop returns empty for single-session contexts ─────────────────────
+// ── RenderTop renders for a single session (always-2-line, plan 024) ─────────
 
-func TestRenderTop_EmptyWhenSingleSession(t *testing.T) {
+func TestRenderTop_NonEmptyWhenSingleSession(t *testing.T) {
 	p := testPalette()
 	ctx := baseCtx()
 	ctx.WorkspaceSessions = []string{"main"}
 	for _, preset := range AllPresets() {
 		got := RenderTop(p, ctx, preset)
-		if got != "" {
-			t.Errorf("preset %s: RenderTop should be empty for single session, got %q", preset, got)
+		if got == "" {
+			t.Errorf("preset %s: RenderTop should render a single-session top row (always-2-line), got empty", preset)
+		}
+	}
+}
+
+// Each top-row variant (tabs/dots/minimal) must degrade sanely to a single
+// session — non-empty, no panic — under always-2-line (plan 024).
+func TestRenderTopRow_SingleSessionAllVariants(t *testing.T) {
+	p := testPalette()
+	ctx := baseCtx()
+	ctx.WorkspaceSessions = []string{"main"}
+	for _, variant := range []string{"tabs", "dots", "minimal"} {
+		for _, preset := range AllPresets() {
+			got := RenderTopRow(p, ctx, preset, variant)
+			if got == "" {
+				t.Errorf("variant %s preset %s: single-session top row is empty", variant, preset)
+			}
 		}
 	}
 }

@@ -38,16 +38,7 @@ func runSessionPicker(app *apppkg.App) error {
 	model.SetTemplates(templates)
 	model.SetWorkspaceStore(app.WorkspaceStore)
 	model.SetWorkspaceDataLoader(func() []workspaceview.WorkspaceViewModel {
-		// Reconcile before loading state.
-		if roots := liveRootSet(app); roots != nil {
-			_ = app.WorkspaceStore.Reconcile(roots)
-		}
-		workspaces, err := app.WorkspaceStore.ListWorkspaces()
-		if err != nil {
-			return nil
-		}
-		sessions, _ := session.ListSessions(app.Runner)
-		return workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
+		return loadWorkspaceView(app, workspaceViewOptions{Reconcile: true})
 	})
 
 	p := tea.NewProgram(model)

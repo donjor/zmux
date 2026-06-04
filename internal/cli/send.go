@@ -41,7 +41,7 @@ Examples:
 				}
 			}
 
-			target := fmt.Sprintf("%s:%s", sessionName, windowName)
+			target := resolveTabForMutation(app, sessionName, windowName)
 
 			if err := app.Runner.SendKeys(target, keys...); err != nil {
 				return fmt.Errorf("send to %s: %w", target, err)
@@ -84,7 +84,7 @@ Examples:
 				}
 			}
 
-			target := fmt.Sprintf("%s:%s", sessionName, windowName)
+			target := resolveTabForMutation(app, sessionName, windowName)
 
 			if err := app.Runner.SendKeys(target, text, "Enter"); err != nil {
 				return fmt.Errorf("type to %s: %w", target, err)

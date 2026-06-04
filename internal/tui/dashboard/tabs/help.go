@@ -29,6 +29,10 @@ func (t *HelpTab) ID() dashboard.TabID { return dashboard.TabHelp }
 func (t *HelpTab) Title() string       { return "Help" }
 func (t *HelpTab) Init() tea.Cmd       { return nil }
 
+// CapturesEscape is always false — the Help tab is static, so Esc closes the
+// dashboard.
+func (t *HelpTab) CapturesEscape() bool { return false }
+
 func (t *HelpTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	if tc, ok := msg.(dashboard.ThemeChangedMsg); ok {
 		t.styles = tc.Styles

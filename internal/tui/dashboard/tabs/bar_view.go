@@ -24,7 +24,7 @@ func (t *BarTab) View() string {
 	if t.currentBar != "" {
 		currentLabel = t.currentBar
 	}
-	if t.layout != "" && t.layout != "single" {
+	if t.layout != "" {
 		currentLabel += " (" + t.layout + ")"
 	}
 	b.WriteString(t.styles.Dim.Render("Current: ") + t.styles.Success.Render(currentLabel))
@@ -105,6 +105,8 @@ func (t *BarTab) View() string {
 		)
 		lineCount++
 	}
+	b.WriteString("  " + t.styles.Muted.Render(layoutHint(t.layoutValue("layout"))) + "\n")
+	lineCount++
 	b.WriteString("\n")
 	lineCount++
 
@@ -165,9 +167,12 @@ func (t *BarTab) renderPresetPreview(preset bar.Preset) string {
 		noWS.Workspace = false
 		bottomRow := bar.RenderBarPreviewOverride(preset, t.palette, noWS, width,
 			func(bctx *bar.BarContext) {
+				// Top row owns identity in two-line mode (plan 024) — flag it
+				// so the dashboard preview matches the live bottom-left.
+				bctx.TopRowActive = true
 				switch t.indicator {
 				case "dots":
-					bctx.SessionIndicator = bar.CompactDots(previewSessions, previewSessions[0])
+					bctx.SessionIndicator = bar.CompactDots(previewSessions, previewSessions[0], nil)
 				case "none":
 					bctx.WorkspaceCount = 1
 				}

@@ -13,6 +13,35 @@ tests whose captured output is the whole artifact, your normal shell is fine.
 You are likely working inside a zmux-managed session. Drive zmux through its CLI —
 every example below is a shell command.
 
+## Never reach past zmux to raw tmux
+
+zmux **is** the tmux wrapper. Raw `tmux` drops the `@zmux_label` pin + session/
+workspace bookkeeping that keep tabs stably addressable — the window can auto-rename
+out from under you and your next command lands on the wrong slot. Use the zmux verb;
+it's almost always shorter:
+
+| reaching for…                       | use instead                                        |
+| ----------------------------------- | -------------------------------------------------- |
+| `tmux capture-pane -t X`            | `zmux watch <tab>` (read-only; `--until` baselines)|
+| `tmux send-keys -t X …`             | `zmux send <tab> <keys>` / `zmux type <tab> '…'`   |
+| `tmux list-windows`                 | `zmux tabs`                                         |
+| `tmux list-sessions` / `tmux ls`    | `zmux ls` (`-s` for a flat list)                   |
+| `tmux list-panes`                   | `zmux pane list --json`                            |
+| `tmux split-window …`               | `zmux pane open <name> -r 35 -- …`                 |
+| `tmux select/kill/resize-pane`      | `zmux pane focus / close / resize`                 |
+| `tmux new/kill/rename/move-window`  | `zmux run -n` / `zmux tab kill / label / move`     |
+| `tmux new-session` / `attach`       | `zmux new` / `zmux open`                           |
+
+A `PreToolUse` guard (`skills/zmux/hooks/zmux-guard.mjs`, symlinked into
+`~/.claude/hooks/`) **blocks** these raw calls and prints the mapping back to you —
+so a slip self-corrects instead of silently targeting the wrong window. The same
+guard enforces the rest of this skill's hygiene: a dev server / background job
+(`npm run dev`, `&`, `nohup`) is **blocked** toward `zmux run -n <name> -d`, and an
+interactive/remote command (`sudo`, `ssh`, a REPL) draws a non-blocking **warn**
+nudging it into a shared tab. Genuinely need the raw command (zmux development,
+socket inspection, a one-off)? Prefix `ZMUX_ALLOW=1`, append `# zmux: allow`, use an
+explicit `-L <socket>`, or run from the zmux repo — all are exempt.
+
 ## Am I in zmux?
 
 ```bash
@@ -66,8 +95,18 @@ zmux run '<cmd>' -n <name> -s <session> # target a specific session
 
 `zmux run` **waits by default**: it streams output live, then returns the command's
 exit code. It injects its own completion sentinel internally — **do not add your own
-`echo ":::DONE:::"` markers**. If the tab already exists, the command is sent to it
-(reused, not recreated). Use `-d` **only** for processes expected to run forever.
+`echo ":::DONE:::"` markers**. If a tab with that name already exists, the command is
+sent to it (reused, not recreated). `-d` creates the tab **without stealing your
+focus**. Use `-d` **only** for processes expected to run forever.
+
+> **Tab names are stable.** The first time you address a tab by name with `run`,
+> `send`, or `type` and it matches, zmux pins that name as a stable label — so the tab
+> stays reachable as `<name>` even after a running process makes tmux rename the
+> window (a dev server's window often drifts to `node`/`vite`, or back to the shell
+> after you `C-c` it). `watch` resolves the same label but is read-only — it never
+> pins. **Caveat:** a tab that already drifted *before* you ever addressed it by name
+> has nothing pinned — run `zmux tabs`, then pin it by addressing its **current** name
+> with `send`/`type`, or label it explicitly.
 
 ### Read tab output
 
@@ -102,7 +141,7 @@ zmux run 'go test ./...' -n test -T 180
 zmux run 'npm run dev' -n server -d
 zmux watch server --until 'Local:|ready|listening' -T 90
 
-# Restart
+# Restart in place (reuses the same 'server' tab, even if tmux renamed it)
 zmux send server C-c
 zmux run 'npm run dev' -n server -d
 zmux watch server --until 'ready|listening' -T 90

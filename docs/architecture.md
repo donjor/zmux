@@ -59,6 +59,7 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 | `termtitle` | ~80 | tmux terminal-title format contract + parser (no zmux deps; dissolves the latent tmux↔terminal cycle) |
 | `terminal` | ~240 | Resolves strict screenshot targets for the current tmux client |
 | `keys` | ~280 | Keybinding registry — single source of truth for `conf.go`, help surfaces, and the generated `docs/keybindings.md` |
+| `guard` | ~270 | Classifies a shell command for agent terminal-hygiene (raw-tmux / background-job / shared-interaction); ruleset shares `testdata/zmux-guard-corpus.jsonl` with the Claude hook + pi classifier. Pure leaf, no deps |
 
 ### tmux boundary
 
@@ -81,6 +82,7 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 | `overmind` | ~120 | Overmind control client (`Client` interface: connect/restart/stop/logs) |
 | `setup` | ~190 | Shell-rc integration: pure plan + apply behind `config.FS` (markers, `.bak`, dry-run, removal) |
 | `wm` | ~150 | Window manager adapters (Hyprland today) |
+| `snapshot` | ~470 | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver` |
 
 ### UI
 

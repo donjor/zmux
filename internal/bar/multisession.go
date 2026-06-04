@@ -9,19 +9,48 @@ import (
 
 // ── Session indicator (inside the session pill) ─────────────────────
 
+// AttachState is the attach status of a workspace's sibling session from the
+// bar's point of view. The enum keeps the door open for SSH/remote work
+// without a refactor — AttachRemote is reserved for the SSH chapter and is
+// not populated by the local-tmux probe today.
+type AttachState int
+
+const (
+	// AttachUnknown means we have no attach signal for the session, or the
+	// state was not populated by the caller. Renderers treat this the same
+	// as "exists, no client attached" (an empty dot).
+	AttachUnknown AttachState = iota
+	// AttachLocal means at least one tmux client on this socket has the
+	// session attached. For sibling sessions this is the "attached
+	// elsewhere" signal — some other client is on it.
+	AttachLocal
+	// AttachRemote is reserved for SSH-mediated remote attaches and is
+	// unused today. Defined so the dot/pill renderers can introduce a
+	// distinct glyph without another data-model migration.
+	AttachRemote
+)
+
 // CompactDots returns a plain unicode dot string for embedding inside
 // the session pill. No ANSI colors — the preset's pill fg/bg applies.
 //
-//	main ○●○   (3 sessions, current is #2)
-func CompactDots(sessions []string, currentSession string) string {
+// states is index-aligned with sessions and may be nil (treated as all
+// Unknown). When a sibling session is attached elsewhere (AttachLocal),
+// it renders as ◉ instead of ○ so the user can spot "another client is on
+// that session" at a glance.
+//
+//	main ○●◉    (3 sessions, current is #2, session #3 is attached elsewhere)
+func CompactDots(sessions []string, currentSession string, states []AttachState) string {
 	if len(sessions) <= 1 {
 		return ""
 	}
 	var b strings.Builder
-	for _, s := range sessions {
-		if s == currentSession {
+	for i, s := range sessions {
+		switch {
+		case s == currentSession:
 			b.WriteRune('●')
-		} else {
+		case i < len(states) && (states[i] == AttachLocal || states[i] == AttachRemote):
+			b.WriteRune('◉')
+		default:
 			b.WriteRune('○')
 		}
 	}
@@ -34,9 +63,10 @@ func CompactDots(sessions []string, currentSession string) string {
 // called by RenderTopRow which dispatches on the variant config.
 
 // RenderTopRow renders the top status row based on variant + preset.
-// Returns tmux format strings. Empty when sessions <= 1.
+// Returns tmux format strings. Renders a single session too (always-2-line,
+// plan 024); empty only when there are no sessions at all.
 func RenderTopRow(p *theme.Palette, ctx BarContext, preset Preset, variant string) string {
-	if len(ctx.WorkspaceSessions) <= 1 {
+	if len(ctx.WorkspaceSessions) == 0 {
 		return ""
 	}
 	switch variant {
@@ -67,7 +97,7 @@ func renderTopDots(p *theme.Palette, ctx BarContext, preset Preset) string {
 		}
 		if isCurrent {
 			fmt.Fprintf(&b, "#[fg=%s]● #[fg=%s,bold]%s#[nobold]",
-				p.Accent.Hex(), p.Accent.Hex(), sess)
+				p.Accent.Hex(), p.Accent.Hex(), topSessionLabel(ctx, sess))
 		} else {
 			fmt.Fprintf(&b, "#[fg=%s]○ #[fg=%s]%s",
 				p.Dim.Hex(), p.Dim.Hex(), sess)
@@ -88,7 +118,7 @@ func renderTopMinimalVariant(p *theme.Palette, ctx BarContext, preset Preset) st
 			b.WriteString("  ")
 		}
 		if sess == ctx.Session {
-			fmt.Fprintf(&b, "#[fg=%s,bold]%s#[nobold]", p.FG.Hex(), sess)
+			fmt.Fprintf(&b, "#[fg=%s,bold]%s#[nobold]", p.FG.Hex(), topSessionLabel(ctx, sess))
 		} else {
 			fmt.Fprintf(&b, "#[fg=%s]%s", p.Dim.Hex(), sess)
 		}

@@ -10,6 +10,7 @@ import (
 	"github.com/donjor/zmux/internal/tui/tkey"
 
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
@@ -596,6 +597,297 @@ func TestSessionsTabViewRendersWorkspaces(t *testing.T) {
 	}
 	if !strings.Contains(view, "api") {
 		t.Error("expected view to contain 'api'")
+	}
+}
+
+// ── Search / filter ──
+
+// typeSearch enters search mode via "/" (when not already there) and types
+// each rune of query as a separate keystroke, driving the live-filter path
+// through handleSearchKey exactly as a real user would.
+func typeSearch(tab *SessionsTab, query string) *SessionsTab {
+	if tab.mode != sessionsModeSearch {
+		tab, _ = sendKey(tab, "/")
+	}
+	for _, r := range query {
+		tab, _ = sendKey(tab, string(r))
+	}
+	return tab
+}
+
+func TestSessionsTabSearchEntersMode(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	tab, _ = sendKey(tab, "/")
+	if tab.mode != sessionsModeSearch {
+		t.Fatalf("expected search mode, got %d", tab.mode)
+	}
+	if !tab.CapturesEscape() {
+		t.Error("expected CapturesEscape true while in search mode")
+	}
+}
+
+func TestSessionsTabSearchFiltersByWorkspaceName(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	tab = typeSearch(tab, "api")
+
+	if findRowIndexByID(tab, outline.WorkspaceID("api")) < 0 {
+		t.Error("expected api workspace to survive the filter")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("dev")) >= 0 {
+		t.Error("expected dev workspace to be filtered out")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("empty")) >= 0 {
+		t.Error("expected empty workspace to be filtered out")
+	}
+}
+
+func TestSessionsTabSearchFiltersBySessionName(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	// "dev-2" matches the session, not the workspace name "dev" — the header
+	// is kept (force-expanded) but only the matching session shows.
+	tab = typeSearch(tab, "dev-2")
+
+	if findRowIndexByID(tab, outline.WorkspaceID("dev")) < 0 {
+		t.Error("expected dev header kept for matching session")
+	}
+	if findRowIndexByID(tab, outline.SessionID("dev-2")) < 0 {
+		t.Error("expected matching session dev-2 to show")
+	}
+	if findRowIndexByID(tab, outline.SessionID("dev")) >= 0 {
+		t.Error("expected non-matching sibling session dev to be hidden")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("api")) >= 0 {
+		t.Error("expected api workspace filtered out")
+	}
+}
+
+func TestSessionsTabSearchEscCancelsFilter(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	tab = typeSearch(tab, "api")
+	tab, _ = sendKey(tab, "esc")
+
+	if tab.mode != sessionsModeList {
+		t.Fatalf("expected list mode after esc, got %d", tab.mode)
+	}
+	if tab.searchQuery != "" {
+		t.Errorf("expected filter cleared, got %q", tab.searchQuery)
+	}
+	// All three workspaces back, collapsed.
+	if got := len(tab.tree.Rows); got != 3 {
+		t.Errorf("expected 3 rows after cancel, got %d", got)
+	}
+}
+
+func TestSessionsTabSearchEnterCommitsFilter(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	tab = typeSearch(tab, "api")
+	tab, _ = sendKey(tab, "enter")
+
+	// Back to list browsing but the filter stays active.
+	if tab.mode != sessionsModeList {
+		t.Fatalf("expected list mode after enter, got %d", tab.mode)
+	}
+	if tab.searchQuery != "api" {
+		t.Errorf("expected filter retained as %q, got %q", "api", tab.searchQuery)
+	}
+	if !tab.CapturesEscape() {
+		t.Error("expected CapturesEscape true while a committed filter is active")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("dev")) >= 0 {
+		t.Error("expected dev still filtered out after commit")
+	}
+
+	// A second Esc (now in list mode) clears the committed filter.
+	tab, _ = sendKey(tab, "esc")
+	if tab.searchQuery != "" {
+		t.Errorf("expected filter cleared by list-mode esc, got %q", tab.searchQuery)
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("dev")) < 0 {
+		t.Error("expected dev to return after clearing filter")
+	}
+}
+
+func TestSessionsTabSearchFiltersExternalGroups(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	// Seed an external source group (simulateActivate clears the catalog).
+	tab.catalog = &source.Catalog{
+		External: []source.SourceGroup{{
+			Source: source.Source{
+				ID:     "/tmp/remote.sock",
+				Kind:   source.SourceExternal,
+				Label:  "remote-box",
+				Health: source.HealthOK,
+			},
+			Entries: []source.CatalogEntry{{Session: "rsess"}},
+		}},
+	}
+	tab.tree.SetRows(tab.buildRows())
+
+	tab = typeSearch(tab, "remote")
+
+	groupID := outline.ExternalGroupID("external", "/tmp/remote.sock")
+	if findRowIndexByID(tab, groupID) < 0 {
+		t.Error("expected external group matching label to survive filter")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("dev")) >= 0 {
+		t.Error("expected workspaces filtered out by external-only query")
+	}
+}
+
+// TestSessionsTabSearchMutationUnderFilterClearsAndJumps covers the latent
+// jump-miss guard in applyData: a mutation whose target row is hidden by the
+// active filter must drop the filter and land the cursor on the new row.
+func TestSessionsTabSearchMutationUnderFilterClearsAndJumps(t *testing.T) {
+	tab, _, store := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	// Commit a filter that hides everything but api.
+	tab = typeSearch(tab, "api")
+	tab, _ = sendKey(tab, "enter")
+	if tab.searchQuery != "api" {
+		t.Fatalf("expected committed filter, got %q", tab.searchQuery)
+	}
+
+	// Create a workspace that the filter would hide.
+	tab, _ = sendKey(tab, "n")
+	if tab.mode != sessionsModeCreate {
+		t.Fatalf("expected create mode, got %d", tab.mode)
+	}
+	tab.createInput.SetValue("zebra")
+	tab, cmd := sendKey(tab, "enter")
+	tab = runMutationCmd(tab, cmd)
+
+	if ws, _ := store.GetWorkspace("zebra"); ws == nil {
+		t.Fatal("expected zebra workspace created")
+	}
+	if tab.searchQuery != "" {
+		t.Errorf("expected filter dropped after hidden-target mutation, got %q", tab.searchQuery)
+	}
+	row := tab.tree.Current()
+	if row == nil || row.ID != outline.WorkspaceID("zebra") {
+		t.Errorf("expected cursor jumped to zebra, got %+v", row)
+	}
+}
+
+// TestSessionsTabSearchForceExpandPreservesSavedState verifies the filter's
+// force-expand is view-only: clearing the filter restores the workspace's
+// original collapsed state rather than leaving it expanded.
+func TestSessionsTabSearchForceExpandPreservesSavedState(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	devID := outline.WorkspaceID("dev")
+	if tab.tree.IsExpanded(devID) {
+		t.Fatal("expected dev collapsed at start")
+	}
+
+	// Filter to dev — it force-expands in the view.
+	tab = typeSearch(tab, "dev")
+	if findRowIndexByID(tab, outline.SessionID("dev")) < 0 {
+		t.Error("expected dev sessions visible under filter (force-expand)")
+	}
+
+	// Cancel: saved expansion state must be untouched (still collapsed).
+	tab, _ = sendKey(tab, "esc")
+	if tab.tree.IsExpanded(devID) {
+		t.Error("expected dev expansion state untouched by force-expand")
+	}
+	if got := len(tab.tree.Rows); got != 3 {
+		t.Errorf("expected 3 collapsed rows after clearing filter, got %d", got)
+	}
+}
+
+// TestSessionsTabFilteredEnterDoesNotToggleExpansion guards the buddy-flagged
+// bug: Enter on a force-expanded (filtered) header must not mutate the saved
+// expansion state, since the toggle would be invisible under the filter and
+// surface as a surprise flip once the filter clears.
+func TestSessionsTabFilteredEnterDoesNotToggleExpansion(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	devID := outline.WorkspaceID("dev")
+	tab = typeSearch(tab, "dev")
+	tab, _ = sendKey(tab, "enter") // commit filter; dev force-expanded
+
+	// Cursor onto the dev header and press Enter — should be a no-op.
+	devIdx := findRowIndexByID(tab, devID)
+	if devIdx < 0 {
+		t.Fatal("dev header not found under filter")
+	}
+	tab.tree.Cursor = devIdx
+	tab, _ = sendKey(tab, "enter")
+
+	if tab.tree.IsExpanded(devID) {
+		t.Error("expected saved expansion untouched by Enter while filtered")
+	}
+
+	// Clearing the filter should reveal dev collapsed, not expanded.
+	tab, _ = sendKey(tab, "esc")
+	if tab.tree.IsExpanded(devID) {
+		t.Error("expected dev collapsed after clearing filter")
+	}
+	if got := len(tab.tree.Rows); got != 3 {
+		t.Errorf("expected 3 collapsed rows after clear, got %d", got)
+	}
+}
+
+// TestSessionsTabMoveModeIgnoresFilter guards the buddy-flagged bug: a
+// committed filter must be suspended while picking a move destination, so the
+// user can move a session to ANY workspace, not just matching ones. The filter
+// is restored (not cleared) when move mode exits.
+func TestSessionsTabMoveModeIgnoresFilter(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	// Commit a filter that hides api + empty.
+	tab = typeSearch(tab, "dev")
+	tab, _ = sendKey(tab, "enter")
+	if findRowIndexByID(tab, outline.WorkspaceID("api")) >= 0 {
+		t.Fatal("precondition: api should be filtered out before move")
+	}
+
+	// Cursor onto a dev session and enter move mode.
+	sIdx := findRowIndexByID(tab, outline.SessionID("dev-2"))
+	if sIdx < 0 {
+		t.Fatal("dev-2 session row not found under filter")
+	}
+	tab.tree.Cursor = sIdx
+	tab, _ = sendKey(tab, "m")
+	if tab.mode != sessionsModeMove {
+		t.Fatalf("expected move mode, got %d", tab.mode)
+	}
+
+	// All workspaces must be reachable as move targets.
+	if findRowIndexByID(tab, outline.WorkspaceID("api")) < 0 {
+		t.Error("expected api reachable as move target despite filter")
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("empty")) < 0 {
+		t.Error("expected empty reachable as move target despite filter")
+	}
+	// Filter is suspended, not destroyed.
+	if tab.searchQuery != "dev" {
+		t.Errorf("expected filter suspended (retained) during move, got %q", tab.searchQuery)
+	}
+
+	// Cancelling move restores the filter.
+	tab, _ = sendKey(tab, "esc")
+	if tab.searchQuery != "dev" {
+		t.Errorf("expected filter retained after move cancel, got %q", tab.searchQuery)
+	}
+	if findRowIndexByID(tab, outline.WorkspaceID("api")) >= 0 {
+		t.Error("expected api filtered out again after move cancel")
 	}
 }
 

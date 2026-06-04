@@ -32,7 +32,8 @@ func RenderTopPreview(preset Preset, palette *theme.Palette, sessions []string, 
 }
 
 // RenderTopPreviewVariant renders the top row for any variant (tabs,
-// dots, minimal) as ANSI. Returns empty string when sessions <= 1.
+// dots, minimal) as ANSI. Renders a single session too (always-2-line,
+// plan 024); empty only when there are no sessions.
 func RenderTopPreviewVariant(preset Preset, palette *theme.Palette, sessions []string, currentSession string, width int, variant string) string {
 	ctx := makePreviewCtx(config.BarSegments{Workspace: true})
 	ctx.WorkspaceSessions = sessions

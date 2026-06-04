@@ -8,6 +8,7 @@ import (
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
@@ -170,24 +171,38 @@ func (t *CurrentTab) fetchMoveDestinations() tea.Cmd {
 // tab-specific done-message type.
 
 // renameWorkspace renames a workspace and queues a jump-to on the new ID.
+// Errors (validation, name conflict) surface as a status flash so the user
+// gets feedback instead of a silent no-op.
 func (t *CurrentTab) renameWorkspace(oldName, newName string) tea.Cmd {
 	wsStore := t.wsStore
 	reqID := t.reqID
 	t.pendingJumpTo = outline.WorkspaceID(newName)
 	return func() tea.Msg {
-		_ = renameWorkspaceMutation(wsStore, oldName, newName)
+		if err := renameWorkspaceMutation(wsStore, oldName, newName); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("rename workspace failed: %v", err),
+				IsError: true,
+			}
+		}
 		return currentMutationDoneMsg{reqID: reqID}
 	}
 }
 
 // renameSession renames a tmux session and queues a jump-to on the new ID.
+// Errors surface as a status flash; silent failure here is what the user
+// hit when reporting the rename flow as "fragile".
 func (t *CurrentTab) renameSession(oldName, newName string) tea.Cmd {
 	runner := t.runner
 	wsStore := t.wsStore
 	reqID := t.reqID
 	t.pendingJumpTo = outline.SessionID(newName)
 	return func() tea.Msg {
-		_ = renameSessionMutation(runner, wsStore, oldName, newName)
+		if err := renameSessionMutation(runner, wsStore, oldName, newName); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("rename session failed: %v", err),
+				IsError: true,
+			}
+		}
 		return currentMutationDoneMsg{reqID: reqID}
 	}
 }
@@ -223,12 +238,42 @@ func (t *CurrentTab) killWorkspace(name string) tea.Cmd {
 	}
 }
 
-// killSession kills a single session.
+// killSession kills a session. When the target is the currently-attached
+// session, we switch the client to a sibling first so killing the underlying
+// tmux session doesn't drop the client (and with it the dashboard popup).
+//
+// A standalone session with no siblings cannot be killed from the in-session
+// dashboard — there's nowhere to switch to, and killing it would terminate
+// the client mid-action. The user has to fall back to `zmux kill <ws>` or
+// killing the whole workspace from outside.
 func (t *CurrentTab) killSession(name string) tea.Cmd {
 	runner := t.runner
+	wsStore := t.wsStore
+	wsName := t.wsName
 	reqID := t.reqID
+	isCurrent := name == t.sessionName
+	fallback := ""
+	if isCurrent && len(t.siblings) > 0 {
+		fallback = t.siblings[0].Name
+	}
+
+	if isCurrent && fallback == "" {
+		return func() tea.Msg {
+			return dashboard.SetStatusIntent{
+				Text:    "Cannot kill the only session — would drop your client. Run this from outside tmux instead.",
+				IsError: true,
+			}
+		}
+	}
+
 	return func() tea.Msg {
-		_ = killSessionMutation(runner, name)
+		if fallback != "" {
+			_ = runner.SwitchClient(fallback)
+			if wsStore != nil {
+				_ = wsStore.SetLastActive(wsName, fallback)
+			}
+		}
+		_ = killSessionMutation(runner, wsStore, name)
 		return currentMutationDoneMsg{reqID: reqID}
 	}
 }

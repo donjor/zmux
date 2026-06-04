@@ -23,23 +23,23 @@ func renderLeftPowerline(p *theme.Palette, ctx BarContext) string {
 	// Workspace → Session → Dir chain.
 	if ctx.Workspace != "" {
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] 󱂬 %s ", p.Special.Hex(), p.BG.Hex(), ctx.WorkspaceLabel())
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", p.Special.Hex(), bg)
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Special.Hex(), bg)
 	}
 
 	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold]  %s ", bg, p.BG.Hex(), ctx.SessionLabel())
 	if ctx.ViewportID != "" {
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", bg, p.Info.Hex())
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Info.Hex())
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Info.Hex(), p.BG.Hex(), ctx.ViewportID)
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", p.Info.Hex(), p.Surface.Hex())
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Info.Hex(), p.Surface.Hex())
 	} else {
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", bg, p.Surface.Hex())
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Surface.Hex())
 	}
 
 	dir := shortenDir(ctx.PaneDir)
 	if dir != "" {
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s]  %s ", p.Surface.Hex(), p.Muted.Hex(), dir)
 	}
-	fmt.Fprintf(&b, "#[fg=%s,bg=default] ", p.Surface.Hex())
+	fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b0 ", p.Surface.Hex())
 
 	return b.String()
 }
@@ -56,19 +56,19 @@ func renderRightPowerline(p *theme.Palette, ctx BarContext) string {
 		if ctx.GitDirty {
 			gitBg = p.Accent.Hex()
 		}
-		fmt.Fprintf(&b, "#[fg=%s]", gitBg)
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b2", gitBg)
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", gitBg, p.BG.Hex(), formatGitText(ctx))
 	}
 
 	// Time.
 	if ctx.Time != "" {
-		fmt.Fprintf(&b, "#[fg=%s]", p.Surface.Hex())
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b2", p.Surface.Hex())
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s] 󱑍 %s ", p.Surface.Hex(), p.Muted.Hex(), ctx.Time)
 	}
 
 	// Date accent.
 	if ctx.Date != "" {
-		fmt.Fprintf(&b, "#[fg=%s]", p.Accent.Hex())
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b2", p.Accent.Hex())
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Accent.Hex(), p.BG.Hex(), ctx.Date)
 	}
 
@@ -77,7 +77,7 @@ func renderRightPowerline(p *theme.Palette, ctx BarContext) string {
 
 func renderTopPowerline(p *theme.Palette, ctx BarContext) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "#[fg=%s,bg=%s]#[bg=%s,fg=%s,bold] 󱂬 %s ",
+	fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s,bold] 󱂬 %s ",
 		p.BG.Hex(), p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.Workspace)
 	for i, sess := range ctx.WorkspaceSessions {
 		isCurrent := sess == ctx.Session
@@ -89,16 +89,16 @@ func renderTopPowerline(p *theme.Palette, ctx BarContext) string {
 		if i > 0 {
 			prevBG = p.Surface.Hex()
 		}
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", prevBG, bg)
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", prevBG, bg)
 		if isCurrent {
-			fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s #[nobold]", bg, p.BG.Hex(), sess)
+			fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s #[nobold]", bg, p.BG.Hex(), topSessionLabel(ctx, sess))
 		} else {
 			fmt.Fprintf(&b, "#[bg=%s,fg=%s] %s ", bg, p.Surface.Hex(), sess)
 		}
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]#[bg=%s,fg=%s] ",
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s] ",
 			bg, p.Surface.Hex(), p.Surface.Hex(), p.Muted.Hex())
 		if i == len(ctx.WorkspaceSessions)-1 {
-			fmt.Fprintf(&b, "#[fg=%s,bg=default]", p.Surface.Hex())
+			fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b0", p.Surface.Hex())
 		}
 	}
 	return b.String()
@@ -115,26 +115,26 @@ func renderLeftRpowerline(p *theme.Palette, ctx BarContext) string {
 
 	// Workspace → Session → Dir chain with rounded caps.
 	if ctx.Workspace != "" {
-		fmt.Fprintf(&b, "#[fg=%s]#[bg=%s,fg=%s,bold] 󱂬 %s ", p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.WorkspaceLabel())
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", p.Special.Hex(), bg)
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s ", p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.WorkspaceLabel())
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Special.Hex(), bg)
 	} else {
-		fmt.Fprintf(&b, "#[fg=%s]", bg)
+		fmt.Fprintf(&b, "#[fg=%s]\ue0b6", bg)
 	}
 
 	fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold]  %s ", bg, p.BG.Hex(), ctx.SessionLabel())
 	if ctx.ViewportID != "" {
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", bg, p.Info.Hex())
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Info.Hex())
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %s ", p.Info.Hex(), p.BG.Hex(), ctx.ViewportID)
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", p.Info.Hex(), p.Surface.Hex())
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Info.Hex(), p.Surface.Hex())
 	} else {
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", bg, p.Surface.Hex())
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", bg, p.Surface.Hex())
 	}
 
 	dir := shortenDir(ctx.PaneDir)
 	if dir != "" {
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s]  %s ", p.Surface.Hex(), p.Muted.Hex(), dir)
 	}
-	fmt.Fprintf(&b, "#[fg=%s,bg=default] ", p.Surface.Hex())
+	fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4 ", p.Surface.Hex())
 
 	return b.String()
 }
@@ -174,7 +174,7 @@ func renderRightRpowerline(p *theme.Palette, ctx BarContext) string {
 	for i, s := range segs {
 		// Lead-in: rounded left cap on first segment.
 		if i == 0 {
-			fmt.Fprintf(&b, "#[fg=%s]", s.bg)
+			fmt.Fprintf(&b, "#[fg=%s]\ue0b6", s.bg)
 		}
 		// Pill body.
 		boldTag := ""
@@ -184,9 +184,9 @@ func renderRightRpowerline(p *theme.Palette, ctx BarContext) string {
 		fmt.Fprintf(&b, "#[bg=%s,fg=%s%s] %s ", s.bg, p.BG.Hex(), boldTag, s.text)
 		// Transition: pointed arrow into next segment, or rounded cap to end.
 		if i+1 < len(segs) {
-			fmt.Fprintf(&b, "#[fg=%s,bg=%s]", s.bg, segs[i+1].bg)
+			fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", s.bg, segs[i+1].bg)
 		} else {
-			fmt.Fprintf(&b, "#[fg=%s,bg=default]", s.bg)
+			fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4", s.bg)
 		}
 	}
 
@@ -196,7 +196,7 @@ func renderRightRpowerline(p *theme.Palette, ctx BarContext) string {
 func renderTopRpowerline(p *theme.Palette, ctx BarContext) string {
 	var b strings.Builder
 	// Workspace pill.
-	fmt.Fprintf(&b, "#[fg=%s]#[bg=%s,fg=%s,bold] 󱂬 %s #[nobold]",
+	fmt.Fprintf(&b, "#[fg=%s]\ue0b6#[bg=%s,fg=%s,bold] 󱂬 %s #[nobold]",
 		p.Special.Hex(), p.Special.Hex(), p.BG.Hex(), ctx.Workspace)
 	// Arrow from workspace to first session.
 	if len(ctx.WorkspaceSessions) > 0 {
@@ -204,21 +204,21 @@ func renderTopRpowerline(p *theme.Palette, ctx BarContext) string {
 		if ctx.WorkspaceSessions[0] == ctx.Session {
 			firstBG = p.Accent.Hex()
 		}
-		fmt.Fprintf(&b, "#[fg=%s,bg=%s]", p.Special.Hex(), firstBG)
+		fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Special.Hex(), firstBG)
 	} else {
-		fmt.Fprintf(&b, "#[fg=%s,bg=default]", p.Special.Hex())
+		fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4", p.Special.Hex())
 	}
 	// Session tabs — two-section pills matching window-tab chrome.
 	for i, sess := range ctx.WorkspaceSessions {
 		isCurrent := sess == ctx.Session
 		idx := i + 1
 		if isCurrent {
-			fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %d #[fg=%s,bg=%s]#[bg=%s,fg=%s,bold] %s ",
+			fmt.Fprintf(&b, "#[bg=%s,fg=%s,bold] %d #[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s,bold] %s ",
 				p.Accent.Hex(), p.BG.Hex(), idx,
 				p.Accent.Hex(), p.Surface.Hex(),
-				p.Surface.Hex(), p.FG.Hex(), sess)
+				p.Surface.Hex(), p.FG.Hex(), topSessionLabel(ctx, sess))
 		} else {
-			fmt.Fprintf(&b, "#[bg=%s,fg=%s] %d #[fg=%s,bg=%s]#[bg=%s,fg=%s] %s ",
+			fmt.Fprintf(&b, "#[bg=%s,fg=%s] %d #[fg=%s,bg=%s]\ue0b0#[bg=%s,fg=%s] %s ",
 				p.Dim.Hex(), p.Surface.Hex(), idx,
 				p.Dim.Hex(), p.Surface.Hex(),
 				p.Surface.Hex(), p.Muted.Hex(), sess)
@@ -229,9 +229,9 @@ func renderTopRpowerline(p *theme.Palette, ctx BarContext) string {
 			if ctx.WorkspaceSessions[i+1] == ctx.Session {
 				nextBG = p.Accent.Hex()
 			}
-			fmt.Fprintf(&b, "#[fg=%s,bg=%s]", p.Surface.Hex(), nextBG)
+			fmt.Fprintf(&b, "#[fg=%s,bg=%s]\ue0b0", p.Surface.Hex(), nextBG)
 		} else {
-			fmt.Fprintf(&b, "#[fg=%s,bg=default]", p.Surface.Hex())
+			fmt.Fprintf(&b, "#[fg=%s,bg=default]\ue0b4", p.Surface.Hex())
 		}
 	}
 	return b.String()

@@ -41,8 +41,8 @@ Bound with `-n` in tmux's root table — no prefix needed.
 | Action | Key | Description |
 |--------|-----|-------------|
 | `tab.goto.N` | `Alt+1-9` | Switch to tab N directly |
-| `session.goto.N` | `Alt+Shift+1-9` | Switch to session N in workspace |
-| `tab.switch` | `` Alt+` `` | Tab switcher popup |
+| `tab.switch` | `` Alt+` `` | Session + tab switcher popup |
+| `workspace.switch` | `Alt+w` | Workspace switcher popup |
 | `pane.focus.left` | `Alt+Shift+←` | Focus pane left |
 | `pane.focus.right` | `Alt+Shift+→` | Focus pane right |
 | `pane.focus.up` | `Alt+Shift+↑` | Focus pane up |

@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -156,7 +157,6 @@ func TestGenerateConfContainsSessionBindings(t *testing.T) {
 		"bind w display-popup",
 		"bind [ run-shell",
 		"bind ] run-shell",
-		"bind -n M-S-1 run-shell",
 		`bind x confirm-before`,
 	}
 
@@ -248,6 +248,48 @@ func TestGenerateConfContainsScratchShell(t *testing.T) {
 	if !strings.Contains(conf, `"$SHELL"`) {
 		t.Error("conf missing $SHELL invocation in scratch shell popup")
 	}
+	// Scratch popup advertises the extract subcommand in its title so users
+	// can discover the "promote scratch cwd to a real tab" affordance
+	// without reading the docs.
+	if !strings.Contains(conf, "zmux scratch extract") {
+		t.Error("conf missing zmux scratch extract hint in scratch popup title")
+	}
+}
+
+// When zmuxBin is empty (os.Executable failed AND a zero Profile — never the
+// real app.New path), every self-invoking popup bind is OMITTED rather than
+// falling back to a hardcoded "zmux". This guards the deleted palette/dashboard
+// else-branches: a future edit that re-introduces a literal "zmux --…" fallback
+// would break zzmux isolation, and this test catches it.
+func TestGenerateConfEmptyBinOmitsSelfInvokingBinds(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "")
+
+	for _, frag := range []string{
+		"--tab-picker", "--workspace-picker", "--picker",
+		"--palette", "--dashboard",
+		"zmux --palette", "zmux --dashboard", // the removed hardcoded else-branches
+	} {
+		if strings.Contains(conf, frag) {
+			t.Errorf("empty-bin conf should omit self-invoking bind, but contains %q", frag)
+		}
+	}
+	// The scratch popup is always emitted (runs $SHELL, not the zmux binary) and
+	// falls back to the literal "zmux" hint when no binary path is known.
+	if !strings.Contains(conf, "zmux scratch extract") {
+		t.Error("empty-bin conf should still emit the scratch popup with default 'zmux' hint")
+	}
+}
+
+func TestGenerateConfPopupBorderRounded(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	if !strings.Contains(conf, "set -g popup-border-lines rounded") {
+		t.Error("conf missing rounded popup-border-lines option")
+	}
 }
 
 func TestGenerateConfContainsReload(t *testing.T) {
@@ -276,6 +318,30 @@ func TestGenerateConfContainsDuplicateNameRefreshHooks(t *testing.T) {
 	} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("conf missing duplicate-name hook: %q", want)
+		}
+	}
+}
+
+// Bare `refresh-client -S` in a status hook errors "(null):0: no current
+// client" when the hook fires with nothing attached (e.g. a zmux CLI command
+// from an unattached shell triggers session-created/closed). The refresh must
+// be guarded by the triggering client's tty so it skips silently in that case.
+func TestGenerateConfGuardsRefreshHooksAgainstNoClient(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	for _, ev := range []string{
+		"client-session-changed", "session-window-changed", "window-linked",
+		"window-renamed", "session-renamed", "session-created[2]", "session-closed[2]",
+	} {
+		want := fmt.Sprintf(`set-hook -g %s "if-shell -F '#{client_tty}' 'refresh-client -S'"`, ev)
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing guarded refresh hook for %s:\n  want substring: %q", ev, want)
+		}
+		// The unguarded form must not survive — it's the source of the error.
+		if strings.Contains(conf, fmt.Sprintf(`set-hook -g %s "refresh-client -S"`, ev)) {
+			t.Errorf("conf still has UNGUARDED refresh hook for %s (would error with no client)", ev)
 		}
 	}
 }

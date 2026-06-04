@@ -85,6 +85,12 @@ func applyDefaults(cfg *Config) {
 	if cfg.Bar.Preset == "" {
 		cfg.Bar.Preset = defaults.Bar.Preset
 	}
+	// Layout: the bar is always two-line (plan 024). Normalize empty, the
+	// removed "single" layout, and any unknown value to two-line so the bar is
+	// never a single reflowing line; "split" is the only alternate.
+	if cfg.Bar.Layout != "two-line" && cfg.Bar.Layout != "split" {
+		cfg.Bar.Layout = defaults.Bar.Layout
+	}
 	// For auto_cleanup_tmp: TOML unmarshals missing bools as false, but our
 	// default is true. We check if the sessions section was entirely absent
 	// (both fields at zero value) and apply the default in that case.

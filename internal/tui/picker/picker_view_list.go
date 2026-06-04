@@ -39,9 +39,17 @@ func (m PickerModel) viewList() string {
 		b.WriteString(m.styles.Dim.Render("  ↑ more") + "\n")
 	}
 
+	confirming := (m.mode == modeConfirmDelete || m.mode == modeConfirmDeleteAttached) && m.confirm != nil
+
 	for i := start; i < end; i++ {
 		row := &rows[i]
 		selected := i == m.tree.Cursor
+		// Delete confirmation renders in place of the cursor row, so the
+		// prompt sits exactly where the target is.
+		if selected && confirming {
+			b.WriteString(m.renderInlineConfirm(row))
+			continue
+		}
 		switch row.Kind {
 		case outline.RowTopAction:
 			b.WriteString(m.renderTopAction(selected))
@@ -68,9 +76,17 @@ func (m PickerModel) viewList() string {
 		b.WriteString(m.styles.Dim.Render("  ↓ more") + "\n")
 	}
 
+	// Show-all affordance: the browse view is capped, so surface how many
+	// workspaces are collapsed behind ctrl+h rather than truncating silently.
+	if m.state.workspaceQuery == "" && !m.state.showAll {
+		if hidden := len(m.workspaces) - len(m.filteredWorkspaces); hidden > 0 {
+			b.WriteString(m.styles.Dim.Render(fmt.Sprintf("  + %d more (ctrl+h)", hidden)) + "\n")
+		}
+	}
+
 	// Helpful empty state.
-	if len(rows) <= 1 && m.state.workspaceQuery == "" && !m.state.showEmpty {
-		b.WriteString(m.styles.Dim.Render("  no workspaces with live sessions (ctrl+h to show empty)") + "\n")
+	if len(rows) <= 1 && m.state.workspaceQuery == "" {
+		b.WriteString(m.styles.Dim.Render("  no workspaces yet — type a name to create one") + "\n")
 	}
 
 	return b.String()
@@ -136,12 +152,13 @@ func (m PickerModel) renderWorkspaceRow(ws workspaceview.WorkspaceViewModel, sel
 		cursor = m.styles.Accent.Render("▸ ")
 	}
 
-	// Name with matched-char underlines.
+	// Name with matched-char underlines. Empty workspaces (and pseudo
+	// buckets) render grayed unless they're the current row.
 	nameStyle := m.styles.Normal.Bold(true)
-	if selected {
+	switch {
+	case selected:
 		nameStyle = m.styles.Accent.Bold(true)
-	}
-	if ws.IsPseudo && !selected {
+	case ws.IsPseudo, ws.LiveSessionCount == 0:
 		nameStyle = m.styles.Dim
 	}
 	name := m.renderNameWithMatches(ws.Name, ws.MatchedIndexes, nameStyle)
@@ -256,28 +273,36 @@ func (m PickerModel) renderNameWithMatches(name string, matches []int, baseStyle
 	return b.String()
 }
 
-// renderDeletePrompt builds the red y/N prompt shown in the overlay for
-// both confirm steps. Relies on the confirm-target snapshot so the copy
-// stays stable if the cursor shifts mid-confirmation.
-func (m PickerModel) renderDeletePrompt() string {
-	if m.confirm == nil {
-		return ""
+// renderInlineConfirm builds the red delete prompt rendered in place of the
+// cursor row. Confirm with y or ctrl+x again; any other key cancels. Relies on
+// the confirm-target snapshot so the copy stays stable if an async refresh
+// shifts the underlying rows mid-confirmation. `row` is the cursor row, used
+// only to match the list's indent (sessions sit one level deeper).
+func (m PickerModel) renderInlineConfirm(row *outline.Row) string {
+	indent := "  "
+	if row.Kind == outline.RowSession {
+		indent = "    "
 	}
-	// Second step: attached-workspace "this will detach you" warning.
-	if m.mode == modeConfirmDeleteAttached {
-		nameStyled := m.styles.Error.Bold(true).Render(m.confirm.name)
-		lead := m.styles.Error.Render("  ⚠ ") +
-			m.styles.Error.Render("workspace ") + nameStyled +
-			m.styles.Error.Render(" has live clients — this will disconnect them. ") +
-			m.styles.Dim.Render("(y/N)")
-		return lead
-	}
-	// First step: normal confirm.
+	cursor := m.styles.Accent.Render("▸ ")
+	keys := m.styles.Dim.Render(" (y / ctrl+x to confirm · esc cancel)")
 	nameStyled := m.styles.Error.Bold(true).Render(m.confirm.name)
-	body := m.styles.Error.Render("  Delete "+m.confirm.kind+" ") + nameStyled
-	if m.confirm.kind == "workspace" && m.confirm.liveCount > 0 {
-		body += m.styles.Error.Render(fmt.Sprintf(" (%d live sessions)", m.confirm.liveCount))
+
+	// Second step: attached-workspace "this will disconnect you" warning.
+	if m.mode == modeConfirmDeleteAttached {
+		body := m.styles.Error.Render("⚠ ") + nameStyled +
+			m.styles.Error.Render(" has live clients — disconnect & delete?")
+		return indent + cursor + body + keys + "\n"
 	}
-	body += m.styles.Error.Render("? ") + m.styles.Dim.Render("(y/N)")
-	return body
+
+	// First step: normal confirm.
+	body := m.styles.Error.Render("delete "+m.confirm.kind+" ") + nameStyled
+	if m.confirm.kind == "workspace" && m.confirm.liveCount > 0 {
+		unit := "sessions"
+		if m.confirm.liveCount == 1 {
+			unit = "session"
+		}
+		body += m.styles.Error.Render(fmt.Sprintf(" + %d %s", m.confirm.liveCount, unit))
+	}
+	body += m.styles.Error.Render("?")
+	return indent + cursor + body + keys + "\n"
 }

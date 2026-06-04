@@ -111,6 +111,10 @@ func NewPickerModel(runner tmux.Runner, styles styles.Styles) PickerModel {
 	ti.ShowSuggestions = true
 	// Customize prompt/completion styles to match our theme.
 	ti.Prompt = ""
+	// Non-zero default width; refined on WindowSizeMsg. Guards the first
+	// render (before any size msg) against the bubbles v2 width-0 placeholder
+	// bug that renders only the first rune.
+	ti.SetWidth(40)
 	tiStyles := ti.Styles()
 	tiStyles.Focused.Suggestion = styles.Dim
 	tiStyles.Blurred.Suggestion = styles.Dim
@@ -120,6 +124,7 @@ func NewPickerModel(runner tmux.Runner, styles styles.Styles) PickerModel {
 	ni := textinput.New()
 	ni.Placeholder = "session name"
 	ni.CharLimit = 64
+	ni.SetWidth(40)
 
 	return PickerModel{
 		runner:    runner,
@@ -181,6 +186,15 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Propagate width to the text inputs. bubbles v2 renders only the
+		// first placeholder rune when Width()==0 (the "stray s" bug), so the
+		// inputs must always carry a non-zero width.
+		inputWidth := m.width - 6
+		if inputWidth < 20 {
+			inputWidth = 20
+		}
+		m.input.SetWidth(inputWidth)
+		m.nameInput.SetWidth(inputWidth)
 		return m, nil
 
 	case refreshSessionsMsg:

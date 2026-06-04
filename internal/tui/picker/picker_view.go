@@ -61,12 +61,8 @@ func (m PickerModel) view() string {
 		b.WriteString(m.viewList())
 	}
 
-	// ── Delete confirmation overlay ──
-	if (m.mode == modeConfirmDelete || m.mode == modeConfirmDeleteAttached) && m.confirm != nil {
-		b.WriteString("\n")
-		prompt := m.renderDeletePrompt()
-		b.WriteString(prompt + "\n")
-	}
+	// Delete confirmation renders inline on the cursor row (see viewList),
+	// not as a detached overlay.
 
 	// ── Help bar ──
 	b.WriteString(m.viewHelp())

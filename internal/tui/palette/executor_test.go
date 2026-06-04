@@ -29,7 +29,7 @@ func newTestExecutor(t *testing.T) (*Executor, *tmux.MockRunner, *fakeFS) {
 		t.Fatalf("seed config: %v", err)
 	}
 
-	return NewExecutor(mock, fs, noopOvermind{}), mock, fs
+	return NewExecutor(mock, fs, noopOvermind{}, nil), mock, fs
 }
 
 func TestExecutorSessionSwitch(t *testing.T) {

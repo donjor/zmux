@@ -1,0 +1,86 @@
+{"command":"tmux capture-pane -t vone:2 -p","cwd":"project","kind":"direct_tmux","decision":"block","target":"watch","note":"report-002 slip"}
+{"command":"tmux capture-pane -t \"my pane\" -p","cwd":"project","kind":"direct_tmux","decision":"block","target":"watch","note":"quoted arg, still a real call"}
+{"command":"tmux send-keys -t vone:3 C-c","cwd":"project","kind":"direct_tmux","decision":"block","target":"send"}
+{"command":"tmux send-keys -t x 'npm run dev' Enter","cwd":"project","kind":"direct_tmux","decision":"block","target":"send"}
+{"command":"tmux list-windows","cwd":"project","kind":"direct_tmux","decision":"block","target":"tabs"}
+{"command":"tmux lsw -a","cwd":"project","kind":"direct_tmux","decision":"block","target":"tabs"}
+{"command":"tmux ls","cwd":"project","kind":"direct_tmux","decision":"block","target":"ls"}
+{"command":"tmux list-sessions","cwd":"project","kind":"direct_tmux","decision":"block","target":"ls"}
+{"command":"tmux list-panes","cwd":"project","kind":"direct_tmux","decision":"block","target":"pane-list"}
+{"command":"tmux split-window -h","cwd":"project","kind":"direct_tmux","decision":"block","target":"pane-open"}
+{"command":"tmux select-pane -t %3","cwd":"project","kind":"direct_tmux","decision":"block","target":"pane-focus"}
+{"command":"tmux kill-pane -t %4","cwd":"project","kind":"direct_tmux","decision":"block","target":"pane-close"}
+{"command":"tmux resize-pane -D 5","cwd":"project","kind":"direct_tmux","decision":"block","target":"pane-resize"}
+{"command":"tmux new-window -n logs","cwd":"project","kind":"direct_tmux","decision":"block","target":"run"}
+{"command":"tmux kill-window -t logs","cwd":"project","kind":"direct_tmux","decision":"block","target":"tab-kill"}
+{"command":"tmux rename-window dev","cwd":"project","kind":"direct_tmux","decision":"block","target":"tab-label"}
+{"command":"tmux new-session -s dev","cwd":"project","kind":"direct_tmux","decision":"block","target":"new"}
+{"command":"tmux attach -t dev","cwd":"project","kind":"direct_tmux","decision":"block","target":"open"}
+{"command":"tmux capture-pane -t x -p","cwd":"repo","kind":"direct_tmux","decision":"allow","target":"","note":"zmux repo cwd is exempt (dogfood); confirms blind spot"}
+{"command":"tmux -L zzmux capture-pane -t x -p","cwd":"project","kind":"direct_tmux","decision":"allow","target":"","note":"socket-scoped = profile/dev, exempt"}
+{"command":"tmux info","cwd":"project","kind":"safe","decision":"allow","target":"","note":"low-level, no clean zmux equivalent"}
+{"command":"tmux has-session -t dev","cwd":"project","kind":"safe","decision":"allow","target":"","note":"scripting predicate, no equivalent"}
+{"command":"ZMUX_ALLOW=1 tmux capture-pane -t x -p","cwd":"project","kind":"direct_tmux","decision":"allow","target":"","note":"explicit bypass token"}
+{"command":"tmux capture-pane -t x -p  # zmux: allow","cwd":"project","kind":"direct_tmux","decision":"allow","target":"","note":"explicit bypass comment"}
+{"command":"npm run dev","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"pnpm dev","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"yarn start:dev","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"bun run dev","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"vite","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"next dev -p 4747","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"npm run watch","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"cargo run","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"cargo watch -x run","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"docker compose up","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"make dev","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"nodemon server.js","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"python manage.py runserver","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"uvicorn app:app --reload","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"air","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"go run ./cmd/server","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"npm run build","cwd":"project","kind":"safe","decision":"allow","target":"","note":"bounded build, not a server"}
+{"command":"go test ./...","cwd":"project","kind":"safe","decision":"allow","target":"","note":"bounded test run"}
+{"command":"npm run dev  # zmux: allow","cwd":"project","kind":"runtime","decision":"allow","target":"","note":"bypass"}
+{"command":"./worker.sh &","cwd":"project","kind":"background","decision":"block","target":"runtime"}
+{"command":"nohup ./ingest.sh","cwd":"project","kind":"background","decision":"block","target":"runtime"}
+{"command":"node server.js & disown","cwd":"project","kind":"background","decision":"block","target":"runtime"}
+{"command":"make build && make test","cwd":"project","kind":"safe","decision":"allow","target":"","note":"&& is not backgrounding"}
+{"command":"sudo apt update","cwd":"project","kind":"interactive","decision":"warn","target":"interactive","note":"warn not block: avoid bricking legit sudo; nudge to shared tab"}
+{"command":"sudo systemctl --user restart vone-renderer","cwd":"project","kind":"interactive","decision":"warn","target":"interactive"}
+{"command":"ssh vone-objects 'systemctl --user restart vone-renderer'","cwd":"project","kind":"interactive","decision":"warn","target":"interactive","note":"the Box-redeploy slip; warn-level"}
+{"command":"ssh box","cwd":"project","kind":"interactive","decision":"warn","target":"interactive"}
+{"command":"psql -U postgres","cwd":"project","kind":"interactive","decision":"warn","target":"interactive"}
+{"command":"redis-cli","cwd":"project","kind":"interactive","decision":"warn","target":"interactive"}
+{"command":"python","cwd":"project","kind":"interactive","decision":"warn","target":"interactive","note":"bare REPL"}
+{"command":"node","cwd":"project","kind":"interactive","decision":"warn","target":"interactive","note":"bare REPL"}
+{"command":"python script.py","cwd":"project","kind":"safe","decision":"allow","target":"","note":"not a bare REPL"}
+{"command":"sudo ufw status  # zmux: allow","cwd":"project","kind":"interactive","decision":"allow","target":"","note":"bypass"}
+{"command":"echo \"tmux capture-pane -t x\"","cwd":"project","kind":"safe","decision":"allow","target":"","note":"false-positive guard: tmux inside a quoted string"}
+{"command":"rg 'tmux send-keys' src/","cwd":"project","kind":"safe","decision":"allow","target":"","note":"false-positive guard: quoted"}
+{"command":"git commit -m \"use zmux not raw tmux send-keys\"","cwd":"project","kind":"safe","decision":"allow","target":"","note":"false-positive guard"}
+{"command":"cat notes-tmux.md","cwd":"project","kind":"safe","decision":"allow","target":"","note":"false-positive guard: tmux in a filename"}
+{"command":"echo tmuxinator","cwd":"project","kind":"safe","decision":"allow","target":"","note":"false-positive guard: word boundary"}
+{"command":"zmux watch bun -l 30","cwd":"project","kind":"safe","decision":"allow","target":"","note":"correct zmux CLI call (Claude/Codex view). pi's direct_zmux nudge is pi-only, tested pi-side."}
+{"command":"zmux run 'npm run dev' -n server -d","cwd":"project","kind":"safe","decision":"allow","target":"","note":"correct runtime launch via zmux"}
+{"command":"ls -la","cwd":"project","kind":"safe","decision":"allow","target":""}
+{"command":"git status","cwd":"project","kind":"safe","decision":"allow","target":""}
+{"command": "NODE_ENV=production npm run dev", "cwd": "project", "kind": "runtime", "decision": "block", "target": "runtime", "note": "env-prefixed dev server: assignment stripped, still classifies on npm"}
+{"command": "env PORT=3000 npm run dev", "cwd": "project", "kind": "runtime", "decision": "block", "target": "runtime", "note": "env wrapper + assignment stripped before classify"}
+{"command": "FOO=bar git status", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "env-prefixed safe command stays safe (no false positive)"}
+{"command": "PGPASSWORD=secret psql -U postgres", "cwd": "project", "kind": "interactive", "decision": "warn", "target": "interactive", "note": "env-prefixed interactive still warns"}
+{"command": "tmux info; tmux capture-pane -t x -p", "cwd": "project", "kind": "direct_tmux", "decision": "block", "target": "watch", "note": "compound: first tmux subcommand unmapped, second must still block (all-segment scan)"}
+{"command": "echo tmux capture-pane", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "tmux not at command position (echo arg) \u2014 not a real invocation"}
+{"command": "cat x | grep tmux", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "tmux is a grep pattern, not command position"}
+{"command": "echo -L foo; tmux capture-pane -t x -p", "cwd": "project", "kind": "direct_tmux", "decision": "block", "target": "watch", "note": "-L in an unrelated segment must NOT exempt the real raw tmux (per-segment socket scope)"}
+{"command": "tmux -L zzmux capture-pane -t x && npm run dev", "cwd": "project", "kind": "runtime", "decision": "block", "target": "runtime", "note": "exempt socket tmux then a dev server: scan continues, runtime wins"}
+{"command": "./server & echo started", "cwd": "project", "kind": "background", "decision": "block", "target": "runtime", "note": "backgrounding before another command \u2014 & not at EOL"}
+{"command": "go build ./... 2>&1", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "2>&1 redirect must not read as backgrounding"}
+{"command": "make build && npm run dev", "cwd": "project", "kind": "runtime", "decision": "block", "target": "runtime", "note": "&& is not backgrounding; the dev server still classifies as runtime"}
+{"command": "echo \"deploy a & b\"", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "& inside quotes is not a background operator"}
+{"command": "FOO=\"bar baz\" npm run dev", "cwd": "project", "kind": "runtime", "decision": "block", "target": "runtime", "note": "double-quoted env value with space stripped before classify"}
+{"command": "BAR='a b' npm run dev", "cwd": "project", "kind": "runtime", "decision": "block", "target": "runtime", "note": "single-quoted env value with space stripped before classify"}
+{"command": "NODE_OPTIONS=\"--max-old-space-size=4096\" npm run dev", "cwd": "project", "kind": "runtime", "decision": "block", "target": "runtime", "note": "quoted env value containing = and dashes still stripped"}
+{"command": "sudo npm run dev", "cwd": "project", "kind": "interactive", "decision": "warn", "target": "interactive", "note": "interactive wrapper (sudo) wins over runtime \u2014 needs a shared tab for the password"}
+{"command": "go build ./... |& grep -i error", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "|& is bash pipe-both-streams, not a background operator"}
+{"command": "cat > run.sh <<'EOF'\n./server & echo started\nEOF", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "here-doc body is stdin data, not executed \u2014 & and commands inside it are stripped before classify"}
+{"command": "echo $(tmux capture-pane -p)", "cwd": "project", "kind": "safe", "decision": "allow", "target": "", "note": "KNOWN GAP: tmux inside command-substitution is not at segment-command-position, so it is not flagged (acceptable \u2014 agents rarely wrap tmux in $())"}

@@ -10,7 +10,7 @@ themes/iterm2/
 .dump/
 .claude/
 .codetree/
-docs/NOTES.MD
+docs/.*
 
 # Demo / capture artifacts
 *.cast
@@ -36,3 +36,5 @@ demo.gif
 
 # v0 downloaded theme cache (if v0 init is ever run)
 legacy/v0/themes/iterm2/
+
+skills/zmux/reports

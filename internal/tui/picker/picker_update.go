@@ -17,12 +17,12 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ── Confirm delete (first step) ──
 	if m.mode == modeConfirmDelete {
 		switch msg.String() {
-		case "y", "Y":
-			// If we're killing a workspace with a live attached client,
-			// route through the second-step confirm before running the
-			// mutation — deleting an attached workspace from outside
-			// tmux silently kills the user's only client, so we require
-			// a second explicit y/N.
+		case "y", "Y", "ctrl+x":
+			// y or pressing ctrl+x again confirms. If we're killing a
+			// workspace with a live attached client, route through the
+			// second-step confirm before running the mutation — deleting an
+			// attached workspace from outside tmux silently kills the user's
+			// only client, so we require a second explicit confirm.
 			if m.confirm != nil && m.confirm.kind == "workspace" && m.confirm.attached {
 				m.mode = modeConfirmDeleteAttached
 				return m, nil
@@ -41,7 +41,7 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// ── Confirm delete (second step — attached workspace) ──
 	if m.mode == modeConfirmDeleteAttached {
 		switch msg.String() {
-		case "y", "Y":
+		case "y", "Y", "ctrl+x":
 			m.applyConfirmedDelete()
 			m.mode = modeNormal
 			m.confirm = nil
@@ -159,8 +159,8 @@ func (m PickerModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "ctrl+h":
-		// Toggle visibility of empty workspaces.
-		m.state.showEmpty = !m.state.showEmpty
+		// Toggle show-all: reveal every workspace past the default cap.
+		m.state.showAll = !m.state.showAll
 		m.applyFilter()
 		return m, nil
 
@@ -181,6 +181,13 @@ func (m PickerModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					name:      ws.Name,
 					attached:  ws.HasAttached,
 					liveCount: len(ws.LiveSessions),
+				}
+				// Empty workspace (nothing live to kill) — delete outright,
+				// no confirmation step.
+				if len(ws.LiveSessions) == 0 {
+					m.applyConfirmedDelete()
+					m.confirm = nil
+					return m, m.reloadWorkspaces()
 				}
 				m.mode = modeConfirmDelete
 			}

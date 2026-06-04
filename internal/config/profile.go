@@ -58,3 +58,15 @@ func profileFor(home, name, socket, stateName, cfgName, confName string) Profile
 func ActiveProfile(fs FS) Profile {
 	return ProfileFromArgv(os.Args[0], fs)
 }
+
+// SelfBin resolves the binary to invoke from generated tmux binds, popup
+// commands, and shell-rc snippets. It prefers os.Executable() (the absolute
+// path display-popup needs); on error it falls back to the profile's binary
+// NAME (e.g. "zzmux"), never a hardcoded "zmux" — so the edge profile never
+// silently re-invokes the live binary and breaks isolation.
+func SelfBin(profile Profile) string {
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		return exe
+	}
+	return profile.Name
+}

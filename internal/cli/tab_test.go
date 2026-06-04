@@ -71,6 +71,81 @@ func TestRefreshDuplicateWindowNameMarkersMarksOnlyDuplicateNames(t *testing.T) 
 	}
 }
 
+// Two same-named tabs that also share a cwd basename get NO marker: the
+// [basename] bracket would render identically on both and differentiate
+// nothing (the window index already does). This is the common same-worktree
+// case — e.g. two "claude" tabs both opened in the same repo.
+func TestRefreshDuplicateWindowNameMarkersSuppressesSharedCwd(t *testing.T) {
+	a, mock := newTestApp(t)
+	mock.Windows["dev"] = []tmux.Window{
+		{Index: 1, Name: "claude", Dir: "/home/user/skills"},
+		{Index: 2, Name: "claude", Dir: "/home/user/skills"}, // same name + same cwd
+		{Index: 3, Name: "bun", Dir: "/home/user/proj/api"},
+		{Index: 4, Name: "bun", Dir: "/home/user/proj/web"}, // same name, DIFFERENT cwd
+	}
+
+	if err := refreshDuplicateWindowNameMarkersForSession(a, "dev"); err != nil {
+		t.Fatalf("refreshDuplicateWindowNameMarkersForSession failed: %v", err)
+	}
+
+	var setTargets, unsetTargets []string
+	for _, call := range mock.Calls {
+		switch call.Method {
+		case "SetWindowOption":
+			if call.Args[1] == tablabel.DuplicateNameOption {
+				setTargets = append(setTargets, call.Args[0])
+			}
+		case "UnsetWindowOption":
+			if call.Args[1] == tablabel.DuplicateNameOption {
+				unsetTargets = append(unsetTargets, call.Args[0])
+			}
+		}
+	}
+	// claude/claude share a cwd basename -> suppressed; bun/bun differ -> marked.
+	if strings.Join(setTargets, ",") != "dev:3,dev:4" {
+		t.Fatalf("set targets = %v, want dev:3,dev:4 (differing cwd)", setTargets)
+	}
+	if strings.Join(unsetTargets, ",") != "dev:1,dev:2" {
+		t.Fatalf("unset targets = %v, want dev:1,dev:2 (shared cwd)", unsetTargets)
+	}
+}
+
+// Three same-named tabs: two share a cwd basename, one is unique. Only the
+// unique one earns the bracket — the shared pair would render an identical
+// [api] on both, so they stay bare and rely on the index.
+func TestRefreshDuplicateWindowNameMarkersMixedCwd(t *testing.T) {
+	a, mock := newTestApp(t)
+	mock.Windows["dev"] = []tmux.Window{
+		{Index: 1, Name: "bun", Dir: "/home/user/proj/api"},
+		{Index: 2, Name: "bun", Dir: "/home/user/proj/api"}, // shares basename with :1
+		{Index: 3, Name: "bun", Dir: "/home/user/proj/web"}, // unique basename
+	}
+
+	if err := refreshDuplicateWindowNameMarkersForSession(a, "dev"); err != nil {
+		t.Fatalf("refreshDuplicateWindowNameMarkersForSession failed: %v", err)
+	}
+
+	var setTargets, unsetTargets []string
+	for _, call := range mock.Calls {
+		switch call.Method {
+		case "SetWindowOption":
+			if call.Args[1] == tablabel.DuplicateNameOption {
+				setTargets = append(setTargets, call.Args[0])
+			}
+		case "UnsetWindowOption":
+			if call.Args[1] == tablabel.DuplicateNameOption {
+				unsetTargets = append(unsetTargets, call.Args[0])
+			}
+		}
+	}
+	if strings.Join(setTargets, ",") != "dev:3" {
+		t.Fatalf("set targets = %v, want dev:3 (unique basename only)", setTargets)
+	}
+	if strings.Join(unsetTargets, ",") != "dev:1,dev:2" {
+		t.Fatalf("unset targets = %v, want dev:1,dev:2 (shared basename)", unsetTargets)
+	}
+}
+
 func TestRefreshDuplicateWindowNameMarkersUnsetsAllUniqueNames(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.Windows["dev"] = []tmux.Window{

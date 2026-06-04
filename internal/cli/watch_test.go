@@ -31,6 +31,30 @@ func TestWatchCapturesOutput(t *testing.T) {
 	}
 }
 
+// watch must read from an auto-renamed window via its @zmux_label, targeting
+// by index rather than the stale session:name.
+func TestWatchResolvesAutoRenamedWindowByLabel(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.Windows["test-session"] = []tmux.Window{
+		{Index: 4, Name: "node", Label: "server", Active: true},
+	}
+	mock.CapturedPaneContent = "line 1\n"
+
+	rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("watch command failed: %v", err)
+	}
+
+	for _, c := range mock.Calls {
+		if c.Method == "CapturePane" {
+			if len(c.Args) == 0 || c.Args[0] != "test-session:4" {
+				t.Errorf("expected target 'test-session:4' (by index), got %v", c.Args)
+			}
+		}
+	}
+}
+
 func TestWatchUntilIgnoresBaselineOutput(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}

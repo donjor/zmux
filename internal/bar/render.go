@@ -15,6 +15,7 @@ package bar
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/donjor/zmux/internal/theme"
 )
@@ -50,6 +51,18 @@ type BarContext struct {
 	// Empty when the bar is single-line or the workspace has one session.
 	WorkspaceSessions []string
 
+	// WorkspaceSessionStates is index-aligned with WorkspaceSessions and
+	// carries the attach state of each sibling. May be nil (treated as
+	// all Unknown). See [AttachState] for the enum; populated by the
+	// bar-render data path from the live tmux session list.
+	WorkspaceSessionStates []AttachState
+
+	// TopRowActive signals two-line mode, where the top row owns the
+	// workspace/session identity. When set, RenderLeft drops all identity
+	// chrome (pills, viewport, powerline chain) and renders only the compact
+	// volatile aux (dir/git/process) via renderLeftAux — see plan 024.
+	TopRowActive bool
+
 	// Segment visibility (from config).
 	ShowWorkspace bool
 	ShowGit       bool
@@ -78,6 +91,19 @@ func (ctx BarContext) SessionLabel() string {
 		return fmt.Sprintf("%s %d/%d", ctx.Session, ctx.WorkspacePos, ctx.WorkspaceCount)
 	}
 	return ctx.Session
+}
+
+// topSessionLabel returns the session name as it appears in the top status
+// row. For the *current* session of a grouped clone it appends a compact
+// viewport suffix (e.g. "dev·b"), so the clone letter shows exactly once on the
+// top row and never on the bottom-left (plan 024, two-line row ownership).
+// Gated on ShowGroup — applySegmentVisibility does not run for the top row, so
+// the check is explicit here. Returns the bare name in every other case.
+func topSessionLabel(ctx BarContext, sess string) string {
+	if sess == ctx.Session && ctx.ViewportID != "" && ctx.ShowGroup {
+		return sess + "·" + ctx.ViewportID
+	}
+	return sess
 }
 
 // applySegmentVisibility clears context fields for disabled segments.
@@ -117,6 +143,9 @@ func applySegmentVisibility(ctx *BarContext) {
 // RenderLeft generates the left side of the status bar.
 func RenderLeft(p *theme.Palette, ctx BarContext, preset Preset) string {
 	applySegmentVisibility(&ctx)
+	if ctx.TopRowActive {
+		return renderLeftAux(p, ctx, preset)
+	}
 	switch preset {
 	case Minimal:
 		return renderLeftMinimal(p, ctx)
@@ -137,6 +166,62 @@ func RenderLeft(p *theme.Palette, ctx BarContext, preset Preset) string {
 	default:
 		return renderLeftDefault(p, ctx)
 	}
+}
+
+// renderLeftAux renders the compact bottom-left for two-line mode
+// (TopRowActive): the top row now owns workspace/session identity, so the
+// bottom-left drops all identity chrome (pills, viewport, powerline chain) and
+// keeps only the *volatile* aux each preset historically surfaced on the left.
+// Field policy mirrors the per-preset left: powerline/rpowerline → dir; hacker
+// → process + dir; starship → dir + git; every other preset → empty (their
+// left was pure identity). Plain dim text, no caps — the bottom-left is
+// secondary chrome here (plan 024).
+//
+// Callers must run applySegmentVisibility first so segment toggles still gate
+// these fields (RenderLeft does).
+func renderLeftAux(p *theme.Palette, ctx BarContext, preset Preset) string {
+	dir := shortenDir(ctx.PaneDir)
+	proc := ctx.PaneCmd
+	if proc == "bash" || proc == "zsh" || proc == "fish" {
+		proc = ""
+	}
+
+	var parts []string
+	add := func(hex, text string) {
+		if text != "" {
+			parts = append(parts, fmt.Sprintf("#[fg=%s]%s", hex, text))
+		}
+	}
+
+	switch preset {
+	case Powerline, Rpowerline:
+		add(p.Muted.Hex(), dir)
+	case Hacker:
+		add(p.Success.Hex(), proc)
+		add(p.Dim.Hex(), dir)
+	case Starship:
+		add(p.Meta.Hex(), dir)
+		add(p.Success.Hex(), formatGitText(ctx))
+	default:
+		return ""
+	}
+
+	if len(parts) == 0 {
+		return ""
+	}
+	return " " + strings.Join(parts, " ") + " "
+}
+
+// EdgeBadge renders a leading status-bar tag that marks a non-default profile
+// (e.g. the zzmux edge binary), so it's obvious at a glance you're not on the
+// stable zmux. Glyph-free + preset-agnostic: distinctness comes from the Error
+// colour, so it composes cleanly in front of any preset's first pill.
+func EdgeBadge(p *theme.Palette, label string) string {
+	if label == "" {
+		return ""
+	}
+	return fmt.Sprintf("#[bg=%s,fg=%s,bold] %s #[nobold,bg=default,fg=default] ",
+		p.Error.Hex(), p.BG.Hex(), label)
 }
 
 // RenderRight generates the right side of the status bar.
@@ -165,10 +250,11 @@ func RenderRight(p *theme.Palette, ctx BarContext, preset Preset) string {
 }
 
 // RenderTop generates the workspace/session row for two-line status bars.
-// Outputs tmux format strings. Returns empty if there's only one session
-// (callers should collapse to single-line).
+// Outputs tmux format strings. Renders for a single session too (always-2-line,
+// plan 024); returns empty only when there are no sessions at all, to avoid an
+// orphaned workspace pill.
 func RenderTop(p *theme.Palette, ctx BarContext, preset Preset) string {
-	if len(ctx.WorkspaceSessions) <= 1 {
+	if len(ctx.WorkspaceSessions) == 0 {
 		return ""
 	}
 	switch preset {

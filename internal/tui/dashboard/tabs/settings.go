@@ -165,6 +165,10 @@ func (t *SettingsTab) ID() dashboard.TabID { return dashboard.TabSettings }
 func (t *SettingsTab) Title() string       { return "Settings" }
 func (t *SettingsTab) Init() tea.Cmd       { return nil }
 
+// CapturesEscape reports that Esc should cancel the inline config edit input
+// rather than close the dashboard.
+func (t *SettingsTab) CapturesEscape() bool { return t.mode == settingsModeEdit }
+
 func (t *SettingsTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	t.reqID = dashboard.NextReqID()
 	return t.fetchData(t.reqID)

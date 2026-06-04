@@ -24,6 +24,8 @@ func (t *SessionsTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t.handleConfirmKillKey(msg)
 	case sessionsModeMove:
 		return t.handleMoveKey(msg)
+	case sessionsModeSearch:
+		return t.handleSearchKey(msg)
 	default:
 		return t.handleNormalKey(msg)
 	}
@@ -44,6 +46,15 @@ func (t *SessionsTab) handleNormalKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t, nil
 	case "G":
 		t.tree.JumpBottom()
+		return t, nil
+	case "/":
+		return t.enterSearchMode()
+	case "esc":
+		// Reaches the tab only when a filter is active (see CapturesEscape);
+		// the first Esc clears the filter, a second closes the dashboard.
+		if t.searchQuery != "" {
+			t.clearSearch()
+		}
 		return t, nil
 	}
 
@@ -67,12 +78,81 @@ func (t *SessionsTab) handleNormalKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	return t, nil
 }
 
+// ── Search mode ──
+
+// enterSearchMode opens the `/` search input, pre-filled with any active
+// filter so the user can refine it.
+func (t *SessionsTab) enterSearchMode() (dashboard.Tab, tea.Cmd) {
+	t.mode = sessionsModeSearch
+	t.searchInput.SetValue(t.searchQuery)
+	t.searchInput.CursorEnd()
+	t.searchInput.Focus()
+	return t, textinput.Blink
+}
+
+// handleSearchKey drives the inline search input. Typing live-filters the
+// tree; Enter applies the filter and returns to list browsing (the filter
+// stays active); Esc cancels the filter entirely. Arrow keys move the cursor
+// through the filtered results without leaving the input.
+func (t *SessionsTab) handleSearchKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		t.searchQuery = strings.TrimSpace(t.searchInput.Value())
+		t.finishSearch()
+		return t, nil
+	case "esc":
+		t.searchQuery = ""
+		t.searchInput.SetValue("")
+		t.finishSearch()
+		return t, nil
+	case "up":
+		t.tree.MoveUp()
+		return t, nil
+	case "down":
+		t.tree.MoveDown()
+		return t, nil
+	}
+
+	var cmd tea.Cmd
+	t.searchInput, cmd = t.searchInput.Update(msg)
+	t.searchQuery = strings.TrimSpace(t.searchInput.Value())
+	t.tree.SetRows(t.buildRows())
+	return t, cmd
+}
+
+// finishSearch transitions from search-edit mode back to list mode, flushing
+// any data refetch staged while editing and rebuilding the (possibly still
+// filtered) tree.
+func (t *SessionsTab) finishSearch() {
+	t.mode = sessionsModeList
+	t.searchInput.Blur()
+	if t.pending != nil {
+		t.applyData(*t.pending)
+		t.pending = nil
+		return
+	}
+	t.tree.SetRows(t.buildRows())
+}
+
+// clearSearch drops the active filter and rebuilds the full tree.
+func (t *SessionsTab) clearSearch() {
+	t.searchQuery = ""
+	t.searchInput.SetValue("")
+	t.searchInput.Blur()
+	t.tree.SetRows(t.buildRows())
+}
+
 // handleEnter dispatches Enter based on the row kind.
 func (t *SessionsTab) handleEnter(row *outline.Row) (dashboard.Tab, tea.Cmd) {
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
-		t.tree.ToggleExpand(row.ID)
-		t.tree.SetRows(t.buildRows())
+		// While a filter is active rows are force-expanded for visibility
+		// (buildWorkspaceRow), so toggling would only mutate saved expansion
+		// state invisibly — make it a no-op until the filter clears.
+		if t.searchQuery == "" {
+			t.tree.ToggleExpand(row.ID)
+			t.tree.SetRows(t.buildRows())
+		}
 		return t, nil
 
 	case outline.RowSession:
@@ -86,8 +166,10 @@ func (t *SessionsTab) handleEnter(row *outline.Row) (dashboard.Tab, tea.Cmd) {
 		}
 
 	case outline.RowExternalGroup:
-		t.tree.ToggleExpand(row.ID)
-		t.tree.SetRows(t.buildRows())
+		if t.searchQuery == "" {
+			t.tree.ToggleExpand(row.ID)
+			t.tree.SetRows(t.buildRows())
+		}
 		return t, nil
 
 	case outline.RowExternalEntry:

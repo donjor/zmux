@@ -38,13 +38,13 @@ var (
 
 	// No-prefix (instant) bindings. Dynamic families carry a range label in Key;
 	// conf.go expands them.
-	TabGoto     = Binding{Action: "tab.goto.N", Key: "M-1..9", Help: "Switch to tab N directly", Category: CatTabs, Context: NoPrefix}
-	TabSwitch   = Binding{Action: "tab.switch", Key: "M-`", Help: "Tab switcher popup", Category: CatTabs, Context: NoPrefix}
-	SessionGoto = Binding{Action: "session.goto.N", Key: "M-S-1..9", Help: "Switch to session N in workspace", Category: CatSessions, Context: NoPrefix}
-	PaneFocusL  = Binding{Action: "pane.focus.left", Key: "M-S-Left", Help: "Focus pane left", Category: CatPanes, Context: NoPrefix}
-	PaneFocusR  = Binding{Action: "pane.focus.right", Key: "M-S-Right", Help: "Focus pane right", Category: CatPanes, Context: NoPrefix}
-	PaneFocusU  = Binding{Action: "pane.focus.up", Key: "M-S-Up", Help: "Focus pane up", Category: CatPanes, Context: NoPrefix}
-	PaneFocusD  = Binding{Action: "pane.focus.down", Key: "M-S-Down", Help: "Focus pane down", Category: CatPanes, Context: NoPrefix}
+	TabGoto         = Binding{Action: "tab.goto.N", Key: "M-1..9", Help: "Switch to tab N directly", Category: CatTabs, Context: NoPrefix}
+	TabSwitch       = Binding{Action: "tab.switch", Key: "M-`", Help: "Session + tab switcher popup", Category: CatTabs, Context: NoPrefix}
+	WorkspaceSwitch = Binding{Action: "workspace.switch", Key: "M-w", Help: "Workspace switcher popup", Category: CatSessions, Context: NoPrefix}
+	PaneFocusL      = Binding{Action: "pane.focus.left", Key: "M-S-Left", Help: "Focus pane left", Category: CatPanes, Context: NoPrefix}
+	PaneFocusR      = Binding{Action: "pane.focus.right", Key: "M-S-Right", Help: "Focus pane right", Category: CatPanes, Context: NoPrefix}
+	PaneFocusU      = Binding{Action: "pane.focus.up", Key: "M-S-Up", Help: "Focus pane up", Category: CatPanes, Context: NoPrefix}
+	PaneFocusD      = Binding{Action: "pane.focus.down", Key: "M-S-Down", Help: "Focus pane down", Category: CatPanes, Context: NoPrefix}
 
 	// Copy mode (copy-mode-vi). Yank is bound by the clipboard integration
 	// (see ClipboardBinding); it is documented here but not emitted from this set.
@@ -66,7 +66,7 @@ var PrefixBindings = []Binding{
 
 // NoPrefixBindings lists the instant (root-table) bindings in render order.
 var NoPrefixBindings = []Binding{
-	TabGoto, SessionGoto, TabSwitch, PaneFocusL, PaneFocusR, PaneFocusU, PaneFocusD,
+	TabGoto, TabSwitch, WorkspaceSwitch, PaneFocusL, PaneFocusR, PaneFocusU, PaneFocusD,
 }
 
 // CopyModeBindings lists the copy-mode-vi bindings in render order.

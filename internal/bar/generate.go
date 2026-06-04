@@ -15,7 +15,7 @@ type TmuxOption struct {
 
 // BarLayoutConfig holds the multi-session layout settings.
 type BarLayoutConfig struct {
-	Layout    string // "single", "two-line", "split"
+	Layout    string // "two-line", "split" (legacy "single" normalized to two-line)
 	Indicator string // "none", "numbers", "dots"
 	TopBar    string // "tabs", "dots", "minimal"
 }
@@ -42,15 +42,15 @@ func TopBarFormatCmd(zmuxBin, topBar string) string {
 // TmuxDefaultStatusFormat is the standard tmux status-format[0] template
 // that renders status-left, window tabs, and status-right. Used as
 // status-format[1] in two-line layouts (so the normal bar renders on the
-// bottom line) and to restore status-format[0] when switching back to
-// single. Matches the tmux 3.4 default.
+// bottom line) and as the one-line fallback for the defensive non-two-line
+// reconcile path. Matches the tmux 3.4 default.
 const TmuxDefaultStatusFormat = `#[align=left range=left #{E:status-left-style}]#[push-default]#{T;=/#{status-left-length}:status-left}#[pop-default]#[norange default]#[list=on align=#{status-justify}]#[list=left-marker]<#[list=right-marker]>#[list=on]#{W:#[range=window|#{window_index} #{E:window-status-style}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-format}#[pop-default]#[norange default]#{?window_end_flag,,#{window-status-separator}},#[range=window|#{window_index} list=focus #{?#{!=:#{E:window-status-current-style},default},#{E:window-status-current-style},#{E:window-status-style}}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-current-format}#[pop-default]#[norange list=on default]#{?window_end_flag,,#{window-status-separator}}}#[nolist align=right range=right #{E:status-right-style}]#[push-default]#{T;=/#{status-right-length}:status-right}#[pop-default]#[norange default]`
 
 // Generate produces the tmux status-line options for a given preset and palette.
 // If zmuxBin is provided, uses #(zmux bar-render) for dynamic left/right content
 // (git branch, workspace, prefix hints). Otherwise falls back to static tmux formats.
 func Generate(preset Preset, palette *theme.Palette, zmuxBin ...string) []TmuxOption {
-	return GenerateWithLayout(preset, palette, BarLayoutConfig{Layout: "single"}, zmuxBin...)
+	return GenerateWithLayout(preset, palette, BarLayoutConfig{Layout: "two-line"}, zmuxBin...)
 }
 
 // GenerateWithLayout is Generate with explicit layout configuration.
@@ -236,8 +236,9 @@ func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset, layout BarL
 
 	// Multi-line layouts: add a top row with workspace + session info.
 	// tmux's `status 2` gives two rows sharing the same status-style bg.
-	// The top row renders empty when there's only 1 session, so single-
-	// session workspaces effectively get a single-line bar.
+	// always-2-line (plan 024): the top row renders for a single session too,
+	// so two-line/split is a stable two rows that never reflows on session
+	// add/remove. Single-session collapse was removed.
 	if zmuxBin != "" && (layout.Layout == "two-line" || layout.Layout == "split") {
 		opts = append(
 			opts,

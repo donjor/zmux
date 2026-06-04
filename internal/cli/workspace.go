@@ -6,6 +6,7 @@ import (
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/spf13/cobra"
 )
 
@@ -137,6 +138,47 @@ func liveRootSet(app *apppkg.App) map[string]bool {
 		roots[session.RootName(s.Name)] = true
 	}
 	return roots
+}
+
+// workspaceViewOptions tunes loadWorkspaceView per browse surface.
+type workspaceViewOptions struct {
+	// Reconcile prunes dead sessions against the live tmux roots before loading.
+	// The picker and workspace switcher do this; the dashboard does not (it
+	// refreshes through its own fetch cycle).
+	Reconcile bool
+	// HidePseudo drops pseudo-workspaces (e.g. "temporary"). The workspace
+	// switcher hides them since "switch to temporary" has no useful target.
+	HidePseudo bool
+}
+
+// loadWorkspaceView builds the workspace view models shared by the primary
+// picker, the dashboard, and the M-w workspace switcher. The three surfaces
+// differ only in whether they reconcile first and whether they hide
+// pseudo-workspaces — captured by workspaceViewOptions — so the load/build core
+// lives here once instead of in three near-identical closures.
+func loadWorkspaceView(app *apppkg.App, opts workspaceViewOptions) []workspaceview.WorkspaceViewModel {
+	if opts.Reconcile {
+		if roots := liveRootSet(app); roots != nil {
+			_ = app.WorkspaceStore.Reconcile(roots)
+		}
+	}
+	workspaces, err := app.WorkspaceStore.ListWorkspaces()
+	if err != nil {
+		return nil
+	}
+	sessions, _ := session.ListSessions(app.Runner)
+	all := workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
+	if !opts.HidePseudo {
+		return all
+	}
+	out := all[:0]
+	for _, ws := range all {
+		if ws.IsPseudo {
+			continue
+		}
+		out = append(out, ws)
+	}
+	return out
 }
 
 // cleanupWorkspaces removes workspace entries for sessions that no longer

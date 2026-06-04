@@ -2,7 +2,6 @@ package bar
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
@@ -10,19 +9,20 @@ import (
 
 // Apply generates the tmux status-bar options for the given preset and palette,
 // then calls runner.SetOption for each one (scope "-g" for global).
-// Uses #(zmux bar-render) for dynamic content when zmux binary is available.
-func Apply(runner tmux.Runner, preset Preset, palette *theme.Palette, layout ...BarLayoutConfig) error {
-	zmuxBin, err := os.Executable()
-	if err != nil {
-		zmuxBin = ""
-	}
-
+//
+// selfBin is the binary embedded in #(<bin> bar-render) dynamic content. Pass
+// config.SelfBin(profile) — never os.Executable() directly: a symlinked or
+// misresolved binary makes the edge (zzmux) profile bake the live zmux binary
+// into its bar, which then resolves the wrong workspace store and renders an
+// empty workspace pill. SelfBin also falls back to the profile name rather
+// than "" (a "" here produces a broken `#( bar-render …)` status string).
+func Apply(runner tmux.Runner, selfBin string, preset Preset, palette *theme.Palette, layout ...BarLayoutConfig) error {
 	var lc BarLayoutConfig
 	if len(layout) > 0 {
 		lc = layout[0]
 	}
 
-	opts := GenerateWithLayout(preset, palette, lc, zmuxBin)
+	opts := GenerateWithLayout(preset, palette, lc, selfBin)
 	for _, opt := range opts {
 		if err := runner.SetOption("-g", opt.Key, opt.Value); err != nil {
 			return fmt.Errorf("set %s: %w", opt.Key, err)

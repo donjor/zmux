@@ -2,11 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	apppkg "github.com/donjor/zmux/internal/app"
-	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tablabel"
+	"github.com/donjor/zmux/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -157,22 +158,9 @@ func newSessionKillCmd(app *apppkg.App) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessName := args[0]
 
-			if err := session.Kill(app.Runner, sessName); err != nil {
+			if err := workspace.KillSession(app.Runner, app.WorkspaceStore, sessName); err != nil {
 				return err
 			}
-
-			root := session.RootName(sessName)
-
-			// Only remove from workspace if we killed the root session itself
-			// (not just a grouped clone like dev-b).
-			isClone := sessName != root
-			if !isClone {
-				// Root session killed — check if it's truly gone (not just a clone detach).
-				if !app.Runner.HasSession(root) {
-					_ = app.WorkspaceStore.RemoveSession(root)
-				}
-			}
-
 			fmt.Printf("Killed session %q\n", sessName)
 			return nil
 		},
@@ -211,13 +199,31 @@ func refreshDuplicateWindowNameMarkersForSession(app *apppkg.App, sessionName st
 		// incomplete metadata; the next successful refresh will repair markers.
 		return nil
 	}
-	counts := make(map[string]int, len(windows))
-	for _, w := range windows {
-		counts[w.Name]++
+	// The [cwd-basename] disambiguator only earns its place when a window's
+	// name is duplicated AND its basename is unique among the same-named
+	// windows. If two same-named tabs share a cwd basename (the common
+	// same-worktree case — e.g. two "claude" tabs both in skills/, two "bun"
+	// tabs in one feature branch) the bracket renders identically on both and
+	// differentiates nothing the window index doesn't already resolve, so we
+	// suppress it rather than add noise. Basename, not full path, because the
+	// bracket itself shows #{b:pane_current_path}.
+	//
+	// The decision reads each window's cwd at refresh time; the rendered
+	// bracket uses the live #{b:pane_current_path}. A cd after this hook fired
+	// can briefly desync the two until the next window event re-refreshes —
+	// acceptable for a dimmed cosmetic marker.
+	nameCounts := make(map[string]int, len(windows))
+	nameBaseCounts := make(map[string]int, len(windows))
+	bases := make([]string, len(windows))
+	for i, w := range windows {
+		bases[i] = filepath.Base(w.Dir)
+		nameCounts[w.Name]++
+		nameBaseCounts[w.Name+"\x00"+bases[i]]++
 	}
-	for _, w := range windows {
+	for i, w := range windows {
 		target := fmt.Sprintf("%s:%d", sessionName, w.Index)
-		if counts[w.Name] > 1 {
+		disambiguates := nameCounts[w.Name] > 1 && nameBaseCounts[w.Name+"\x00"+bases[i]] == 1
+		if disambiguates {
 			_ = app.Runner.SetWindowOption(target, tablabel.DuplicateNameOption, "1")
 		} else {
 			_ = app.Runner.UnsetWindowOption(target, tablabel.DuplicateNameOption)

@@ -13,7 +13,7 @@ type Config struct {
 // BarConfig holds status bar settings.
 type BarConfig struct {
 	Preset    string      `toml:"preset"`
-	Layout    string      `toml:"layout"`    // "single", "two-line", "split"
+	Layout    string      `toml:"layout"`    // "two-line", "split" (legacy "single" normalized to two-line)
 	Indicator string      `toml:"indicator"` // "none", "numbers", "dots"
 	TopBar    string      `toml:"top_bar"`   // "tabs", "dots", "minimal"
 	Segments  BarSegments `toml:"segments"`

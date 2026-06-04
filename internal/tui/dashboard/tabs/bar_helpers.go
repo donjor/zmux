@@ -47,6 +47,7 @@ func (t *BarTab) fetchData(reqID int64) tea.Cmd {
 func (t *BarTab) saveConfig() tea.Cmd {
 	fs := t.fs
 	runner := t.runner
+	selfBin := t.selfBin
 	cfg := t.cfg
 	reqID := t.reqID
 	resolver := t.resolver
@@ -69,7 +70,7 @@ func (t *BarTab) saveConfig() tea.Cmd {
 					Indicator: cfg.Bar.Indicator,
 					TopBar:    cfg.Bar.TopBar,
 				}
-				_ = bar.Apply(runner, preset, &p, lc)
+				_ = bar.Apply(runner, selfBin, preset, &p, lc)
 			}
 		}
 		return barConfigSaveMsg{reqID: reqID}
@@ -132,6 +133,17 @@ func (t *BarTab) currentSection() barSection {
 }
 
 // ── Layout helpers ──
+
+// layoutHint is the one-line tradeoff note shown under the Layout selector, so
+// the cost/benefit of each layout is legible at the point of choice (plan 024).
+func layoutHint(layout string) string {
+	switch layout {
+	case "split":
+		return "split · two rows, top bar separated from the status row"
+	default: // two-line
+		return "two-line · stable two rows, no reflow (default)"
+	}
+}
 
 func (t *BarTab) layoutValue(field string) string {
 	// Defaults match config.DefaultConfig().

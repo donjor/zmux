@@ -2,10 +2,10 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/bar"
+	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
@@ -42,10 +42,7 @@ func runApply(app *apppkg.App, skipSource bool) error {
 		return fmt.Errorf("load palette: %w", err)
 	}
 
-	zmuxBin, err := os.Executable()
-	if err != nil {
-		zmuxBin = "zmux"
-	}
+	zmuxBin := config.SelfBin(app.Profile)
 
 	// Step 1: Regenerate tmux.conf at the active profile's conf path
 	// (~/.tmux.conf for zmux, ~/.zzmux.conf for the zzmux edge profile).
@@ -86,11 +83,13 @@ func runApply(app *apppkg.App, skipSource bool) error {
 		Indicator: cfg.Bar.Indicator,
 		TopBar:    cfg.Bar.TopBar,
 	}
-	_ = bar.Apply(app.Runner, preset, palette, layoutCfg)
+	_ = bar.Apply(app.Runner, zmuxBin, preset, palette, layoutCfg)
 
-	// Step 4b: Per-session status line count for two-line layouts.
-	if (cfg.Bar.Layout == "two-line" || cfg.Bar.Layout == "split") && zmuxBin != "" {
-		adjustBarStatusLines(app.Runner, app.WorkspaceStore, cfg.Bar.TopBar, zmuxBin)
+	// Step 4b: Reconcile per-session status lines to the configured layout, so
+	// existing sessions pick up the always-2-line wiring (and any stale
+	// per-session overrides are cleared) rather than only new ones (plan 024).
+	if zmuxBin != "" {
+		reconcileBarStatusLines(app.Runner, cfg.Bar.Layout, cfg.Bar.TopBar, zmuxBin)
 	}
 
 	// Step 5: Source conf for keybinding changes.

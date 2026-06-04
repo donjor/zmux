@@ -19,11 +19,32 @@ const (
 	ExitThemeNotFound = 5
 )
 
+// codedError carries an explicit exit code (and an already-formatted message),
+// bypassing the heuristic formatError/exitCodeForError mappings. A command that
+// has already printed its own output returns one with an empty msg so Run adds
+// nothing further. The guard command uses code 2 to signal a blocked command.
+type codedError struct {
+	code int
+	msg  string
+}
+
+func (e *codedError) Error() string {
+	if e.msg != "" {
+		return e.msg
+	}
+	return fmt.Sprintf("exit %d", e.code)
+}
+
 // formatError inspects err and returns a user-friendly message with
 // actionable suggestions where possible.
 func formatError(err error) string {
 	if err == nil {
 		return ""
+	}
+
+	var coded *codedError
+	if errors.As(err, &coded) {
+		return coded.msg
 	}
 
 	msg := err.Error()
@@ -74,6 +95,11 @@ func formatError(err error) string {
 func exitCodeForError(err error) int {
 	if err == nil {
 		return ExitOK
+	}
+
+	var coded *codedError
+	if errors.As(err, &coded) {
+		return coded.code
 	}
 
 	msg := err.Error()

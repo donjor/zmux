@@ -62,7 +62,10 @@ func (t *CurrentTab) renderWorkspaceRow(row *outline.Row, selected bool) string 
 	}
 
 	sessionCount := 1 + len(t.siblings)
-	meta := fmt.Sprintf("%d %s", sessionCount, pluralize("session", sessionCount))
+	// Banner meta anchors the rows below as "scoped to <workspace>" — the
+	// only signal that distinguishes session rows here from workspace rows
+	// elsewhere in the dashboard.
+	meta := fmt.Sprintf("%d %s in %s", sessionCount, pluralize("session", sessionCount), row.Label)
 	if row.Attached {
 		meta += " · attached"
 	}

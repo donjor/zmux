@@ -20,6 +20,15 @@ import (
 
 func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	switch {
+	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+		// Reaches the tab only when a committed filter is active (see
+		// CapturesEscape); clear it. A second Esc then closes the dashboard.
+		if t.filter.Value() != "" {
+			t.filter.SetValue("")
+			t.applyFilter()
+		}
+		return t, nil
+
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
 		if t.themeCursor > 0 {
 			t.themeCursor--

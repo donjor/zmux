@@ -195,16 +195,37 @@ func (c *Client) RenameSession(old, new string) error {
 // ListWindows lists all windows in a session.
 func (c *Client) ListWindows(session string) ([]Window, error) {
 	out, err := c.run("list-windows", "-t", session, "-F",
-		"#{window_index}\t#{window_name}\t#{window_active}\t#{pane_current_path}")
+		"#{window_index}\t#{window_name}\t#{window_active}\t#{pane_current_path}\t#{@zmux_label}")
 	if err != nil {
 		return nil, err
 	}
 	return parseWindows(out)
 }
 
-// NewWindow creates a new window in a session.
-func (c *Client) NewWindow(session, name, dir string) error {
-	return c.runSilent("new-window", "-t", session, "-n", name, "-c", dir)
+// WindowOpt configures NewWindow.
+type WindowOpt func(*windowOpts)
+
+type windowOpts struct{ detached bool }
+
+// Detached creates the window without switching the attached client to it
+// (tmux `new-window -d`), so background work never steals the user's focus.
+func Detached() WindowOpt { return func(o *windowOpts) { o.detached = true } }
+
+// NewWindow creates a new window in a session. An empty name omits `-n` so
+// tmux's automatic-rename can label the window from the running command.
+func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) error {
+	var o windowOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
+	args := []string{"new-window", "-t", session, "-c", dir}
+	if o.detached {
+		args = append(args, "-d")
+	}
+	if name != "" {
+		args = append(args, "-n", name)
+	}
+	return c.runSilent(args...)
 }
 
 // KillWindow kills a window by session and index.

@@ -48,7 +48,7 @@ func renderTopMinimal(p *theme.Palette, ctx BarContext) string {
 	fmt.Fprintf(&b, "#[fg=%s,bold] %s  ", p.FG.Hex(), ctx.Workspace)
 	for i, sess := range ctx.WorkspaceSessions {
 		if sess == ctx.Session {
-			fmt.Fprintf(&b, "#[fg=%s,bold]%s#[nobold]", p.FG.Hex(), sess)
+			fmt.Fprintf(&b, "#[fg=%s,bold]%s#[nobold]", p.FG.Hex(), topSessionLabel(ctx, sess))
 		} else {
 			fmt.Fprintf(&b, "#[fg=%s]%s", p.Dim.Hex(), sess)
 		}

@@ -84,6 +84,7 @@ func (t *ThemesTab) fetchData(reqID int64) tea.Cmd {
 func (t *ThemesTab) applyTheme(name string) tea.Cmd {
 	fs := t.fs
 	runner := t.runner
+	selfBin := t.selfBin
 	resolver := t.resolver
 	reqID := t.reqID
 	return func() tea.Msg {
@@ -111,7 +112,7 @@ func (t *ThemesTab) applyTheme(name string) tea.Cmd {
 					Indicator: cfg.Bar.Indicator,
 					TopBar:    cfg.Bar.TopBar,
 				}
-				_ = bar.Apply(runner, preset, &p, lc)
+				_ = bar.Apply(runner, selfBin, preset, &p, lc)
 				pal = &p
 				s := styles.NewStyles(&p)
 				sty = &s

@@ -99,7 +99,7 @@ func barListLive(app *apppkg.App, palette *theme.Palette, currentPreset string) 
 		fmt.Printf("%s%s", marker, p)
 
 		// Apply this preset to the live bar.
-		_ = bar.Apply(app.Runner, p, palette)
+		_ = bar.Apply(app.Runner, config.SelfBin(app.Profile), p, palette)
 
 		if p.String() == currentPreset {
 			fmt.Println("  (current)")
@@ -113,7 +113,7 @@ func barListLive(app *apppkg.App, palette *theme.Palette, currentPreset string) 
 
 	// Restore the current preset.
 	current, _ := bar.PresetFromString(currentPreset)
-	_ = bar.Apply(app.Runner, current, palette)
+	_ = bar.Apply(app.Runner, config.SelfBin(app.Profile), current, palette)
 
 	fmt.Printf("\n  Restored: %s\n", currentPreset)
 	fmt.Println("  Set with: zmux bar <preset>")
@@ -132,7 +132,7 @@ func barSet(app *apppkg.App, name string, palette *theme.Palette) error {
 
 	// Apply to tmux if server is running
 	if app.Runner.ServerRunning() {
-		if err := bar.Apply(app.Runner, preset, palette); err != nil {
+		if err := bar.Apply(app.Runner, config.SelfBin(app.Profile), preset, palette); err != nil {
 			return fmt.Errorf("apply bar: %w", err)
 		}
 	}

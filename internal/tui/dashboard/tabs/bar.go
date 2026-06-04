@@ -60,7 +60,7 @@ type barLayoutOption struct {
 }
 
 var barLayoutOptions = []barLayoutOption{
-	{"Layout", "layout", []string{"single", "two-line", "split"}},
+	{"Layout", "layout", []string{"two-line", "split"}},
 	{"Top bar", "top_bar", []string{"tabs", "dots", "minimal"}},
 	{"Indicator", "indicator", []string{"none", "numbers", "dots"}},
 }
@@ -87,6 +87,7 @@ type BarTab struct {
 	resolver *theme.Resolver
 	fs       config.FS
 	runner   tmux.Runner
+	selfBin  string // binary embedded in #(<bin> bar-render); config.SelfBin(profile)
 	styles   styles.Styles
 
 	presets    []bar.Preset
@@ -95,7 +96,7 @@ type BarTab struct {
 	segments   config.BarSegments
 
 	// Layout settings.
-	layout    string // "single", "two-line", "split"
+	layout    string // "two-line", "split"
 	topBar    string // "tabs", "dots", "minimal"
 	indicator string // "none", "numbers", "dots"
 
@@ -111,12 +112,14 @@ type BarTab struct {
 	width, height int
 }
 
-// NewBarTab creates a new bar tab.
-func NewBarTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, styles styles.Styles) *BarTab {
+// NewBarTab creates a new bar tab. selfBin is the binary embedded in the
+// generated bar's #(<bin> bar-render) content — pass config.SelfBin(profile).
+func NewBarTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, selfBin string, styles styles.Styles) *BarTab {
 	return &BarTab{
 		resolver: resolver,
 		fs:       fs,
 		runner:   runner,
+		selfBin:  selfBin,
 		styles:   styles,
 		presets:  bar.AllPresets(),
 	}
@@ -125,6 +128,10 @@ func NewBarTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, style
 func (t *BarTab) ID() dashboard.TabID { return dashboard.TabBar }
 func (t *BarTab) Title() string       { return "Bar" }
 func (t *BarTab) Init() tea.Cmd       { return nil }
+
+// CapturesEscape is always false — the Bar tab has no inline input mode, so
+// Esc closes the dashboard.
+func (t *BarTab) CapturesEscape() bool { return false }
 
 func (t *BarTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	t.reqID = dashboard.NextReqID()

@@ -31,7 +31,7 @@ type pickerConfirmTarget struct {
 type pickerState struct {
 	workspaceQuery string // filter text before the space separator
 	sessionQuery   string // filter text after the space separator
-	showEmpty      bool   // show workspaces with 0 live sessions?
+	showAll        bool   // expand the list past the default cap (reveal all workspaces)
 }
 
 // PickerResult holds the outcome of the picker interaction.
@@ -50,4 +50,5 @@ type PickerResult struct {
 // picker needs (e.g., for delete). Implemented by *workspace.Store.
 type WorkspaceMutator interface {
 	DeleteWorkspace(name string) error
+	RemoveSession(rootSession string) error
 }

@@ -91,7 +91,7 @@ func renderTopStarship(p *theme.Palette, ctx BarContext) string {
 	for i, sess := range ctx.WorkspaceSessions {
 		if sess == ctx.Session {
 			fmt.Fprintf(&b, "#[fg=%s,bold]%s #[fg=%s]❯#[fg=default,nobold] ",
-				p.Accent.Hex(), sess, p.Accent.Hex())
+				p.Accent.Hex(), topSessionLabel(ctx, sess), p.Accent.Hex())
 		} else {
 			fmt.Fprintf(&b, "#[fg=%s]%s ", p.Dim.Hex(), sess)
 		}

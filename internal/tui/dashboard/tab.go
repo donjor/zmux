@@ -69,6 +69,14 @@ type Tab interface {
 
 	// ShortHelp returns a compact help string for the footer.
 	ShortHelp() string
+
+	// CapturesEscape reports whether the tab is currently in a mode that owns
+	// the Escape key (an inline rename/create/search/edit input, a y/N
+	// confirm, etc.). When true, the dashboard routes Esc to the tab so it can
+	// cancel that mode instead of closing the whole popup. List/idle state
+	// returns false, so Esc falls through to the global "close dashboard"
+	// binding. Ctrl+C always closes regardless.
+	CapturesEscape() bool
 }
 
 // TargetedMsg is a message destined for a specific tab.

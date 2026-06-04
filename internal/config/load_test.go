@@ -190,6 +190,31 @@ ghostty_config = "/home/user/.config/ghostty/config"
 	}
 }
 
+// The bar is always two-line (plan 024): the removed "single" layout, an empty
+// value, and any unknown string must all normalize to two-line on load, so the
+// bar can never end up a single reflowing line. "split" is the only alternate.
+func TestLoad_LayoutNormalization(t *testing.T) {
+	cases := map[string]string{
+		`[bar]` + "\nlayout = 'single'\n":   "two-line",
+		`[bar]` + "\nlayout = 'one-line'\n": "two-line",
+		`[bar]` + "\npreset = 'minimal'\n":  "two-line", // layout omitted
+		`[bar]` + "\nlayout = 'two-line'\n": "two-line",
+		`[bar]` + "\nlayout = 'split'\n":    "split",
+	}
+	for toml, want := range cases {
+		fs := newMemFS("/home/testuser")
+		path := "/home/testuser/.zmux.toml"
+		fs.files[path] = []byte(toml)
+		cfg, err := Load(fs, path)
+		if err != nil {
+			t.Fatalf("Load(%q): %v", toml, err)
+		}
+		if cfg.Bar.Layout != want {
+			t.Errorf("Load(%q): layout = %q, want %q", toml, cfg.Bar.Layout, want)
+		}
+	}
+}
+
 func TestSave(t *testing.T) {
 	fs := newMemFS("/home/testuser")
 	path := "/home/testuser/.zmux.toml"

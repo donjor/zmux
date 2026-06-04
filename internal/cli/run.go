@@ -10,6 +10,7 @@ import (
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
+	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
@@ -95,32 +96,59 @@ Examples:
 			}
 			sendCmd := fmt.Sprintf("bash %s", scriptPath)
 
-			target := fmt.Sprintf("%s:%s", sessionName, name)
-
-			// Check if tab already exists.
-			windows, err := app.Runner.ListWindows(sessionName)
-			if err == nil {
-				for _, w := range windows {
-					if w.Name == name {
-						if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
-							return fmt.Errorf("send to %s: %w", target, err)
-						}
-						fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
-						if shouldWait {
-							return waitForSentinel(app, target, runTimeout, runFollowLines)
-						}
-						if runFollow {
-							return followOutput(app, target, runFollowLines)
-						}
-						return nil
-					}
+			// Find an existing tab to reuse. findWindow matches the stable
+			// @zmux_label overlay before the live window name — tmux's
+			// automatic-rename retitles a window to its running process
+			// (e.g. `server` → `node`), which silently defeated name-only
+			// matching and made the old code spawn a duplicate tab.
+			if reuse := findWindow(app, sessionName, name); reuse != nil {
+				// Target by index, not name: an auto-renamed window no longer
+				// resolves as session:name.
+				target := fmt.Sprintf("%s:%d", sessionName, reuse.Index)
+				// Backfill the stable label on a tab we matched by live name
+				// but that carries no label yet (manual / pre-fix tabs). Without
+				// this it would heal only on create — so the first restart after
+				// auto-rename would miss again. Never clobber an existing label.
+				if runWindowName != "" && reuse.Label == "" {
+					labelTab(app, target, name)
 				}
+				if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
+					return fmt.Errorf("send to %s: %w", target, err)
+				}
+				fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
+				if shouldWait {
+					return waitForSentinel(app, target, runTimeout, runFollowLines)
+				}
+				if runFollow {
+					return followOutput(app, target, runFollowLines)
+				}
+				return nil
 			}
 
-			// Create new tab and run command.
+			// No existing tab — create one. Surface this when a name was
+			// explicitly requested so the operator notices a fresh tab rather
+			// than a silent duplicate.
+			if runWindowName != "" {
+				fmt.Fprintf(os.Stderr, "no tab %q in %s — creating\n", name, sessionName)
+			}
+
 			dir, _ := os.Getwd()
-			if err := app.Runner.NewWindow(sessionName, name, dir); err != nil {
+			var newOpts []tmux.WindowOpt
+			if runDetach {
+				// Don't yank the user's focus to a fire-and-forget tab.
+				newOpts = append(newOpts, tmux.Detached())
+			}
+			if err := app.Runner.NewWindow(sessionName, name, dir, newOpts...); err != nil {
 				return fmt.Errorf("create tab: %w", err)
+			}
+
+			target := fmt.Sprintf("%s:%s", sessionName, name)
+
+			// Tag explicitly-named tabs with the stable label so a later
+			// `run -n <name>` reuses this window even after auto-rename. Set
+			// before the command runs, while the window name still matches.
+			if runWindowName != "" {
+				labelTab(app, target, name)
 			}
 
 			if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {

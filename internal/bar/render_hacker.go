@@ -80,7 +80,7 @@ func renderTopHacker(p *theme.Palette, ctx BarContext) string {
 			fmt.Fprintf(&b, "#[fg=%s]>", d)
 		}
 		if sess == ctx.Session {
-			fmt.Fprintf(&b, "#[fg=%s,bold]%d:%s#[nobold]", g, i+1, sess)
+			fmt.Fprintf(&b, "#[fg=%s,bold]%d:%s#[nobold]", g, i+1, topSessionLabel(ctx, sess))
 		} else {
 			fmt.Fprintf(&b, "#[fg=%s]%d:%s", d, i+1, sess)
 		}

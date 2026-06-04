@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	apppkg "github.com/donjor/zmux/internal/app"
+	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/theme"
@@ -23,6 +24,7 @@ import (
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/tabpicker"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
+	"github.com/donjor/zmux/internal/tui/wspicker"
 )
 
 // resolveDashboardTab maps the --dashboard-tab flag value to a TabID. It
@@ -44,11 +46,8 @@ func resolveDashboardTab(flag string) dashboard.TabID {
 }
 
 func launchDashboardPopup(app *apppkg.App) error {
-	// Find our own binary path.
-	zmuxBin, err := os.Executable()
-	if err != nil {
-		zmuxBin = "zmux"
-	}
+	// Find our own binary path (profile-correct; never a hardcoded "zmux").
+	zmuxBin := config.SelfBin(app.Profile)
 	// Pass as single shell command string — tmux display-popup -E expects this.
 	return app.Runner.DisplayPopup("-w80%", "-h80%", "-E", zmuxBin+" --dashboard")
 }
@@ -87,22 +86,21 @@ func runNewDashboard(app *apppkg.App, dashboardTabFlag string) error {
 		Resolver: resolver,
 	}
 
-	// Shared workspace data loader for Session and Workspaces tabs.
+	// Shared workspace data loader for Session and Workspaces tabs. The
+	// dashboard does not reconcile here — it refreshes via its own fetch cycle.
 	wsLoader := func() []workspaceview.WorkspaceViewModel {
-		workspaces, err := app.WorkspaceStore.ListWorkspaces()
-		if err != nil {
-			return nil
-		}
-		sessions, _ := session.ListSessions(app.Runner)
-		return workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
+		return loadWorkspaceView(app, workspaceViewOptions{})
 	}
 
 	// Build tabs (order: Session, Workspaces, Themes, Bar, Settings, Help).
+	// selfBin is the active profile's binary, embedded in the bar's
+	// #(<bin> bar-render) when the Themes/Bar tabs hot-reload the live bar.
+	selfBin := config.SelfBin(app.Profile)
 	tabImpls := []dashboard.Tab{
 		tabs.NewCurrentTab(app.Runner, styles, wsLoader, app.WorkspaceStore),
 		tabs.NewSessionsTab(app.Runner, styles, wsLoader, app.WorkspaceStore, app.Overmind),
-		tabs.NewThemesTab(resolver, app.FS, app.Runner, styles),
-		tabs.NewBarTab(resolver, app.FS, app.Runner, styles),
+		tabs.NewThemesTab(resolver, app.FS, app.Runner, selfBin, styles),
+		tabs.NewBarTab(resolver, app.FS, app.Runner, selfBin, styles),
 		tabs.NewSettingsTab(resolver, app.FS, app.Runner, styles),
 		tabs.NewHelpTab(styles),
 	}
@@ -145,7 +143,7 @@ func runPalette(app *apppkg.App) error {
 	}
 
 	// Execute the chosen action.
-	executor := palette.NewExecutor(app.Runner, app.FS, app.Overmind)
+	executor := palette.NewExecutor(app.Runner, app.FS, app.Overmind, app.WorkspaceStore)
 	post := executor.Run(*pm.Chosen)
 
 	switch post.Kind {
@@ -154,10 +152,7 @@ func runPalette(app *apppkg.App) error {
 
 	case palette.PostOpenDashboard:
 		// Re-launch as dashboard popup with the specified tab.
-		zmuxBin, binErr := os.Executable()
-		if binErr != nil {
-			zmuxBin = "zmux"
-		}
+		zmuxBin := config.SelfBin(app.Profile)
 		return app.Runner.DisplayPopup(
 			"-w80%", "-h80%", "-E",
 			zmuxBin+" --dashboard --dashboard-tab="+post.Tab,
@@ -174,15 +169,36 @@ func runPalette(app *apppkg.App) error {
 }
 
 func runTabPicker(app *apppkg.App) error {
-	// Get current session name.
+	// Current session name (root — clone suffixes stripped).
 	sessionName, err := app.Runner.DisplayMessage("", "#{session_name}")
 	if err != nil {
 		return fmt.Errorf("not inside a tmux session")
 	}
-	sessionName = session.RootName(sessionName)
+	sessionName = session.RootName(strings.TrimSpace(sessionName))
+
+	// Resolve the workspace + its live sessions. The switcher is scoped to
+	// the current workspace; if the session isn't claimed by one we fall
+	// back to a single-session list so the tab ops still work.
+	wsName := sessionName
+	var infos []session.SessionInfo
+	if app.WorkspaceStore != nil {
+		if name, ok := app.WorkspaceStore.WorkspaceFor(sessionName); ok {
+			wsName = name
+		}
+	}
+	for _, vm := range loadWorkspaceView(app, workspaceViewOptions{}) {
+		if vm.Name == wsName {
+			infos = vm.LiveSessions
+			break
+		}
+	}
+	if len(infos) == 0 {
+		// Not in a tracked workspace (or none live): just the current one.
+		infos = []session.SessionInfo{{Name: sessionName, Attached: true}}
+	}
 
 	styles, _, _ := loadActiveStyles(app)
-	model := tabpicker.NewTabPickerModel(app.Runner, sessionName, styles)
+	model := tabpicker.NewTabPickerModel(app.Runner, wsName, sessionName, infos, styles)
 
 	p := tea.NewProgram(model)
 	result, err := p.Run()
@@ -196,22 +212,66 @@ func runTabPicker(app *apppkg.App) error {
 	}
 
 	res := tp.Result
+	target := res.Session
+	if target == "" {
+		target = sessionName
+	}
 	switch res.Action {
+	case "switch":
+		return session.Switch(app.Runner, target)
 	case "select":
-		return app.Runner.SelectWindow(sessionName, res.Index)
+		// Switch to the owning session first if it isn't the current one,
+		// then select the window there.
+		if session.RootName(target) != sessionName {
+			if err := session.Switch(app.Runner, target); err != nil {
+				return err
+			}
+		}
+		return app.Runner.SelectWindow(target, res.Index)
 	case "new":
 		dir, _ := os.Getwd()
-		return app.Runner.NewWindow(sessionName, res.Name, dir)
+		return app.Runner.NewWindow(target, res.Name, dir)
 	case "rename":
 		old := fmt.Sprintf("%d", res.Index)
-		return app.Runner.RenameWindow(sessionName, old, res.Name)
+		return app.Runner.RenameWindow(target, old, res.Name)
 	case "close":
-		return app.Runner.KillWindow(sessionName, res.Index)
+		return app.Runner.KillWindow(target, res.Index)
 	case "swap":
-		return app.Runner.SwapWindow(sessionName, res.Index, res.Index+res.Delta)
+		return app.Runner.SwapWindow(target, res.Index, res.Index+res.Delta)
 	}
 
 	return nil
+}
+
+func runWorkspacePicker(app *apppkg.App) error {
+	styles, _, _ := loadActiveStyles(app)
+
+	loader := func() []workspaceview.WorkspaceViewModel {
+		return loadWorkspaceView(app, workspaceViewOptions{Reconcile: true, HidePseudo: true})
+	}
+
+	model := wspicker.NewModel(loader, styles)
+	p := tea.NewProgram(model)
+	result, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("workspace picker: %w", err)
+	}
+
+	wp, ok := result.(wspicker.Model)
+	if !ok || wp.Result.Action != "switch" {
+		return nil
+	}
+
+	ws, err := app.WorkspaceStore.GetWorkspace(wp.Result.Workspace)
+	if err != nil || ws == nil {
+		return fmt.Errorf("workspace %q not found", wp.Result.Workspace)
+	}
+	target := resolveLastActive(app, ws)
+	if target == "" {
+		return fmt.Errorf("workspace %q has no live sessions", wp.Result.Workspace)
+	}
+	_ = app.WorkspaceStore.SetLastActive(wp.Result.Workspace, target)
+	return session.Attach(app.Runner, target)
 }
 
 // handleDashboardResult applies the action chosen from inside the dashboard

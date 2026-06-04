@@ -130,9 +130,14 @@ func (m *MockRunner) ListWindows(session string) ([]Window, error) {
 	return m.Windows[session], m.Err
 }
 
-// NewWindow records the call.
-func (m *MockRunner) NewWindow(session, name, dir string) error {
-	m.record("NewWindow", session, name, dir)
+// NewWindow records the call. The recorded args include detached=<bool> so
+// tests can assert focus-safe creation.
+func (m *MockRunner) NewWindow(session, name, dir string, opts ...WindowOpt) error {
+	var o windowOpts
+	for _, fn := range opts {
+		fn(&o)
+	}
+	m.record("NewWindow", session, name, dir, fmt.Sprintf("detached=%v", o.detached))
 	return m.Err
 }
 

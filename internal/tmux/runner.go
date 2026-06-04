@@ -41,7 +41,7 @@ type Runner interface {
 
 	// Windows
 	ListWindows(session string) ([]Window, error)
-	NewWindow(session, name, dir string) error
+	NewWindow(session, name, dir string, opts ...WindowOpt) error
 	KillWindow(session string, index int) error
 	RenameWindow(session, old, new string) error
 	SelectWindow(session string, index int) error

@@ -42,11 +42,7 @@ Checks workspace names first, then session names.
 				return fmt.Errorf("%q is not a workspace or session", name)
 			}
 
-			if err := session.Kill(app.Runner, name); err != nil {
-				return err
-			}
-			_ = app.WorkspaceStore.RemoveSession(session.RootName(name))
-			return nil
+			return workspace.KillSession(app.Runner, app.WorkspaceStore, name)
 		},
 	}
 }

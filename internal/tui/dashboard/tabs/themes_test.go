@@ -48,7 +48,7 @@ func newTestThemesTab(t *testing.T) (*ThemesTab, *tmux.MockRunner, *sessionsMemF
 	// Resolver with no user/iterm2 dirs — returns bundled themes only.
 	resolver := theme.NewResolver(fs, "", "")
 
-	tab := NewThemesTab(resolver, fs, mock, styles.DefaultStyles())
+	tab := NewThemesTab(resolver, fs, mock, "zmux", styles.DefaultStyles())
 	tab.Resize(120, 40)
 	return tab, mock, fs
 }
@@ -211,6 +211,44 @@ func TestThemesFilterMode(t *testing.T) {
 	}
 	if len(tab.filtered) != originalCount {
 		t.Errorf("after esc clear: filtered = %d, want %d", len(tab.filtered), originalCount)
+	}
+}
+
+// TestThemesCommittedFilterEscClears guards the modal-esc routing contract:
+// Enter commits a filter (stays in list mode, value retained); in that state
+// CapturesEscape must be true so the dashboard routes Esc here to clear the
+// committed filter — matching the "esc to clear" hint the list view shows.
+func TestThemesCommittedFilterEscClears(t *testing.T) {
+	tab, _, _ := newTestThemesTab(t)
+	tab = activateTheme(t, tab)
+	originalCount := len(tab.filtered)
+
+	// Filter, then commit with Enter (filter persists in list mode).
+	tab, _ = sendThemesKey(tab, "/")
+	for _, r := range "ayu" {
+		tab, _ = sendThemesKey(tab, string(r))
+	}
+	tab, _ = sendThemesKey(tab, "enter")
+	if tab.mode != themesModeList {
+		t.Fatalf("after enter: mode = %v, want List", tab.mode)
+	}
+	if tab.filter.Value() == "" {
+		t.Fatal("expected committed filter value retained after enter")
+	}
+	if !tab.CapturesEscape() {
+		t.Error("expected CapturesEscape true with a committed filter in list mode")
+	}
+
+	// Esc in list mode clears the committed filter.
+	tab, _ = sendThemesKey(tab, "esc")
+	if tab.filter.Value() != "" {
+		t.Errorf("expected committed filter cleared by esc, got %q", tab.filter.Value())
+	}
+	if len(tab.filtered) != originalCount {
+		t.Errorf("after esc clear: filtered = %d, want %d", len(tab.filtered), originalCount)
+	}
+	if tab.CapturesEscape() {
+		t.Error("expected CapturesEscape false after filter cleared (esc would now quit)")
 	}
 }
 

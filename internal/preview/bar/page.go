@@ -164,10 +164,14 @@ func (p *Page) Render(ctx preview.RenderContext) string {
 		// Top row: depends on variant.
 		topRow := renderTopRow(variant, preset, palette, sessionNames, currentName, frameWidth)
 
-		// Bottom row: session bar (no workspace, with indicator).
+		// Bottom row: aux-only — the top row owns identity in two-line mode
+		// (plan 024), so flag TopRowActive so the preview matches live render.
 		noWS := segments
 		noWS.Workspace = false
-		bottomRow := bar.RenderBarPreviewOverride(preset, palette, noWS, frameWidth, barOverride)
+		bottomRow := bar.RenderBarPreviewOverride(preset, palette, noWS, frameWidth, func(bctx *bar.BarContext) {
+			bctx.TopRowActive = true
+			barOverride(bctx)
+		})
 
 		if layout == draft.LayoutSplit {
 			return header + "\n\n" +

@@ -1,11 +1,19 @@
 package bar
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/keys"
 )
+
+var tmuxStyleRE = regexp.MustCompile(`#\[[^\]]*\]`)
+
+// stripTmuxStyles removes tmux #[...] style directives so tests can assert
+// against the visible payload.
+func stripTmuxStyles(s string) string { return tmuxStyleRE.ReplaceAllString(s, "") }
 
 func TestRenderPreviewContainsANSI(t *testing.T) {
 	p := *testPalette()
@@ -45,6 +53,27 @@ func TestDefaultPrefixHintsIncludeRename(t *testing.T) {
 	for _, want := range []string{"dash", "etach", "tab", "session", "rename", "close", "help"} {
 		if !strings.Contains(hints, want) {
 			t.Errorf("prefix hints should include %q, got %q", want, hints)
+		}
+	}
+}
+
+// TestPrefixHintsMatchRegistry ensures the hint surface stays glued to the
+// keys registry. Regression for the historical bug where the hint said
+// ".rename" but "." was bound to label-tab — the real rename key is ",".
+func TestPrefixHintsMatchRegistry(t *testing.T) {
+	hints := stripTmuxStyles(prefixHints(testPalette()))
+	cases := []struct{ key, label string }{
+		{keys.RenameSession.Key, "rename"},
+		{keys.LabelTab.Key, "label"},
+		{keys.NewTab.Key, "tab"},
+		{keys.NewSession.Key, "session"},
+		{keys.TabKill.Key, "close"},
+		{keys.Help.Key, "help"},
+	}
+	for _, c := range cases {
+		want := c.key + c.label
+		if !strings.Contains(hints, want) {
+			t.Errorf("prefix hints should contain %q (key+label), got %q", want, hints)
 		}
 	}
 }

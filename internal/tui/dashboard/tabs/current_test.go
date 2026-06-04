@@ -365,6 +365,39 @@ func TestCurrentTabRenameWorkspaceJumpsToNewID(t *testing.T) {
 	}
 }
 
+// Renaming a workspace to a name that already exists must surface an
+// error flash instead of silently no-op'ing. Regression for the "rename
+// feels fragile" report.
+func TestCurrentTabRenameWorkspaceConflictFlashesError(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	idx := findCurrentRowByID(tab, outline.WorkspaceID("dev"))
+	tab.tree.Cursor = idx
+
+	tab, _ = sendCurrentKey(tab, "r")
+	if tab.mode != currentModeRename {
+		t.Fatalf("expected rename mode, got %d", tab.mode)
+	}
+	tab.renameInput.SetValue("api") // already exists
+
+	_, cmd := sendCurrentKey(tab, "enter")
+	if cmd == nil {
+		t.Fatal("expected a command from the rename")
+	}
+	msg := cmd()
+	intent, ok := msg.(dashboard.SetStatusIntent)
+	if !ok {
+		t.Fatalf("expected SetStatusIntent, got %T (%+v)", msg, msg)
+	}
+	if !intent.IsError {
+		t.Error("expected error flash for name conflict")
+	}
+	if !strings.Contains(intent.Text, "rename workspace failed") {
+		t.Errorf("expected 'rename workspace failed' in flash, got %q", intent.Text)
+	}
+}
+
 func TestCurrentTabRenameCancel(t *testing.T) {
 	tab, _, _ := newTestCurrentTab(t)
 	tab = simulateCurrentActivate(tab)
@@ -431,6 +464,108 @@ func TestCurrentTabKillWorkspaceDoubleConfirm(t *testing.T) {
 	}
 	if ws, _ := store.GetWorkspace("dev"); ws != nil {
 		t.Error("expected dev workspace to be deleted")
+	}
+}
+
+// Killing the currently-attached session must switch the client to a
+// sibling first; otherwise tmux drops the client and the dashboard popup
+// dies mid-action.
+func TestCurrentTabKillCurrentSessionSwitchesToSibling(t *testing.T) {
+	tab, mock, store := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	idx := findCurrentRowByID(tab, outline.SessionID("dev"))
+	if idx < 0 {
+		t.Fatalf("dev session row not found")
+	}
+	tab.tree.Cursor = idx
+
+	tab, _ = sendCurrentKey(tab, "x")
+	if tab.confirm == nil || tab.confirm.kind != "session" || tab.confirm.name != "dev" {
+		t.Fatalf("expected session confirm for dev, got %+v", tab.confirm)
+	}
+	tab, cmd := sendCurrentKey(tab, "y")
+	_ = runCurrentMutationCmd(tab, cmd)
+
+	switchedFirst, killed := false, false
+	for _, c := range mock.Calls {
+		if c.Method == "SwitchClient" && len(c.Args) > 0 && c.Args[0] == "dev-2" && !killed {
+			switchedFirst = true
+		}
+		if c.Method == "KillSession" && len(c.Args) > 0 && c.Args[0] == "dev" {
+			killed = true
+		}
+	}
+	if !switchedFirst {
+		t.Errorf("expected SwitchClient(dev-2) before KillSession(dev), calls: %v", mock.Calls)
+	}
+	if !killed {
+		t.Errorf("expected KillSession(dev), calls: %v", mock.Calls)
+	}
+
+	ws, _ := store.GetWorkspace("dev")
+	if ws == nil || ws.LastActiveSession != "dev-2" {
+		got := ""
+		if ws != nil {
+			got = ws.LastActiveSession
+		}
+		t.Errorf("expected last-active=dev-2 after fallback switch, got %q", got)
+	}
+}
+
+// Killing a sibling (non-current) session must not switch the client.
+func TestCurrentTabKillSiblingSessionDoesNotSwitch(t *testing.T) {
+	tab, mock, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	idx := findCurrentRowByID(tab, outline.SessionID("dev-2"))
+	if idx < 0 {
+		t.Fatalf("dev-2 sibling session row not found")
+	}
+	tab.tree.Cursor = idx
+
+	tab, _ = sendCurrentKey(tab, "x")
+	tab, cmd := sendCurrentKey(tab, "y")
+	_ = runCurrentMutationCmd(tab, cmd)
+
+	if currentMockCalled(mock, "SwitchClient") {
+		t.Error("sibling kill should not switch the client")
+	}
+	if !currentMockCalled(mock, "KillSession") {
+		t.Error("expected KillSession to be called")
+	}
+}
+
+// A current session with no siblings cannot be killed from the dashboard —
+// it would drop the client. Expect a status flash and no KillSession.
+func TestCurrentTabKillOnlySessionBlocked(t *testing.T) {
+	tab, mock, _ := newTestCurrentTab(t)
+	// Strip dev-2 so dev is the only session in the workspace.
+	tab.siblings = nil
+	tab.wsName = "dev"
+	tab.sessionName = "dev"
+
+	tab.confirm = &confirmState{kind: "session", name: "dev"}
+	tab.mode = currentModeConfirmKill
+
+	_, cmd := sendCurrentKey(tab, "y")
+	if cmd == nil {
+		t.Fatal("expected a command from the confirm")
+	}
+	msg := cmd()
+
+	intent, ok := msg.(dashboard.SetStatusIntent)
+	if !ok {
+		t.Fatalf("expected SetStatusIntent flash, got %T", msg)
+	}
+	if !intent.IsError {
+		t.Error("expected error flash")
+	}
+	if !strings.Contains(intent.Text, "only session") {
+		t.Errorf("expected 'only session' in flash, got %q", intent.Text)
+	}
+	if currentMockCalled(mock, "KillSession") {
+		t.Error("only-session kill must not call KillSession")
 	}
 }
 

@@ -174,6 +174,11 @@ func (t *CurrentTab) ID() dashboard.TabID { return dashboard.TabSession }
 func (t *CurrentTab) Title() string       { return "Session & Workspace" }
 func (t *CurrentTab) Init() tea.Cmd       { return nil }
 
+// CapturesEscape reports that Esc should cancel the active mode (inline
+// rename/create, move-window picker, y/N confirm) rather than close the
+// dashboard.
+func (t *CurrentTab) CapturesEscape() bool { return t.mode != currentModeList }
+
 func (t *CurrentTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	// Fresh activation always starts at session level so session-hopping
 	// is one keystroke away. Callers that re-enter window level do so
