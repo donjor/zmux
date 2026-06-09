@@ -75,7 +75,7 @@ func (m WizardModel) writeConfig() tea.Msg {
 	dirs := []string{
 		m.profile.StateDir,
 		m.profile.ThemesDir,
-		m.profile.TemplatesDir,
+		m.profile.RecipesDir,
 	}
 	for _, dir := range dirs {
 		if err := m.fs.MkdirAll(dir, 0o755); err != nil {
@@ -93,8 +93,8 @@ func (m WizardModel) writeConfig() tea.Msg {
 		Sessions: config.SessionsConfig{
 			AutoCleanupTmp: true,
 		},
-		Templates: config.TemplatesConfig{
-			Paths: []string{m.profile.TemplatesDir},
+		Recipes: config.RecipesConfig{
+			Paths: []string{m.profile.RecipesDir},
 		},
 		Sync: config.SyncConfig{
 			Target:        m.chosenSync,

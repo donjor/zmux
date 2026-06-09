@@ -39,12 +39,36 @@ func TopBarFormatCmd(zmuxBin, topBar string) string {
 	return fmt.Sprintf("#(%s bar-render top --top-bar '%s' %s)", zmuxBin, topBar, barRenderArgs)
 }
 
+// Status-format sections (tmux 3.4 default, carved up so the window-list
+// middle can be swapped for the dynamic logical tabs row while status-left
+// and status-right keep their native rendering).
+const (
+	statusFmtLeftSection  = `#[align=left range=left #{E:status-left-style}]#[push-default]#{T;=/#{status-left-length}:status-left}#[pop-default]#[norange default]`
+	statusFmtWindowList   = `#[list=on align=#{status-justify}]#[list=left-marker]<#[list=right-marker]>#[list=on]#{W:#[range=window|#{window_index} #{E:window-status-style}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-format}#[pop-default]#[norange default]#{?window_end_flag,,#{window-status-separator}},#[range=window|#{window_index} list=focus #{?#{!=:#{E:window-status-current-style},default},#{E:window-status-current-style},#{E:window-status-style}}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-current-format}#[pop-default]#[norange list=on default]#{?window_end_flag,,#{window-status-separator}}}`
+	statusFmtRightSection = `#[nolist align=right range=right #{E:status-right-style}]#[push-default]#{T;=/#{status-right-length}:status-right}#[pop-default]#[norange default]`
+)
+
 // TmuxDefaultStatusFormat is the standard tmux status-format[0] template
 // that renders status-left, window tabs, and status-right. Used as
 // status-format[1] in two-line layouts (so the normal bar renders on the
-// bottom line) and as the one-line fallback for the defensive non-two-line
-// reconcile path. Matches the tmux 3.4 default.
-const TmuxDefaultStatusFormat = `#[align=left range=left #{E:status-left-style}]#[push-default]#{T;=/#{status-left-length}:status-left}#[pop-default]#[norange default]#[list=on align=#{status-justify}]#[list=left-marker]<#[list=right-marker]>#[list=on]#{W:#[range=window|#{window_index} #{E:window-status-style}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-format}#[pop-default]#[norange default]#{?window_end_flag,,#{window-status-separator}},#[range=window|#{window_index} list=focus #{?#{!=:#{E:window-status-current-style},default},#{E:window-status-current-style},#{E:window-status-style}}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-current-format}#[pop-default]#[norange list=on default]#{?window_end_flag,,#{window-status-separator}}}#[nolist align=right range=right #{E:status-right-style}]#[push-default]#{T;=/#{status-right-length}:status-right}#[pop-default]#[norange default]`
+// bottom line) and as the binary-less fallback for the logical tabs row.
+// Matches the tmux 3.4 default.
+const TmuxDefaultStatusFormat = statusFmtLeftSection + statusFmtWindowList + statusFmtRightSection
+
+// TabsRowStatusFormat is TmuxDefaultStatusFormat with the native window list
+// swapped for the dynamic logical tabs row (`bar-render tabs`): pane-of tabs
+// ride their host cell, docked tabs group dim at the end, state glyphs come
+// from pane-canonical state. status-left/right keep native rendering. The
+// native window list is the fallback when no zmux binary is available.
+//
+// No #[range=window|N] click targets in the dynamic row (directive support
+// inside #() output is unverified for ranges) — window switching stays on
+// keys/tabpicker.
+func TabsRowStatusFormat(zmuxBin string) string {
+	return statusFmtLeftSection +
+		fmt.Sprintf(`#[list=on align=#{status-justify}]#(%s bar-render tabs --session '#S' --prefix '#{client_prefix}' --group '#{session_group}')`, zmuxBin) +
+		statusFmtRightSection
+}
 
 // Generate produces the tmux status-line options for a given preset and palette.
 // If zmuxBin is provided, uses #(zmux bar-render) for dynamic left/right content
@@ -78,7 +102,9 @@ func GenerateWithLayout(preset Preset, palette *theme.Palette, layout BarLayoutC
 		}
 	}
 
-	return withTabLabelFormats(opts, palette)
+	// State first (targets the single raw #W), labels second (#W → label
+	// conditional, which itself contains #W tokens) — see withTabStateFormats.
+	return withTabLabelFormats(withTabStateFormats(opts, palette, bin), palette)
 }
 
 func withTabLabelFormats(opts []TmuxOption, palette *theme.Palette) []TmuxOption {
@@ -244,14 +270,14 @@ func dynamicOptions(p *theme.Palette, zmuxBin string, preset Preset, layout BarL
 			opts,
 			TmuxOption{"status", "2"},
 			TmuxOption{"status-format[0]", TopBarFormatCmd(zmuxBin, layout.TopBar)},
-			TmuxOption{"status-format[1]", TmuxDefaultStatusFormat},
+			TmuxOption{"status-format[1]", TabsRowStatusFormat(zmuxBin)},
 		)
 	} else if zmuxBin != "" {
 		// Single layout: restore in case we're switching from two-line.
 		opts = append(
 			opts,
 			TmuxOption{"status", "on"},
-			TmuxOption{"status-format[0]", TmuxDefaultStatusFormat},
+			TmuxOption{"status-format[0]", TabsRowStatusFormat(zmuxBin)},
 		)
 	}
 

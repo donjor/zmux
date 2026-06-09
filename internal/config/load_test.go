@@ -77,8 +77,8 @@ preset = "minimal"
 auto_cleanup_tmp = false
 default_shell = "/bin/zsh"
 
-[templates]
-paths = ["/custom/templates"]
+[recipes]
+paths = ["/custom/recipes"]
 
 [sync]
 target = "ghostty"
@@ -100,8 +100,8 @@ ghostty_config = "/home/user/.config/ghostty/config"
 				if cfg.Sessions.DefaultShell != "/bin/zsh" {
 					t.Errorf("Sessions.DefaultShell = %q, want %q", cfg.Sessions.DefaultShell, "/bin/zsh")
 				}
-				if len(cfg.Templates.Paths) != 1 || cfg.Templates.Paths[0] != "/custom/templates" {
-					t.Errorf("Templates.Paths = %v, want [/custom/templates]", cfg.Templates.Paths)
+				if len(cfg.Recipes.Paths) != 1 || cfg.Recipes.Paths[0] != "/custom/recipes" {
+					t.Errorf("Recipes.Paths = %v, want [/custom/recipes]", cfg.Recipes.Paths)
 				}
 				if cfg.Sync.Target != "ghostty" {
 					t.Errorf("Sync.Target = %q, want %q", cfg.Sync.Target, "ghostty")
@@ -130,8 +130,8 @@ ghostty_config = "/home/user/.config/ghostty/config"
 				if cfg.Sync.GhosttyConfig != "auto" {
 					t.Errorf("Sync.GhosttyConfig = %q, want default %q", cfg.Sync.GhosttyConfig, "auto")
 				}
-				if len(cfg.Templates.Paths) != 1 || cfg.Templates.Paths[0] != "~/.zmux/templates" {
-					t.Errorf("Templates.Paths = %v, want default", cfg.Templates.Paths)
+				if len(cfg.Recipes.Paths) != 1 || cfg.Recipes.Paths[0] != "~/.zmux/recipes" {
+					t.Errorf("Recipes.Paths = %v, want default", cfg.Recipes.Paths)
 				}
 			},
 		},
@@ -337,5 +337,8 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.Sync.GhosttyConfig != "auto" {
 		t.Errorf("default Sync.GhosttyConfig = %q, want %q", cfg.Sync.GhosttyConfig, "auto")
+	}
+	if len(cfg.Recipes.Paths) != 1 || cfg.Recipes.Paths[0] != "~/.zmux/recipes" {
+		t.Errorf("default Recipes.Paths = %v, want ~/.zmux/recipes", cfg.Recipes.Paths)
 	}
 }

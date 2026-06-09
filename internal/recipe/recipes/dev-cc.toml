@@ -1,0 +1,7 @@
+name = "dev-cc"
+description = "Project workspace with Claude Code in the first tab"
+extends = "dev"
+
+[[tabs]]
+name = "bash"
+command = "claude"

@@ -43,7 +43,7 @@ func newScratchExtractCmd(app *apppkg.App) *cobra.Command {
 				dir = os.Getenv("HOME")
 			}
 
-			if err := app.Runner.NewWindow(session, "", dir); err != nil {
+			if _, err := app.Runner.NewWindow(session, "", dir); err != nil {
 				return fmt.Errorf("create tab in %s: %w", session, err)
 			}
 

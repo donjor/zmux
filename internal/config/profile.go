@@ -18,7 +18,7 @@ type Profile struct {
 	ConfFile     string // generated tmux conf: ~/.tmux.conf | ~/.zzmux.conf
 	StateDir     string // ~/.zmux | ~/.zzmux
 	ThemesDir    string // <StateDir>/themes
-	TemplatesDir string // <StateDir>/templates
+	RecipesDir   string // <StateDir>/recipes
 	SnapshotsDir string // <StateDir>/snapshots
 	DebugLog     string // <StateDir>/debug.log
 }
@@ -46,7 +46,7 @@ func profileFor(home, name, socket, stateName, cfgName, confName string) Profile
 		ConfFile:     filepath.Join(home, confName),
 		StateDir:     dir,
 		ThemesDir:    filepath.Join(dir, "themes"),
-		TemplatesDir: filepath.Join(dir, "templates"),
+		RecipesDir:   filepath.Join(dir, "recipes"),
 		SnapshotsDir: filepath.Join(dir, "snapshots"),
 		DebugLog:     filepath.Join(dir, "debug.log"),
 	}

@@ -21,7 +21,7 @@ func newInitCmd(app *apppkg.App, version string) *cobra.Command {
   - Detects available sync targets (ghostty, nvim)
   - Lets you pick a theme and status bar preset
   - Writes ~/.zmux.toml and ~/.tmux.conf
-  - Creates user directories (~/.zmux/themes/, ~/.zmux/templates/)
+  - Creates user directories (~/.zmux/themes/, ~/.zmux/recipes/)
 
 Run this once to get started with zmux.`,
 		RunE: func(cmd *cobra.Command, args []string) error {

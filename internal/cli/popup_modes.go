@@ -14,8 +14,10 @@ import (
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/debug"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
+	tabspkg "github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
@@ -211,7 +213,13 @@ func runTabPicker(app *apppkg.App) error {
 		return nil
 	}
 
-	res := tp.Result
+	return applyTabPickerResult(app, sessionName, tp.Result)
+}
+
+// applyTabPickerResult executes the picker's chosen action against tmux.
+// Split out of runTabPicker so the action→tmux mapping is testable without
+// driving a tea program.
+func applyTabPickerResult(app *apppkg.App, sessionName string, res tabpicker.TabPickerResult) error {
 	target := res.Session
 	if target == "" {
 		target = sessionName
@@ -227,19 +235,92 @@ func runTabPicker(app *apppkg.App) error {
 				return err
 			}
 		}
-		return app.Runner.SelectWindow(target, res.Index)
+		if err := app.Runner.SelectWindow(target, res.Index); err != nil {
+			return err
+		}
+		touchPickerMRU(app, target, res.TabID)
+		return nil
+	case "select-pane":
+		// A rider tab: focus its host window, then the pane itself.
+		if session.RootName(target) != sessionName {
+			if err := session.Switch(app.Runner, target); err != nil {
+				return err
+			}
+		}
+		if err := app.Runner.SelectWindow(target, res.Index); err != nil {
+			return err
+		}
+		if err := app.Runner.SelectPane(res.Pane); err != nil {
+			return err
+		}
+		touchPickerMRU(app, target, res.TabID)
+		return nil
+	case "show":
+		return showPickedTab(app, sessionName, res.TabID)
 	case "new":
 		dir, _ := os.Getwd()
-		return app.Runner.NewWindow(target, res.Name, dir)
+		_, err := app.Runner.NewWindow(target, res.Name, dir)
+		return err
 	case "rename":
 		old := fmt.Sprintf("%d", res.Index)
 		return app.Runner.RenameWindow(target, old, res.Name)
 	case "close":
 		return app.Runner.KillWindow(target, res.Index)
+	case "close-pane":
+		return app.Runner.KillPane(res.Pane)
 	case "swap":
 		return app.Runner.SwapWindow(target, res.Index, res.Index+res.Delta)
 	}
 
+	return nil
+}
+
+// touchPickerMRU records a picker selection in the session's tab MRU —
+// logical tabs only; raw windows have no stable id to remember.
+func touchPickerMRU(app *apppkg.App, sessionName, tabID string) {
+	if tabID == "" {
+		return
+	}
+	if err := tabspkg.TouchMRU(app.Runner, sessionName, tabID); err != nil {
+		debug.Log("tabpicker: mru touch failed", "err", err)
+	}
+}
+
+// showPickedTab returns a hidden tab from the dock to its origin and focuses
+// it: same clone-block + Show + epilogue as `zmux tab show`, then a re-scan
+// finds where the window landed so the client can jump to it.
+func showPickedTab(app *apppkg.App, sessionName, tabID string) error {
+	all, err := tabspkg.ListLogicalTabs(app.Runner)
+	if err != nil {
+		return err
+	}
+	t := tabspkg.ByID(all, tabID)
+	if t == nil {
+		return fmt.Errorf("hidden tab no longer exists")
+	}
+	if t.Placement == tabspkg.PlacementDock {
+		if err := blockOnAttachedClones(app, t.OriginSession); err != nil {
+			return err
+		}
+	}
+	origin, err := tabspkg.Show(app.Runner, t)
+	if err != nil {
+		return err
+	}
+	placementEpilogue(app)
+	if session.RootName(origin) != sessionName {
+		if err := session.Switch(app.Runner, origin); err != nil {
+			return err
+		}
+	}
+	if all, err := tabspkg.ListLogicalTabs(app.Runner); err == nil {
+		if shown := tabspkg.ByID(all, tabID); shown != nil && shown.Session == origin {
+			if err := app.Runner.SelectWindow(origin, shown.WindowIndex); err != nil {
+				return err
+			}
+		}
+	}
+	touchPickerMRU(app, origin, tabID)
 	return nil
 }
 
@@ -284,17 +365,6 @@ func handleDashboardResult(app *apppkg.App, action, chosen string) error {
 	case "new":
 		name := session.NextTmpName(app.Runner)
 		if err := session.Create(app.Runner, name, "."); err != nil {
-			return err
-		}
-		return session.Switch(app.Runner, name)
-
-	case "template":
-		templates := session.EmbeddedTemplates()
-		if len(templates) == 0 {
-			return fmt.Errorf("no templates available")
-		}
-		name := session.NextTmpName(app.Runner)
-		if err := session.CreateFromTemplate(app.Runner, templates[0], name, "."); err != nil {
 			return err
 		}
 		return session.Switch(app.Runner, name)

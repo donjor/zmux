@@ -17,7 +17,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/sahilm/fuzzy"
 
+	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/styles"
@@ -45,17 +47,67 @@ const (
 // popup closes. Session names the target session for every action — tab
 // ops can target a sibling session now, not just the current one.
 type TabPickerResult struct {
-	Action  string // "switch", "select", "new", "rename", "close", "swap", ""
+	Action  string // "switch", "select", "select-pane", "show", "new", "rename", "close", "close-pane", "swap", ""
 	Session string // target session name
 	Index   int    // window index (tab actions)
 	Name    string // tab name (new / rename)
 	Delta   int    // swap direction (-1 / +1)
+	Pane    string // pane id (select-pane / close-pane)
+	TabID   string // logical tab id (MRU touch / show)
 }
 
-// tabEntry is one window plus its active pane command (display only).
+// tabEntryKind says what a picker row actually is: a window slot (raw
+// window or full tab), a pane-of tab riding inside a host window, or a
+// docked tab whose origin is this session.
+type tabEntryKind int
+
+const (
+	teWindow tabEntryKind = iota
+	teRider
+	teHidden
+)
+
+// tabEntry is one picker row. Window is the host window for teWindow and
+// teRider (selection needs its index); zero for teHidden. Tab carries the
+// logical identity when the row is zmux-managed (nil for raw windows).
 type tabEntry struct {
 	tmux.Window
 	Command string
+	Kind    tabEntryKind
+	Tab     *tabs.LogicalTab
+}
+
+// displayName is the row label: the logical label when one exists, else
+// the window name (or the tab id for unlabeled riders/hidden tabs).
+func (t *tabEntry) displayName() string {
+	if t.Tab != nil && (t.Kind != teWindow || t.Tab.Label != "") {
+		return tabs.DisplayName(t.Tab)
+	}
+	return t.Name
+}
+
+// rowActive reports whether the row carries the active dot.
+func (t *tabEntry) rowActive() bool {
+	switch t.Kind {
+	case teRider:
+		return t.Tab != nil && t.Tab.Active
+	case teHidden:
+		return false
+	}
+	return t.Active
+}
+
+// stateGlyph returns the lifecycle glyph for the row's logical state
+// (shared vocabulary with the bar); empty when stateless or raw.
+func (t *tabEntry) stateGlyph() string {
+	if t.Tab == nil {
+		return ""
+	}
+	st, ok := t.Tab.StateOf()
+	if !ok {
+		return ""
+	}
+	return bar.StateGlyph(st)
 }
 
 // sessionEntry is one session plus its loaded tabs.
@@ -139,11 +191,18 @@ func (m TabPickerModel) Init() tea.Cmd {
 	return tea.Batch(m.loadSessions(), textinput.Blink)
 }
 
-// loadSessions fetches windows + active-pane commands for every session.
+// loadSessions fetches windows + active-pane commands for every session,
+// then decorates them from one whole-server logical scan: full tabs get
+// their label/state, pane-of riders slot in under their host window, and
+// docked tabs surface at the end of their origin session's list.
 func (m TabPickerModel) loadSessions() tea.Cmd {
 	runner := m.runner
 	infos := m.infos
 	return func() tea.Msg {
+		var logical []tabs.LogicalTab
+		if rows, err := runner.ListLogicalPaneRows(); err == nil {
+			logical = tabs.FromRows(rows)
+		}
 		entries := make([]sessionEntry, 0, len(infos))
 		for _, info := range infos {
 			windows, _ := runner.ListWindows(info.Name)
@@ -154,11 +213,34 @@ func (m TabPickerModel) loadSessions() tea.Cmd {
 					cmdByWin[p.WindowIndex] = p.Command
 				}
 			}
-			tabs := make([]tabEntry, len(windows))
-			for i, w := range windows {
-				tabs[i] = tabEntry{Window: w, Command: cmdByWin[w.Index]}
+			fullByIdx := make(map[int]*tabs.LogicalTab)
+			ridersByIdx := make(map[int][]*tabs.LogicalTab)
+			var hidden []*tabs.LogicalTab
+			for i := range logical {
+				t := &logical[i]
+				switch {
+				case t.Placement == tabs.PlacementDock:
+					if t.OriginSession == info.Name {
+						hidden = append(hidden, t)
+					}
+				case t.Session != info.Name:
+				case t.Placement == tabs.PlacementFull:
+					fullByIdx[t.WindowIndex] = t
+				case t.Placement == tabs.PlacementPaneOf:
+					ridersByIdx[t.WindowIndex] = append(ridersByIdx[t.WindowIndex], t)
+				}
 			}
-			entries = append(entries, sessionEntry{Info: info, Windows: tabs})
+			rows := make([]tabEntry, 0, len(windows))
+			for _, w := range windows {
+				rows = append(rows, tabEntry{Window: w, Command: cmdByWin[w.Index], Tab: fullByIdx[w.Index]})
+				for _, r := range ridersByIdx[w.Index] {
+					rows = append(rows, tabEntry{Window: w, Command: r.Command, Kind: teRider, Tab: r})
+				}
+			}
+			for _, h := range hidden {
+				rows = append(rows, tabEntry{Command: h.Command, Kind: teHidden, Tab: h})
+			}
+			entries = append(entries, sessionEntry{Info: info, Windows: rows})
 		}
 		return sessionsLoadedMsg{entries: entries}
 	}
@@ -308,7 +390,7 @@ func (m TabPickerModel) handleTabLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		if t := m.currentTab(); t != nil {
-			m.Result = TabPickerResult{Action: "select", Session: m.drilled, Index: t.Index}
+			m.Result = m.selectResult(t)
 			m.Quitting = true
 			return m, tea.Quit
 		}
@@ -321,7 +403,9 @@ func (m TabPickerModel) handleTabLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "ctrl+r":
-		if t := m.currentTab(); t != nil {
+		// Rename renames the WINDOW — riders and hidden tabs have no window
+		// of their own (zmux tab label owns logical labels).
+		if t := m.currentTab(); t != nil && t.Kind == teWindow {
 			m.renameIdx = t.Index
 			m.mode = tpModeRename
 			m.input.SetValue(t.Name)
@@ -331,7 +415,13 @@ func (m TabPickerModel) handleTabLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+x":
 		if t := m.currentTab(); t != nil {
-			m.Result = TabPickerResult{Action: "close", Session: m.drilled, Index: t.Index}
+			if t.Kind == teWindow {
+				m.Result = TabPickerResult{Action: "close", Session: m.drilled, Index: t.Index}
+			} else if t.Tab != nil {
+				// Riders and hidden tabs die by pane — killing the host
+				// window (or the dock's) would take innocents with it.
+				m.Result = TabPickerResult{Action: "close-pane", Session: m.drilled, Pane: t.Tab.PaneID}
+			}
 			m.Quitting = true
 			return m, tea.Quit
 		}
@@ -339,7 +429,7 @@ func (m TabPickerModel) handleTabLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+left", "<":
 		if m.input.Value() == "" {
-			if t := m.currentTab(); t != nil {
+			if t := m.currentTab(); t != nil && t.Kind == teWindow {
 				m.Result = TabPickerResult{Action: "swap", Session: m.drilled, Index: t.Index, Delta: -1}
 				m.Quitting = true
 				return m, tea.Quit
@@ -349,7 +439,7 @@ func (m TabPickerModel) handleTabLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "ctrl+right", ">":
 		if m.input.Value() == "" {
-			if t := m.currentTab(); t != nil {
+			if t := m.currentTab(); t != nil && t.Kind == teWindow {
 				m.Result = TabPickerResult{Action: "swap", Session: m.drilled, Index: t.Index, Delta: 1}
 				m.Quitting = true
 				return m, tea.Quit
@@ -363,6 +453,28 @@ func (m TabPickerModel) handleTabLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	m.input, cmd = m.input.Update(msg)
 	m.applyFilter()
 	return m, cmd
+}
+
+// selectResult maps the cursor row to its selection action: windows select
+// by index, riders focus their pane inside the host window, hidden tabs
+// come back from the dock via show.
+func (m TabPickerModel) selectResult(t *tabEntry) TabPickerResult {
+	res := TabPickerResult{Session: m.drilled}
+	if t.Tab != nil {
+		res.TabID = t.Tab.ID
+	}
+	switch t.Kind {
+	case teRider:
+		res.Action = "select-pane"
+		res.Index = t.Index
+		res.Pane = t.Tab.PaneID
+	case teHidden:
+		res.Action = "show"
+	default:
+		res.Action = "select"
+		res.Index = t.Index
+	}
+	return res
 }
 
 // backToSessions returns the cursor to session level, re-pinning it on the
@@ -501,14 +613,20 @@ func (m *TabPickerModel) buildRows() []outline.Row {
 		}
 		for j := range wins {
 			w := &wins[j]
+			id := outline.WindowID(name, w.Index)
+			if w.Kind != teWindow && w.Tab != nil {
+				// Riders/hidden share (or lack) a window — the pane id is
+				// the stable cursor anchor.
+				id = outline.PaneID(name, w.Tab.PaneID)
+			}
 			rows = append(rows, outline.Row{
-				ID:         outline.WindowID(name, w.Index),
+				ID:         id,
 				Kind:       outline.RowWindow,
 				Depth:      1,
 				ParentID:   sid,
-				Label:      w.Name,
+				Label:      w.displayName(),
 				Selectable: m.nav == navTab && name == m.drilled,
-				Attached:   w.Active,
+				Attached:   w.rowActive(),
 				Data:       w,
 			})
 		}
@@ -534,19 +652,20 @@ func filterSessions(entries []sessionEntry, query string) []sessionEntry {
 	return out
 }
 
-// filterTabs fuzzy-matches tabs by name. Empty query returns all.
-func filterTabs(tabs []tabEntry, query string) []tabEntry {
+// filterTabs fuzzy-matches tabs by display name (logical label when one
+// exists). Empty query returns all.
+func filterTabs(entries []tabEntry, query string) []tabEntry {
 	if strings.TrimSpace(query) == "" {
-		return tabs
+		return entries
 	}
-	names := make([]string, len(tabs))
-	for i := range tabs {
-		names[i] = tabs[i].Name
+	names := make([]string, len(entries))
+	for i := range entries {
+		names[i] = entries[i].displayName()
 	}
 	matches := fuzzy.Find(query, names)
 	out := make([]tabEntry, len(matches))
 	for i, mt := range matches {
-		out[i] = tabs[mt.Index]
+		out[i] = entries[mt.Index]
 	}
 	return out
 }

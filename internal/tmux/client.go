@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -40,8 +41,40 @@ func (c *Client) buildArgs(args ...string) []string {
 	return append(epArgs, args...)
 }
 
+// ErrCrossProfile marks a refused cross-profile tmux invocation, so degrade
+// paths that tolerate "no server running" (e.g. ls printing "No sessions.")
+// can re-surface this error instead of swallowing it into a misleading state.
+var ErrCrossProfile = errors.New("cross-profile tmux access refused")
+
+// ambientSocketMismatch reports a foreign $TMUX socket for a default-endpoint
+// client. The default endpoint passes no -L flag, so tmux routes every command
+// to the socket in $TMUX — running the live binary inside another profile's
+// session (e.g. `zmux apply` in a zzmux pane) would silently read from and
+// write themed bar options onto the wrong server. Refuse loudly instead.
+// Reads are refused too: an answer from the wrong server is misinformation.
+// Explicit -L/-S endpoints always win over $TMUX, so they need no check.
+func (c *Client) ambientSocketMismatch() error {
+	if c.endpoint.Mode != SocketDefault {
+		return nil
+	}
+	tmuxEnv := os.Getenv("TMUX")
+	if tmuxEnv == "" {
+		return nil
+	}
+	if name := tmuxSocketName(tmuxEnv); name != "default" {
+		return fmt.Errorf(
+			"%w: this binary targets the default tmux server, but $TMUX points at socket %q — use that profile's binary (%s), or run from outside its session",
+			ErrCrossProfile, name, name,
+		)
+	}
+	return nil
+}
+
 // run executes a tmux command and returns its stdout.
 func (c *Client) run(args ...string) (string, error) {
+	if err := c.ambientSocketMismatch(); err != nil {
+		return "", err
+	}
 	full := c.buildArgs(args...)
 	cmd := exec.Command(c.bin, full...)
 	out, err := cmd.Output()
@@ -62,11 +95,14 @@ func (c *Client) runSilent(args ...string) error {
 }
 
 // IsInsideTmux reports whether we're running inside a tmux session that this
-// client's endpoint actually owns. For the default endpoint it preserves the
-// historical "$TMUX is set" check. For a named/path endpoint (e.g. the zzmux
-// profile's -L zzmux) it additionally requires the $TMUX socket to match the
-// endpoint — so a `zzmux` invocation nested inside the live `zmux` server reports
-// false instead of doing current-client work against a server it doesn't own.
+// client's endpoint actually owns. Every endpoint mode requires the $TMUX
+// socket to match: a named/path endpoint (e.g. the zzmux profile's -L zzmux)
+// compares against its socket, and the default endpoint requires the stock
+// "default" socket — so the live binary inside a zzmux pane reports false
+// instead of routing current-client work onto a server it doesn't own (the
+// ambientSocketMismatch guard would refuse it anyway, but a true here would
+// send commands down inside-tmux paths that mask that refusal with generic
+// "no current session" errors).
 func (c *Client) IsInsideTmux() bool {
 	tmuxEnv := os.Getenv("TMUX")
 	if tmuxEnv == "" {
@@ -78,7 +114,7 @@ func (c *Client) IsInsideTmux() bool {
 	case SocketPath:
 		return tmuxSocketName(tmuxEnv) == filepath.Base(c.endpoint.Value)
 	default:
-		return true
+		return tmuxSocketName(tmuxEnv) == "default"
 	}
 }
 
@@ -94,6 +130,9 @@ func tmuxSocketName(tmuxEnv string) string {
 
 // ServerRunning returns true if a tmux server is active.
 func (c *Client) ServerRunning() bool {
+	if c.ambientSocketMismatch() != nil {
+		return false
+	}
 	err := exec.Command(c.bin, c.buildArgs("list-sessions")...).Run()
 	return err == nil
 }
@@ -129,6 +168,9 @@ func (c *Client) ListClients() ([]ClientInfo, error) {
 
 // HasSession returns true if a session with the given name exists.
 func (c *Client) HasSession(name string) bool {
+	if c.ambientSocketMismatch() != nil {
+		return false
+	}
 	err := exec.Command(c.bin, c.buildArgs("has-session", "-t", name)...).Run()
 	return err == nil
 }
@@ -151,6 +193,9 @@ func (c *Client) KillSession(name string) error {
 
 // AttachSession attaches to a session, taking over the terminal.
 func (c *Client) AttachSession(name string) error {
+	if err := c.ambientSocketMismatch(); err != nil {
+		return err
+	}
 	cmd := exec.Command(c.bin, c.buildArgs("attach-session", "-t", name)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -161,6 +206,9 @@ func (c *Client) AttachSession(name string) error {
 // AttachSessionDetach attaches to a session, detaching any other clients first.
 // This is "hijack mode" — steals the session from whoever has it.
 func (c *Client) AttachSessionDetach(name string) error {
+	if err := c.ambientSocketMismatch(); err != nil {
+		return err
+	}
 	cmd := exec.Command(c.bin, c.buildArgs("attach-session", "-d", "-t", name)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -211,21 +259,23 @@ type windowOpts struct{ detached bool }
 // (tmux `new-window -d`), so background work never steals the user's focus.
 func Detached() WindowOpt { return func(o *windowOpts) { o.detached = true } }
 
-// NewWindow creates a new window in a session. An empty name omits `-n` so
-// tmux's automatic-rename can label the window from the running command.
-func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) error {
+// NewWindow creates a new window in a session and returns its initial pane
+// id (%N) so callers can stamp pane-scoped identity without a follow-up
+// lookup race. An empty name omits `-n` so tmux's automatic-rename can label
+// the window from the running command.
+func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) (string, error) {
 	var o windowOpts
 	for _, fn := range opts {
 		fn(&o)
 	}
-	args := []string{"new-window", "-t", session, "-c", dir}
+	args := []string{"new-window", "-P", "-F", "#{pane_id}", "-t", session, "-c", dir}
 	if o.detached {
 		args = append(args, "-d")
 	}
 	if name != "" {
 		args = append(args, "-n", name)
 	}
-	return c.runSilent(args...)
+	return c.run(args...)
 }
 
 // KillWindow kills a window by session and index.
@@ -458,6 +508,68 @@ func (c *Client) UnsetWindowOption(target, key string) error {
 	}
 	args = append(args, key)
 	return c.runSilent(args...)
+}
+
+// SetPaneOption sets a tmux pane option for a specific pane target.
+func (c *Client) SetPaneOption(target, key, value string) error {
+	args := []string{"set-option", "-p"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, key, value)
+	return c.runSilent(args...)
+}
+
+// UnsetPaneOption unsets a tmux pane option for a specific pane target.
+func (c *Client) UnsetPaneOption(target, key string) error {
+	args := []string{"set-option", "-p", "-u"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, key)
+	return c.runSilent(args...)
+}
+
+// ShowWindowOption reads a window option scope-exactly (show-options -w),
+// returning "" when unset (-q). Format reads (#{@opt}) merge scopes — a
+// pane-target read can surface a window value and vice versa — so mirror
+// validation and migration must use these instead.
+func (c *Client) ShowWindowOption(target, key string) (string, error) {
+	args := []string{"show-options", "-w", "-q", "-v"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, key)
+	return c.run(args...)
+}
+
+// ShowPaneOption reads a pane option scope-exactly (show-options -p),
+// returning "" when unset (-q). See ShowWindowOption for why format reads
+// don't suffice.
+func (c *Client) ShowPaneOption(target, key string) (string, error) {
+	args := []string{"show-options", "-p", "-q", "-v"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+	args = append(args, key)
+	return c.run(args...)
+}
+
+// ListPaneOptionValues returns key's value for every pane on the server,
+// one entry per pane (empty string when unset).
+func (c *Client) ListPaneOptionValues(key string) ([]string, error) {
+	out, err := c.run("list-panes", "-a", "-F", "#{"+key+"}")
+	if err != nil {
+		return nil, err
+	}
+	return strings.Split(strings.TrimRight(out, "\n"), "\n"), nil
+}
+
+// RefreshStatus forces a status-line redraw via refresh-client -S. Fails
+// with "no current client" when no client is attached — best-effort only;
+// callers must not fail state writes on this error.
+func (c *Client) RefreshStatus() error {
+	return c.runSilent("refresh-client", "-S")
 }
 
 // SetEnvironment sets a global environment variable in tmux.

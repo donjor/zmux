@@ -21,9 +21,8 @@ var logo = "" +
 	"░█████████ ░██   ░██   ░██  ░█████░██ ░██    ░██"
 
 // View renders the picker's outer chrome (logo, list/dialog, help bar,
-// ghost prompt). Mode-specific bodies live in picker_view_list.go and
-// picker_view_templates.go; the help bar and ghost prompt live in
-// picker_view_help.go.
+// ghost prompt). Row rendering lives in picker_view_list.go; the help bar
+// and ghost prompt live in picker_view_help.go.
 func (m PickerModel) View() tea.View {
 	v := tea.NewView(m.view())
 	v.AltScreen = true
@@ -51,15 +50,7 @@ func (m PickerModel) view() string {
 		b.WriteString("  " + m.styles.Dim.Render(fmt.Sprintf("%d workspaces • prefix: ctrl+space", len(m.workspaces))) + "\n")
 	}
 
-	// ── Mode-specific content ──
-	switch m.mode {
-	case modeTemplateSelect:
-		b.WriteString(m.viewTemplateSelect())
-	case modeTemplateName:
-		b.WriteString(m.viewTemplateNameInput())
-	default:
-		b.WriteString(m.viewList())
-	}
+	b.WriteString(m.viewList())
 
 	// Delete confirmation renders inline on the cursor row (see viewList),
 	// not as a detached overlay.

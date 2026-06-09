@@ -59,8 +59,8 @@ type BarContext struct {
 
 	// TopRowActive signals two-line mode, where the top row owns the
 	// workspace/session identity. When set, RenderLeft drops all identity
-	// chrome (pills, viewport, powerline chain) and renders only the compact
-	// volatile aux (dir/git/process) via renderLeftAux — see plan 024.
+	// chrome (pills, viewport, powerline chain) and renders only compact aux
+	// that does not include cwd via renderLeftAux — see plan 024.
 	TopRowActive bool
 
 	// Segment visibility (from config).
@@ -171,16 +171,16 @@ func RenderLeft(p *theme.Palette, ctx BarContext, preset Preset) string {
 // renderLeftAux renders the compact bottom-left for two-line mode
 // (TopRowActive): the top row now owns workspace/session identity, so the
 // bottom-left drops all identity chrome (pills, viewport, powerline chain) and
-// keeps only the *volatile* aux each preset historically surfaced on the left.
-// Field policy mirrors the per-preset left: powerline/rpowerline → dir; hacker
-// → process + dir; starship → dir + git; every other preset → empty (their
-// left was pure identity). Plain dim text, no caps — the bottom-left is
-// secondary chrome here (plan 024).
+// keeps only volatile aux that cannot shift as cwd changes. Directory moved to
+// the top-row overlay because this bottom-left shares the logical tabs row: when
+// cwd width changed, tab cells jumped/truncated. Field policy now mirrors only
+// stable-enough aux: hacker → process; starship → git; every other preset →
+// empty. Plain dim text, no caps — the bottom-left is secondary chrome here
+// (plan 024).
 //
 // Callers must run applySegmentVisibility first so segment toggles still gate
 // these fields (RenderLeft does).
 func renderLeftAux(p *theme.Palette, ctx BarContext, preset Preset) string {
-	dir := shortenDir(ctx.PaneDir)
 	proc := ctx.PaneCmd
 	if proc == "bash" || proc == "zsh" || proc == "fish" {
 		proc = ""
@@ -194,13 +194,9 @@ func renderLeftAux(p *theme.Palette, ctx BarContext, preset Preset) string {
 	}
 
 	switch preset {
-	case Powerline, Rpowerline:
-		add(p.Muted.Hex(), dir)
 	case Hacker:
 		add(p.Success.Hex(), proc)
-		add(p.Dim.Hex(), dir)
 	case Starship:
-		add(p.Meta.Hex(), dir)
 		add(p.Success.Hex(), formatGitText(ctx))
 	default:
 		return ""
@@ -222,6 +218,38 @@ func EdgeBadge(p *theme.Palette, label string) string {
 	}
 	return fmt.Sprintf("#[bg=%s,fg=%s,bold] %s #[nobold,bg=default,fg=default] ",
 		p.Error.Hex(), p.BG.Hex(), label)
+}
+
+// DirectoryBadge renders the shortened current pane cwd for the top-row
+// overlay. It intentionally stays out of status-left in two-line mode so cwd
+// changes cannot steal width from the logical tabs row.
+func DirectoryBadge(p *theme.Palette, dir string) string {
+	dir = shortenDir(dir)
+	if dir == "" {
+		return ""
+	}
+	return fmt.Sprintf("#[bg=%s,fg=%s] %s #[bg=default,fg=default] ",
+		p.Surface.Hex(), p.Muted.Hex(), dir)
+}
+
+// RenderTopOverlay renders right-aligned top-row chrome that should not affect
+// the bottom tabs row. Today that is cwd plus the non-default profile badge.
+// One align directive owns the whole cluster so cwd and zzmux never fight for
+// the right edge.
+func RenderTopOverlay(p *theme.Palette, ctx BarContext, profileName string) string {
+	applySegmentVisibility(&ctx)
+
+	var parts []string
+	if badge := DirectoryBadge(p, ctx.PaneDir); badge != "" {
+		parts = append(parts, badge)
+	}
+	if profileName != "" && profileName != "zmux" {
+		parts = append(parts, EdgeBadge(p, profileName))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "#[align=right]" + strings.Join(parts, "")
 }
 
 // RenderRight generates the right side of the status bar.

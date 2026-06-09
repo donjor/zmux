@@ -17,10 +17,6 @@ func (m PickerModel) viewHelp() string {
 		return m.styles.Help.Render("  y / ctrl+x:confirm  any:cancel")
 	case modeConfirmDeleteAttached:
 		return m.styles.Help.Render("  y / ctrl+x:confirm detach  any:cancel")
-	case modeTemplateSelect:
-		return m.styles.Help.Render("  enter:select  esc:cancel")
-	case modeTemplateName:
-		return m.styles.Help.Render("  enter:create  esc:back")
 	}
 
 	parts := []string{}
@@ -71,7 +67,6 @@ func (m PickerModel) viewHelp() string {
 		}
 	}
 	parts = append(parts, toggleLabel)
-	parts = append(parts, "ctrl+t:template")
 	if m.state.workspaceQuery != "" || m.state.sessionQuery != "" {
 		parts = append(parts, "esc:clear")
 	} else {
@@ -85,17 +80,6 @@ func (m PickerModel) viewHelp() string {
 // will issue if the user hits enter right now.
 func (m PickerModel) ghostCmd() string {
 	switch m.mode {
-	case modeTemplateName:
-		name := strings.TrimSpace(m.nameInput.Value())
-		if name != "" {
-			return "zmux new -t " + m.selectedTemplate + " " + name
-		}
-		return "zmux new -t " + m.selectedTemplate
-	case modeTemplateSelect:
-		if m.templateCursor < len(m.templates) {
-			return "zmux new -t " + m.templates[m.templateCursor].Name
-		}
-		return "zmux new -t ..."
 	case modeConfirmDelete, modeConfirmDeleteAttached:
 		if m.confirm != nil {
 			return "zmux kill " + m.confirm.name

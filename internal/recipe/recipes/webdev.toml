@@ -1,0 +1,22 @@
+name = "webdev"
+description = "Web development: editor, dev server, tests, git"
+kind = "session"
+workspace = "{{ cwd_name | slug }}"
+session = "{{ workspace }}"
+
+[[tabs]]
+name = "editor"
+command = "nvim ."
+
+[[tabs]]
+name = "dev"
+
+[[tabs]]
+name = "test"
+
+[[tabs]]
+name = "git"
+command = "git status"
+
+[options]
+focus_tab = "editor"

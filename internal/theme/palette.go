@@ -11,7 +11,7 @@ type Palette struct {
 	Success   Color // confirmations, active status (ANSI 2 / green)
 	Accent    Color // primary accent, branding (ANSI 3 / yellow)
 	Info      Color // links, secondary accent (ANSI 4 / blue)
-	Special   Color // unique items, templates (ANSI 5 / magenta)
+	Special   Color // unique items, recipes (ANSI 5 / magenta)
 	Meta      Color // tags, metadata (ANSI 6 / cyan)
 	Muted     Color // secondary text, labels (ANSI 7 / white)
 	Dim       Color // borders, separators, faint (ANSI 8 / bright black)

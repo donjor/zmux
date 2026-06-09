@@ -1,0 +1,7 @@
+name = "dev-codex"
+description = "Project workspace with Codex in the first tab"
+extends = "dev"
+
+[[tabs]]
+name = "bash"
+command = "codex"

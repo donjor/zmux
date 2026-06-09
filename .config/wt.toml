@@ -1,0 +1,19 @@
+# worktrunk project config — pre-merge verification gate.
+# Mirrors the pre-push hook (scripts/hooks/pre-push): lint + race tests gate
+# anything integrating into master. Local-first repo — this is the real gate.
+
+[pre-merge]
+check = "make lint"
+test = "make test-race"
+
+[post-create]
+# Shared scratch: .dump/ (plans, discussions) and docs/.NOTES.md (intake) live
+# only in the primary worktree; branches get symlinks so nothing forks.
+scratch = """
+[ -e .dump ] && [ ! -L .dump ] && rm -rf .dump
+ln -sfn "{{ primary_worktree_path }}/.dump" .dump
+if [ -f "{{ primary_worktree_path }}/docs/.NOTES.md" ]; then
+  mkdir -p docs
+  ln -sfn "{{ primary_worktree_path }}/docs/.NOTES.md" docs/.NOTES.md
+fi
+"""

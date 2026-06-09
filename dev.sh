@@ -2,7 +2,7 @@
 # dev.sh — build + install a zmux binary for local testing.
 #
 # Usage: ./dev.sh [zmux|zzmux]   (default: zmux)
-#   zmux   build + install the live binary, link Claude Code + Pi integration
+#   zmux   build + install the live binary, refresh shared agent integrations
 #   zzmux  build + install an identical edge binary (binary only), so you can
 #          test changes without overwriting the zmux you're currently running
 
@@ -37,19 +37,38 @@ rm -f "$HOME/.local/bin/$TARGET" 2>/dev/null || true
 cp "$TARGET" "$HOME/.local/bin/$TARGET"
 printf "${green}ok${reset}  ${dim}~/.local/bin/%s${reset}\n" "$TARGET"
 
-# Claude + Pi integration links only for the live binary. The skill is
-# brand-agnostic (repo is source of truth); edge testing doesn't relink.
+# Agent integration links only for the live binary. The skill is brand-agnostic;
+# edge testing does not relink shared Claude/Codex/Pi state.
 if [ "$TARGET" = "zmux" ]; then
-	printf "${dim}linking claude integration...${reset} "
-	mkdir -p "$HOME/.claude/skills"
-	rm -rf "$HOME/.claude/skills/zmux"
-	ln -s "$ZMUX_ROOT/skills/zmux" "$HOME/.claude/skills/zmux"
-	printf "${green}ok${reset}  ${dim}~/.claude/skills/zmux${reset}\n"
+	SKILLS_ROOT="${DONJOR_SKILLS_ROOT:-$HOME/donjor/skills}"
 
-	printf "${dim}linking pi integration...${reset} "
-	mkdir -p "$HOME/.pi/agent/skills" "$HOME/.pi/agent/extensions"
-	rm -rf "$HOME/.pi/agent/skills/zmux" "$HOME/.pi/agent/extensions/pi-zmux"
-	ln -s "$ZMUX_ROOT/skills/zmux" "$HOME/.pi/agent/skills/zmux"
+	if [ -d "$SKILLS_ROOT/skills" ]; then
+		printf "${dim}linking shared skill...${reset} "
+		ln -sfn "$ZMUX_ROOT/skills/zmux" "$SKILLS_ROOT/skills/zmux"
+		printf "${green}ok${reset}  ${dim}%s/skills/zmux${reset}\n" "$SKILLS_ROOT"
+	else
+		printf "${dim}skipping shared skill link; missing %s/skills${reset}\n" "$SKILLS_ROOT"
+	fi
+
+	if [ -f "$SKILLS_ROOT/codex/sync-skills.mjs" ] && command -v node >/dev/null 2>&1; then
+		printf "${dim}refreshing codex skill mirror...${reset} "
+		node "$SKILLS_ROOT/codex/sync-skills.mjs" --no-global >/dev/null
+		printf "${green}ok${reset}  ${dim}${CODEX_HOME:-$HOME/.codex}/skills${reset}\n"
+	else
+		printf "${dim}skipping codex mirror; missing node or %s/codex/sync-skills.mjs${reset}\n" "$SKILLS_ROOT"
+	fi
+
+	if [ -f "$SKILLS_ROOT/pi/sync-pi.mjs" ] && command -v node >/dev/null 2>&1; then
+		printf "${dim}refreshing pi skill mirror...${reset} "
+		node "$SKILLS_ROOT/pi/sync-pi.mjs" --no-codex-sync --no-global --no-settings >/dev/null
+		printf "${green}ok${reset}  ${dim}~/.pi/agent/skills/donjor${reset}\n"
+	else
+		printf "${dim}skipping pi skill mirror; missing node or %s/pi/sync-pi.mjs${reset}\n" "$SKILLS_ROOT"
+	fi
+
+	printf "${dim}linking pi extension...${reset} "
+	mkdir -p "$HOME/.pi/agent/extensions"
+	rm -rf "$HOME/.pi/agent/extensions/pi-zmux"
 	ln -s "$ZMUX_ROOT/pi-extension" "$HOME/.pi/agent/extensions/pi-zmux"
-	printf "${green}ok${reset}  ${dim}~/.pi/agent/{skills/zmux,extensions/pi-zmux}${reset}\n"
+	printf "${green}ok${reset}  ${dim}~/.pi/agent/extensions/pi-zmux${reset}\n"
 fi

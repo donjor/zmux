@@ -2,12 +2,12 @@ package config
 
 // Config represents the full zmux configuration from ~/.zmux.toml.
 type Config struct {
-	Theme     string          `toml:"theme"`
-	Prefix    string          `toml:"prefix"`
-	Bar       BarConfig       `toml:"bar"`
-	Sessions  SessionsConfig  `toml:"sessions"`
-	Templates TemplatesConfig `toml:"templates"`
-	Sync      SyncConfig      `toml:"sync"`
+	Theme    string         `toml:"theme"`
+	Prefix   string         `toml:"prefix"`
+	Bar      BarConfig      `toml:"bar"`
+	Sessions SessionsConfig `toml:"sessions"`
+	Recipes  RecipesConfig  `toml:"recipes"`
+	Sync     SyncConfig     `toml:"sync"`
 }
 
 // BarConfig holds status bar settings.
@@ -36,9 +36,10 @@ type SessionsConfig struct {
 	DefaultShell   string `toml:"default_shell"`
 }
 
-// TemplatesConfig holds template discovery paths.
-type TemplatesConfig struct {
-	Paths []string `toml:"paths"`
+// RecipesConfig holds recipe discovery paths and bundled recipe toggles.
+type RecipesConfig struct {
+	Paths    []string `toml:"paths"`
+	Disabled []string `toml:"disabled"`
 }
 
 // SyncConfig holds theme sync settings.
@@ -71,8 +72,8 @@ func DefaultConfig() Config {
 			AutoCleanupTmp: true,
 			DefaultShell:   "",
 		},
-		Templates: TemplatesConfig{
-			Paths: []string{"~/.zmux/templates"},
+		Recipes: RecipesConfig{
+			Paths: []string{"~/.zmux/recipes"},
 		},
 		Sync: SyncConfig{
 			Target:        "none",

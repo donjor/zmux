@@ -41,8 +41,13 @@ type Runner interface {
 
 	// Windows
 	ListWindows(session string) ([]Window, error)
-	NewWindow(session, name, dir string, opts ...WindowOpt) error
+	// NewWindow returns the new window's initial pane id (%N) so identity
+	// can be stamped at create without a lookup race.
+	NewWindow(session, name, dir string, opts ...WindowOpt) (string, error)
 	KillWindow(session string, index int) error
+	// KillWindowByID kills a window by opaque id (@N) — stable across
+	// moves between sessions, unlike session:index targets.
+	KillWindowByID(windowID string) error
 	RenameWindow(session, old, new string) error
 	SelectWindow(session string, index int) error
 	MoveWindow(srcSession, dstSession string) error
@@ -52,8 +57,20 @@ type Runner interface {
 	ListPanes(target string) ([]Pane, error)
 	ListWindowPanes(target string) ([]Pane, error)
 	ListAllPanes() ([]Pane, error)
+	// ListLogicalPaneRows is the one-call logical-tab scan (list-panes -a):
+	// every pane on the server with the placement/identity facts the tabs
+	// layer computes logical tabs from.
+	ListLogicalPaneRows() ([]LogicalPaneRow, error)
 	SplitWindow(target, direction string) error
 	SplitPane(opts SplitPaneOptions) (string, error)
+	// JoinPane relocates a pane into another window; BreakPane promotes a
+	// pane to its own window (returning the new window id). Both auto-unzoom
+	// affected windows; SelectLayout restores a #{window_layout} snapshot —
+	// silently best-effort on pane-count mismatch, so callers compare counts.
+	JoinPane(opts JoinPaneOptions) error
+	BreakPane(opts BreakPaneOptions) (string, error)
+	SelectLayout(target, layout string) error
+	ToggleZoom(target string) error
 	KillPane(target string) error
 	SelectPane(target string) error
 	ResizePane(target, axis, size string) error
@@ -69,6 +86,23 @@ type Runner interface {
 	SetSessionOption(target, key, value string) error
 	SetWindowOption(target, key, value string) error
 	UnsetWindowOption(target, key string) error
+	SetPaneOption(target, key, value string) error
+	UnsetPaneOption(target, key string) error
+	// Show*Option read an option scope-exactly (show-options -w/-p, -q):
+	// "" when unset, never the merged-scope fallback that format reads do.
+	ShowWindowOption(target, key string) (string, error)
+	ShowPaneOption(target, key string) (string, error)
+	// ApplyOptions batches set-option calls into one tmux invocation
+	// (";"-chained) — state writes touch many options; one spawn, not nine.
+	ApplyOptions(writes []OptionWrite) error
+	// ListPaneOptionValues returns key's value for every pane on the server
+	// (list-panes -a), one entry per pane; unset options yield empty strings.
+	// Lets tabstate ask "does any running state remain?" in one round-trip.
+	ListPaneOptionValues(key string) ([]string, error)
+	// RefreshStatus forces a status-line redraw (refresh-client -S). Errors
+	// with "no current client" when nothing is attached — callers treat it
+	// as best-effort and must not fail state writes on it.
+	RefreshStatus() error
 	SetEnvironment(key, value string) error
 	SourceFile(path string) error
 

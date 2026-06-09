@@ -10,7 +10,12 @@ themes/iterm2/
 .dump/
 .claude/
 .codetree/
+/.NOTES.md
+/.NOTES.AGENT.md
 docs/.*
+
+# QA runner state (scorecards + cached binary; checklists/ is committed)
+.qa/
 
 # Demo / capture artifacts
 *.cast

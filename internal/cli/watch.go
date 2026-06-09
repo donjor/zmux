@@ -17,6 +17,7 @@ func newWatchCmd(app *apppkg.App) *cobra.Command {
 	var watchSessionFlag string
 	var watchFollow bool
 	var watchUntil string
+	var watchIdle int
 	var watchTimeout int
 
 	cmd := &cobra.Command{
@@ -31,10 +32,20 @@ Examples:
   zmux watch server -f                           # follow (tail -f)
   zmux watch server --until "ready on port"      # wait for pattern
   zmux watch server --until "error|failed" -T 30 # wait with timeout
+  zmux watch buddy --idle 3                      # wait until quiet for 3s
   zmux watch git -s myproject                    # from specific session`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			windowName := args[0]
+
+			if cmd.Flags().Changed("idle") {
+				if watchIdle <= 0 {
+					return fmt.Errorf("--idle must be a positive number of seconds")
+				}
+				if watchUntil != "" || watchFollow {
+					return fmt.Errorf("--idle cannot be combined with --until or --follow")
+				}
+			}
 
 			sessionName := watchSessionFlag
 			if sessionName == "" {
@@ -49,10 +60,18 @@ Examples:
 				}
 			}
 
-			target := resolveWindowTarget(app, sessionName, windowName)
+			rt, err := resolveTabTarget(app, sessionName, windowName)
+			if err != nil {
+				return err
+			}
+			target := rt.Target
 
 			if watchUntil != "" {
 				return watchUntilPattern(app, target, watchUntil, watchTimeout, watchLines)
+			}
+
+			if watchIdle > 0 {
+				return watchUntilIdle(app, target, watchIdle, watchTimeout, watchLines)
 			}
 
 			if watchFollow {
@@ -72,9 +91,88 @@ Examples:
 	cmd.Flags().IntVarP(&watchLines, "lines", "l", 50, "number of lines to capture")
 	cmd.Flags().BoolVarP(&watchFollow, "follow", "f", false, "follow output (tail -f style)")
 	cmd.Flags().StringVar(&watchUntil, "until", "", "wait for regex pattern in output")
-	cmd.Flags().IntVarP(&watchTimeout, "timeout", "T", 120, "timeout in seconds for --until (default 120)")
+	cmd.Flags().IntVar(&watchIdle, "idle", 0, "wait until output is unchanged for N seconds, then print it")
+	cmd.Flags().IntVarP(&watchTimeout, "timeout", "T", 120, "timeout in seconds for --until / --idle (default 120)")
 	cmd.Flags().StringVarP(&watchSessionFlag, "session", "s", "", "target session (default: current)")
 	return cmd
+}
+
+// watchUntilIdle polls a tab's output until the capture is byte-stable for
+// idleSec seconds, then prints the final capture and returns nil.
+//
+// Stability means the SCREEN stopped changing — not that the process is done.
+// A TUI thinking quietly (e.g. an agent CLI waiting on a remote model) goes
+// byte-stable mid-turn by design; the caller reads the printed capture and
+// judges what state it represents. Contract: exit 0 = stable for idleSec;
+// timeout returns non-zero with a best-effort capture (fresh, falling back
+// to the last good one); interrupts and other errors are also non-zero.
+func watchUntilIdle(app *apppkg.App, target string, idleSec, timeoutSec, watchLines int) error {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	defer signal.Stop(sig)
+
+	idleDur := time.Duration(idleSec) * time.Second
+	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	fmt.Fprintf(os.Stderr, "waiting for %s to be stable for %ds (timeout %ds)...\n", target, idleSec, timeoutSec)
+
+	var last string
+	var stableSince time.Time // zero = no trusted capture yet
+	var lastCaptureErr error
+
+	// Seed the stability streak immediately — without this, the first sample
+	// would only land on the first tick (+500ms) and an already-stable pane
+	// could never prove "stable for N seconds" inside --timeout N. A failed
+	// seed just leaves the streak unstarted; the first tick retries.
+	if output, err := app.Runner.CapturePane(target, watchLines); err == nil {
+		last = output
+		stableSince = time.Now()
+	}
+
+	for {
+		select {
+		case <-sig:
+			return fmt.Errorf("interrupted")
+
+		case <-ticker.C:
+			// Evaluate stability BEFORE the deadline: a pane that proves
+			// stable on the same tick the timeout expires is a success —
+			// the caller wants the capture, not a coin-flip on ordering.
+			// (CapturePane is a local tmux call; it is not itself bounded
+			// by --timeout.)
+			output, err := app.Runner.CapturePane(target, watchLines)
+			if err != nil {
+				// A failed capture proves nothing about stability — distrust
+				// the streak entirely rather than risk a false "stable".
+				stableSince = time.Time{}
+				lastCaptureErr = err
+			} else {
+				lastCaptureErr = nil
+				if stableSince.IsZero() || output != last {
+					last = output
+					stableSince = time.Now()
+				} else if time.Since(stableSince) >= idleDur {
+					fmt.Print(output)
+					return nil
+				}
+			}
+
+			if time.Now().After(deadline) {
+				// Best-effort capture so the caller can still judge content.
+				if err == nil {
+					fmt.Print(output)
+				} else if last != "" {
+					fmt.Print(last)
+				}
+				if lastCaptureErr != nil {
+					return fmt.Errorf("timeout after %ds — captures failing (%v)", timeoutSec, lastCaptureErr)
+				}
+				return fmt.Errorf("timeout after %ds — output never stable for %ds", timeoutSec, idleSec)
+			}
+		}
+	}
 }
 
 // watchUntilPattern polls a tab's output until a regex pattern is found in NEW output.

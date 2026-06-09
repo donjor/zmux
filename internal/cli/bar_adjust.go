@@ -4,6 +4,7 @@ import (
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
 )
@@ -53,16 +54,24 @@ func reconcileBarStatusLines(runner tmux.Runner, layout, topBar, zmuxBin string)
 	twoLine := layout == "two-line" || layout == "split"
 	topBarCmd := bar.TopBarFormatCmd(zmuxBin, topBar)
 
+	// The bottom row carries the dynamic logical tabs row when a zmux binary
+	// is around to render it; the native window list otherwise.
+	bottomRow := bar.TmuxDefaultStatusFormat
+	if zmuxBin != "" {
+		bottomRow = bar.TabsRowStatusFormat(zmuxBin)
+	}
+
 	for _, sess := range allSessions {
+		if tabs.IsReservedSession(sess.Name) {
+			continue // the dock never renders a bar
+		}
 		if twoLine {
 			_ = runner.SetSessionOption(sess.Name, "status", "2")
 			_ = runner.SetSessionOption(sess.Name, "status-format[0]", topBarCmd)
-			_ = runner.SetSessionOption(sess.Name, "status-format[1]",
-				bar.TmuxDefaultStatusFormat)
+			_ = runner.SetSessionOption(sess.Name, "status-format[1]", bottomRow)
 		} else {
 			_ = runner.SetSessionOption(sess.Name, "status", "on")
-			_ = runner.SetSessionOption(sess.Name, "status-format[0]",
-				bar.TmuxDefaultStatusFormat)
+			_ = runner.SetSessionOption(sess.Name, "status-format[0]", bottomRow)
 		}
 	}
 }

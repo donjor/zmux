@@ -1,0 +1,7 @@
+name = "dev-nvim"
+description = "Project workspace with nvim in the first tab"
+extends = "dev"
+
+[[tabs]]
+name = "bash"
+command = "nvim ."

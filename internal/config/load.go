@@ -115,7 +115,7 @@ func applyDefaults(cfg *Config) {
 	if cfg.Sync.GhosttyConfig == "" {
 		cfg.Sync.GhosttyConfig = defaults.Sync.GhosttyConfig
 	}
-	if len(cfg.Templates.Paths) == 0 {
-		cfg.Templates.Paths = defaults.Templates.Paths
+	if len(cfg.Recipes.Paths) == 0 {
+		cfg.Recipes.Paths = defaults.Recipes.Paths
 	}
 }

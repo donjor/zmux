@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/bar"
@@ -41,6 +42,28 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			groupID := barRenderGroup
 			if groupID == "" {
 				groupID, _ = app.Runner.DisplayMessage("", "#{session_group}")
+			}
+
+			if side == "tabs" {
+				// Logical tab row: one scan, rendered for the RAW session (a
+				// grouped clone has its own current-window pointer) with
+				// docked-tab origins matched against the root name (hide
+				// records the root — clone-block keeps clones away from
+				// placement verbs). Preset comes from config (same per-call
+				// load as left/right); prefix arrives as a flag because tmux
+				// #{?} conditionals don't expand inside #() output.
+				rows, err := app.Runner.ListLogicalPaneRows()
+				if err != nil {
+					return nil // empty row beats a broken bar
+				}
+				originScope := sessionName
+				if groupID != "" {
+					originScope = session.RootName(sessionName)
+				}
+				cfg, _ := loadConfig(app.FS)
+				preset, _ := bar.PresetFromString(cfg.Bar.Preset)
+				fmt.Print(bar.RenderTabsRow(palette, preset, sessionName, originScope, rows, barRenderPrefix == "1", time.Now()))
+				return nil
 			}
 
 			// Resolve grouped session clones (e.g. "dev-b") to their root
@@ -138,35 +161,38 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 					topVariant = "tabs"
 				}
 				fmt.Print(bar.RenderTopRow(palette, ctx, preset, topVariant))
-				// Mark non-default profiles (e.g. the zzmux edge binary) with a
-				// right-aligned badge on the top row so it's obvious you're not
-				// on stable zmux, without crowding the de-duped bottom-left.
-				if app.Profile.Name != "" && app.Profile.Name != "zmux" {
-					fmt.Print("#[align=right]" + bar.EdgeBadge(palette, app.Profile.Name))
-				}
+				// Right-aligned overlay: cwd plus non-default profile badge
+				// (e.g. zzmux). Keep both off the bottom tabs row.
+				fmt.Print(bar.RenderTopOverlay(palette, ctx, app.Profile.Name))
 			default:
-				return fmt.Errorf("unknown side %q (use 'left', 'right', or 'top')", side)
+				return fmt.Errorf("unknown side %q (use 'left', 'right', 'top', or 'tabs')", side)
 			}
 
 			return nil
 		},
 	}
 
-	cmd.Flags().StringVar(&barRenderDir, "dir", "", "pane directory (avoids tmux query, enables per-window cache)")
-	cmd.Flags().StringVar(&barRenderSession, "session", "", "session name (passed from tmux #S, avoids global query)")
-	cmd.Flags().StringVar(&barRenderPaneCmd, "pane-cmd", "", "current pane command (passed from tmux #{pane_current_command})")
-	cmd.Flags().StringVar(&barRenderPrefix, "prefix", "", "client prefix state 0|1 (passed from tmux #{client_prefix})")
-	cmd.Flags().StringVar(&barRenderGroup, "group", "", "session group id (passed from tmux #{session_group})")
-	cmd.Flags().StringVar(&barRenderGroupSize, "group-size", "", "session group size (passed from tmux #{session_group_size})")
-	cmd.Flags().StringVar(&barRenderTopBar, "top-bar", "", "top bar variant: tabs, dots, minimal (passed from generate.go)")
+	registerFlags := func(c *cobra.Command) {
+		c.Flags().StringVar(&barRenderDir, "dir", "", "pane directory (avoids tmux query, enables per-window cache)")
+		c.Flags().StringVar(&barRenderSession, "session", "", "session name (passed from tmux #S, avoids global query)")
+		c.Flags().StringVar(&barRenderPaneCmd, "pane-cmd", "", "current pane command (passed from tmux #{pane_current_command})")
+		c.Flags().StringVar(&barRenderPrefix, "prefix", "", "client prefix state 0|1 (passed from tmux #{client_prefix})")
+		c.Flags().StringVar(&barRenderGroup, "group", "", "session group id (passed from tmux #{session_group})")
+		c.Flags().StringVar(&barRenderGroupSize, "group-size", "", "session group size (passed from tmux #{session_group_size})")
+		c.Flags().StringVar(&barRenderTopBar, "top-bar", "", "top bar variant: tabs, dots, minimal (passed from generate.go)")
+	}
+	registerFlags(cmd)
 
-	// Add bar render debug subcommand to barCmd.
+	// Add bar render debug subcommand to barCmd. Same flags: outside tmux
+	// the session fallback query is ambiguous (it can land on a hidden-tab
+	// dock session), so QA/agent use needs --session.
 	barRenderDebug := &cobra.Command{
-		Use:   "render <left|right>",
+		Use:   "render <left|right|top|tabs>",
 		Short: "Render a bar segment (debug)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  cmd.RunE,
 	}
+	registerFlags(barRenderDebug)
 	barCmd.AddCommand(barRenderDebug)
 
 	return cmd

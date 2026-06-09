@@ -1,6 +1,9 @@
 package source
 
-import "github.com/donjor/zmux/internal/tmux"
+import (
+	"github.com/donjor/zmux/internal/tabs"
+	"github.com/donjor/zmux/internal/tmux"
+)
 
 // prober is the host-I/O seam for discovery. Discover orchestrates over it; the
 // production impl (systemProber) performs real filesystem/ps/tmux calls, while
@@ -53,6 +56,9 @@ func (systemProber) localSessions(local tmux.Endpoint) ([]CatalogEntry, bool) {
 	}
 	entries := make([]CatalogEntry, 0, len(sessions))
 	for _, s := range sessions {
+		if tabs.IsReservedSession(s.Name) {
+			continue // zmux-internal (hidden-tab dock) — never catalog
+		}
 		entries = append(entries, CatalogEntry{
 			Source:   localSource,
 			Session:  s.Name,

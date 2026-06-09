@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/spf13/cobra"
@@ -41,13 +42,20 @@ Examples:
 				}
 			}
 
-			target := resolveTabForMutation(app, sessionName, windowName)
-
-			if err := app.Runner.SendKeys(target, keys...); err != nil {
-				return fmt.Errorf("send to %s: %w", target, err)
+			rt, err := resolveTabTargetForMutation(app, sessionName, windowName, windowName)
+			if err != nil {
+				return err
 			}
 
-			fmt.Printf("sent to %s\n", target)
+			// Input acknowledges a finished tab: clear done|failed first
+			// (ratified clear table — attention/running stay).
+			rt.clearStale(app)
+
+			if err := app.Runner.SendKeys(rt.Target, keys...); err != nil {
+				return fmt.Errorf("send to %s: %w", rt.Target, err)
+			}
+
+			fmt.Printf("sent to %s\n", rt.Target)
 			return nil
 		},
 	}
@@ -84,9 +92,25 @@ Examples:
 				}
 			}
 
-			target := resolveTabForMutation(app, sessionName, windowName)
+			rt, err := resolveTabTargetForMutation(app, sessionName, windowName, windowName)
+			if err != nil {
+				return err
+			}
+			target := rt.Target
 
-			if err := app.Runner.SendKeys(target, text, "Enter"); err != nil {
+			rt.clearStale(app)
+
+			// Send text and Enter as separate key events with a gap between
+			// them. TUI input boxes (agent CLIs like codex) detect rapid
+			// input as a paste burst; an Enter glued to the text in the same
+			// send-keys call gets absorbed into the paste as a newline and
+			// the message silently never submits. Shells don't care about
+			// the gap.
+			if err := app.Runner.SendKeys(target, text); err != nil {
+				return fmt.Errorf("type to %s: %w", target, err)
+			}
+			time.Sleep(typeGap(len(text)))
+			if err := app.Runner.SendKeys(target, "Enter"); err != nil {
 				return fmt.Errorf("type to %s: %w", target, err)
 			}
 
@@ -96,4 +120,19 @@ Examples:
 	}
 	cmd.Flags().StringVarP(&sendSessionFlag, "session", "s", "", "target session (default: current)")
 	return cmd
+}
+
+// typeGap returns how long to wait between the text and the Enter key.
+// The TUI paste-burst window scales with paste size: a large paste takes
+// longer to ingest, and an Enter arriving mid-ingest is absorbed into the
+// paste as a newline (observed live: ~1KB prompts into codex with a fixed
+// 200ms gap silently never submit). 200ms base covers the empirical
+// ~30-50ms burst window for short text; +1ms/char covers ingest time for
+// large pastes, capped so shells never wait absurdly long.
+func typeGap(textLen int) time.Duration {
+	gap := 200*time.Millisecond + time.Duration(textLen)*time.Millisecond
+	if gap > 1500*time.Millisecond {
+		return 1500 * time.Millisecond
+	}
+	return gap
 }

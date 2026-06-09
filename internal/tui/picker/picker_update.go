@@ -1,10 +1,6 @@
 package picker
 
 import (
-	"strings"
-
-	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/session"
@@ -53,70 +49,6 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// ── Template select mode ──
-	if m.mode == modeTemplateSelect {
-		switch {
-		case key.Matches(msg, Keys.Back), key.Matches(msg, Keys.Quit):
-			m.mode = modeNormal
-			m.input.Focus()
-			return m, textinput.Blink
-		case key.Matches(msg, Keys.Up):
-			if m.templateCursor > 0 {
-				m.templateCursor--
-			}
-			return m, nil
-		case key.Matches(msg, Keys.Down):
-			if m.templateCursor < len(m.templates)-1 {
-				m.templateCursor++
-			}
-			return m, nil
-		case key.Matches(msg, Keys.Enter):
-			if m.templateCursor < len(m.templates) {
-				tmpl := m.templates[m.templateCursor]
-				m.selectedTemplate = tmpl.Name
-				m.mode = modeTemplateName
-				m.nameInput.SetValue(tmpl.Name)
-				m.nameInput.Placeholder = "blank for " + tmpl.Name
-				m.nameInput.Focus()
-				return m, textinput.Blink
-			}
-			return m, nil
-		}
-		return m, nil
-	}
-
-	// ── Template name input mode ──
-	if m.mode == modeTemplateName {
-		switch {
-		case key.Matches(msg, Keys.Back):
-			m.mode = modeTemplateSelect
-			m.nameInput.Blur()
-			m.nameInput.SetValue("")
-			return m, nil
-		case key.Matches(msg, Keys.Enter):
-			name := strings.TrimSpace(m.nameInput.Value())
-			// Scope the template to the workspace the cursor is currently on.
-			wsName := ""
-			if row := m.tree.CurrentSelectable(); row != nil && row.Kind == outline.RowWorkspaceHeader {
-				if ws, ok := outline.RowData[workspaceview.WorkspaceViewModel](row); ok && ws != nil && !ws.IsPseudo {
-					wsName = ws.Name
-				}
-			}
-			m.Result = PickerResult{
-				Action:    "template",
-				Name:      name,
-				Template:  m.selectedTemplate,
-				Workspace: wsName,
-			}
-			m.Quitting = true
-			return m, tea.Quit
-		default:
-			var cmd tea.Cmd
-			m.nameInput, cmd = m.nameInput.Update(msg)
-			return m, cmd
-		}
-	}
-
 	// ── Normal mode ──
 	return m.handleNormalKey(msg)
 }
@@ -148,15 +80,6 @@ func (m PickerModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.input, cmd = m.input.Update(msg)
 		m.onInputChanged()
 		return m, cmd
-
-	case "ctrl+t":
-		if len(m.templates) == 0 {
-			return m, nil
-		}
-		m.mode = modeTemplateSelect
-		m.templateCursor = 0
-		m.input.Blur()
-		return m, nil
 
 	case "ctrl+h":
 		// Toggle show-all: reveal every workspace past the default cap.

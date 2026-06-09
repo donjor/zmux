@@ -1,6 +1,6 @@
 ---
 name: zmux
-description: "Terminal/session orchestration via zmux, a tmux wrapper. TRIGGER when: managing long-running or interactive terminal processes (dev servers, watchers, queues, REPLs), the user mentions zmux/tmux sessions or tabs, sharing a terminal pane with the user, or diagnosing terminal/truecolor capabilities. Provides rules for running commands and managing tabs/panes/sessions while keeping work visible to the user."
+description: "Terminal/session orchestration via zmux, a tmux wrapper. TRIGGER when: managing long-running or interactive terminal processes (dev servers, watchers, queues, REPLs), the user mentions zmux/tmux sessions or tabs, sharing a terminal pane with the user, diagnosing terminal/truecolor capabilities, or driving another real agent CLI (codex, claude, pi, etc.) in a visible zmux tab — as a read-only peer for review/second opinion, or as a write-capable worker bound to a git worktree. Provides rules for named tabs/panes/sessions, agent peer + agent worker doctrine, and keeping work visible to the user."
 ---
 
 # zmux — Terminal & Session Orchestration
@@ -41,6 +41,60 @@ interactive/remote command (`sudo`, `ssh`, a REPL) draws a non-blocking **warn**
 nudging it into a shared tab. Genuinely need the raw command (zmux development,
 socket inspection, a one-off)? Prefix `ZMUX_ALLOW=1`, append `# zmux: allow`, use an
 explicit `-L <socket>`, or run from the zmux repo — all are exempt.
+
+## Tab states (attention glyphs in the bar)
+
+`zmux tab state <attention|running|done|failed|clear> [tab]` marks a tab's
+lifecycle; the bar renders a colored glyph (● needs-human / ◐ running /
+✓ done / ✗ failed) visible from any tab. Mostly automatic: `zmux run` sets
+running→done/failed; `zmux send`/`type` clear a stale done/failed; focusing
+a tab clears attention. Set `attention` manually when handing the human a
+prompt they must act on (sudo, permission prompt): `zmux tab state attention
+admin --msg 'sudo password'`. A `Stop` hook
+(`skills/zmux/hooks/zmux-tab-state-stop.mjs`, symlink into
+`~/.claude/hooks/` like the guard) marks the agent's own tab done/attention
+when a turn ends — no transcript parsing, just "the turn ended".
+
+## Agent peer
+
+When asked to get a review, second opinion, or agent-to-agent discussion from a
+real CLI (`codex`, `claude`, `pi`, etc.), use zmux to drive that CLI in a
+visible tab. This is a generic zmux doctrine, not a personal workflow policy.
+Read `skills/zmux/references/agent-peer.md` before running the loop.
+
+Minimal loop:
+
+```bash
+zmux run 'codex -s read-only -a never' -n codex-peer -d
+zmux watch codex-peer --idle 3 -T 30
+zmux type codex-peer '<prompt with repo/file pointers>'
+zmux watch codex-peer --idle 3 -T 300
+```
+
+Do not create a separate peer adapter or manager. zmux owns the visible terminal
+mechanics; workflow skills layer above this doctrine.
+
+## Agent worker
+
+The peer's write-capable sibling: drive a real CLI as an **autonomous worker bound
+to an isolated git worktree**, where writing + running code in that worktree *is*
+the job (not declined, as in peer mode). Same visible-tab mechanics; inverted
+permission posture. Generic zmux doctrine — read
+`skills/zmux/references/agent-worker.md` before running the loop.
+
+Minimal loop (one worker = one session, bound to one worktree):
+
+```bash
+zmux new dev worker-auth                                   # session per worker (when >1 concurrent)
+zmux run 'codex -C /path/to/worktree-auth' -n worker-auth-cli -d -s worker-auth
+zmux type worker-auth-cli '<brief: worktree path, scope, boundary>' -s worker-auth
+zmux watch worker-auth-cli --idle 3 -T 600 -s worker-auth  # long, often async
+```
+
+The worktree is the sandbox: writes/exec inside it are routine; network, installs,
+auth, and out-of-worktree writes still surface. zmux owns the terminal + lifecycle;
+the *fan-out policy* (which worktrees, merge order, who tests in the browser) lives
+in the workflow skill above, never here.
 
 ## Am I in zmux?
 
@@ -159,7 +213,10 @@ Do not attempt to automate password entry.
 zmux ls [workspace]              # list workspaces, or sessions within one
 zmux ls -s                       # flat list of all sessions
 zmux new <workspace> [session…] # create workspace + sessions, attach (alias: n)
-zmux new -t <template> <ws>     # create from a template
+zmux run <recipe>               # recipe form with cwd/workspace/session defaults
+zmux run <recipe> -y            # run recipe defaults without prompting
+zmux run <recipe> --dry-run     # print the exact recipe plan
+zmux recipe list                # list bundled and user recipes
 zmux open <ws> [session]         # open/attach a workspace session (aliases: attach, a)
 zmux open <ws> <session> --hijack   # take over a session attached elsewhere (advanced)
 zmux kill <name>                 # smart kill, workspace-first (alias: k)
@@ -175,7 +232,7 @@ zmux ws kill <workspace>         # kill a workspace and all its sessions
 ## Tabs
 
 ```bash
-zmux tabs [session]              # list tabs (alias: t)
+zmux tabs [session]              # list tabs — riders nested under hosts, hidden marked ~ (alias: t)
 zmux tab move <tab> <dest-session>  # move a tab to another session in the workspace
 zmux tab label '<label>'         # set a stable zmux label for the current tab
 zmux tab label ''                # clear the label
@@ -184,6 +241,25 @@ zmux tab kill <tab>              # kill a tab in the current session
 
 Labels are zmux overlays (`label [auto-name]`); they don't disable tmux's automatic
 window renaming.
+
+### Placements (pane / full / hide / show)
+
+A zmux tab is a **stable logical unit** (id + label + state), not a window slot. It
+can live as a full window, as a pane inside another tab, or hidden in the dock —
+and `send`/`type`/`watch`/`run -n` keep reaching it by name in every placement.
+
+```bash
+zmux tab pane <tab>                      # join <tab> as a pane beside your current tab
+zmux tab pane <tab> --into <host> --down --size 30%   # explicit host + geometry
+zmux tab full <tab>                      # promote a pane back to its own tab (--after: next to old host)
+zmux tab hide <tab>                      # park it off the bar — process keeps running
+zmux tab show <tab>                      # bring it back to the session it was hidden from
+```
+
+States and labels ride along: a `running` glyph set on a full tab is still there
+when it's a pane or hidden. Placement verbs refuse while grouped viewports
+(`-b`/`-c` clones) are attached — detach the extra clients first. `tab show` never
+auto-joins; follow with `tab pane` if you want it back as a pane.
 
 ## Panes & sidecars
 

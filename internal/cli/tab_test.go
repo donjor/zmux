@@ -10,31 +10,69 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// setTabLabel is pane-canonical: it stamps the resolved window's active pane
+// (id + label) and mirrors the label to the window in the same batch.
 func TestSetTabLabelSetsManualLabel(t *testing.T) {
 	a, mock := newTestApp(t)
+	mock.DisplayMessageResult = "%4\tdev:1\n"
 	cmd, out := outputCommand()
 	if err := setTabLabel(a, cmd, "@11", "pi", false); err != nil {
 		t.Fatalf("setTabLabel failed: %v", err)
 	}
-	if len(mock.Calls) != 2 || mock.Calls[0].Method != "SetWindowOption" || mock.Calls[0].Args[0] != "@11" || mock.Calls[0].Args[1] != tablabel.Option || mock.Calls[0].Args[2] != "pi" {
-		t.Fatalf("unexpected calls: %#v", mock.Calls)
+	var stamped, paneLabel, winLabel, manualSource bool
+	for _, c := range mock.Calls {
+		if c.Method != "ApplyOptions" || c.Args[4] != "unset=false" {
+			continue
+		}
+		switch {
+		case c.Args[0] == "-p" && c.Args[1] == "%4" && c.Args[2] == "@zmux_tab_id":
+			stamped = true
+		case c.Args[0] == "-p" && c.Args[1] == "%4" && c.Args[2] == tablabel.Option && c.Args[3] == "pi":
+			paneLabel = true
+		case c.Args[0] == "-w" && c.Args[1] == "dev:1" && c.Args[2] == tablabel.Option && c.Args[3] == "pi":
+			winLabel = true
+		case c.Args[0] == "-p" && c.Args[2] == tablabel.SourceOption && c.Args[3] == tablabel.SourceManual:
+			manualSource = true
+		}
 	}
-	if mock.Calls[1].Method != "SetWindowOption" || mock.Calls[1].Args[1] != tablabel.SourceOption || mock.Calls[1].Args[2] != tablabel.SourceManual {
-		t.Fatalf("expected manual source call, got %#v", mock.Calls[1])
+	if !stamped || !paneLabel || !winLabel || !manualSource {
+		t.Fatalf("expected pane-canonical stamp+label+mirror (stamped=%v pane=%v win=%v manual=%v): %#v",
+			stamped, paneLabel, winLabel, manualSource, mock.Calls)
 	}
 	if !strings.Contains(out.String(), "tab label: pi") {
 		t.Fatalf("unexpected output: %q", out.String())
 	}
 }
 
+// Clearing unsets the label at both scopes but keeps the tab managed (no id
+// writes, no id unsets).
 func TestSetTabLabelClearsBlankLabel(t *testing.T) {
 	a, mock := newTestApp(t)
+	mock.DisplayMessageResult = "%4\tdev:1\n"
 	cmd, _ := outputCommand()
 	if err := setTabLabel(a, cmd, "@11", "", false); err != nil {
 		t.Fatalf("setTabLabel clear failed: %v", err)
 	}
-	if len(mock.Calls) != 2 || mock.Calls[0].Method != "UnsetWindowOption" || mock.Calls[0].Args[1] != tablabel.Option || mock.Calls[1].Args[1] != tablabel.SourceOption {
-		t.Fatalf("expected unset calls, got %#v", mock.Calls)
+	var paneUnset, winUnset bool
+	for _, c := range mock.Calls {
+		if c.Method != "ApplyOptions" {
+			continue
+		}
+		if c.Args[2] == "@zmux_tab_id" {
+			t.Fatalf("clearing a label must not touch the tab id: %#v", c)
+		}
+		if c.Args[4] != "unset=true" || c.Args[2] != tablabel.Option {
+			continue
+		}
+		switch c.Args[0] {
+		case "-p":
+			paneUnset = c.Args[1] == "%4"
+		case "-w":
+			winUnset = c.Args[1] == "dev:1"
+		}
+	}
+	if !paneUnset || !winUnset {
+		t.Fatalf("expected label unset at both scopes (pane=%v win=%v): %#v", paneUnset, winUnset, mock.Calls)
 	}
 }
 

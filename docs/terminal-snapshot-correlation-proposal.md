@@ -3,15 +3,15 @@
 Date: 2026-05-01  
 Audience: zmux implementation agent
 
-> **Status (2026-05-25):** Phases 1, 3, and 4 are implemented. `zmux terminal
+> **Status (2026-05-25):** Stable terminal title support, current-terminal
+> resolution, and snapshot bundles are implemented. `zmux terminal
 > current --json` resolves strict screenshot geometry (`internal/terminal`), and
 > `zmux snapshot` now bundles per-pane text/ANSI + metadata + an optional strict
 > PNG into `~/.zmux/snapshots/<timestamp>/` (`internal/snapshot`, exposed via the
-> `zmux` skill). The PNG covers only the current terminal — off-current-window
-> `--pane` targets get text/ANSI plus a warning, never a mismatched screenshot. Phase 2
-> (`zmux terminals` plural listing) remains unbuilt; it isn't needed by snapshot.
-> The bundle path is zmux-native (`~/.zmux/snapshots`), not the pi-parley
-> `.dump/vision-snapshots` convention.
+> `zmux` skill). The PNG covers only the current terminal; off-current-window
+> `--pane` targets get text/ANSI plus a warning, never a mismatched screenshot.
+> `zmux terminals` plural listing remains unbuilt; it is not needed by snapshot.
+> The bundle path is zmux-native (`~/.zmux/snapshots`).
 
 ## Prompt for the implementation agent
 
@@ -175,7 +175,7 @@ If the matched window is hidden or not visible:
 Once terminal correlation is reliable, zmux can own the whole snapshot bundle:
 
 ```bash
-zmux snapshot --current --ansi --text --png --out .dump/clean-ui/snapshots/foo --json
+zmux snapshot --current --ansi --text --png --out ~/tmp/zmux-snapshots/foo --json
 ```
 
 Bundle shape:

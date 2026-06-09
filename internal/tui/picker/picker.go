@@ -83,12 +83,6 @@ type PickerModel struct {
 	// Window names per session (cached).
 	windows map[string][]tmux.Window
 
-	// Templates.
-	templates        []session.Template
-	templateCursor   int
-	nameInput        textinput.Model
-	selectedTemplate string
-
 	// External sources.
 	catalog *source.Catalog
 
@@ -121,18 +115,12 @@ func NewPickerModel(runner tmux.Runner, styles styles.Styles) PickerModel {
 	ti.SetStyles(tiStyles)
 	ti.Focus()
 
-	ni := textinput.New()
-	ni.Placeholder = "session name"
-	ni.CharLimit = 64
-	ni.SetWidth(40)
-
 	return PickerModel{
-		runner:    runner,
-		styles:    styles,
-		input:     ti,
-		nameInput: ni,
-		tree:      outline.NewTree(),
-		windows:   make(map[string][]tmux.Window),
+		runner:  runner,
+		styles:  styles,
+		input:   ti,
+		tree:    outline.NewTree(),
+		windows: make(map[string][]tmux.Window),
 	}
 }
 
@@ -144,11 +132,6 @@ func (m *PickerModel) SetWorkspaceDataLoader(loader workspaceview.WorkspaceDataL
 // SetWorkspaceStore sets the store used for workspace mutations (delete).
 func (m *PickerModel) SetWorkspaceStore(store WorkspaceMutator) {
 	m.wsStore = store
-}
-
-// SetTemplates sets the available templates for the picker.
-func (m *PickerModel) SetTemplates(templates []session.Template) {
-	m.templates = templates
 }
 
 // ── Init ──
@@ -194,7 +177,6 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			inputWidth = 20
 		}
 		m.input.SetWidth(inputWidth)
-		m.nameInput.SetWidth(inputWidth)
 		return m, nil
 
 	case refreshSessionsMsg:
@@ -251,11 +233,5 @@ func (m PickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.onInputChanged()
 		return m, cmd
 	}
-	if m.mode == modeTemplateName {
-		var cmd tea.Cmd
-		m.nameInput, cmd = m.nameInput.Update(msg)
-		return m, cmd
-	}
-
 	return m, nil
 }

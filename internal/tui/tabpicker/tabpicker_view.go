@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tabstate"
 	"github.com/donjor/zmux/internal/tui/outline"
 )
 
@@ -122,9 +124,20 @@ func (m TabPickerModel) renderTabRow(row *outline.Row, selected bool) string {
 
 	idx := ""
 	cmd := ""
+	glyph := ""
 	if t, ok := outline.RowData[tabEntry](row); ok && t != nil {
-		idx = m.styles.Dim.Render(fmt.Sprintf("%d", t.Index))
+		switch t.Kind {
+		case teRider:
+			idx = m.styles.Dim.Render("└") // pane riding inside the window above
+		case teHidden:
+			idx = m.styles.Dim.Render("~") // parked in the dock
+		default:
+			idx = m.styles.Dim.Render(fmt.Sprintf("%d", t.Index))
+		}
 		cmd = m.styles.Dim.Render(t.Command)
+		if g := t.stateGlyph(); g != "" {
+			glyph = " " + m.stateStyle(t).Render(g)
+		}
 	}
 
 	nameStyle := m.styles.Normal
@@ -133,7 +146,27 @@ func (m TabPickerModel) renderTabRow(row *outline.Row, selected bool) string {
 	}
 	name := nameStyle.Render(fmt.Sprintf("%-14s", row.Label))
 
-	return fmt.Sprintf("  %s%s %s %s  %s\n", cursor, active, idx, name, cmd)
+	return fmt.Sprintf("  %s%s %s %s%s  %s\n", cursor, active, idx, name, glyph, cmd)
+}
+
+// stateStyle colors a lifecycle glyph by its semantic role — the same
+// state→purpose mapping the bar uses.
+func (m TabPickerModel) stateStyle(t *tabEntry) lipgloss.Style {
+	st, ok := t.Tab.StateOf()
+	if !ok {
+		return m.styles.Dim
+	}
+	switch st {
+	case tabstate.StateAttention:
+		return m.styles.Accent
+	case tabstate.StateFailed:
+		return m.styles.Error
+	case tabstate.StateRunning:
+		return m.styles.Info
+	case tabstate.StateDone:
+		return m.styles.Success
+	}
+	return m.styles.Dim
 }
 
 // entryByNameConst is the value-receiver lookup used by the renderer.

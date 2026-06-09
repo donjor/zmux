@@ -18,7 +18,8 @@ func TestGenerateConfContainsGeneral(t *testing.T) {
 		`set -g default-terminal "tmux-256color"`,
 		`set -g mouse on`,
 		`set -g history-limit 50000`,
-		`set -g escape-time 10`,
+		`set -g escape-time 50`,
+		`set -g repeat-time 300`,
 		`set -g base-index 1`,
 		`setw -g pane-base-index 1`,
 		`set -g renumber-windows on`,
@@ -108,6 +109,23 @@ func TestGenerateConfContainsAltTabSwitching(t *testing.T) {
 	}
 }
 
+func TestGenerateConfContainsPrefixAltSessionSwitching(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	for i := 1; i <= 9; i++ {
+		want := fmt.Sprintf(`bind M-%d run-shell "/usr/local/bin/zmux workspace switch-to %d"`, i, i)
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing prefix alt session binding: %q", want)
+		}
+	}
+
+	if strings.Contains(conf, "bind -n M-1 run-shell") {
+		t.Error("session switching should stay behind prefix, not bind in the root table")
+	}
+}
+
 func TestGenerateConfContainsWindowBindings(t *testing.T) {
 	cfg := config.DefaultConfig()
 	palette := testPalette()
@@ -118,6 +136,8 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 		"bind n next-window",
 		`bind . command-prompt -p "label tab (blank clears):"`,
 		`set-option -w -t #{window_id} @zmux_label`,
+		`bind J command-prompt -p "join tab here:" "run-shell '/usr/local/bin/zmux tab pane \"%%\"'"`,
+		`bind F run-shell "/usr/local/bin/zmux tab full --after"`,
 		`bind x confirm-before`,
 		`#{?@zmux_label,#{?#{==:#{@zmux_label},#W},#W,#{@zmux_label} [#W]},#W#{?@zmux_duplicate_name,[#{b:pane_current_path}],}}`,
 	}
@@ -135,6 +155,14 @@ func TestGenerateConfContainsNoPrefixPaneFocusBindings(t *testing.T) {
 	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
 
 	checks := []string{
+		"unbind -n M-Left",
+		"unbind -n M-Right",
+		"unbind -n M-Up",
+		"unbind -n M-Down",
+		"unbind -n M-S-Left",
+		"unbind -n M-S-Right",
+		"unbind -n M-S-Up",
+		"unbind -n M-S-Down",
 		"bind -n M-S-Left select-pane -L",
 		"bind -n M-S-Right select-pane -R",
 		"bind -n M-S-Up select-pane -U",
@@ -143,6 +171,12 @@ func TestGenerateConfContainsNoPrefixPaneFocusBindings(t *testing.T) {
 	for _, want := range checks {
 		if !strings.Contains(conf, want) {
 			t.Errorf("conf missing pane focus binding: %q", want)
+		}
+	}
+
+	for _, old := range []string{"M-Left", "M-Right", "M-Up", "M-Down"} {
+		if strings.Contains(conf, "bind -n "+old+" select-pane") {
+			t.Errorf("conf should not use plain Alt pane focus binding %q", old)
 		}
 	}
 }
@@ -343,6 +377,32 @@ func TestGenerateConfGuardsRefreshHooksAgainstNoClient(t *testing.T) {
 		if strings.Contains(conf, fmt.Sprintf(`set-hook -g %s "refresh-client -S"`, ev)) {
 			t.Errorf("conf still has UNGUARDED refresh hook for %s (would error with no client)", ev)
 		}
+	}
+}
+
+// Focus clears `attention` via the *-changed hooks — pane-focus-in is
+// deliberately absent (doesn't fire without focus-events; plan 026 spike C).
+// Hook commands must be silent and fail-open like the other generated hooks.
+func TestGenerateConfFocusClearHooks(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	cmd := "/usr/local/bin/zmux tab state clear --target #{pane_id} --if attention --source focus --quiet >/dev/null 2>&1 || true"
+	for _, ev := range []string{"session-window-changed[1]", "window-pane-changed"} {
+		want := fmt.Sprintf(`set-hook -g %s "run-shell -b '%s'"`, ev, cmd)
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing focus-clear hook for %s:\n  want substring: %q", ev, want)
+		}
+	}
+	if strings.Contains(conf, "pane-focus-in") {
+		t.Error("pane-focus-in must not be used — it does not fire without focus-events (spike C)")
+	}
+
+	// No zmux binary → no focus-clear hooks (nothing to run).
+	confNoBin := GenerateConf(&cfg, &palette, "")
+	if strings.Contains(confNoBin, "tab state clear") {
+		t.Error("focus-clear hooks must be omitted without a zmux binary")
 	}
 }
 

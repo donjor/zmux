@@ -3,19 +3,18 @@ package picker
 import "charm.land/bubbles/v2/key"
 
 type keymap struct {
-	Quit     key.Binding
-	Enter    key.Binding
-	Back     key.Binding
-	Filter   key.Binding
-	Up       key.Binding
-	Down     key.Binding
-	New      key.Binding
-	Template key.Binding
-	Delete   key.Binding
-	Rename   key.Binding
-	Cleanup  key.Binding
-	MoveTab  key.Binding
-	Preview  key.Binding
+	Quit    key.Binding
+	Enter   key.Binding
+	Back    key.Binding
+	Filter  key.Binding
+	Up      key.Binding
+	Down    key.Binding
+	New     key.Binding
+	Delete  key.Binding
+	Rename  key.Binding
+	Cleanup key.Binding
+	MoveTab key.Binding
+	Preview key.Binding
 }
 
 // Keys defines the default keybindings for TUI components.
@@ -47,10 +46,6 @@ var Keys = keymap{
 	New: key.NewBinding(
 		key.WithKeys("n"),
 		key.WithHelp("n", "new session"),
-	),
-	Template: key.NewBinding(
-		key.WithKeys("t"),
-		key.WithHelp("t", "from template"),
 	),
 	Delete: key.NewBinding(
 		key.WithKeys("x"),

@@ -6,7 +6,7 @@ An opinionated, all-in-one tmux management wrapper. It replaces tmux's sharp
 edges with a beautiful, interactive experience powered by modern CLI tooling.
 
 zmux handles:
-- **Session management** — interactive picker, fuzzy search, templates
+- **Session management** — interactive picker, fuzzy search, recipes
 - **tmux configuration** — opinionated defaults, keybinds, vim copy mode
 - **Theming** — 300+ themes, status bar presets, theme sync across tools
 - **Terminal commands** — run, watch, send, type for scripting and agent workflows
@@ -49,7 +49,8 @@ internal/
 ├── theme/                      theme parsing, resolution, semantic palette
 ├── tmux/                       tmux command interface, conf generation
 ├── bar/                        status bar presets, dynamic rendering, tmux hooks
-├── session/                    session lifecycle, templates, tmp cleanup
+├── session/                    session lifecycle, tmp cleanup
+├── recipe/                     recipe discovery, planning, and execution
 ├── sync/                       theme sync targets (ghostty, nvim)
 ├── workspace/                  first-class workspace objects (versioned TOML v2)
 ├── source/                     external source discovery (sockets, overmind)
@@ -120,7 +121,7 @@ User paths:
 ```
 ~/.zmux.toml                    user config
 ~/.zmux/themes/                 user custom themes
-~/.zmux/templates/              user custom templates
+~/.zmux/recipes/                user custom recipes
 ```
 
 ### Dashboard tab system
@@ -178,36 +179,39 @@ and external sessions in grouped sections.
 ### Hybrid dashboard
 Inside tmux, zmux provides two complementary interfaces:
 - **Command palette** (prefix+p) — fast, spotlight-style overlay for quick actions
-  (switch session, new from template, theme switch)
+  (switch session, run recipe, theme switch)
 - **Full dashboard** (prefix+Space) — deeper management view with tabbed layout,
   session list, settings, and help
 
 Both render as tmux popup overlays, activated via keybind (not a pane).
 
-### Declarative templates
-v0 templates were bash scripts. v1 uses declarative TOML:
+### Declarative recipes
+v0 templates were bash scripts. v1 uses declarative TOML recipes:
 
 ```toml
 name = "dev"
 description = "Editor, server, and git"
+kind = "session"
+workspace = "{{ cwd_name | slug }}"
+session = "{{ workspace }}"
 
-[[windows]]
+[[tabs]]
 name = "editor"
 command = "nvim ."
 
-[[windows]]
+[[tabs]]
 name = "server"
 
-[[windows]]
+[[tabs]]
 name = "git"
 
 [options]
-focus = "editor"
+focus_tab = "editor"
 ```
 
-Templates are discovered from:
-1. `~/.zmux/templates/` — user custom
-2. Bundled templates (embedded in binary)
+Recipes are discovered from:
+1. `~/.zmux/recipes/` — user custom
+2. Bundled recipes (embedded in binary)
 
 ### Visual direction
 Charm CLI / Ghostty aesthetic — clean, spacious, beautiful, restrained.
@@ -236,8 +240,8 @@ preset = "default"              # 9 presets — see Status Bar section
 auto_cleanup_tmp = true
 default_shell = ""
 
-[templates]
-paths = ["~/.zmux/templates"]
+[recipes]
+paths = ["~/.zmux/recipes"]
 
 [sync]
 target = "ghostty"              # ghostty, nvim, or none
@@ -273,7 +277,7 @@ iterm2 ANSI palette maps directly to zmux semantic roles:
 | palette 2 (green) | `SUCCESS` | confirmations, active status |
 | palette 3 (yellow) | `ACCENT` | primary accent, branding |
 | palette 4 (blue) | `INFO` | links, secondary accent |
-| palette 5 (magenta) | `SPECIAL` | unique items, templates |
+| palette 5 (magenta) | `SPECIAL` | unique items, recipes |
 | palette 6 (cyan) | `META` | tags, metadata |
 | palette 7 (white) | `MUTED` | secondary text, labels |
 | palette 8 (bright black) | `DIM` | borders, separators, faint |
@@ -368,7 +372,7 @@ Activated via prefix+Space as a tmux popup. Five tabs:
 
 ### Command palette (inside tmux)
 Activated via prefix+p as a tmux popup. Spotlight-style fuzzy search
-across all available actions — switch session, new from template,
+across all available actions — switch session, run recipe,
 change theme, open dashboard tabs.
 
 ### Tab switcher (inside tmux)
@@ -384,8 +388,8 @@ persisted as versioned TOML v2 in `~/.zmux/workspaces.toml`.
 ### Model
 - A workspace owns one or more sessions. Sessions belong to exactly one workspace.
 - `zmux new <workspace> [session...]` creates one or more sessions within a workspace.
-- `zmux <workspace>` attaches to the workspace's last-active session (shorthand).
-- `zmux <workspace> <session>` attaches to a specific session in a workspace.
+- `zmux open <workspace>` attaches to the workspace's last-active session.
+- `zmux open <workspace> <session>` attaches to a specific session in a workspace.
 - `zmux open <workspace> [session]` is the explicit form for scripts.
 - The picker is **workspace-primary**: a single flat list of workspaces with
   their sessions expanded inline (when selected, or when search matches).
@@ -413,9 +417,8 @@ ctrl+h toggles visibility of empty workspaces. There is no two-level drill-in.
 zmux new <ws>                   Create workspace + 'main' session, attach
 zmux new <ws> <session>         Create workspace (if needed) + session, attach
 zmux new <ws> <s1> <s2> ...     Variadic — create workspace + multiple sessions
-zmux new <ws> -t <template>     Create workspace + template-defined sessions
-zmux <ws>                       Attach workspace last-active (shorthand)
-zmux <ws> <session>             Attach specific session in workspace (shorthand)
+zmux run <recipe>               Open recipe form / run recipe defaults with -y
+zmux recipe list                List recipes
 zmux open <ws> [session]        Explicit attach (alias: a, attach)
 zmux kill <name>                Smart kill — workspace-first, then session
 zmux ls                         List workspaces (workspace-primary default)
@@ -433,7 +436,7 @@ zmux tab kill <tab>             Kill a tab
 ```
 prefix + w                      Workspace session picker
 prefix + [ / ]                  Cycle prev / next session in workspace
-Shift+Alt+1-9                   Direct session switching within workspace (no prefix)
+prefix + Alt+1-9                Direct session switching within workspace
 ```
 
 ## Terminal Commands
@@ -471,6 +474,7 @@ target the same window.
 | . | label tab (blank clears) |
 | w | workspace session picker |
 | [ / ] | prev / next session in workspace |
+| Alt+1-9 | switch to session N in workspace |
 | c | new tab |
 | n / N | next / previous tab |
 | < / > | move tab left / right |
@@ -478,8 +482,12 @@ target the same window.
 | v | copy mode (vim) |
 | P | paste buffer |
 | r | reload config (zmux apply) |
+
+### No-prefix keys
+
+| Key | Action |
+|-----|--------|
 | Alt+1-9 | jump to tab (no prefix) |
-| Shift+Alt+1-9 | switch to session N in workspace (no prefix) |
 | Alt+` | tab switcher (no prefix) |
 
 ### Copy mode (vim)
@@ -495,15 +503,15 @@ target the same window.
 
 ```
 zmux                            — workspace picker (outside tmux) / dashboard (inside)
-zmux <workspace>                — attach workspace's last-active session
-zmux <workspace> <session>      — attach specific session in workspace
-zmux <name>                     — falls back to session if workspace not found
 
 zmux new                        — create tmp-N session (no workspace)
 zmux new <ws>                   — create workspace + 'main' session, attach
 zmux new <ws> <session...>      — variadic: create workspace + sessions
-zmux new <ws> -t <tmpl>         — create workspace from template
-zmux open <ws> [session]        — open workspace session (alias: o, attach, a)
+zmux open <ws> [session]        — open workspace session (aliases: attach, a)
+zmux run <recipe>               — recipe form with cwd/workspace/session defaults
+zmux run <recipe> -y            — run recipe defaults without prompting
+zmux recipe list                — list bundled and user recipes
+zmux recipe fork <recipe>       — copy a bundled recipe for editing
 zmux kill <name>                — smart kill (workspace-first, then session) (alias: k)
 zmux ls                         — list workspaces (workspace-primary)
 zmux ls <ws>                    — list sessions within a workspace

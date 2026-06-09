@@ -7,12 +7,18 @@ intended to be symlinked into Pi's global extension directory:
 ln -s /home/user/donjor/zmux/pi-extension ~/.pi/agent/extensions/pi-zmux
 ```
 
-The repo also owns the zmux skill in [`skills/zmux/`](../skills/zmux/), which can
-be symlinked globally:
+The repo also owns the zmux skill in [`skills/zmux/`](../skills/zmux/). On the
+maintainer setup, the skill is exposed to Pi through the shared generated skill
+mirror at `~/.pi/agent/skills/donjor/zmux` rather than the disabled direct
+`~/.pi/agent/skills/zmux` path. The full shared-skills setup, including Pi
+settings, lives in `~/donjor/skills`:
 
 ```bash
-ln -s /home/user/donjor/zmux/skills/zmux ~/.pi/agent/skills/zmux
+node /home/user/donjor/skills/pi/sync-pi.mjs
 ```
+
+For this repo's maintainer loop, `./dev.sh zmux` only refreshes the mirrors and
+relinks the Pi extension; it does not rewrite global agent settings.
 
 ## Purpose
 

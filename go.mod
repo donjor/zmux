@@ -1,10 +1,11 @@
 module github.com/donjor/zmux
 
-go 1.25.0
+go 1.25.8
 
 require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/bubbletea/v2 v2.0.6
+	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.3
 	github.com/charmbracelet/log v1.0.0
 	github.com/charmbracelet/x/ansi v0.11.7
@@ -12,6 +13,14 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/sahilm/fuzzy v0.1.1
 	github.com/spf13/cobra v1.10.2
+)
+
+require (
+	github.com/catppuccin/go v0.2.0 // indirect
+	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
+	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
+	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 )
 
 require (

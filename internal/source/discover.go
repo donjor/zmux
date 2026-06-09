@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -360,6 +361,9 @@ func parseProbeOutput(output string) []CatalogEntry {
 		fields := strings.SplitN(line, "\t", 3)
 		if len(fields) < 3 {
 			continue
+		}
+		if tabs.IsReservedSession(fields[0]) {
+			continue // another profile's dock — never catalog
 		}
 		windows, _ := strconv.Atoi(fields[1])
 		attached := fields[2] == "1"

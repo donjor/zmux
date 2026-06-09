@@ -2,15 +2,18 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
+	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/workspace"
 )
 
-// memFS is a minimal in-memory config.FS for shorthand tests.
+// memFS is a minimal in-memory config.FS for CLI tests.
 type memFS struct {
 	files map[string][]byte
 	home  string
@@ -40,8 +43,18 @@ func (m *memFS) Stat(path string) (os.FileInfo, error) {
 	return nil, &os.PathError{Op: "stat", Path: path, Err: os.ErrNotExist}
 }
 func (m *memFS) UserHomeDir() (string, error) { return m.home, nil }
-func (m *memFS) Glob(_ string) ([]string, error) {
-	return nil, nil
+func (m *memFS) Glob(pattern string) ([]string, error) {
+	var matches []string
+	for path := range m.files {
+		ok, err := filepath.Match(pattern, path)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			matches = append(matches, path)
+		}
+	}
+	return matches, nil
 }
 
 type fakeInfo struct{ name string }
@@ -53,9 +66,6 @@ func (f fakeInfo) ModTime() time.Time { return time.Time{} }
 func (f fakeInfo) IsDir() bool        { return false }
 func (f fakeInfo) Sys() any           { return nil }
 
-// withMockAppAndStore sets up an App with a tmux mock and an
-// in-memory workspace store that has one workspace "myapp" with
-// session "main" registered.
 func withMockAppAndStore(t *testing.T) (*apppkg.App, *tmux.MockRunner, *workspace.Store) {
 	t.Helper()
 
@@ -69,10 +79,7 @@ func withMockAppAndStore(t *testing.T) (*apppkg.App, *tmux.MockRunner, *workspac
 	_ = store.AddSession("myapp", "main")
 	_ = store.CreateWorkspace("empty", "/home/user/empty")
 
-	// Seed mock with one live session "main".
-	mock.Sessions = []tmux.Session{
-		{Name: "main", Activity: time.Now()},
-	}
+	mock.Sessions = []tmux.Session{{Name: "main", Activity: time.Now()}}
 
 	a := &apppkg.App{
 		FS:             fs,
@@ -82,153 +89,39 @@ func withMockAppAndStore(t *testing.T) (*apppkg.App, *tmux.MockRunner, *workspac
 	return a, mock, store
 }
 
-// ── Two-arg shorthand: zmux <ws> <session> ──
-
-func TestShorthand_TwoArg_AttachExistingSession(t *testing.T) {
-	a, mock, _ := withMockAppAndStore(t)
-
-	err := resolveShorthand(a, []string{"myapp", "main"})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// Should have called AttachSession (or NewGroupedSession if attached).
-	found := false
-	for _, call := range mock.Calls {
-		if call.Method == "AttachSession" || call.Method == "NewGroupedSession" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected AttachSession or NewGroupedSession call, got: %+v", mock.Calls)
-	}
-}
-
-func TestShorthand_TwoArg_CreateMissingSession(t *testing.T) {
-	a, mock, store := withMockAppAndStore(t)
-
-	// "dev" doesn't exist as a tmux session.
-	err := resolveShorthand(a, []string{"myapp", "dev"})
-	if err != nil {
-		t.Fatalf("expected no error (should create session), got: %v", err)
-	}
-
-	// Should have called NewSession to create "dev".
-	found := false
-	for _, call := range mock.Calls {
-		if call.Method == "NewSession" && len(call.Args) > 0 && call.Args[0] == "dev" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected NewSession(dev, ...) call, got: %+v", mock.Calls)
-	}
-
-	// "dev" should be registered in the workspace store.
-	ws, _ := store.GetWorkspace("myapp")
-	if ws == nil {
-		t.Fatal("workspace myapp should still exist")
-	}
-	hasSession := false
-	for _, s := range ws.Sessions {
-		if s == "dev" {
-			hasSession = true
-			break
-		}
-	}
-	if !hasSession {
-		t.Errorf("session 'dev' not registered in workspace store; sessions=%v", ws.Sessions)
-	}
-}
-
-func TestShorthand_TwoArg_WorkspaceNotFound(t *testing.T) {
+func TestShorthandSingleArgRemoved(t *testing.T) {
 	a, _, _ := withMockAppAndStore(t)
-
-	err := resolveShorthand(a, []string{"nonexistent", "dev"})
-	if err == nil {
-		t.Fatal("expected error for nonexistent workspace")
-	}
-	if !contains(err.Error(), "not found") {
-		t.Errorf("error = %q, want contains 'not found'", err.Error())
-	}
-}
-
-// ── Single-arg shorthand: zmux <name> ──
-
-func TestShorthand_SingleArg_WorkspaceAttachLastActive(t *testing.T) {
-	a, mock, _ := withMockAppAndStore(t)
-
 	err := resolveShorthand(a, []string{"myapp"})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
+	if err == nil {
+		t.Fatal("expected shorthand removal error")
 	}
-
-	// Should attach to the live session "main".
-	found := false
-	for _, call := range mock.Calls {
-		if call.Method == "AttachSession" || call.Method == "NewGroupedSession" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected session attach call, got: %+v", mock.Calls)
+	msg := err.Error()
+	if !strings.Contains(msg, "shorthand was removed") || !strings.Contains(msg, "zmux open myapp") || !strings.Contains(msg, "zmux new myapp") || !strings.Contains(msg, "zmux run myapp") {
+		t.Fatalf("unexpected error: %q", msg)
 	}
 }
 
-func TestShorthand_SingleArg_SessionFallback(t *testing.T) {
-	a, mock, _ := withMockAppAndStore(t)
-
-	// "main" exists as a session but isn't in a workspace called "main".
-	err := resolveShorthand(a, []string{"main"})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
+func TestShorthandTwoArgRemoved(t *testing.T) {
+	a, _, _ := withMockAppAndStore(t)
+	err := resolveShorthand(a, []string{"myapp", "main"})
+	if err == nil {
+		t.Fatal("expected shorthand removal error")
 	}
-
-	found := false
-	for _, call := range mock.Calls {
-		if call.Method == "AttachSession" || call.Method == "NewGroupedSession" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("expected session attach call, got: %+v", mock.Calls)
+	msg := err.Error()
+	if !strings.Contains(msg, "shorthand was removed") || !strings.Contains(msg, "zmux open myapp main") || !strings.Contains(msg, "zmux new myapp main") || !strings.Contains(msg, "zmux run myapp main") {
+		t.Fatalf("unexpected error: %q", msg)
 	}
 }
 
-func TestShorthand_SingleArg_CreateSession(t *testing.T) {
-	a, mock, _ := withMockAppAndStore(t)
-
-	// "brand-new" doesn't exist as workspace or session.
-	err := resolveShorthand(a, []string{"brand-new"})
-	if err != nil {
-		t.Fatalf("expected no error (should create session), got: %v", err)
+func TestShorthandRemovedUsesActiveProfileName(t *testing.T) {
+	a, _, _ := withMockAppAndStore(t)
+	a.Profile = config.ProfileFromArgv("zzmux", a.FS)
+	err := resolveShorthand(a, []string{"myapp"})
+	if err == nil {
+		t.Fatal("expected shorthand removal error")
 	}
-
-	found := false
-	for _, call := range mock.Calls {
-		if call.Method == "NewSession" && len(call.Args) > 0 && call.Args[0] == "brand-new" {
-			found = true
-			break
-		}
+	msg := err.Error()
+	if !strings.Contains(msg, "zzmux open myapp") || !strings.Contains(msg, "zzmux new myapp") || !strings.Contains(msg, "zzmux run myapp") {
+		t.Fatalf("unexpected error: %q", msg)
 	}
-	if !found {
-		t.Errorf("expected NewSession(brand-new, ...) call, got: %+v", mock.Calls)
-	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsImpl(s, substr))
-}
-
-func containsImpl(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

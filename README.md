@@ -12,8 +12,10 @@ status bar presets, and a popup dashboard — in a single binary.
 - **Theme sync** — pull your theme from Ghostty or Neovim
 - **Workspaces** — first-class project containers grouping sessions
 - **Status bar** — 9 presets with dynamic segments (git, lang, workspace, directory)
-- **Templates** — declarative TOML session layouts
+- **Recipes** — declarative TOML launch plans for workspaces, sessions, tabs, and commands
 - **Terminal commands** — run, watch, send, type for agent/scripting workflows
+- **Logical tabs** — tabs can run full-screen, ride as panes, or park hidden while staying addressable
+- **Attention states** — running/done/failed/needs-human glyphs in the bar
 - **Multi-source discovery** — find sessions across tmux sockets and overmind
 - **Init wizard** — interactive TUI setup
 - **Shell completions** — bash, zsh, fish
@@ -36,9 +38,7 @@ The installer:
 2. Builds the binary
 3. Installs to `~/.local/bin/zmux`
 4. Optionally adds shell integration (auto-start on terminal open)
-5. Optionally links the Claude Code skill
-6. Optionally links the Pi agent skill and extension
-7. Runs `zmux init` setup wizard
+5. Offers to run the `zmux init` setup wizard
 
 ### Updating
 
@@ -95,24 +95,37 @@ After `zmux init`, restart tmux or `prefix+r` to reload config.
 
 ```
 zmux                                Workspace picker (outside tmux) / dashboard (inside)
-zmux <workspace>                    Attach workspace's last-active session
-zmux <workspace> <session>          Attach specific session in workspace
-zmux <name>                         Falls back to session if workspace not found
 
 zmux new                            Create tmp-N session (no workspace)
 zmux new <ws>                       Create workspace + 'main' session, attach
 zmux new <ws> <session>             Create workspace (if needed) + session, attach
 zmux new <ws> <s1> <s2> <s3>        Variadic — create workspace + multiple sessions
-zmux new <ws> -t <template>         Create from template in workspace
-zmux open <ws> [session]            Open workspace explicitly (alias: zmux o, attach, a)
+zmux open <ws> [session]            Open workspace explicitly (aliases: attach, a)
+
+zmux run <recipe>                   Open the recipe form with defaults
+zmux run <recipe> -y                Run defaults without prompting
+zmux run <recipe> --dry-run         Print the exact recipe plan
+zmux run --command <cmd>            Force command mode on name collisions
+zmux run <recipe> --tab-mode ready  Type commands into tabs without pressing Enter
+zmux recipe list                    List bundled and user recipes
+zmux recipe show <recipe>           Show recipe TOML
+zmux recipe lint [recipe...]        Validate recipes
+zmux recipe fork <recipe>           Copy a bundled recipe for editing
+zmux recipe edit <recipe>           Edit a user recipe
 
 zmux kill <name>                    Smart kill — workspace-first, then session (confirms if live)
 zmux ls                             List workspaces (workspace-primary)
 zmux ls <ws>                        List sessions within a workspace
 zmux ls -s                          Flat session list (legacy/debug)
-zmux tabs [session]                 List tabs in session (alias: zmux t)
+zmux tabs [session]                 List tabs in session (riders nested, hidden marked ~)
 
 zmux tab move <tab> <dest>          Move tab to another session
+zmux tab label [label]              Set/clear stable label for current tab
+zmux tab state <state> [tab]        Set lifecycle glyph: attention/running/done/failed/clear
+zmux tab pane <tab> [--into host]   Join a tab as a pane beside another tab
+zmux tab full [tab]                 Promote focused/named pane-of tab back to full
+zmux tab hide <tab>                 Park a tab off the bar in the hidden dock
+zmux tab show <tab>                 Return a hidden tab to its origin session
 zmux tab kill <tab>                 Kill a tab
 zmux session kill <session>         Kill a session
 zmux workspace list                 List workspaces (alias: zmux ws)
@@ -131,17 +144,22 @@ zmux run '<cmd>' -n <tab> -d   Run detached (for servers)
 zmux run '<cmd>' -n <tab> -f   Run + follow output
 zmux watch <tab>               Capture tab output
 zmux watch <tab> --until <pat> Wait for pattern match
+zmux watch <tab> --idle 3      Wait until the visible screen is quiet for 3s
 zmux watch <tab> -f            Follow output (tail -f)
 zmux send <tab> <keys>         Send keystrokes to tab
 zmux type <tab> '<text>'       Type text + Enter
 
 zmux pane open <name> -r 40 -- <cmd>  Open right pane, print pane id
+zmux pane open --label-tab ...        Preserve tab label before sidecar split
 zmux pane toggle <name> -r 40 -- <cmd> Toggle named pane (close/open)
 zmux pane current [--json]            Print current pane id/details
 zmux pane list / zmux panes           List panes in current window
 zmux pane focus <pane>                Focus pane by id/title/index
 zmux pane resize <pane> --size 40%    Resize pane width
 zmux pane close <pane>                Close pane by id/title/index
+zmux terminal refresh                 Reattach client to refresh RGB features
+zmux snapshot                         Capture pane text/ANSI + optional PNG evidence
+zmux snapshot --no-png                Capture text/ANSI only
 ```
 
 ### Theming
@@ -162,6 +180,7 @@ zmux bar <preset>              Set preset directly
 zmux bar show                  Show current preset with preview
 zmux init                      Setup wizard (run outside tmux)
 zmux apply                     Regenerate + apply config
+zmux refresh                   Apply config + refresh current client
 zmux status                    Show current config summary
 ```
 
@@ -190,13 +209,18 @@ Prefix: `Ctrl+Space` (configurable)
 | prefix + n / N | Next / previous tab |
 | prefix + < / > | Move tab left / right |
 | prefix + x | Close tab (with confirm) |
+| prefix + J | Join a tab into this tab as a pane |
+| prefix + F | Promote focused pane-tab to full tab |
 | prefix + R | Respawn stopped/dead pane |
 | prefix + . | Label tab (blank clears label) |
 | prefix + , | Rename session |
+| prefix + C | New session in current workspace |
 | prefix + w | Workspace session picker |
 | prefix + [ / ] | Prev / next session in workspace |
+| prefix + Alt+1-9 | Switch to session N in workspace |
 | prefix + r | Reload config (zmux apply) |
 | prefix + v | Enter copy mode (vi keys) |
+| prefix + P | Paste buffer |
 | prefix + ← / → / ↑ / ↓ | Focus pane in direction (tmux default) |
 | prefix + Ctrl+← / → / ↑ / ↓ | Resize pane by one cell (tmux default) |
 | prefix + Alt+← / → / ↑ / ↓ | Resize pane by five cells (tmux default) |
@@ -205,7 +229,7 @@ Prefix: `Ctrl+Space` (configurable)
 | prefix + o / ; | Next / previous pane (tmux default) |
 | prefix + % / " | Split pane right / below (tmux default) |
 | Alt+1-9 | Switch to tab (no prefix) |
-| Shift+Alt+1-9 | Switch to session N in workspace (no prefix) |
+| Alt+w | Workspace switcher (no prefix) |
 | Alt+Shift+← / → / ↑ / ↓ | Focus pane in direction (no prefix) |
 | Alt+` | Tab switcher (no prefix) |
 
@@ -222,6 +246,8 @@ transparent/default. Single-pane windows keep the border header blank.
 Auto-named tabs normally use tmux's command name (`pi`, `bash`, etc.). When
 multiple tabs in the same session share that name, zmux marks them as
 `name[cwd]` in the bar (for example `pi[zmux]`) with the cwd suffix dimmed.
+The current pane's working directory renders as a shortened, right-aligned
+overlay on the top row, so cwd changes do not push the logical tabs around.
 `zmux panes` lists the current window by default;
 use `zmux panes --session` for all panes in the current/target session or
 `zmux panes --all` for every session. `zmux tab label [label]` sets a stable
@@ -252,7 +278,6 @@ bindings, so the pane keys do not collide with the terminal or WM setup.
 | tab | Accept ghost autocompletion |
 | ctrl+x | Delete workspace or session under cursor (with confirm) |
 | ctrl+h | Toggle hide-empty workspaces |
-| ctrl+t | Open template picker |
 | 1-9 | Quick-select session by index |
 | esc | Clear query, or quit if empty |
 | ctrl+c | Quit |
@@ -267,6 +292,9 @@ prefix = "C-Space"
 
 [bar]
 preset = "default"
+layout = "two-line"
+indicator = "dots"
+top_bar = "tabs"
 
 [bar.segments]
 workspace = true
@@ -280,8 +308,8 @@ group = true
 [sessions]
 auto_cleanup_tmp = true
 
-[templates]
-paths = ["~/.zmux/templates"]
+[recipes]
+paths = ["~/.zmux/recipes"]
 
 [sync]
 target = "ghostty"          # ghostty, nvim, or none
@@ -312,30 +340,41 @@ zmux theme pull ghostty      # read Ghostty's theme
 zmux theme pull nvim         # read Neovim's colorscheme
 ```
 
-## Session templates
+## Recipes
 
-Declarative TOML files that define window layouts:
+Declarative TOML files that define launch plans:
 
 ```toml
 name = "dev"
-description = "Editor, server, and git"
+description = "Project workspace: bash, dev server, git"
+context = "outside"
+kind = "session"
+workspace = "{{ cwd_name | slug }}"
+session = "{{ session | slug }}"
 
-[[windows]]
-name = "editor"
-command = "nvim ."
+[defaults]
+session = "main"
+tab_mode = "run"
 
-[[windows]]
-name = "server"
+[[tabs]]
+name = "bash"
+command = "code ."
 
-[[windows]]
+[[tabs]]
+name = "dev"
+command = "bun run dev"
+
+[[tabs]]
 name = "git"
+command = "git status"
 
 [options]
-focus = "editor"
+focus_tab = "bash"
 ```
 
-Place custom templates in `~/.zmux/templates/`. Four built-in templates
-are included: dev, claude, webdev, monitor.
+Place custom recipes in `~/.zmux/recipes/`. Bundled recipes include
+`dev`, `dev-nvim`, `dev-cc`, `dev-codex`, `claude`, `webdev`, `monitor`,
+`shell-fanout`, `worktree-shell`, and `showcase`.
 
 ## Status bar presets
 
@@ -382,15 +421,37 @@ zmux send server C-c                      # stop server
 ```
 
 Agent integration lives in this repo:
-- `skills/zmux/SKILL.md` is the canonical skill — taught to both Claude Code
-  (via `~/.claude/skills/zmux`) and Pi agents (via `~/.pi/agent/skills/zmux`).
-  `./install.sh` and `./dev.sh` symlink it into both locations so updates flow
-  automatically.
+- `skills/zmux/SKILL.md` is the canonical zmux skill. On the maintainer setup,
+  `~/donjor/skills/skills/zmux` symlinks here, and `~/.claude/skills` points at
+  that shared skill tree, so Claude does not need a separate repo-local link.
+  `./dev.sh zmux` refreshes that shared link, then refreshes the shared skills
+  repo's Codex/Pi mirrors without touching global agent settings. Restart Codex
+  after the mirror refresh if you need the new skill text in an existing session.
+  It also owns the generic agent-peer and agent-worker doctrine for driving real
+  CLIs in visible zmux tabs: read-only review loops, write-capable workers bound
+  to isolated worktrees, spawn profiles, the `type` -> `watch --idle` loop,
+  capture classification, and etiquette. The doctrine lives at
+  `skills/zmux/references/agent-peer.md` and
+  `skills/zmux/references/agent-worker.md`.
+  `./install.sh` does not mutate agent skill directories.
 - `pi-extension/` registers typed Pi tools and bash guardrails for deterministic
   runtime, tab/pane/send, sidecar, interactive-command, and terminal-capability
-  orchestration.
+  orchestration. `./dev.sh zmux` relinks the Pi extension at
+  `~/.pi/agent/extensions/pi-zmux`.
 
 See [docs/pi-zmux-extension.md](docs/pi-zmux-extension.md).
+
+Repo-local QA walkthroughs live in committed `checklists/*.toml` files and run
+through `./qa` (a dedicated `cmd/qa` binary, not a `zmux` subcommand):
+
+```bash
+./qa                 # picker for human-verdict steps
+./qa run <checklist> # agent-sweep automatic steps
+./qa status <checklist> [--json]
+./qa lint
+```
+
+See [docs/qa.md](docs/qa.md).
 
 ## Development
 

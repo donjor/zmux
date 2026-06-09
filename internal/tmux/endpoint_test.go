@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -16,7 +17,7 @@ func TestIsInsideTmuxEndpointAware(t *testing.T) {
 		{"set env, default endpoint always true", "/tmp/tmux-1000/default,1,0", NewClient(), true},
 		{"named matches socket", "/tmp/tmux-1000/zzmux,1,0", NewClientFor(NamedEndpoint("zzmux")), true},
 		{"named mismatches default socket", "/tmp/tmux-1000/default,1,0", NewClientFor(NamedEndpoint("zzmux")), false},
-		{"default-named zmux inside zzmux socket still true (historical)", "/tmp/tmux-1000/zzmux,1,0", NewClient(), true},
+		{"default client inside zzmux socket is foreign", "/tmp/tmux-1000/zzmux,1,0", NewClient(), false},
 		{"path endpoint matches basename", "/tmp/tmux-1000/zzmux,1,0", NewClientFor(PathEndpoint("/tmp/tmux-1000/zzmux")), true},
 	}
 	for _, tc := range cases {
@@ -24,6 +25,51 @@ func TestIsInsideTmuxEndpointAware(t *testing.T) {
 			t.Setenv("TMUX", tc.tmuxEnv)
 			if got := tc.client.IsInsideTmux(); got != tc.want {
 				t.Errorf("IsInsideTmux() = %v, want %v (TMUX=%q)", got, tc.want, tc.tmuxEnv)
+			}
+		})
+	}
+}
+
+// TestAmbientSocketMismatchGuard pins the cross-profile refusal: a
+// default-endpoint client (live zmux) invoked inside another profile's
+// session (foreign $TMUX socket) must refuse every server command instead
+// of silently following $TMUX onto that profile's server — the 2026-06-06
+// incident wrote the live binary's themed bar (no tab glyphs) onto the
+// zzmux qa server exactly this way.
+func TestAmbientSocketMismatchGuard(t *testing.T) {
+	cases := []struct {
+		name    string
+		tmuxEnv string
+		client  *Client
+		refuse  bool
+	}{
+		{"outside tmux, default", "", NewClient(), false},
+		{"inside own default socket", "/tmp/tmux-1000/default,1,0", NewClient(), false},
+		{"default client inside zzmux socket", "/tmp/tmux-1000/zzmux,1,0", NewClient(), true},
+		{"named endpoint is exempt (explicit -L wins)", "/tmp/tmux-1000/default,1,0", NewClientFor(NamedEndpoint("zzmux")), false},
+		{"path endpoint is exempt", "/tmp/tmux-1000/default,1,0", NewClientFor(PathEndpoint("/tmp/tmux-1000/zzmux")), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("TMUX", tc.tmuxEnv)
+			err := tc.client.ambientSocketMismatch()
+			if tc.refuse && err == nil {
+				t.Error("want refusal, got nil")
+			}
+			if !tc.refuse && err != nil {
+				t.Errorf("want pass, got %v", err)
+			}
+			if tc.refuse {
+				if _, runErr := tc.client.run("list-sessions"); runErr == nil ||
+					!strings.Contains(runErr.Error(), "cross-profile") {
+					t.Errorf("run() must surface the refusal, got %v", runErr)
+				}
+				if tc.client.ServerRunning() {
+					t.Error("ServerRunning() must report false under mismatch")
+				}
+				if tc.client.HasSession("any") {
+					t.Error("HasSession() must report false under mismatch")
+				}
 			}
 		})
 	}

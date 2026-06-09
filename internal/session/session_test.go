@@ -163,6 +163,25 @@ func TestListSessions(t *testing.T) {
 	}
 }
 
+// Reserved zmux-internal sessions (the hidden-tab dock) never surface in
+// the enriched list — this is the collapse point ls/pickers/bar flow through.
+func TestListSessionsFiltersReserved(t *testing.T) {
+	now := time.Now()
+	m := tmux.NewMockRunner()
+	m.Sessions = []tmux.Session{
+		{Name: "dev", Windows: 3, Attached: true, Activity: now},
+		{Name: "__zmux_dock", Windows: 2, Attached: false, Activity: now},
+	}
+
+	sessions, err := ListSessions(m)
+	if err != nil {
+		t.Fatalf("ListSessions() error: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].Name != "dev" {
+		t.Fatalf("expected only 'dev', got %+v", sessions)
+	}
+}
+
 func TestListSessionsError(t *testing.T) {
 	m := tmux.NewMockRunner()
 	m.Err = errTestError

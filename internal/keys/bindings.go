@@ -22,11 +22,14 @@ var (
 	TabReorderRight = Binding{Action: "reorder.right", Key: ">", Help: "Move tab right", Category: CatTabs, Context: Prefix}
 	TabKill         = Binding{Action: "kill", Key: "x", Help: "Close tab (with confirm)", Category: CatTabs, Context: Prefix}
 	LabelTab        = Binding{Action: "label.tab", Key: ".", Help: "Set stable tab label (blank clears)", Category: CatTabs, Context: Prefix}
+	TabJoinPane     = Binding{Action: "tab.pane", Key: "J", Help: "Join a tab into this tab as a pane", Category: CatTabs, Context: Prefix}
+	TabFull         = Binding{Action: "tab.full", Key: "F", Help: "Promote focused pane-tab to full tab", Category: CatTabs, Context: Prefix}
 
 	// Sessions (prefix).
 	RenameSession = Binding{Action: "rename", Key: ",", Help: "Rename session", Category: CatSessions, Context: Prefix}
 	NewSession    = Binding{Action: "session.new", Key: "C", Help: "New session in current workspace", Category: CatSessions, Context: Prefix}
 	SessionPicker = Binding{Action: "session.picker", Key: "w", Aliases: []string{"s"}, Help: "Workspace + session picker", Category: CatSessions, Context: Prefix}
+	SessionGoto   = Binding{Action: "session.goto.N", Key: "M-1..9", Help: "Switch to session N in current workspace", Category: CatSessions, Context: Prefix}
 	SessionPrev   = Binding{Action: "session.prev", Key: "[", Help: "Previous session in workspace", Category: CatSessions, Context: Prefix}
 	SessionNext   = Binding{Action: "session.next", Key: "]", Help: "Next session in workspace", Category: CatSessions, Context: Prefix}
 
@@ -59,8 +62,8 @@ var (
 // PrefixBindings lists the prefix-table bindings in help/doc render order.
 var PrefixBindings = []Binding{
 	Dashboard, Palette, ScratchShell, Help,
-	NewTab, TabNext, TabPrev, TabReorderLeft, TabReorderRight, TabKill, LabelTab,
-	SessionPicker, SessionPrev, SessionNext, RenameSession, NewSession,
+	NewTab, TabNext, TabPrev, TabReorderLeft, TabReorderRight, TabKill, LabelTab, TabJoinPane, TabFull,
+	SessionPicker, SessionGoto, SessionPrev, SessionNext, RenameSession, NewSession,
 	PaneRespawn, CopyModeKey, Paste, Reload,
 }
 

@@ -8,8 +8,8 @@ preset = "default"
 auto_cleanup_tmp = true
 default_shell = ""
 
-[templates]
-paths = ["~/.zmux/templates"]
+[recipes]
+paths = ["~/.zmux/recipes"]
 
 [sync]
 target = "none"

@@ -1,0 +1,19 @@
+name = "claude"
+description = "Claude Code session: claude, shell, git"
+kind = "session"
+workspace = "{{ cwd_name | slug }}"
+session = "{{ workspace }}"
+
+[[tabs]]
+name = "claude"
+command = "claude"
+
+[[tabs]]
+name = "shell"
+
+[[tabs]]
+name = "git"
+command = "git status"
+
+[options]
+focus_tab = "claude"

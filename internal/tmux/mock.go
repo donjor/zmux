@@ -26,6 +26,10 @@ type MockRunner struct {
 	// DisplayMessageResult is the content returned by DisplayMessage.
 	DisplayMessageResult string
 
+	// DisplayMessageFunc, if set, overrides DisplayMessageResult with dynamic
+	// responses (e.g. keyed on the format string).
+	DisplayMessageFunc func(target, format string) (string, error)
+
 	// CapturedPaneContent is the content returned by CapturePane.
 	CapturedPaneContent string
 
@@ -34,6 +38,28 @@ type MockRunner struct {
 
 	// CapturePaneOptsFunc, if set, overrides CapturedPaneContent for CapturePaneOpts.
 	CapturePaneOptsFunc func(target string, opts CapturePaneOptions) (string, error)
+
+	// RefreshStatusErr is returned by RefreshStatus only — models the
+	// best-effort "no current client" failure without poisoning other calls.
+	RefreshStatusErr error
+
+	// PaneOptionValues backs ListPaneOptionValues, keyed by option name —
+	// one entry per pane, as list-panes -a would report.
+	PaneOptionValues map[string][]string
+
+	// LogicalRows backs ListLogicalPaneRows.
+	LogicalRows []LogicalPaneRow
+
+	// NewWindowPaneID is the pane id NewWindow returns ("" by default).
+	NewWindowPaneID string
+
+	// BreakPaneWindowID is the window id BreakPane returns ("" by default).
+	BreakPaneWindowID string
+
+	// WindowOptions/PaneOptions back the scope-exact Show*Option reads,
+	// keyed "target\x00key"; missing keys read as "" (unset).
+	WindowOptions map[string]string
+	PaneOptions   map[string]string
 
 	// Optional error to return from any method.
 	Err error
@@ -130,14 +156,20 @@ func (m *MockRunner) ListWindows(session string) ([]Window, error) {
 	return m.Windows[session], m.Err
 }
 
-// NewWindow records the call. The recorded args include detached=<bool> so
-// tests can assert focus-safe creation.
-func (m *MockRunner) NewWindow(session, name, dir string, opts ...WindowOpt) error {
+// NewWindow records the call and returns NewWindowPaneID. The recorded args
+// include detached=<bool> so tests can assert focus-safe creation.
+func (m *MockRunner) NewWindow(session, name, dir string, opts ...WindowOpt) (string, error) {
 	var o windowOpts
 	for _, fn := range opts {
 		fn(&o)
 	}
 	m.record("NewWindow", session, name, dir, fmt.Sprintf("detached=%v", o.detached))
+	return m.NewWindowPaneID, m.Err
+}
+
+// KillWindowByID records the call.
+func (m *MockRunner) KillWindowByID(windowID string) error {
+	m.record("KillWindowByID", windowID)
 	return m.Err
 }
 
@@ -193,6 +225,39 @@ func (m *MockRunner) ListAllPanes() ([]Pane, error) {
 	return panes, m.Err
 }
 
+// ListLogicalPaneRows returns the configured logical scan rows.
+func (m *MockRunner) ListLogicalPaneRows() ([]LogicalPaneRow, error) {
+	m.record("ListLogicalPaneRows")
+	return m.LogicalRows, m.Err
+}
+
+// JoinPane records the call.
+func (m *MockRunner) JoinPane(opts JoinPaneOptions) error {
+	m.record("JoinPane", opts.Source, opts.Target, string(opts.Direction), opts.Size, fmt.Sprintf("detached=%v", opts.Detached))
+	return m.Err
+}
+
+// BreakPane records the call and returns BreakPaneWindowID.
+func (m *MockRunner) BreakPane(opts BreakPaneOptions) (string, error) {
+	m.record("BreakPane", opts.Source, opts.Target, opts.Name, fmt.Sprintf("after=%v", opts.After), fmt.Sprintf("detached=%v", opts.Detached))
+	if m.Err != nil {
+		return "", m.Err
+	}
+	return m.BreakPaneWindowID, nil
+}
+
+// SelectLayout records the call.
+func (m *MockRunner) SelectLayout(target, layout string) error {
+	m.record("SelectLayout", target, layout)
+	return m.Err
+}
+
+// ToggleZoom records the call.
+func (m *MockRunner) ToggleZoom(target string) error {
+	m.record("ToggleZoom", target)
+	return m.Err
+}
+
 // SplitWindow records the call.
 func (m *MockRunner) SplitWindow(target, direction string) error {
 	m.record("SplitWindow", target, direction)
@@ -235,6 +300,9 @@ func (m *MockRunner) SendKeys(target string, keys ...string) error {
 // DisplayMessage records the call and returns the configured result.
 func (m *MockRunner) DisplayMessage(target, format string) (string, error) {
 	m.record("DisplayMessage", target, format)
+	if m.DisplayMessageFunc != nil {
+		return m.DisplayMessageFunc(target, format)
+	}
 	return m.DisplayMessageResult, m.Err
 }
 
@@ -259,6 +327,12 @@ func (m *MockRunner) CapturePaneOpts(target string, opts CapturePaneOptions) (st
 	return m.CapturedPaneContent, m.Err
 }
 
+// ListPaneOptionValues returns the configured per-pane values for key.
+func (m *MockRunner) ListPaneOptionValues(key string) ([]string, error) {
+	m.record("ListPaneOptionValues", key)
+	return m.PaneOptionValues[key], m.Err
+}
+
 // SetOption records the call.
 func (m *MockRunner) SetOption(scope, key, value string) error {
 	m.record("SetOption", scope, key, value)
@@ -281,6 +355,45 @@ func (m *MockRunner) SetWindowOption(target, key, value string) error {
 func (m *MockRunner) UnsetWindowOption(target, key string) error {
 	m.record("UnsetWindowOption", target, key)
 	return m.Err
+}
+
+// SetPaneOption records the call.
+func (m *MockRunner) SetPaneOption(target, key, value string) error {
+	m.record("SetPaneOption", target, key, value)
+	return m.Err
+}
+
+// UnsetPaneOption records the call.
+func (m *MockRunner) UnsetPaneOption(target, key string) error {
+	m.record("UnsetPaneOption", target, key)
+	return m.Err
+}
+
+// ApplyOptions records one call per write (method "ApplyOptions") so tests
+// can assert batch contents without caring about argv encoding.
+func (m *MockRunner) ApplyOptions(writes []OptionWrite) error {
+	for _, w := range writes {
+		m.record("ApplyOptions", string(w.Scope), w.Target, w.Key, w.Value, fmt.Sprintf("unset=%v", w.Unset))
+	}
+	return m.Err
+}
+
+// ShowWindowOption returns the configured window option ("" when absent).
+func (m *MockRunner) ShowWindowOption(target, key string) (string, error) {
+	m.record("ShowWindowOption", target, key)
+	return m.WindowOptions[target+"\x00"+key], m.Err
+}
+
+// ShowPaneOption returns the configured pane option ("" when absent).
+func (m *MockRunner) ShowPaneOption(target, key string) (string, error) {
+	m.record("ShowPaneOption", target, key)
+	return m.PaneOptions[target+"\x00"+key], m.Err
+}
+
+// RefreshStatus records the call.
+func (m *MockRunner) RefreshStatus() error {
+	m.record("RefreshStatus")
+	return m.RefreshStatusErr
 }
 
 // SetEnvironment records the call.

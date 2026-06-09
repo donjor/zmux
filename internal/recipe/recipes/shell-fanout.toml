@@ -1,0 +1,16 @@
+name = "shell-fanout"
+description = "Create one shell session per item"
+kind = "workspace"
+workspace = "{{ cwd_name | slug }}"
+
+[inputs]
+items = true
+min_items = 1
+prompt = "Session names"
+
+[[sessions]]
+foreach = "items"
+name = "{{ item | slug }}"
+
+[[sessions.tabs]]
+name = "shell"

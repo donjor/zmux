@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
 )
@@ -45,10 +46,14 @@ func runStatus(app *apppkg.App) error {
 		clipboard = "none"
 	}
 
-	// Count sessions.
+	// Count sessions (reserved zmux-internal ones don't count).
 	sessionCount := 0
 	if sessions, err := app.Runner.ListSessions(); err == nil {
-		sessionCount = len(sessions)
+		for _, s := range sessions {
+			if !tabs.IsReservedSession(s.Name) {
+				sessionCount++
+			}
+		}
 	}
 
 	// Determine theme source.

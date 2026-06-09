@@ -1,0 +1,120 @@
+# QA walkthrough for tab placements (plan 027): logical tabs as panes/docks,
+# hide/show, lifecycle glyphs, and the Alt+` switcher rows.
+#
+# Targets the isolated zzmux edge profile — live zmux is untouched.
+# Setup: `./dev.sh zzmux`, then in another terminal `zzmux new qa` and WATCH it.
+# Drive from here: `./qa tab-placements` (picker) or `./qa run tab-placements`.
+
+[checklist]
+name = "Tab placements (027)"
+doc = "Placement verbs + switcher on the zzmux edge profile. Keep a 'zzmux new qa' terminal visible — most expectations are about what its bar shows."
+
+[checklist.vars]
+bin = "zzmux"
+s = "qa"
+
+[[step]]
+id = "session"
+name = "qa session exists"
+cmd = "{bin} ls"
+expect = "session 'qa' is listed (in another terminal: zzmux new qa)"
+check = '(?m)\bqa\b'
+
+[[step]]
+id = "prep"
+name = "Prep the host tab"
+cmd = "{bin} run 'echo host ready' -n work -s {s} -T 15"
+expect = "a tab named 'work' exists and prints 'host ready'"
+check = "host ready"
+needs = ["session"]
+
+[[step]]
+id = "spawn"
+name = "Spawn the mon tab"
+cmd = "{bin} run 'top' -n mon -s {s} -d"
+expect = "new tab 'mon' on the bar, with a ticking ◐ spinner glyph"
+needs = ["session"]
+
+[[step]]
+id = "pane"
+name = "Pull mon in as a pane"
+cmd = "{bin} tab pane mon -s {s} --into work"
+expect = "'mon' leaves the bar; top appears as a split right of 'work'; the work cell shows +mon"
+needs = ["prep", "spawn"]
+
+[[step]]
+id = "watch-pane"
+name = "Read mon while it's a pane"
+cmd = "sleep 1; {bin} watch mon -s {s} -l 15"
+expect = "top's screen text prints here — the name still resolves as a pane"
+check = "load average|%Cpu|Tasks"
+needs = ["pane"]
+
+[[step]]
+id = "full"
+name = "Promote mon to a full tab"
+cmd = "{bin} tab full mon -s {s}"
+expect = "top pops back out as its own tab 'mon' at the end of the row"
+needs = ["pane"]
+
+[[step]]
+id = "hide"
+name = "Hide mon"
+cmd = "{bin} tab hide mon -s {s}"
+expect = "'mon' vanishes from the bar; a dim (mon…) note sits at the row's end"
+needs = ["full"]
+
+[[step]]
+id = "watch-hidden"
+name = "Read mon while hidden"
+cmd = "sleep 1; {bin} watch mon -s {s} -l 15"
+expect = "top's screen text STILL prints here"
+check = "load average|%Cpu|Tasks"
+needs = ["hide"]
+
+[[step]]
+id = "show"
+name = "Bring mon back"
+cmd = "{bin} tab show mon -s {s}"
+expect = "the 'mon' tab returns to the bar"
+needs = ["hide"]
+
+[[step]]
+id = "glyph"
+name = "Done-glyph demo"
+cmd = "{bin} run 'sleep 30' -n job -s {s} -d"
+expect = "'job' shows a ticking ◐; ~30s later it flips to a green ✓"
+needs = ["session"]
+
+[[step]]
+id = "bar"
+name = "EYEBALL the bar"
+expect = "bottom row: current tab bold/accented, others dim, │ separators, NO raw #[..] garbage"
+needs = ["spawn"]
+
+[[step]]
+id = "switcher-rows"
+name = "EYEBALL switcher rows"
+expect = "with a rider in place (do 'pane' first), press Alt+` then → to drill in: rider shows '└ mon'; a hidden tab shows '~ mon' at the bottom"
+needs = ["pane"]
+
+[[step]]
+id = "switcher-actions"
+name = "EYEBALL switcher actions"
+expect = "Alt+`: Enter on a └ row lands on that split; Enter on a ~ row brings the tab back AND jumps to it; Ctrl+R on a └ row does nothing"
+needs = ["pane"]
+
+[[step]]
+id = "regress"
+name = "Old stuff still works"
+cmd = "{bin} run 'echo regress-ok' -n quick -s {s} -T 15"
+expect = "runs and returns output normally; 'quick' tab reachable"
+check = "regress-ok"
+needs = ["session"]
+
+[[step]]
+id = "cleanup"
+name = "Kill the qa session"
+cmd = "{bin} kill {s}"
+expect = "the watching terminal detaches; session gone"
+needs = ["session"]

@@ -4,7 +4,7 @@
 // Layout:
 //
 //   - root.go            — Cobra root command + Run entry point, top-level
-//     dispatch, shorthand resolution, tmux version check, flag wiring.
+//     dispatch, removed shorthand guard, tmux version check, flag wiring.
 //   - popup_modes.go     — Popup-mode entry points (--dashboard, --palette,
 //     --tab-picker) and their result handlers.
 //   - session_picker.go  — Outside-tmux workspace+session picker flow.
@@ -123,6 +123,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newBarAdjustCmd(a),
 		barCmd,
 		barRenderCmd,
+		newBarSpinnerCmd(a),
 		completionCmd,
 		newGuardCmd(a),
 		newHelpCmd(a),
@@ -136,6 +137,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newTopLevelPaneListCmd(a, "panes"),
 		newTopLevelPaneListCmd(a, "list-panes"),
 		newRefreshCmd(a),
+		newRecipeCmd(a),
 		newRunCmd(a),
 		newScratchCmd(a),
 		newSendCmd(a),
@@ -148,6 +150,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newTerminalCmd(a),
 		themeCmd,
 		newTypeCmd(a),
+		newUpCmd(a),
 		newVersionCmd(version),
 		newWatchCmd(a),
 		newWorkspaceCmd(a),
@@ -166,62 +169,17 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 	return rootCmd
 }
 
-// resolveShorthand handles `zmux <name>` and `zmux <ws> <session>` dispatch.
-//
-// Two-arg form: the workspace must exist. If the session exists, attach.
-// If not, create the session in the workspace and attach — equivalent to
-// `zmux new <ws> <session>`.
-//
-// Single-arg form is workspace-first: checks if <name> is a workspace and
-// attaches to its last-active session. Falls back to session attach/create
-// if no matching workspace.
+// resolveShorthand rejects the removed top-level workspace/session shorthand.
 func resolveShorthand(app *apppkg.App, args []string) error {
-	if len(args) == 2 {
-		wsName := args[0]
-		sessName := args[1]
-		ws, _ := app.WorkspaceStore.GetWorkspace(wsName)
-		if ws == nil {
-			return fmt.Errorf("workspace %q not found — use zmux new %s %s to create", wsName, wsName, sessName)
-		}
-		if app.Runner.HasSession(sessName) {
-			_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
-			return session.Attach(app.Runner, sessName)
-		}
-		// Session doesn't exist → create it in the workspace and attach.
-		dir, _ := os.Getwd()
-		if dir == "" {
-			dir = os.Getenv("HOME")
-		}
-		if err := session.Create(app.Runner, sessName, dir); err != nil {
-			return err
-		}
-		_ = app.WorkspaceStore.AddSession(wsName, sessName)
-		_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
-		return session.Attach(app.Runner, sessName)
+	bin := app.Profile.Name
+	if bin == "" {
+		bin = "zmux"
 	}
-
-	// Single arg: workspace-first, then session fallback.
-	name := args[0]
-	if ws, _ := app.WorkspaceStore.GetWorkspace(name); ws != nil {
-		if target := resolveLastActive(app, ws); target != "" {
-			_ = app.WorkspaceStore.SetLastActive(name, target)
-			return session.Attach(app.Runner, target)
-		}
-		// Workspace exists but no live sessions — fall through to create.
+	if len(args) == 1 {
+		return fmt.Errorf("top-level workspace shorthand was removed — use %s open %s to attach, %s new %s to create, or %s run %s to run a recipe", bin, args[0], bin, args[0], bin, args[0])
 	}
-
-	if app.Runner.HasSession(name) {
-		return session.Attach(app.Runner, name)
-	}
-
-	dir, _ := os.Getwd()
-	if dir == "" {
-		dir = os.Getenv("HOME")
-	}
-	if err := session.Create(app.Runner, name, dir); err != nil {
-		return err
-	}
-	return session.Attach(app.Runner, name)
+	rest := strings.Join(args[1:], " ")
+	return fmt.Errorf("top-level workspace/session shorthand was removed — use %s open %s %s to attach, %s new %s %s to create, or %s run %s %s to run a recipe", bin, args[0], rest, bin, args[0], rest, bin, args[0], rest)
 }
 
 func checkTmuxVersion(app *apppkg.App) error {

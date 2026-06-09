@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# qa — repo-local QA walkthrough runner (cmd/qa). Cached build → exec:
+# ~200ms warm via Go's build cache, always fresh after code changes.
+#
+#   ./qa              picker (checklist select → steps)   [human]
+#   ./qa run <cl>     sweep automatic steps               [agent]
+#   ./qa ls | status <cl> [--json] | mark <cl> <step> pass|fail | reset <cl> | lint
+#
+# Checklists: checklists/*.toml (committed). Scorecards: .qa/ (gitignored).
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+mkdir -p .qa
+go build -o .qa/bin ./cmd/qa
+exec .qa/bin "$@"

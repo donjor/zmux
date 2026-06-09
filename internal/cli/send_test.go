@@ -2,6 +2,7 @@ package cli
 
 import (
 	"testing"
+	"time"
 
 	"github.com/donjor/zmux/internal/tmux"
 )
@@ -77,33 +78,40 @@ func TestTypeResolvesAutoRenamedWindowByLabel(t *testing.T) {
 	}
 }
 
-// send claims the name as a stable @zmux_label when it matches an unlabeled
-// window by live name — and must do so BEFORE the keys, so a `send X C-c` that
-// drifts the name still leaves X reachable for the follow-up command.
+// send claims an unlabeled live-name match as a logical tab — pane-scoped id
+// + pane-canonical label — and must do so BEFORE the keys, so a `send X C-c`
+// that drifts the name still leaves X reachable for the follow-up command.
 func TestSendClaimsLabelBeforeKeysOnNameMatch(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
 	mock.Windows["test-session"] = []tmux.Window{
 		{Index: 2, Name: "devserver", Active: true}, // matched by name, no label yet
 	}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{pane_id}": "%4\ttest-session:2\n",
+	})
 
 	rootCmd.SetArgs([]string{"send", "devserver", "C-c", "-s", "test-session"})
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("send command failed: %v", err)
 	}
 
-	labelIdx, sendIdx := -1, -1
+	idIdx, labelIdx, sendIdx := -1, -1, -1
 	for i, c := range mock.Calls {
-		if c.Method == "SetWindowOption" && len(c.Args) == 3 &&
-			c.Args[0] == "test-session:2" && c.Args[1] == "@zmux_label" && c.Args[2] == "devserver" {
-			labelIdx = i
+		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%4" {
+			switch {
+			case c.Args[2] == "@zmux_tab_id":
+				idIdx = i
+			case c.Args[2] == "@zmux_label" && c.Args[3] == "devserver":
+				labelIdx = i
+			}
 		}
 		if c.Method == "SendKeys" {
 			sendIdx = i
 		}
 	}
-	if labelIdx == -1 {
-		t.Fatal("expected send to claim @zmux_label=devserver on the unlabeled name-match")
+	if idIdx == -1 || labelIdx == -1 {
+		t.Fatalf("expected send to claim the unlabeled name-match (id=%d label=%d)", idIdx, labelIdx)
 	}
 	if sendIdx == -1 || labelIdx > sendIdx {
 		t.Errorf("expected label claim (idx %d) BEFORE SendKeys (idx %d)", labelIdx, sendIdx)
@@ -132,7 +140,10 @@ func TestWatchDoesNotClaimLabel(t *testing.T) {
 	}
 }
 
-func TestTypeAddsEnter(t *testing.T) {
+// type must deliver text and Enter as SEPARATE SendKeys calls — gluing them
+// into one call makes TUI paste-burst detection absorb the Enter as a
+// newline and the message silently never submits.
+func TestTypeSendsTextThenEnterSeparately(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
 
@@ -141,12 +152,31 @@ func TestTypeAddsEnter(t *testing.T) {
 		t.Fatalf("type command failed: %v", err)
 	}
 
+	var sends [][]string
 	for _, c := range mock.Calls {
 		if c.Method == "SendKeys" {
-			// Should include "Enter" as last arg.
-			if len(c.Args) < 3 || c.Args[len(c.Args)-1] != "Enter" {
-				t.Errorf("expected Enter as last key, got args: %v", c.Args)
-			}
+			sends = append(sends, c.Args)
 		}
+	}
+	if len(sends) != 2 {
+		t.Fatalf("expected 2 SendKeys calls (text, then Enter), got %d: %v", len(sends), sends)
+	}
+	if len(sends[0]) != 2 || sends[0][1] != "git status" {
+		t.Errorf("first call should send the text only, got %v", sends[0])
+	}
+	if len(sends[1]) != 2 || sends[1][1] != "Enter" {
+		t.Errorf("second call should send Enter only, got %v", sends[1])
+	}
+}
+
+func TestTypeGapScalesWithPasteSize(t *testing.T) {
+	if g := typeGap(10); g != 210*time.Millisecond {
+		t.Errorf("short text: got %v", g)
+	}
+	if g := typeGap(1020); g != 1220*time.Millisecond {
+		t.Errorf("1KB paste must exceed the old fixed 200ms gap: got %v", g)
+	}
+	if g := typeGap(100_000); g != 1500*time.Millisecond {
+		t.Errorf("cap: got %v", g)
 	}
 }

@@ -1,5 +1,4 @@
-// Package session manages tmux session lifecycle: creation, templates,
-// tmp session model, and cleanup.
+// Package session manages tmux session lifecycle, tmp session model, and cleanup.
 package session
 
 import (
@@ -9,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -74,6 +74,17 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: %w", err)
 	}
+
+	// Reserved zmux-internal sessions (the hidden-tab dock) never surface:
+	// this is the collapse point every user-facing list flows through
+	// (ls, pickers, dashboard, bar, workspace views).
+	filtered := raw[:0]
+	for _, s := range raw {
+		if !tabs.IsReservedSession(s.Name) {
+			filtered = append(filtered, s)
+		}
+	}
+	raw = filtered
 
 	// Build a set of session names for root-existence checks.
 	nameSet := make(map[string]bool, len(raw))

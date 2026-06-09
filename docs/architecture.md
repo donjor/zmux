@@ -6,24 +6,37 @@ For the product vision (the *why*), see [VISION.md](VISION.md). For keybindings 
 
 ---
 
-## Top-level tree
+## Overview
+
+zmux is a Go CLI around tmux. The command tree lives under `internal/cli`, core
+tmux interaction is isolated behind `internal/tmux`, and the user-facing
+surfaces are split across focused packages for workspaces, recipes, themes, the
+status bar, logical tabs, terminal evidence, and Bubble Tea TUIs. Optional agent
+integrations live at the repository edge in `skills/zmux/` and `pi-extension/`.
+
+## Key components
+
+### Top-level tree
 
 ```
 zmux/
 ├── cmd/                  # main entry points (binaries)
 │   ├── zmux/             # thin launcher (main.go) — calls internal/cli.Run
+│   ├── qa/               # repo-local QA walkthrough runner, invoked by ./qa
 │   └── uiproto/          # internal UI prototyping harness (not shipped)
+├── checklists/           # committed manual/automatic QA walkthrough specs
 ├── internal/             # all business logic (Go's `internal/` visibility)
 ├── docs/                 # this directory (architecture, vision, keybindings, etc.)
 ├── themes/iterm2/        # downloaded theme cache (gitignored; not an embed source)
 ├── tests/                # integration tests (build tag: `integration`)
-├── skills/zmux/          # Claude Code agent skill (symlinked by ./dev.sh)
+├── skills/zmux/          # Agent skill: terminal orchestration + agent peer/worker doctrine
 ├── pi-extension/         # Pi agent TypeScript extension (separate build)
 ├── legacy/v0/            # archived bash+gum prototype — see legacy/v0/README.md
 ├── Makefile              # build / test / lint / install
 ├── install.sh            # end-user installer (build + install + shell integration)
 ├── dev.sh                # MAINTAINER convenience (build + install + agent symlinks)
-└── CLAUDE.md             # AI-agent context (concise, points to this file)
+├── AGENTS.md             # canonical AI-agent context
+└── CLAUDE.md -> AGENTS.md # compatibility symlink
 ```
 
 ### Top-level dirs at a glance
@@ -31,14 +44,16 @@ zmux/
 | Path | Status | Notes |
 |------|--------|-------|
 | `cmd/` | Active | Go entry points |
+| `checklists/` | Active | QA walkthrough TOML specs consumed by `./qa` |
 | `internal/` | Active | All packages live here (Go internal/ visibility) |
 | `docs/` | Active | This file and friends |
-| `internal/session/templates/` | Active | Session templates — the **only** `go:embed` source (`internal/session/embed.go`) |
+| `internal/recipe/recipes/` | Active | Bundled recipes — the recipe `go:embed` source (`internal/recipe/embed.go`) |
 | `internal/theme/bundled/` | Active | Bundled themes — the **only** `go:embed` source (`internal/theme/embed.go`) |
 | `themes/iterm2/` | Generated | Downloaded theme cache; gitignored. Runtime themes resolve under `~/.zmux/themes` |
 | `legacy/v0/{templates,themes}/` | Archived | v0's own real asset copies (de-symlinked from the repo root) |
 | `tests/` | Active | Integration tests, run with `go test -tags integration` |
-| `skills/zmux/` | Active | Optional Claude Code agent integration |
+| `.qa/` | Generated | QA scorecards + cached `cmd/qa` binary; gitignored |
+| `skills/zmux/` | Active | Optional agent integration: terminal orchestration plus generic agent peer/worker doctrine |
 | `pi-extension/` | Active | Optional Pi agent integration (TypeScript) |
 | `legacy/v0/` | Archived | Old bash prototype — preserved, unsupported |
 
@@ -65,7 +80,7 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 
 | Package | Lines | Role |
 |---------|-------|------|
-| `tmux` | ~1580 | Typed wrapper around the `tmux` CLI — `Runner` interface, `MockRunner` for tests, generated `tmux.conf` |
+| `tmux` | ~2300 | Typed wrapper around the `tmux` CLI — `Runner` interface, `MockRunner` for tests, generated `tmux.conf`, logical-pane scan, and placement primitives |
 
 **`Runner` is the boundary.** Production uses `tmux.NewRunner()` which shells out to `tmux`. Tests use `tmux.MockRunner` for deterministic, observable interactions. Anything that calls `os/exec` for tmux **must** route through `Runner`.
 
@@ -73,29 +88,37 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 
 | Package | Lines | Role |
 |---------|-------|------|
-| `session` | ~490 | Session model, CRUD, TOML templates |
+| `session` | ~430 | Session model, CRUD, tmp-session helpers |
+| `recipe` | ~620 | Recipe discovery, TOML parsing, pure planning, dry-run rendering, execution |
 | `workspace` | ~630 | Workspace state (TOML), session tracking, reconciliation |
+| `tabs` | ~950 | Logical-tab identity, scanning, placement, dock hide/show, MRU, and reconciliation |
+| `tabstate` | ~280 | Pane-canonical tab lifecycle state (`running` / `done` / `failed` / `attention`) and bar glyph formatting |
 | `theme` | ~650 | Theme parsing, semantic palette, resolver, embed of bundled themes |
-| `bar` | ~2100 | Status bar generation, presets, two-line rendering, preview |
+| `bar` | ~2700 | Status bar generation, presets, two-line logical-tabs rendering, preview |
 | `sync` | ~220 | Pull-only theme sync targets (Ghostty, Neovim) |
 | `source` | ~430 | External source discovery (tmux sockets, catalog) + generic attach fallback |
 | `overmind` | ~120 | Overmind control client (`Client` interface: connect/restart/stop/logs) |
 | `setup` | ~190 | Shell-rc integration: pure plan + apply behind `config.FS` (markers, `.bak`, dry-run, removal) |
 | `wm` | ~150 | Window manager adapters (Hyprland today) |
 | `snapshot` | ~470 | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver` |
+| `qa` | ~1320 | Repo-local QA walkthrough framework: checklist parse/lint, scorecard state, shell runner, and `cmd/qa` CLI |
 
 ### UI
 
-The flat `tui` root package was dissolved (S3) into focused leaf/surface packages; there is no longer a `package tui`.
+The flat `tui` root package was dissolved into focused leaf/surface packages; there is no longer a `package tui`.
 
 | Package | Role |
 |---------|------|
 | `tui/styles` | Shared lipgloss styles leaf (`Styles`, `NewStyles`) |
 | `tui/workspaceview` | Workspace-view data adapter leaf (consumed by picker **and** dashboard; deps: session+workspace only) |
+| `tui/workspacelist` | Reusable workspace-list component used by the workspace switcher |
+| `tui/wspicker` | No-prefix `Alt+w` workspace switcher |
 | `tui/picker` | Primary workspace+session picker (model/update/view/actions + local keymap) |
-| `tui/tabpicker` | Alt+` tab switcher |
+| `tui/tabpicker` | Alt+` tab switcher; understands full, pane-of, and hidden logical tabs |
 | `tui/themepicker` | Standalone theme picker |
 | `tui/wizard` | First-run `zmux init` setup wizard |
+| `tui/qapicker` | Human-facing QA walkthrough picker for `./qa` |
+| `tui/tkey` | Small key helpers shared by TUI surfaces |
 | `tui/palette` | Command palette: registry, providers, executor |
 | `tui/dashboard` | Tabbed dashboard `App` and `Tab` interface |
 | `tui/dashboard/tabs` | Tab implementations: current, sessions, themes, bar, settings, help |
@@ -103,34 +126,23 @@ The flat `tui` root package was dissolved (S3) into focused leaf/surface package
 | `tui/outline` | Tree-outline component |
 | `preview` | UI prototype framework (`Page`, `Controls`, `RenderContext`) |
 
-### File size guidance
+## Decisions
 
-Prod files over ~500 lines are a smell — read carefully to decide whether the size is intentional cohesion or accidental accumulation. As of the post-omega / cli-extraction refactors, **no production file exceeds 500 lines**; the largest and how to think about them:
+- **Go owns the active implementation** - the bash prototype remains archived in
+  `legacy/v0/`, while new features and fixes target the Go packages.
+- **`cmd/zmux` stays thin** - command behavior belongs under `internal/cli`, with
+  `cmd/zmux/main.go` acting as the launcher.
+- **Side effects sit behind interfaces** - tmux, filesystem, process, command,
+  source-discovery, and terminal-window behavior are injected or wrapped so tests
+  can stay deterministic.
+- **Logical tabs are pane-canonical** - windows are presentation containers;
+  pane-scoped tab identity lets tabs move between full, pane, and hidden dock
+  placements.
+- **Generated user surfaces derive from registries** - keybindings and tmux
+  config should read from canonical registries instead of hardcoded duplicate
+  strings.
 
-| File | Lines | Notes |
-|------|-------|-------|
-| `internal/tui/dashboard/tabs/settings.go` | 496 | Settings tab — config fields + live preview. Cohesive; split per field-group if it grows. |
-| `internal/preview/bar/draft/multisession.go` | 462 | Draft / non-production preview code with known dead helpers. Safe to prune when this directory next gets attention. |
-| `internal/tui/dashboard/tabs/current.go` | 458 | Session tab; already has `current_actions.go` / `current_tree.go` splits alongside it. |
-| `internal/bar/generate.go` | 430 | tmux.conf + bar generation. Cohesive generator. |
-| `internal/tui/dashboard/tabs/sessions_actions.go` | 412 | Workspace-tab action handlers, split out of `sessions.go`. |
-| `internal/tmux/client.go` | 408 | Typed tmux CLI wrapper surface. |
-
-If you're adding code that pushes one of these past ~500, consider splitting along an existing seam in the same package (e.g. `xxx_helpers.go`, `xxx_view.go`) rather than continuing to grow the monolith.
-
-### Recent splits (May 2026)
-
-Four large monoliths were split following the per-preset / MVU / popup-mode patterns. Reading order if you're new:
-
-| Package / surface | Top-level file (post-split) | Split files |
-|-------------------|------------------------------|-------------|
-| `internal/bar` rendering | `render.go` (~195L — `BarContext`, dispatchers) | `render_context.go` (GatherContext + git/lang/dir helpers), `render_<preset>.go` (one per preset: default, minimal, blocks, rounded, hacker, zen, starship, powerline+rpowerline) |
-| `internal/tui` picker | `picker.go` (~240L — model + Update) | `picker_update.go`, `picker_actions.go`, `picker_outline.go`, plus pre-existing `picker_view.go`, `picker_search.go`, `picker_external.go`, `picker_types.go` |
-| `internal/cli` root | `root.go` (~160L — cobra wiring + `Run` + shorthand + version check) | `popup_modes.go` (--dashboard / --palette / --tab-picker), `session_picker.go` (outside-tmux flow) |
-| `internal/tui/dashboard/tabs` bar tab | `bar.go` (~275L — types + lifecycle + Update + keys) | `bar_view.go`, `bar_helpers.go` |
-| `internal/preview/pane` page | `page.go` (~210L — Page + Render + Dump) | `page_fixtures.go` (workload fixtures), `page_layouts.go` (split/grid/stacked/focus-rail + chrome), `page_util.go` (fit/clamp helpers). 7 dead functions pruned. |
-
----
+Durable decision records live in [decisions/](decisions/).
 
 ## Key interfaces (the seams)
 
@@ -140,6 +152,8 @@ Anything that does I/O or talks to the OS sits behind an interface so tests can 
 |-----------|---------|-----------------|------|
 | `tmux.Runner` | `internal/tmux` | `NewRunner()` (shells out) | `MockRunner` |
 | `config.FS` | `internal/config` | OS filesystem (`RealFS`) | inline test fakes |
+| `qa.StateFS` | `internal/qa` | `.qa/` JSON scorecards | test fake |
+| `qa.CmdRunner` | `internal/qa` | `ShellRunner` (`sh -c`) | test fake |
 | `bar.Prober` | `internal/bar` | `ExecProber` (git/lang shellout) | fake prober |
 | `source.prober` (unexported) | `internal/source` | `systemProber` (socket scan / `ps` / live probe) | `fakeProber` — `Discover()` wraps `discoverWith(systemProber{})` |
 | `overmind.Client` | `internal/overmind` | `CLI` (shells out to overmind) | injected via `App.Overmind`; tests pass a fake/noop |
@@ -175,11 +189,41 @@ The render pipeline reads from `time.Now()` for timestamps, `bar.Prober` for git
 
 ### Workspace + session model
 
-`internal/workspace` owns the user's workspaces (TOML files in `~/.zmux/workspaces/`). Each workspace tracks N sessions, each session tracks its name + tmux session group (clones share windows but have independent current-window pointers — see CLAUDE.md "Session Groups").
+`internal/workspace` owns the user's workspaces (TOML files in `~/.zmux/workspaces/`). Each workspace tracks N sessions, each session tracks its name + tmux session group (clones share windows but have independent current-window pointers — see AGENTS.md "Gotchas").
 
-`internal/session` owns the per-session model, templates (in `internal/session/templates/`), and the `RootName()` helper that resolves clone names (`dev-b` → `dev`).
+`internal/session` owns the per-session model and the `RootName()` helper that resolves clone names (`dev-b` → `dev`). `internal/recipe` owns declarative launch plans and bundled recipes.
 
 `workspace.Store.WorkspaceFor()` collapses clones internally — UI surfaces must resolve `#S` (raw tmux session name) to the root before display.
+
+### Logical tabs, placement, and state
+
+`internal/tabs` is the logical-tab core. A zmux-managed tab is identified by a
+pane-scoped `@zmux_tab_id`; windows are presentation containers. Placement is
+computed from live tmux state on each scan:
+
+- `full` — the tab owns a window.
+- `pane-of` — the tab is a pane inside another managed tab's window.
+- `dock` — the tab is parked in the reserved hidden session `__zmux_dock`.
+
+`internal/cli/tab_target.go` is the shared resolver for name-addressed tab
+commands. Keep new tab-targeting behavior behind that choke point so
+`run`, `watch`, `send`, `type`, `tab state`, `tab label`, `tab kill`, and
+`tab move` continue to reach a logical tab in every placement.
+
+`internal/tabstate` owns lifecycle state (`running`, `done`, `failed`,
+`attention`) and formats the bar glyphs. State is pane-canonical, so it follows
+the tab when the tab moves between full, pane, and dock placements.
+
+### QA walkthrough runner
+
+`cmd/qa` is a separate repo-local binary invoked by the root `./qa` wrapper. It
+is deliberately not a `zmux qa` subcommand because QA is a repo-maintenance
+surface rather than a tmux-management verb.
+
+Checklist specs are committed under `checklists/*.toml`. Scorecards and the
+cached built runner live under gitignored `.qa/`. The framework supports both
+automatic shell-check steps and human-verdict steps through `internal/tui/qapicker`.
+See [qa.md](qa.md).
 
 ### TUI layout
 
@@ -187,13 +231,17 @@ The render pipeline reads from `time.Now()` for timestamps, `bar.Prober` for git
 internal/tui/                 — no flat package; focused leaves + surfaces
 ├── styles/                   — shared lipgloss styles leaf
 ├── workspaceview/            — workspace-view data adapter (picker + dashboard)
+├── workspacelist/            — reusable workspace list component
+├── wspicker/                 — no-prefix workspace switcher
 ├── picker/                   — primary session/workspace picker
 │   ├── picker.go             — model + Update
 │   ├── picker_view*.go       — view rendering (list / help splits)
 │   ├── picker_actions.go     — selection/CRUD actions
 │   └── keymap.go             — picker-local keymap (component keys stay local)
-├── tabpicker/                — Alt+` tab switcher
+├── tabpicker/                — Alt+` tab switcher (logical full/rider/hidden rows)
 ├── themepicker/              — standalone theme picker
+├── qapicker/                 — QA walkthrough picker for ./qa
+├── tkey/                     — shared key helpers
 ├── wizard/                   — zmux init setup wizard
 ├── outline/                  — tree-outline subcomponent
 ├── views/                    — shared row/column components
@@ -218,11 +266,20 @@ Tabs all implement `dashboard.Tab` — `Activate`, `Deactivate`, `Update`, `View
 
 ### Configuration
 
-`~/.zmux.conf` is the user's TOML config. `internal/config` loads it via `FS` so tests use in-memory fakes. Themes resolve against three sources in order: user custom (`~/.zmux/themes/`), bundled (`go:embed` from `internal/theme/bundled/`), downloaded iterm2 (`themes/iterm2/`).
+`~/.zmux.toml` is the user's TOML config. `internal/config` loads it via `FS`
+so tests use in-memory fakes. Themes resolve against three sources in order:
+user custom (`~/.zmux/themes/`), bundled (`go:embed` from
+`internal/theme/bundled/`), downloaded iterm2 (`themes/iterm2/`).
 
 ### Generated tmux config
 
-`internal/tmux/conf.go` emits the entire `~/.zmux/tmux.conf` from the user's `config.Config` and the resolved `theme.Palette`. This is the file `zmux apply` writes. Hooks, status hooks, and bar hooks are generated here; the **keybindings come from the `internal/keys` registry** (`conf.go` references `keys.X.Key`), so the generated config, help surfaces, and `docs/keybindings.md` never drift.
+`internal/tmux/conf.go` emits the generated tmux config from the user's
+`config.Config` and the resolved `theme.Palette`. For the live `zmux` profile
+that path is `~/.tmux.conf`; for the edge `zzmux` profile it is `~/.zzmux.conf`.
+This is the file `zmux apply` writes. Hooks, status hooks, and bar hooks are
+generated here; the **keybindings come from the `internal/keys` registry**
+(`conf.go` references `keys.X.Key`), so the generated config, help surfaces,
+and `docs/keybindings.md` never drift.
 
 ### Preview framework
 
@@ -240,23 +297,41 @@ zmux
 ├── init              — first-time setup wizard
 ├── setup             — shell-rc integration (`setup shell`, via internal/setup)
 ├── apply             — regenerate tmux.conf and apply everything
+├── refresh           — apply config and refresh the current tmux client
 ├── new               — create a new session/workspace
+├── open              — open a workspace/session (aliases: attach, a)
+├── kill              — smart workspace/session kill
 ├── ls                — list sessions
 ├── tabs              — list tabs in current session
-├── tab               — tab management (rename, swap, refresh-names, …)
-├── pane              — pane management (respawn, etc.)
+├── tab               — tab management (label, move, kill, state, hide/show/pane/full)
+├── pane              — pane management (open/toggle/current/list/focus/resize/close)
 ├── send              — send keys to a window
 ├── type              — type text into a window
 ├── watch             — read window output
 ├── run               — run a command in a named window
+├── recipe            — recipe list/show/lint/fork/edit/create
 ├── workspace         — workspace management subtree
-├── theme             — theme list / apply / clone / edit
+├── session           — session management subtree
+├── theme             — theme set/list/sync/pull
 ├── bar               — bar preset commands
-├── terminal          — terminal capability probes
+├── terminal          — current/capabilities/refresh probes
+├── snapshot          — per-pane text/ANSI plus optional PNG evidence bundle
 ├── help              — top-level help (prefix+? popup)
 ├── status            — internal status JSON
 ├── completion        — shell completion (cobra-generated)
 └── keys (hidden)     — maintainer tooling: `keys gen` regenerates docs/keybindings.md from internal/keys
+```
+
+The separate repo-local QA runner is outside the zmux tree:
+
+```
+./qa
+├── ls                — list checklists + scorecard summaries
+├── run               — run automatic checklist steps
+├── mark              — record a human/agent verdict
+├── status            — print scorecard summary or JSON
+├── reset             — clear a checklist scorecard
+└── lint              — validate checklist files
 ```
 
 Plus a handful of UI launchers triggered by tmux bindings:
@@ -266,6 +341,7 @@ zmux --picker         # workspace+session picker
 zmux --palette        # command palette
 zmux --dashboard      # tabbed dashboard
 zmux --tab-picker     # Alt+` tab switcher
+zmux --workspace-picker # Alt+w workspace switcher
 ```
 
 These flags live in `root.go` and route into the corresponding `tui/` flow.
@@ -279,6 +355,8 @@ These flags live in `root.go` and route into the corresponding `tui/` flow.
 | Add a new CLI subcommand | `internal/cli/<name>.go` (cobra) — register in `internal/cli/root.go` |
 | Add a tmux keybinding | `internal/keys` — add the `Binding` to the right table. `conf.go`, the dashboard Help tab, `zmux help`, and `docs/keybindings.md` all derive from it. Run `make keys-gen` to regenerate the doc (the `TestKeybindingsDocInSync` golden test / CI enforces freshness) |
 | Add a dashboard tab | Implement `dashboard.Tab` under `internal/tui/dashboard/tabs/`. Register in `dashboard.App`. See an existing tab (e.g. `themes.go`) as a template. |
+| Change logical-tab placement or state | Start in `internal/tabs/` or `internal/tabstate/`, then update the shared resolver in `internal/cli/tab_target.go` if targeting behavior changes. Run `./qa lint` and the relevant checklist under `./qa`. |
+| Add a QA walkthrough | Add `checklists/<name>.toml`, validate with `./qa lint`, and document any human-only expectations in the checklist's `expect` fields. |
 | Add a bar preset | `internal/bar/bar.go` — preset table + segment definitions. Update preview in `internal/bar/preview.go` if visual changes need preview. |
 | Add a theme | Drop a new file into `internal/theme/bundled/` (iterm2-color-schemes format). It will be `go:embed`'d on next build. |
 | Change a generated tmux behavior | `internal/tmux/conf.go` — but verify `internal/tmux/conf_test.go` still covers the new section. |
@@ -286,7 +364,7 @@ These flags live in `root.go` and route into the corresponding `tui/` flow.
 
 ---
 
-## Conventions enforced in CLAUDE.md
+## Conventions enforced in AGENTS.md
 
 A few rules worth re-stating here because they're easy to miss:
 

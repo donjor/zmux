@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
 )
 
@@ -55,7 +57,12 @@ func lsWorkspaces(app *apppkg.App) error {
 		return nil
 	}
 
-	sessions, _ := session.ListSessions(app.Runner)
+	// Tolerates a down server (counts read 0) — but a cross-profile refusal
+	// must surface instead of faking an idle workspace list.
+	sessions, err := session.ListSessions(app.Runner)
+	if err != nil && errors.Is(err, tmux.ErrCrossProfile) {
+		return err
+	}
 	sessionMap := make(map[string]session.SessionInfo)
 	for _, s := range sessions {
 		sessionMap[s.Name] = s
@@ -169,6 +176,11 @@ func lsWorkspaceSessions(app *apppkg.App, wsName string) error {
 func lsSessionsFlat(app *apppkg.App) error {
 	sessions, err := session.ListSessions(app.Runner)
 	if err != nil {
+		// "No server running" degrades to an empty list; a cross-profile
+		// refusal must surface, not masquerade as an empty server.
+		if errors.Is(err, tmux.ErrCrossProfile) {
+			return err
+		}
 		fmt.Println("No sessions.")
 		return nil
 	}

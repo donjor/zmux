@@ -37,13 +37,14 @@ func TestReconcileBarStatusLines_TwoLineAlwaysTwo(t *testing.T) {
 		}
 	}
 
-	// format[0] must be the dynamic top bar, format[1] the normal bar.
+	// format[0] must be the dynamic top bar, format[1] the logical tabs row
+	// (zmux binary present → dynamic row, native list is the fallback).
 	wantTop := bar.TopBarFormatCmd("zmux", "tabs")
 	if !hasSessionOption(mock.Calls, "solo", "status-format[0]", wantTop) {
 		t.Errorf("solo: status-format[0] not set to top bar cmd")
 	}
-	if !hasSessionOption(mock.Calls, "solo", "status-format[1]", bar.TmuxDefaultStatusFormat) {
-		t.Errorf("solo: status-format[1] not set to default bar")
+	if !hasSessionOption(mock.Calls, "solo", "status-format[1]", bar.TabsRowStatusFormat("zmux")) {
+		t.Errorf("solo: status-format[1] not set to the logical tabs row")
 	}
 }
 
@@ -63,8 +64,8 @@ func TestReconcileBarStatusLines_NonTwoLineClearsStale(t *testing.T) {
 			t.Errorf("session %q: want status=[on], got %v", name, vals)
 		}
 	}
-	if !hasSessionOption(mock.Calls, "dev", "status-format[0]", bar.TmuxDefaultStatusFormat) {
-		t.Errorf("dev: status-format[0] not reset to default bar")
+	if !hasSessionOption(mock.Calls, "dev", "status-format[0]", bar.TabsRowStatusFormat("zmux")) {
+		t.Errorf("dev: status-format[0] not reset to the one-line tabs row")
 	}
 }
 

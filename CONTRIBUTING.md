@@ -7,7 +7,7 @@ For *what* zmux is, see [README.md](README.md). For *how it's built*, read [docs
 ## Prerequisites
 
 - **Go 1.25+** (pinned in `go.mod`; the Charm v2 stack requires it)
-- **tmux 3.3+** (zmux speaks current tmux; older versions may work but aren't tested)
+- **tmux 3.2+** (required for popup support; newer current tmux versions are recommended)
 - A POSIX shell environment (Linux or macOS). Windows is not supported.
 - Optional: `gum` only if you want to run the legacy v0 (`legacy/v0/`).
 
@@ -42,6 +42,8 @@ with `git push --no-verify`.
 make test               # unit tests (fast)
 make test-race          # unit tests with the race detector (mirrors CI)
 make test-integration   # integration tests — exercise the built ./zmux CLI (no tmux needed)
+./qa lint               # validate committed QA walkthrough specs
+./qa run <checklist>    # run automatic steps in a QA walkthrough
 make vuln               # govulncheck vulnerability scan
 make lint               # go vet + golangci-lint (incl. gofumpt format check)
 make fmt                # auto-format with gofumpt
@@ -60,9 +62,9 @@ with `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`
 make install            # builds + copies the binary to ~/.local/bin/zmux
 ```
 
-`make install` does **not** touch your `~/.claude/` or `~/.pi/` directories — it's safe to run as a contributor.
+`make install` does **not** touch your `~/.claude/`, `~/.codex/`, or `~/.pi/` directories — it's safe to run as a contributor.
 
-> **Don't run `./dev.sh` unless you know what it does.** It's a maintainer convenience that also symlinks `skills/zmux/` and `pi-extension/` into your home directory's agent configuration. Use `make install` for normal development.
+> **Don't run `./dev.sh` unless you know what it does.** It's a maintainer convenience that updates the shared `~/donjor/skills/skills/zmux` link, refreshes Codex/Pi skill mirrors, and relinks the Pi extension. Use `make install` for normal development.
 
 ## The dev loop
 
@@ -72,12 +74,13 @@ The typical change cycle:
 2. `make build` — compile check.
 3. `make test` — unit tests.
 4. `make install` (or `make build && ./zmux <cmd>`) — exercise the change live.
-5. For UI changes, you may need to `prefix+r` inside an existing tmux session to reload the generated config.
+5. For UI changes, run the relevant `./qa` checklist or add one under `checklists/`.
+6. You may need to `prefix+r` inside an existing tmux session to reload the generated config.
 
 Common gotchas:
 
 - **`zmux init` refuses inside tmux.** This is intentional; exit your tmux session first.
-- **Generated config lives at `~/.zmux/tmux.conf`** and is overwritten by `zmux apply`. Don't hand-edit it.
+- **Generated config lives at `~/.tmux.conf` for `zmux`** (`~/.zzmux.conf` for the edge profile) and is overwritten by `zmux apply`. Don't hand-edit it.
 - **All tmux side effects must go through `internal/tmux.Runner`.** No direct `os/exec` calls in business logic. See [docs/architecture.md → Key interfaces](docs/architecture.md#key-interfaces-the-seams).
 
 ## Project layout
@@ -86,9 +89,11 @@ See [docs/architecture.md](docs/architecture.md) for the full map. A quick orien
 
 ```
 cmd/zmux/          # thin launcher (main.go) — calls internal/cli.Run
+cmd/qa/            # repo-local QA walkthrough runner, invoked by ./qa
+checklists/        # committed QA walkthrough specs (scorecards live in .qa/)
 internal/          # all business logic (Go internal/ visibility)
                    #   cli/                — cobra command tree (importable, testable)
-                   #   session/templates/  — embedded session templates (go:embed source)
+                   #   recipe/              — embedded recipes + planner/executor
                    #   theme/bundled/      — embedded themes (go:embed source)
 docs/              # this guide, architecture, vision, keybindings
 themes/iterm2/     # downloaded theme cache (gitignored)
@@ -103,6 +108,7 @@ The fastest path is in [docs/architecture.md → Where to make common changes](d
 - **New CLI subcommand** → `internal/cli/<name>.go`, register in `internal/cli/root.go`.
 - **New keybinding** → add the `Binding` to `internal/keys`; `conf.go`, the help surfaces, and `docs/keybindings.md` all derive from it. Run `make keys-gen` to regenerate the doc (`TestKeybindingsDocInSync` enforces freshness).
 - **New dashboard tab** → implement `dashboard.Tab` under `internal/tui/dashboard/tabs/`.
+- **New QA walkthrough** → add `checklists/<name>.toml`, validate with `./qa lint`, and document human-visible expectations in `expect`.
 - **New theme** → drop a file into `internal/theme/bundled/`; it's `go:embed`'d on next build.
 
 ## Style and review

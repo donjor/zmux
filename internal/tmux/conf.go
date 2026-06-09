@@ -32,7 +32,8 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set -g terminal-features[92] \"tmux-256color:RGB:extkeys\"\n")
 	b.WriteString("set -g mouse on\n")
 	b.WriteString("set -g history-limit 50000\n")
-	b.WriteString("set -g escape-time 10\n")
+	b.WriteString("set -g escape-time 50\n")
+	b.WriteString("set -g repeat-time 300\n")
 	b.WriteString("set -g focus-events on\n")
 	b.WriteString("set -g base-index 1\n")
 	b.WriteString("setw -g pane-base-index 1\n")
@@ -50,6 +51,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set -g status-position top\n")
 	b.WriteString("set -g set-titles on\n")
 	fmt.Fprintf(&b, "set -g set-titles-string \"%s\"\n", termtitle.TmuxTitleFormat)
+	// Idle baseline — also the #() cache TTL for bar-render. While any pane
+	// holds a running tab state, tabstate.Service drops this to 1s so the
+	// #(bar-spinner) glyph steps, and restores 5s when the last one clears
+	// (no constant 1s bar-render spawn load while nothing runs).
 	b.WriteString("set -g status-interval 5\n")
 	b.WriteString("set -g status-left-length 40\n")
 	b.WriteString("set -g status-right-length 100\n")
@@ -96,6 +101,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	fmt.Fprintf(&b, "bind %s swap-window -t -1 \\; select-window -t -1\n", keys.TabReorderLeft.Key)
 	fmt.Fprintf(&b, "bind %s swap-window -t +1 \\; select-window -t +1\n", keys.TabReorderRight.Key)
 	fmt.Fprintf(&b, "bind %s confirm-before -p \"close tab %s? (y/n)\" kill-window\n", keys.TabKill.Key, tablabel.PlainFormat())
+	if zmuxBin != "" {
+		fmt.Fprintf(&b, "bind %s command-prompt -p \"join tab here:\" \"run-shell '%s tab pane \\\"%%%%\\\"'\"\n", keys.TabJoinPane.Key, zmuxBin)
+		fmt.Fprintf(&b, "bind %s run-shell \"%s tab full --after\"\n", keys.TabFull.Key, zmuxBin)
+	}
 	b.WriteString("\n")
 
 	// Alt+1-9 tab switching (no prefix)
@@ -114,10 +123,18 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	}
 	b.WriteString("\n")
 
-	// No-prefix pane focus. Ghostty and Hyprland leave Alt+Shift+Arrow free,
-	// making this a fast path for Pi ↔ sidecar movement without stealing
-	// Neovim's Ctrl+h/j/k/l window navigation.
+	// No-prefix pane focus. Alt+Shift+Arrow avoids stealing plain Alt+Arrow
+	// from shells and TUIs. Large pane resize remains prefix+Alt+Arrow in
+	// tmux's prefix table, so the chords stay separate.
 	b.WriteString("# Alt+Shift+Arrow pane focus (no prefix)\n")
+	b.WriteString("unbind -n M-Left\n")
+	b.WriteString("unbind -n M-Right\n")
+	b.WriteString("unbind -n M-Up\n")
+	b.WriteString("unbind -n M-Down\n")
+	b.WriteString("unbind -n M-S-Left\n")
+	b.WriteString("unbind -n M-S-Right\n")
+	b.WriteString("unbind -n M-S-Up\n")
+	b.WriteString("unbind -n M-S-Down\n")
 	fmt.Fprintf(&b, "bind -n %s select-pane -L\n", keys.PaneFocusL.Key)
 	fmt.Fprintf(&b, "bind -n %s select-pane -R\n", keys.PaneFocusR.Key)
 	fmt.Fprintf(&b, "bind -n %s select-pane -U\n", keys.PaneFocusU.Key)
@@ -143,14 +160,16 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		for _, k := range append([]string{keys.SessionPicker.Key}, keys.SessionPicker.Aliases...) {
 			popupBind(&b, false, k, 60, 50, zmuxBin, "--picker")
 		}
+		// prefix+Alt+1-9: direct session switching in the current workspace.
+		// Keeping the digit jumps behind prefix avoids stealing Alt+digits from
+		// shells/editors while preserving the tab/session parallel:
+		// Alt+N = tab N, prefix+Alt+N = session N.
+		for i := 1; i <= 9; i++ {
+			fmt.Fprintf(&b, "bind M-%d run-shell \"%s workspace switch-to %d\"\n", i, zmuxBin, i)
+		}
 		// prefix+[ / prefix+]: cycle prev/next session in workspace
 		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace prev\"\n", keys.SessionPrev.Key, zmuxBin)
 		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace next\"\n", keys.SessionNext.Key, zmuxBin)
-		// No direct Alt+<digit> session jump: terminals fold Shift+<digit>
-		// into the shifted symbol (Alt+Shift+2 → M-@, which readline owns as
-		// complete-hostname), so a per-digit bind is both layout-fragile and
-		// a footgun. Session switching lives in the Alt+` picker and the
-		// prefix+[ / prefix+] cycle instead.
 	} else {
 		b.WriteString("bind s choose-tree -s\n")
 	}
@@ -240,6 +259,16 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		fmt.Fprintf(&b, "set-hook -g window-linked[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
 		fmt.Fprintf(&b, "set-hook -g window-unlinked[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
 		fmt.Fprintf(&b, "set-hook -g window-renamed[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
+
+		// Focus clears `attention` (ratified clear table; done/failed stay
+		// until input). session-window-changed covers switching tabs;
+		// window-pane-changed covers switching panes within a tab. Both fire
+		// reliably without focus-events — pane-focus-in does not (spike C,
+		// plan 026), so it is deliberately absent here. #{pane_id} expands to
+		// the newly-active pane when the hook fires.
+		focusClearCmd := fmt.Sprintf("%s tab state clear --target #{pane_id} --if attention --source focus --quiet >/dev/null 2>&1 || true", zmuxBin)
+		fmt.Fprintf(&b, "set-hook -g session-window-changed[1] \"run-shell -b '%s'\"\n", focusClearCmd)
+		fmt.Fprintf(&b, "set-hook -g window-pane-changed \"run-shell -b '%s'\"\n", focusClearCmd)
 	}
 
 	// Two-line bar hooks — reconcile per-session status lines to the configured

@@ -11,8 +11,6 @@ const (
 	modeNormal                pickerMode = iota // unified: type to filter/name, enter to attach/create
 	modeConfirmDelete                           // first-step y/N to confirm delete
 	modeConfirmDeleteAttached                   // second-step y/N for workspaces with live clients
-	modeTemplateSelect                          // picking a template
-	modeTemplateName                            // text input for template session name
 )
 
 // pickerConfirmTarget snapshots what's being deleted at the moment the user
@@ -36,10 +34,9 @@ type pickerState struct {
 
 // PickerResult holds the outcome of the picker interaction.
 type PickerResult struct {
-	Action    string // "attach", "hijack", "new", "template", "overmind-connect", "external-attach", "workspace-create", "workspace-focus", ""
+	Action    string // "attach", "hijack", "new", "overmind-connect", "external-attach", "workspace-create", "workspace-focus", ""
 	Session   string // session name to attach
 	Name      string // name for new session (may be "" for auto tmp-N)
-	Template  string // template name if action is "template"
 	Workspace string // workspace name for workspace-level actions
 
 	// External source fields (overmind-connect, external-attach).

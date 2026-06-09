@@ -1,0 +1,20 @@
+name = "monitor"
+description = "System monitoring: htop, gpu, logs"
+kind = "session"
+workspace = "{{ cwd_name | slug }}"
+session = "{{ workspace }}"
+
+[[tabs]]
+name = "htop"
+command = "htop"
+
+[[tabs]]
+name = "gpu"
+command = "watch -n1 nvidia-smi"
+
+[[tabs]]
+name = "logs"
+command = "journalctl -f"
+
+[options]
+focus_tab = "htop"

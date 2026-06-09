@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/session"
+	tabspkg "github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
@@ -151,6 +152,9 @@ func (t *CurrentTab) fetchMoveDestinations() tea.Cmd {
 		}
 		var targets []currentMoveTarget
 		for _, s := range sessions {
+			if tabspkg.IsReservedSession(s.Name) {
+				continue // never offer the dock as a move destination
+			}
 			if s.Name != current {
 				targets = append(targets, currentMoveTarget{
 					Name:    s.Name,
@@ -304,7 +308,7 @@ func (t *CurrentTab) newWindow(sessionName, dir string) tea.Cmd {
 	runner := t.runner
 	reqID := t.reqID
 	return func() tea.Msg {
-		_ = runner.NewWindow(sessionName, "", dir)
+		_, _ = runner.NewWindow(sessionName, "", dir)
 		return currentMutationDoneMsg{reqID: reqID}
 	}
 }

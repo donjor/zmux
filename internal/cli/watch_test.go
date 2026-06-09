@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -101,6 +103,133 @@ func TestWatchUntilTimesOutWhenPatternOnlyInBaseline(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Error("expected timeout when pattern only exists in baseline")
+	}
+}
+
+func TestWatchIdleReturnsAfterStableOutput(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+
+	// Output changes for the first two polls, then goes stable.
+	var callCount atomic.Int32
+	mock.CapturePaneFunc = func(target string, lines int) (string, error) {
+		n := callCount.Add(1)
+		if n <= 2 {
+			return fmt.Sprintf("streaming chunk %d\n", n), nil
+		}
+		return "streaming chunk 2\nfinal answer\n", nil
+	}
+
+	rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--idle", "1", "-T", "10"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("watch --idle should return once output is stable: %v", err)
+	}
+
+	// Needs the changing polls plus at least the 1s stability window (2+ polls).
+	if count := callCount.Load(); count < 4 {
+		t.Errorf("expected at least 4 CapturePane calls (changes + stability window), got %d", count)
+	}
+}
+
+// A screen that is static because the process is quietly working (e.g. an
+// agent CLI waiting on a remote model) still counts as stable — returning
+// there is BY DESIGN. zmux judges only screen stability; the caller judges
+// what the capture means.
+func TestWatchIdleReturnsOnStaticScreenRegardlessOfProcessState(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.CapturedPaneContent = "> prompt submitted\n(no answer yet)\n"
+
+	rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--idle", "1", "-T", "10"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("static screen must satisfy --idle even mid-turn: %v", err)
+	}
+}
+
+func TestWatchIdleTimesOutWhenOutputKeepsChanging(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+
+	// Every capture is different — never stable.
+	var callCount atomic.Int32
+	mock.CapturePaneFunc = func(target string, lines int) (string, error) {
+		return fmt.Sprintf("tick %d\n", callCount.Add(1)), nil
+	}
+
+	rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--idle", "2", "-T", "1"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Error("expected timeout error when output never stabilizes")
+	}
+}
+
+// Capture errors must not age the stability streak into a false "stable".
+func TestWatchIdleCaptureErrorResetsStability(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+
+	// One good capture, then persistent errors. Without the reset, the
+	// initial capture's streak would age past --idle and report success.
+	var callCount atomic.Int32
+	mock.CapturePaneFunc = func(target string, lines int) (string, error) {
+		if callCount.Add(1) == 1 {
+			return "looks stable\n", nil
+		}
+		return "", fmt.Errorf("pane gone")
+	}
+
+	rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--idle", "1", "-T", "2"})
+	if err := rootCmd.Execute(); err == nil {
+		t.Error("expected timeout — capture errors must not count toward stability")
+	}
+}
+
+// An already-stable pane must succeed even with --timeout == --idle: the
+// streak is seeded by an immediate capture (not the first 500ms tick) and
+// stability is evaluated before the deadline within a tick. Pre-fix this
+// combination could never succeed (codex-review catch, dogfood run).
+func TestWatchIdleStableFromStartSucceedsWithEqualTimeout(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.CapturedPaneContent = "same screen\n"
+
+	rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--idle", "1", "-T", "1"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("stable-from-start pane must beat --timeout == --idle: %v", err)
+	}
+}
+
+// When captures fail persistently, the timeout error must say so instead of
+// the misleading "output never stable".
+func TestWatchIdleTimeoutReportsPersistentCaptureFailure(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.CapturePaneFunc = func(target string, lines int) (string, error) {
+		return "", fmt.Errorf("pane gone")
+	}
+
+	rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--idle", "1", "-T", "1"})
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "captures failing") {
+		t.Errorf("timeout error should surface capture failure, got: %v", err)
+	}
+}
+
+func TestWatchIdleRejectsInvalidValues(t *testing.T) {
+	for _, args := range [][]string{
+		{"watch", "server", "-s", "test-session", "--idle", "0"},
+		{"watch", "server", "-s", "test-session", "--idle", "-3"},
+		{"watch", "server", "-s", "test-session", "--idle", "3", "--until", "ready"},
+		{"watch", "server", "-s", "test-session", "--idle", "3", "-f"},
+	} {
+		rootCmd, mock := withMockApp(t)
+		mock.Sessions = []tmux.Session{{Name: "test-session"}}
+		rootCmd.SetArgs(args)
+		if err := rootCmd.Execute(); err == nil {
+			t.Errorf("expected error for args %v", args)
+		}
 	}
 }
 

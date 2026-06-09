@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/styles"
@@ -281,5 +282,155 @@ func TestViewEmptyWhenQuitting(t *testing.T) {
 	m.Quitting = true
 	if v := m.view(); v != "" {
 		t.Errorf("quitting view non-empty: %q", v)
+	}
+}
+
+// newLogicalPicker builds a single-session picker over "dev" with a raw
+// window (editor), a window owned by a labeled full tab (buddy, running)
+// hosting a rider (tests, done), and a docked tab (logs) hidden from dev.
+func newLogicalPicker(t *testing.T) TabPickerModel {
+	t.Helper()
+	mock := tmux.NewMockRunner()
+	mock.Windows = map[string][]tmux.Window{
+		"dev": {
+			{Index: 1, Name: "editor", Active: true},
+			{Index: 2, Name: "node", Active: false},
+		},
+	}
+	mock.Panes = map[string][]tmux.Pane{
+		"dev": {
+			{WindowIndex: 1, Active: true, Command: "nvim"},
+			{WindowIndex: 2, Active: true, Command: "bun"},
+		},
+	}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		{
+			PaneID: "%2", Session: "dev", WindowID: "@2", WindowIndex: 2, WindowName: "node",
+			WindowPanes: 2, TabID: "ztab_bud", Label: "buddy", State: "running",
+		},
+		{
+			PaneID: "%3", Session: "dev", WindowID: "@2", WindowIndex: 2, WindowName: "node",
+			WindowPanes: 2, TabID: "ztab_tst", Label: "tests", State: "done", Anchor: "ztab_bud",
+		},
+		{
+			PaneID: "%4", Session: tabs.DockSession, WindowID: "@9", WindowIndex: 0, WindowName: "logs",
+			WindowPanes: 1, TabID: "ztab_log", Label: "logs", Hidden: "dev",
+		},
+	}
+
+	infos := []session.SessionInfo{{Name: "dev", Attached: true}}
+	m := NewTabPickerModel(mock, "myapp", "dev", infos, styles.DefaultStyles())
+	m.width = 80
+	m.height = 24
+
+	out, _ := m.Update(m.loadSessions()())
+	return out.(TabPickerModel)
+}
+
+func TestLogicalEntriesDecorated(t *testing.T) {
+	m := newLogicalPicker(t)
+	wins := m.entries[0].Windows
+	if len(wins) != 4 {
+		t.Fatalf("entries = %d, want 4 (editor, buddy, rider, hidden)", len(wins))
+	}
+	if wins[0].Kind != teWindow || wins[0].Tab != nil {
+		t.Errorf("editor must stay a raw window: %+v", wins[0])
+	}
+	if wins[1].displayName() != "buddy" || wins[1].Kind != teWindow {
+		t.Errorf("full tab must display its label: %q", wins[1].displayName())
+	}
+	if wins[2].Kind != teRider || wins[2].displayName() != "tests" || wins[2].Index != 2 {
+		t.Errorf("rider must slot under host window 2: %+v", wins[2])
+	}
+	if wins[3].Kind != teHidden || wins[3].displayName() != "logs" {
+		t.Errorf("hidden tab must trail the list: %+v", wins[3])
+	}
+}
+
+func TestRiderEnterSelectsPane(t *testing.T) {
+	m := newLogicalPicker(t)
+	m = send(m, "right") // drill dev
+	m = send(m, "down")  // buddy
+	m = send(m, "down")  // rider
+	m = send(m, "enter")
+	r := m.Result
+	if r.Action != "select-pane" || r.Pane != "%3" || r.Index != 2 || r.TabID != "ztab_tst" {
+		t.Errorf("result = %+v, want select-pane/%%3/2/ztab_tst", r)
+	}
+}
+
+func TestHiddenEnterShows(t *testing.T) {
+	m := newLogicalPicker(t)
+	m = send(m, "right")
+	m = send(m, "down") // buddy
+	m = send(m, "down") // rider
+	m = send(m, "down") // hidden
+	m = send(m, "enter")
+	if m.Result.Action != "show" || m.Result.TabID != "ztab_log" {
+		t.Errorf("result = %+v, want show/ztab_log", m.Result)
+	}
+}
+
+func TestRiderCtrlXClosesPane(t *testing.T) {
+	m := newLogicalPicker(t)
+	m = send(m, "right")
+	m = send(m, "down")
+	m = send(m, "down") // rider
+	m = send(m, "ctrl+x")
+	if m.Result.Action != "close-pane" || m.Result.Pane != "%3" {
+		t.Errorf("result = %+v, want close-pane/%%3", m.Result)
+	}
+}
+
+func TestRenameGuardedToWindows(t *testing.T) {
+	m := newLogicalPicker(t)
+	m = send(m, "right")
+	m = send(m, "down")
+	m = send(m, "down") // rider
+	m = send(m, "ctrl+r")
+	if m.mode != tpModeList {
+		t.Errorf("rename on a rider must be a no-op, mode = %v", m.mode)
+	}
+}
+
+func TestSwapGuardedToWindows(t *testing.T) {
+	m := newLogicalPicker(t)
+	m = send(m, "right")
+	m = send(m, "down")
+	m = send(m, "down") // rider
+	m = send(m, ">")
+	if m.Result.Action != "" {
+		t.Errorf("swap on a rider must be a no-op, got %+v", m.Result)
+	}
+}
+
+func TestFilterMatchesLabel(t *testing.T) {
+	m := newLogicalPicker(t)
+	m = send(m, "right")
+	m = send(m, "b")
+	m = send(m, "u")
+	m = send(m, "d") // "bud" → only the buddy label matches
+	var tabRows int
+	for i := range m.tree.Rows {
+		if m.tree.Rows[i].Kind == outline.RowWindow {
+			tabRows++
+		}
+	}
+	if tabRows != 1 {
+		t.Errorf("visible tab rows = %d, want 1 (label match)", tabRows)
+	}
+}
+
+func TestViewMarksRidersAndHidden(t *testing.T) {
+	m := newLogicalPicker(t)
+	m = send(m, "right")
+	v := m.view()
+	for _, want := range []string{"buddy", "└", "tests", "~", "logs"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("view missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "node") {
+		t.Errorf("auto window name must yield to the label:\n%s", v)
 	}
 }

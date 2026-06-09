@@ -5,7 +5,7 @@
 // single purpose is to switch), and owns the standalone-program concerns the
 // embeddable component deliberately leaves to its host — window sizing,
 // AltScreen, and quit semantics. Enter on a row switches to that workspace's
-// last-active session (the same behaviour as the `zmux <workspace>` shorthand).
+// last-active session (the same behaviour as `zmux open <workspace>`).
 package wspicker
 
 import (

@@ -1,0 +1,37 @@
+name = "showcase"
+description = "Recipe feature demo with interpolation, shell quoting, and tab modes"
+context = "any"
+kind = "workspace"
+workspace = "{{ cwd_name | slug }}"
+
+[inputs]
+items = true
+min_items = 1
+prompt = "Demo items"
+cwd = true
+workspace = true
+session = true
+tab_mode = true
+
+[defaults]
+session = "demo"
+tab_mode = "ready"
+
+[[sessions]]
+name = "{{ session | slug }}"
+
+[[sessions.tabs]]
+name = "overview"
+command = "echo recipe={{ recipe }} workspace={{ workspace }} cwd={{ cwd | shellquote }}"
+
+[[sessions.tabs]]
+name = "quote-help"
+command = "echo item sessions below use shellquote and slug filters"
+
+[[sessions]]
+foreach = "items"
+name = "demo-{{ item | slug }}"
+
+[[sessions.tabs]]
+name = "echo"
+command = "echo item={{ item | shellquote }} index={{ index }}"

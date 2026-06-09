@@ -1,0 +1,31 @@
+name = "dev"
+description = "Project workspace: bash, dev server, git"
+context = "outside"
+kind = "session"
+workspace = "{{ cwd_name | slug }}"
+session = "{{ session | slug }}"
+
+[inputs]
+cwd = true
+workspace = true
+session = true
+tab_mode = true
+
+[defaults]
+session = "main"
+tab_mode = "run"
+
+[[tabs]]
+name = "bash"
+command = "code ."
+
+[[tabs]]
+name = "dev"
+command = "bun run dev"
+
+[[tabs]]
+name = "git"
+command = "git status"
+
+[options]
+focus_tab = "bash"

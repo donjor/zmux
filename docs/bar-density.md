@@ -39,20 +39,23 @@ shipped:
 1. **Layout** — `two-line` (default) vs `split`; both give the workspace/session
    row its own line so it never crowds the tabs. The 1-row `single` layout was
    removed (it reflowed and repeated info across the line); legacy `single`
-   configs normalize to two-line. (plan 024.)
+   configs normalize to two-line.
 2. **Row ownership / de-dup** — in two-line mode the top row owns
-   workspace/session identity, so the bottom-left drops to volatile aux only
-   (dir/git/process). This is the single biggest tab-survival win — it freed
-   ~40–68 cells of bottom-left width. (plan 024 P2.)
+   workspace/session identity, and cwd lives in a right-aligned top overlay
+   beside the edge-profile badge. The bottom-left drops to stable volatile aux
+   only (process/git, preset-dependent), so directory changes cannot move the
+   logical tabs row. This is the single biggest tab-survival win — it freed
+   ~40–68 cells of bottom-left width, plus the later cwd-overlay cleanup.
 3. **Segment toggles** — hide any of workspace / git / lang / clock / directory /
    process / group. Fewer segments → narrower sides → more tab room.
 4. **Glyph vocabulary (preset)** — nerd-font pills/separators (powerline,
    rounded) pack more signal per cell but cost a nerd font; plain presets
    (minimal, zen, blocks) are wider-character but font-agnostic. Choosing a
    denser preset *is* the closest thing to "smaller bar."
-5. **Truncation** — `shortenDir`, the `status-left/right-length` caps, and tmux's
-   native `<`/`>` overflow markers with `list=focus` keep the current window
-   visible when tabs exceed their budget. (plan 024 P3.)
+5. **Truncation** — `shortenDir` keeps the top-row cwd overlay compact, while
+   `status-left/right-length` caps and tmux's native `<`/`>` overflow markers
+   with `list=focus` keep the current window visible when tabs exceed their
+   budget.
 6. **Indicator compaction** — session indicator as dots (`○●○`), numbers
    (`2/3`), or none.
 

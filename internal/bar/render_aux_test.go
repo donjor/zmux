@@ -24,8 +24,9 @@ func auxCtx() BarContext {
 }
 
 // TestRenderLeftAux_FieldPolicy locks the per-preset bottom-left field policy in
-// two-line mode: identity (session/workspace) is always dropped; aux follows
-// powerline/rpowerline→dir, hacker→process+dir, starship→dir+git, others→empty.
+// two-line mode: identity (session/workspace) is always dropped; cwd never
+// appears because it lives in the top overlay; aux follows hacker→process,
+// starship→git, others→empty.
 func TestRenderLeftAux_FieldPolicy(t *testing.T) {
 	p := testPalette()
 	for _, preset := range AllPresets() {
@@ -44,17 +45,13 @@ func TestRenderLeftAux_FieldPolicy(t *testing.T) {
 		hasGit := strings.Contains(visible, "git-uniq")
 
 		switch preset {
-		case Powerline, Rpowerline:
-			if !hasDir || hasProc || hasGit {
-				t.Errorf("%s: want dir only, got dir=%v proc=%v git=%v: %q", preset, hasDir, hasProc, hasGit, visible)
-			}
 		case Hacker:
-			if !hasDir || !hasProc || hasGit {
-				t.Errorf("%s: want process+dir, got dir=%v proc=%v git=%v: %q", preset, hasDir, hasProc, hasGit, visible)
+			if hasDir || !hasProc || hasGit {
+				t.Errorf("%s: want process only, got dir=%v proc=%v git=%v: %q", preset, hasDir, hasProc, hasGit, visible)
 			}
 		case Starship:
-			if !hasDir || !hasGit || hasProc {
-				t.Errorf("%s: want dir+git, got dir=%v proc=%v git=%v: %q", preset, hasDir, hasProc, hasGit, visible)
+			if hasDir || !hasGit || hasProc {
+				t.Errorf("%s: want git only, got dir=%v proc=%v git=%v: %q", preset, hasDir, hasProc, hasGit, visible)
 			}
 		default:
 			if strings.TrimSpace(visible) != "" {
@@ -66,11 +63,11 @@ func TestRenderLeftAux_FieldPolicy(t *testing.T) {
 
 // TestRenderLeftAux_RespectsSegmentToggles confirms the aux path still honors
 // segment visibility — RenderLeft runs applySegmentVisibility before the
-// short-circuit, so disabling directory/process/git empties their aux.
+// short-circuit, so disabling process/git empties their aux. Directory is
+// already absent from this row.
 func TestRenderLeftAux_RespectsSegmentToggles(t *testing.T) {
 	p := testPalette()
 	ctx := auxCtx()
-	ctx.ShowDirectory = false
 	ctx.ShowProcess = false
 	ctx.ShowGit = false
 	for _, preset := range AllPresets() {
@@ -78,6 +75,52 @@ func TestRenderLeftAux_RespectsSegmentToggles(t *testing.T) {
 		if strings.TrimSpace(visible) != "" {
 			t.Errorf("%s: all aux segments disabled should empty bottom-left, got %q", preset, visible)
 		}
+	}
+}
+
+func TestRenderTopOverlay_DirectoryAndProfileShareRightAlignment(t *testing.T) {
+	p := testPalette()
+	ctx := auxCtx()
+	got := RenderTopOverlay(p, ctx, "zzmux")
+
+	if !strings.HasPrefix(got, "#[align=right]") {
+		t.Fatalf("top overlay must own one right alignment, got %q", got)
+	}
+	if strings.Count(got, "#[align=right]") != 1 {
+		t.Fatalf("top overlay should contain one align directive, got %q", got)
+	}
+	if !strings.Contains(got, "dir-uniq") {
+		t.Fatalf("top overlay should include cwd, got %q", got)
+	}
+	if !strings.Contains(got, "zzmux") {
+		t.Fatalf("top overlay should include non-default profile badge, got %q", got)
+	}
+}
+
+func TestRenderTopOverlay_RespectsDirectoryToggleButKeepsProfile(t *testing.T) {
+	p := testPalette()
+	ctx := auxCtx()
+	ctx.ShowDirectory = false
+	got := RenderTopOverlay(p, ctx, "zzmux")
+
+	if strings.Contains(got, "dir-uniq") {
+		t.Fatalf("ShowDirectory=false should hide cwd overlay, got %q", got)
+	}
+	if !strings.Contains(got, "zzmux") {
+		t.Fatalf("profile badge should still render when directory is hidden, got %q", got)
+	}
+}
+
+func TestRenderTopOverlay_DefaultProfileShowsDirectoryOnly(t *testing.T) {
+	p := testPalette()
+	ctx := auxCtx()
+	got := RenderTopOverlay(p, ctx, "zmux")
+
+	if !strings.Contains(got, "dir-uniq") {
+		t.Fatalf("default profile should still show cwd overlay, got %q", got)
+	}
+	if strings.Contains(got, "zzmux") || strings.Contains(got, " zmux ") {
+		t.Fatalf("default profile should not render an edge badge, got %q", got)
 	}
 }
 

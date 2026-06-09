@@ -1,9 +1,9 @@
 package cli
 
 // runSessionPicker — the workspace+session picker launched when zmux runs
-// outside a tmux client with no shorthand args. Owns the post-pick
-// dispatch (attach / new / workspace-create / template / external-attach /
-// workspace-focus) so the picker model itself stays UI-only.
+// outside a tmux client with no positional args. Owns the post-pick
+// dispatch (attach / new / workspace-create / external-attach / workspace-focus)
+// so the picker model itself stays UI-only.
 
 import (
 	"fmt"
@@ -12,7 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	apppkg "github.com/donjor/zmux/internal/app"
-	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tui/picker"
@@ -29,13 +28,8 @@ func runSessionPicker(app *apppkg.App) error {
 		}
 	}
 
-	// Load templates (embedded + user dirs).
-	cfg := config.DefaultConfig()
-	templates, _ := session.LoadTemplates(app.FS, cfg.Templates.Paths)
-
 	styles, _, _ := loadActiveStyles(app)
 	model := picker.NewPickerModel(app.Runner, styles)
-	model.SetTemplates(templates)
 	model.SetWorkspaceStore(app.WorkspaceStore)
 	model.SetWorkspaceDataLoader(func() []workspaceview.WorkspaceViewModel {
 		return loadWorkspaceView(app, workspaceViewOptions{Reconcile: true})
@@ -107,41 +101,6 @@ func runSessionPicker(app *apppkg.App) error {
 		_ = app.WorkspaceStore.AddSession(wsName, sessName)
 		_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
 		return session.Attach(app.Runner, sessName)
-
-	case "template":
-		tmplName := res.Template
-		name := res.Name
-		if name == "" {
-			name = tmplName
-		}
-		if name == "" {
-			name = session.NextTmpName(app.Runner)
-		}
-
-		// Find the matching template.
-		var tmpl *session.Template
-		for i := range templates {
-			if templates[i].Name == tmplName {
-				tmpl = &templates[i]
-				break
-			}
-		}
-
-		if tmpl == nil {
-			if len(templates) == 0 {
-				return fmt.Errorf("no templates available")
-			}
-			tmpl = &templates[0]
-		}
-
-		if err := session.CreateFromTemplate(app.Runner, *tmpl, name, dir); err != nil {
-			return err
-		}
-		// Auto-assign to workspace if specified.
-		if res.Workspace != "" {
-			_ = app.WorkspaceStore.AddSession(res.Workspace, name)
-		}
-		return session.Attach(app.Runner, name)
 
 	case "overmind-connect":
 		src := res.ExternalSource

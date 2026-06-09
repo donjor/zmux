@@ -26,7 +26,7 @@ func (m WizardModel) viewWelcome() string {
 	b.WriteString(m.styles.Accent.Render("    > ") + m.styles.Normal.Render("Theme selection") + "\n")
 	b.WriteString(m.styles.Accent.Render("    > ") + m.styles.Normal.Render("Status bar preset") + "\n")
 	b.WriteString(m.styles.Accent.Render("    > ") + m.styles.Normal.Render("Sync target configuration") + "\n")
-	b.WriteString(m.styles.Accent.Render("    > ") + m.styles.Normal.Render("User directories (~/.zmux/themes/, ~/.zmux/templates/)") + "\n")
+	b.WriteString(m.styles.Accent.Render("    > ") + m.styles.Normal.Render("User directories (~/.zmux/themes/, ~/.zmux/recipes/)") + "\n")
 
 	b.WriteString("\n")
 	b.WriteString(m.styles.Muted.Render("  Press Enter to begin.") + "\n")
@@ -246,7 +246,7 @@ func (m WizardModel) viewSummary() string {
 	b.WriteString(m.styles.Muted.Render("    ~/.zmux.toml") + "\n")
 	b.WriteString(m.styles.Muted.Render("    ~/.tmux.conf") + "\n")
 	b.WriteString(m.styles.Muted.Render("    ~/.zmux/themes/") + "\n")
-	b.WriteString(m.styles.Muted.Render("    ~/.zmux/templates/") + "\n")
+	b.WriteString(m.styles.Muted.Render("    ~/.zmux/recipes/") + "\n")
 
 	b.WriteString("\n")
 	b.WriteString(m.styles.Normal.Render("  Press Enter to write configuration.") + "\n")
