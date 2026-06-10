@@ -61,16 +61,16 @@ zmux watch codex-peer
 If the peer tab exists, read the screen before sending anything. If a human has
 typed partial input, or the peer is generating, stop and wait.
 
-Spawn detached:
+Spawn detached with the max-permission profile:
 
 ```bash
-zmux run 'codex -s read-only -a never' -n codex-peer -d
+zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d
 zmux watch codex-peer --idle 3 -T 30
 ```
 
-If the boot warns about a broken sandbox (bubblewrap / user namespaces) or the
-peer can't read files, switch to the full-access fallback — see *Launch Profiles
-→ Sandbox reality*. Don't let a dead sandbox block the peer.
+Do not start peers in OS read-only/workspace-write sandbox modes. The prompt is the
+read-only boundary; the CLI profile should be permissive enough that the peer can read,
+search, and inspect without permission flakiness.
 
 Outside tmux, or when targeting another session, pass `-s <session>` to each
 relevant zmux call.
@@ -82,34 +82,30 @@ changes, and network installs are consequential; decline or ask the user.
 
 | profile | when |
 | --- | --- |
-| `codex -s read-only -a never` | default Codex review profile **where the OS sandbox can enforce it** |
-| `codex -s danger-full-access -a on-request` | fallback when the sandbox can't start (see *Sandbox reality*) — reads run free; consequential/destructive actions still surface as in-tab approval prompts |
-| `codex --yolo` (`-s danger-full-access -a never`) | sandbox broken **and** even surfacing is unwanted; write risk fully accepted |
-| `claude` | when the user explicitly wants Claude Code as the peer |
-| `pi` | when the user explicitly wants Pi as the peer |
-| `agy` | when the user explicitly wants Antigravity CLI, or peer policy falls through to it; keep default approval posture for review |
+| `codex --dangerously-bypass-approvals-and-sandbox` | default Codex peer profile |
+| `claude --dangerously-skip-permissions` | default Claude Code peer profile |
+| `agy --dangerously-skip-permissions` | default Antigravity CLI peer profile |
+| `pi` | Pi exposes all core tools by default; use its closest full-tool / auto-approve profile if one is installed |
 
-Write-capable modes are not review-only in practice. A prompt or repo file can
-induce writes. Visible terminal state gives auditability, not prevention — so a
-review prompt + a watched tab are the real guard whenever the sandbox isn't.
+Peers are launched with write-capable permissions by default. A prompt or repo file can still
+induce writes, so visible terminal state gives auditability, not prevention. The guard is the
+review prompt plus the watched tab, not a sandbox.
 
-### Sandbox reality (lean permissive — don't let a dead sandbox block the peer)
+### Permission reality — max profile, prompt-scoped behavior
 
-Codex enforces `read-only` / `workspace-write` with an **OS sandbox**: Linux
-bubblewrap (needs user-namespace creation), macOS Seatbelt. Where that sandbox
-**can't start** — containers, CI, hosts with user namespaces disabled — the
-sandboxed mode **fails closed**: the peer can't even *read*, so it's useless.
+Sandboxed peer launches are too flaky: bubblewrap/user-namespace failures, different CLI
+semantics, and read failures waste the review loop. Do not try to make a review peer safe by
+removing its tools. Tell it what role it is playing.
 
-Signature: a startup warning like *"sandbox uses bubblewrap and needs access to
-create user namespaces"*, then every shell read failing at *sandbox setup* (not
-at the command). The CLI may flail into MCP/`file://` read workarounds.
+For a read-only review, put the boundary in the prompt:
 
-When you see that, **don't fight it** — drop the sandbox (`-s danger-full-access`)
-and lean on `-a on-request` so reads run free while destructive/out-of-scope
-actions still surface in the tab for you to deny. The peer stays read-only by
-*task* (the review prompt) and *visibility* (you're watching), not by the OS.
-Default to the strictest mode that actually lets the peer work — not the
-strictest mode that exists.
+```text
+Stay read-only. Inspect files and the git diff. Do not edit files, install packages,
+delete files, commit, push, or spawn sub-agents. Return findings only.
+```
+
+If a peer violates that boundary, treat the output as suspect, revert/ignore the write, and
+restart or reset the peer. Do not respond by downgrading future peers to sandboxed profiles.
 
 ## Prompt
 
@@ -212,25 +208,15 @@ how `watch`, `type`, `send`, or `tab state` target the peer.
 
 ## Permission Policy
 
-Approve only routine read-only work inside the workspace.
+Peers should normally run in a profile that does not stop for tool approvals. If the CLI still
+surfaces a prompt, apply the prompt contract:
 
-Routine examples:
+- allow routine read/search/diff work inside the workspace;
+- decline installs, self-updates, auth changes, network fetches unrelated to the review,
+  commands outside the workspace, daemon/sub-agent spawning, and any write outside a
+  workflow-sanctioned peer artifact.
 
-- `sed -n`;
-- `rg`;
-- `git diff`;
-- reading docs or source files.
-
-Consequential examples:
-
-- writes;
-- installs or self-updates;
-- network fetches;
-- auth changes;
-- commands outside the workspace;
-- spawning sub-agents or daemons.
-
-For consequential prompts, decline and steer:
+For out-of-scope prompts, decline and steer:
 
 ```bash
 zmux send codex-peer Escape

@@ -1,7 +1,7 @@
 # Agent Worker Doctrine
 
 Drive an official agent CLI (`codex`, `claude`, `pi`, `agy`, etc.) in a zmux tab as an
-**autonomous worker bound to an isolated git worktree**. Unlike a peer (read-only
+**autonomous worker bound to an isolated git worktree**. Unlike a peer (prompt-scoped
 reviewer), a worker *writes and runs code* — that is the job. The whole exchange
 stays in a real, named terminal a human can watch, attach to, take over, or kill.
 
@@ -19,7 +19,7 @@ worker *inverts or adds*:
 
 | dimension | peer (agent-peer.md) | worker (this doc) |
 | --- | --- | --- |
-| posture | read-only reviewer | write + exec is the job |
+| posture | prompt-scoped reviewer | write + exec is the job |
 | cwd | the project (shared) | bound to one isolated worktree |
 | session | usually shares yours | **own session per worker** when >1 concurrent |
 | lifetime | persists, hidden between topics | terminal: spawn → work → done/blocked → reaped |
@@ -52,7 +52,8 @@ to use; this doc says how to bind it once chosen:
 | Antigravity CLI | `cd <worktree> && agy` |
 
 Use a stricter equivalent when the CLI supports one and it still allows normal in-worktree
-writes. Do not use blanket bypass flags (`codex --yolo`, `agy --dangerously-skip-permissions`)
+writes. Do not use blanket bypass flags (`codex --dangerously-bypass-approvals-and-sandbox`,
+`agy --dangerously-skip-permissions`)
 as the default worker launch; see Permission posture and Worker vs blanket bypass below.
 
 ## Permission posture — scoped write + exec
@@ -71,11 +72,13 @@ Pick the **most-scoped write mode the CLI offers**, with the worktree as the san
 not a blanket bypass. Visible terminal state gives auditability, not prevention: a prompt
 or repo file can still induce an out-of-scope action, so the surfacing rule is the real guard.
 
-### Sandbox reality (same root cause as peers)
+### Sandbox reality (same root cause as old sandboxed peer launches)
 
-Scoped-write enforcement leans on the **same OS sandbox** peers do (`agent-peer.md` →
-*Sandbox reality*). Where it can't start (bubblewrap / no user namespaces — containers,
-CI), `workspace-write` doesn't fail closed like a peer's read-only — instead, with
+Scoped-write enforcement uses the CLI's OS sandbox. Peers no longer use that sandbox by
+default (`agent-peer.md` → *Permission reality*), but workers still can because their
+worktree boundary is load-bearing. Where the sandbox can't start (bubblewrap / no user
+namespaces — containers, CI), `workspace-write` doesn't fail closed like old peer read-only —
+instead, with
 `-a on-request`, the CLI **surfaces every blocked write as a scoped approval** ("sandbox
 could not start the command; allow `git -C <worktree>`?"). Dogfooded: one file took three
 approvals (status, write, commit), each correctly scoped to the worktree path.
@@ -89,8 +92,8 @@ not the OS. Default to the strictest mode that still lets the worker work unatte
 
 ### Worker vs blanket bypass
 
-`codex --yolo`, `agy --dangerously-skip-permissions`, or any blanket "approve everything" flag
-is **not** worker mode. Three differences:
+`codex --dangerously-bypass-approvals-and-sandbox`, `agy --dangerously-skip-permissions`, or any
+blanket "approve everything" flag is **not** worker mode. Three differences:
 
 1. **Scoped, not blanket** — the worktree bounds writes; out-of-worktree + network/install/
    auth still surface.

@@ -1,6 +1,6 @@
 ---
 name: zmux
-description: "Terminal/session orchestration via zmux, a tmux wrapper. TRIGGER when: managing long-running or interactive terminal processes (dev servers, watchers, queues, REPLs), the user mentions zmux/tmux sessions or tabs, sharing a terminal pane with the user, diagnosing terminal/truecolor capabilities, or driving another real agent CLI (codex, claude, pi, etc.) in a visible zmux tab — as a read-only peer for review/second opinion, or as a write-capable worker bound to a git worktree. Provides rules for named tabs/panes/sessions, agent peer + agent worker doctrine, and keeping work visible to the user."
+description: "Terminal/session orchestration via zmux, a tmux wrapper. TRIGGER when: managing long-running or interactive terminal processes (dev servers, watchers, queues, REPLs), the user mentions zmux/tmux sessions or tabs, sharing a terminal pane with the user, diagnosing terminal/truecolor capabilities, or driving another real agent CLI (codex, claude, pi, etc.) in a visible zmux tab — as a max-permission prompt-scoped review peer, or as a write-capable worker bound to a git worktree. Provides rules for named tabs/panes/sessions, agent peer + agent worker doctrine, and keeping work visible to the user."
 ---
 
 # zmux — Terminal & Session Orchestration
@@ -65,7 +65,7 @@ Read `skills/zmux/references/agent-peer.md` before running the loop.
 Minimal loop:
 
 ```bash
-zmux run 'codex -s read-only -a never' -n codex-peer -d
+zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d
 zmux watch codex-peer --idle 3 -T 30
 zmux type codex-peer '<prompt with repo/file pointers>'
 zmux watch codex-peer --idle 3 -T 300
