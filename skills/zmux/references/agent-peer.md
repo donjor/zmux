@@ -107,6 +107,28 @@ delete files, commit, push, or spawn sub-agents. Return findings only.
 If a peer violates that boundary, treat the output as suspect, revert/ignore the write, and
 restart or reset the peer. Do not respond by downgrading future peers to sandboxed profiles.
 
+### Model / variant selection
+
+*Which* tier a role should run at is selection policy (global **Model tiering** + the `peer` /
+`orchestrate` skills). This is the mechanics: how to pin a model/variant on each CLI. Every CLI
+takes a launch-time flag, so spawn directly at the wanted tier — no interactive step needed:
+
+| CLI | spawn at tier | variant axis |
+| --- | --- | --- |
+| Claude Code | `claude --model opus\|sonnet\|haiku\|fable` (alias or full id) | `/fast` toggles fast-mode in-session |
+| Codex | `codex -m <model>` (or `-c model="…"`) | reasoning set via model id / config |
+| Antigravity | `agy --model <model>` (`agy models` lists) | — |
+| Pi | `pi --model <provider/id:thinking>` | the `:<thinking>` suffix **is** the effort/reasoning variant |
+
+Tier = model name **+** effort (reasoning/thinking level, fast-mode) — treat them as one knob.
+
+**Mid-session bump (escalation).** When a cheap peer reviews shallowly and you want to raise its
+tier: prefer a **clean respawn** at the higher `--model` (a review peer carries little durable
+context, so respawn is cheap and unambiguous). Only when the tab's loaded context is worth keeping,
+drive the CLI's in-session switcher instead — `zmux type <tab> '/model'` then `zmux send <tab>`
+arrow keys + `Enter` (Claude `/model` menu; Pi `Ctrl+P` cycles `--models`). The `/model`+arrows
+path is the fallback for CLIs without a non-interactive in-session switch.
+
 ## Prompt
 
 Prefer pointers over payloads. The peer has its own tools and cwd:

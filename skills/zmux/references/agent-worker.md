@@ -56,6 +56,13 @@ writes. Do not use blanket bypass flags (`codex --dangerously-bypass-approvals-a
 `agy --dangerously-skip-permissions`)
 as the default worker launch; see Permission posture and Worker vs blanket bypass below.
 
+**Model / variant.** Set the worker's tier at spawn with the same `--model` flag per CLI as
+`agent-peer.md` → *Model / variant selection* (`claude --model …`, `codex -m …`, `agy --model …`,
+`pi --model provider/id:thinking`). *Which* tier per workstream is selection policy
+(`orchestrate` → Worker model tier). To bump a worker, **respawn** at the higher `--model`: the
+worktree is the durable state, so a worker is cheap to relaunch and re-brief — prefer that over
+the interactive `/model` fallback, which is for keeping a loaded peer tab's context.
+
 ## Permission posture — scoped write + exec
 
 Invert peer's "decline writes." For a worker, **writes and command execution inside the
