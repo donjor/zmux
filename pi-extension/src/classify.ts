@@ -123,10 +123,25 @@ const runtimePatterns: Array<{ re: RegExp; reason: string }> = [
 	{ re: /(^|[;&|]\s*)air\b/u, reason: "Go live-reload server" },
 	{ re: /(^|[;&|]\s*)go\s+run\s+\.\/(cmd\/)?(server|api|web)\b/u, reason: "Go server/API runtime command" },
 	{ re: /(^|[;&|]\s*)cargo\s+(run|watch)\b/u, reason: "Rust runtime/watch command" },
-	{ re: /(^|[;&|]\s*)docker\s+compose\s+up\b/u, reason: "Docker Compose runtime" },
 	{ re: /(^|[;&|]\s*)make\s+(dev|serve|server|run|watch|start)\b/u, reason: "make runtime target" },
 	{ re: /(^|[;&|]\s*)(watchexec|entr|nodemon|ts-node-dev)\b/u, reason: "watch/reload command" },
 ];
+
+// docker compose up is runtime only in its foreground form. Detached
+// (-d/--detach) compose hands the stack to dockerd and returns at once — a
+// one-shot that stays safe. Checked per-segment (mirrors guard.go) so a detach
+// flag in one segment can't excuse a foreground compose in another.
+const DOCKER_COMPOSE_UP_SEG = /^\s*docker\s+compose\s+up\b/u;
+const DETACH_FLAG = /(^|\s)(-d|--detach)(\s|$)/u;
+
+// foregroundComposeUp reports whether any segment runs a foreground
+// `docker compose up` (no -d/--detach). Mirrors guard.go's foregroundComposeUp.
+function foregroundComposeUp(scan: string): boolean {
+	for (const seg of scan.split(segSplit)) {
+		if (DOCKER_COMPOSE_UP_SEG.test(seg) && !DETACH_FLAG.test(seg)) return true;
+	}
+	return false;
+}
 
 const interactivePatterns: Array<{ re: RegExp; reason: string }> = [
 	{ re: /(^|[;&|]\s*)sudo\b/u, reason: "sudo requires shared user interaction" },
@@ -261,6 +276,10 @@ export function classifyBash(command: string, config: PiZmuxConfig): BashClassif
 				return { kind: "interactive", reason: pattern.reason, suggestion: suggestionForInteractive(normalized) };
 			}
 		}
+	}
+
+	if (foregroundComposeUp(scan)) {
+		return { kind: "runtime", reason: "Docker Compose runtime", suggestion: suggestionForRuntime(normalized) };
 	}
 
 	for (const pattern of runtimePatterns) {

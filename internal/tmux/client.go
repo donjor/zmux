@@ -278,7 +278,19 @@ func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) (string
 	for _, fn := range opts {
 		fn(&o)
 	}
-	args := []string{"new-window", "-P", "-F", "#{pane_id}", "-t", session, "-c", dir}
+	// Target an explicit next-free index rather than the bare session. A bare
+	// `-t <session>` target makes tmux resolve the new index relative to the
+	// session's *current* window; on some tmux builds that is current-index+1,
+	// which fails with "index N in use" when the active window isn't the last
+	// one — i.e. whenever an agent lives in window 1 of a multi-window session.
+	// max+1 always appends past every existing window, free of that collision
+	// and identical across tmux versions. Falls back to the bare target if the
+	// window list is unreadable.
+	target := session
+	if idx, err := c.nextWindowIndex(session); err == nil {
+		target = fmt.Sprintf("%s:%d", session, idx)
+	}
+	args := []string{"new-window", "-P", "-F", "#{pane_id}", "-t", target, "-c", dir}
 	if o.detached {
 		args = append(args, "-d")
 	}
@@ -286,6 +298,25 @@ func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) (string
 		args = append(args, "-n", name)
 	}
 	return c.run(args...)
+}
+
+// nextWindowIndex returns one past the highest window index in session, the
+// next slot a new window can claim without colliding with an existing one.
+func (c *Client) nextWindowIndex(session string) (int, error) {
+	wins, err := c.ListWindows(session)
+	if err != nil {
+		return 0, err
+	}
+	maxIdx := -1
+	for _, w := range wins {
+		if w.Index > maxIdx {
+			maxIdx = w.Index
+		}
+	}
+	if maxIdx < 0 {
+		return 0, fmt.Errorf("session %q has no windows", session)
+	}
+	return maxIdx + 1, nil
 }
 
 // KillWindow kills a window by session and index.

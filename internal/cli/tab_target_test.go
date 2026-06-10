@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"io"
+	"os"
 	"strings"
 	"testing"
 
+	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/workspace"
 )
 
 // logicalRow builds a LogicalPaneRow for choke-point tests.
@@ -265,4 +269,165 @@ func TestTabMoveFullTabMovesWindowByID(t *testing.T) {
 	if !moved {
 		t.Fatal("expected MoveWindow call")
 	}
+}
+
+func TestTabMoveResolvesDestinationWorkspaceLabel(t *testing.T) {
+	app, mock := newTestApp(t)
+	source := workspace.RawSessionName("proj", "main")
+	dest := workspace.RawSessionName("proj", "other")
+	if err := app.WorkspaceStore.AddSession("proj", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WorkspaceStore.AddSession("proj", "other"); err != nil {
+		t.Fatal(err)
+	}
+	mock.DisplayMessageResult = source
+	mock.Sessions = []tmux.Session{{Name: source}, {Name: dest}}
+	mock.Windows[source] = []tmux.Window{
+		{Index: 0, Name: "main", Active: true},
+		{Index: 1, Name: "tests"},
+	}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", source, "@5", 1, "ztab_tests1", "tests"),
+	}
+
+	rootCmd := NewRootCmd(app, testVersion)
+	rootCmd.SetArgs([]string{"tab", "move", "tests", "other"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab move failed: %v", err)
+	}
+
+	moved := false
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" {
+			if c.Args[0] != "@5" || c.Args[1] != dest+":" {
+				t.Errorf("expected MoveWindow @5 -> %s:, got %v", dest, c.Args)
+			}
+			moved = true
+		}
+	}
+	if !moved {
+		t.Fatal("expected MoveWindow call")
+	}
+}
+
+func TestTabMoveRejectsCrossWorkspaceWithoutForce(t *testing.T) {
+	app, mock := tabMoveCrossWorkspaceApp(t)
+	rootCmd := NewRootCmd(app, testVersion)
+	rootCmd.SetArgs([]string{"tab", "move", "tests", "tools/other"})
+	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
+
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "across workspaces") {
+		t.Fatalf("expected cross-workspace refusal, got %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" {
+			t.Errorf("must not move across workspaces without force: %v", c.Args)
+		}
+	}
+}
+
+func TestTabMoveForceAllowsCrossWorkspace(t *testing.T) {
+	app, mock := tabMoveCrossWorkspaceApp(t)
+	dest := workspace.RawSessionName("tools", "other")
+	rootCmd := NewRootCmd(app, testVersion)
+	rootCmd.SetArgs([]string{"tab", "move", "tests", "tools/other", "-f"})
+
+	var err error
+	stderr := captureStderr(t, func() {
+		err = rootCmd.Execute()
+	})
+	if err != nil {
+		t.Fatalf("tab move failed: %v", err)
+	}
+	if !strings.Contains(stderr, "across workspaces") {
+		t.Fatalf("expected cross-workspace warning, got %q", stderr)
+	}
+
+	moved := false
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" {
+			if c.Args[0] != "@5" || c.Args[1] != dest+":" {
+				t.Errorf("expected MoveWindow @5 -> %s:, got %v", dest, c.Args)
+			}
+			moved = true
+		}
+	}
+	if !moved {
+		t.Fatal("expected MoveWindow call")
+	}
+}
+
+func TestResolveTabTargetWarnsWhenBareNameResolvesOutsideSession(t *testing.T) {
+	app, mock := newTestApp(t)
+	mock.Sessions = []tmux.Session{{Name: "source"}, {Name: "peer"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%9", "peer", "@9", 0, "ztab_peer01", "claude-peer"),
+	}
+
+	var (
+		rt  resolvedTab
+		err error
+	)
+	stderr := captureStderr(t, func() {
+		rt, err = resolveTabTarget(app, "source", "claude-peer")
+	})
+	if err != nil {
+		t.Fatalf("resolveTabTarget failed: %v", err)
+	}
+	if rt.Target != "%9" {
+		t.Fatalf("resolveTabTarget target = %q, want %%9", rt.Target)
+	}
+	if !strings.Contains(stderr, "outside the current session") {
+		t.Fatalf("expected cross-session warning, got %q", stderr)
+	}
+}
+
+func tabMoveCrossWorkspaceApp(t *testing.T) (*apppkg.App, *tmux.MockRunner) {
+	t.Helper()
+	app, mock := newTestApp(t)
+	source := workspace.RawSessionName("proj", "main")
+	dest := workspace.RawSessionName("tools", "other")
+	if err := app.WorkspaceStore.AddSession("proj", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WorkspaceStore.AddSession("tools", "other"); err != nil {
+		t.Fatal(err)
+	}
+	mock.DisplayMessageResult = source
+	mock.Sessions = []tmux.Session{{Name: source}, {Name: dest}}
+	mock.Windows[source] = []tmux.Window{
+		{Index: 0, Name: "main", Active: true},
+		{Index: 1, Name: "tests"},
+	}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", source, "@5", 1, "ztab_tests1", "tests"),
+	}
+	return app, mock
+}
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close stderr pipe: %v", err)
+	}
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+	return string(out)
 }

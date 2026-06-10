@@ -31,7 +31,11 @@
 {"command":"npm run watch","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
 {"command":"cargo run","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
 {"command":"cargo watch -x run","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
-{"command":"docker compose up","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
+{"command":"docker compose up","cwd":"project","kind":"runtime","decision":"block","target":"runtime","note":"foreground compose streams logs — belongs in a tab"}
+{"command":"docker compose up -d postgres","cwd":"project","kind":"safe","decision":"allow","target":"","note":"report 004: detached compose hands the stack to dockerd and returns — a one-shot, not runtime"}
+{"command":"docker compose up --detach","cwd":"project","kind":"safe","decision":"allow","target":"","note":"--detach long form is also a one-shot"}
+{"command":"docker compose up -d minio minio-init","cwd":"project","kind":"safe","decision":"allow","target":""}
+{"command":"docker compose up -d postgres && bun run dev","cwd":"project","kind":"runtime","decision":"block","target":"runtime","note":"detach exemption is per-segment — the dev server after && still blocks"}
 {"command":"make dev","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
 {"command":"nodemon server.js","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}
 {"command":"python manage.py runserver","cwd":"project","kind":"runtime","decision":"block","target":"runtime"}

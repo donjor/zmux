@@ -56,10 +56,16 @@ const RUNTIME = [
   /(^|[;&|]\s*)air\b/,
   /(^|[;&|]\s*)go\s+run\s+\.\/(cmd\/)?(server|api|web)\b/,
   /(^|[;&|]\s*)cargo\s+(run|watch)\b/,
-  /(^|[;&|]\s*)docker\s+compose\s+up\b/,
   /(^|[;&|]\s*)make\s+(dev|serve|server|run|watch|start)\b/,
   /(^|[;&|]\s*)(watchexec|entr|nodemon|ts-node-dev)\b/,
 ]
+
+// docker compose up is runtime only in its foreground form. The detached form
+// (-d/--detach) hands the stack to dockerd and returns in ~1s — a one-shot that
+// stays safe. Checked per-segment (matching guard.go) so a detach flag in one
+// segment can't excuse a foreground compose in another. Mirrors guard.go.
+const DOCKER_COMPOSE_UP_SEG = /^\s*docker\s+compose\s+up\b/
+const DETACH_FLAG = /(^|\s)(-d|--detach)(\s|$)/
 
 // interactive: needs shared visibility / manual input.
 const INTERACTIVE = [
@@ -231,6 +237,16 @@ export function stripQuotedSegments(s) {
 
 // classify returns { kind, decision, target, reason } for command. Mirrors
 // guard.go classify() exactly: background → tmux (blockable wins; exempt is a
+// foregroundComposeUp reports whether any segment runs a foreground
+// `docker compose up` (no -d/--detach) — the only compose-up form that streams
+// logs and belongs in a tab. Mirrors guard.go's foregroundComposeUp.
+function foregroundComposeUp(scan) {
+  for (const seg of scan.split(SEG_SPLIT)) {
+    if (DOCKER_COMPOSE_UP_SEG.test(seg) && !DETACH_FLAG.test(seg)) return true
+  }
+  return false
+}
+
 // fallback) → interactive → runtime → safe. Pure; never throws on normal input.
 export function classify(command, opts = {}) {
   // Pipeline: env-strip (quote-aware) → blank here-doc bodies → blank quoted
@@ -253,6 +269,10 @@ export function classify(command, opts = {}) {
     if (re.test(scan)) {
       return { kind: 'interactive', decision: 'warn', target: 'interactive', reason: 'interactive/remote command — prefer a shared zmux tab so it stays visible' }
     }
+  }
+
+  if (foregroundComposeUp(scan)) {
+    return { kind: 'runtime', decision: 'block', target: 'runtime', reason: 'long-running process — start it with zmux run -n <name> -d' }
   }
 
   for (const re of RUNTIME) {

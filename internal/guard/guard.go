@@ -77,10 +77,18 @@ var (
 		regexp.MustCompile(`(^|[;&|]\s*)air\b`),
 		regexp.MustCompile(`(^|[;&|]\s*)go\s+run\s+\./(cmd/)?(server|api|web)\b`),
 		regexp.MustCompile(`(^|[;&|]\s*)cargo\s+(run|watch)\b`),
-		regexp.MustCompile(`(^|[;&|]\s*)docker\s+compose\s+up\b`),
 		regexp.MustCompile(`(^|[;&|]\s*)make\s+(dev|serve|server|run|watch|start)\b`),
 		regexp.MustCompile(`(^|[;&|]\s*)(watchexec|entr|nodemon|ts-node-dev)\b`),
 	}
+
+	// dockerComposeUpSeg matches `docker compose up` at the head of an
+	// operator-split segment. It's handled apart from runtimePatterns because the
+	// detached form (`-d`/`--detach`) hands the stack to dockerd and returns in
+	// ~1s — a one-shot that stays safe; only the foreground form, which streams
+	// logs, belongs in a visible zmux tab. RE2 has no lookahead, so the detach
+	// exemption is a second per-segment regex rather than a negative match.
+	dockerComposeUpSeg = regexp.MustCompile(`^\s*docker\s+compose\s+up\b`)
+	detachFlag         = regexp.MustCompile(`(^|\s)(-d|--detach)(\s|$)`)
 
 	// interactive: needs shared visibility / manual input.
 	interactivePatterns = []*regexp.Regexp{
@@ -163,6 +171,10 @@ func classify(command string, opts Options) Result {
 		}
 	}
 
+	if foregroundComposeUp(scan) {
+		return Result{Runtime, Block, "runtime", "long-running process — start it with zmux run -n <name> -d"}
+	}
+
 	for _, re := range runtimePatterns {
 		if re.MatchString(scan) {
 			return Result{Runtime, Block, "runtime", "long-running process — start it with zmux run -n <name> -d"}
@@ -173,6 +185,18 @@ func classify(command string, opts Options) Result {
 		return Result{DirectTmux, Allow, "", "exempt (zmux repo / socket-scoped)"}
 	}
 	return Result{Safe, Allow, "", ""}
+}
+
+// foregroundComposeUp reports whether any segment runs a foreground
+// `docker compose up` (no `-d`/`--detach`). The detached form returns
+// immediately and is safe; only the log-streaming foreground form is runtime.
+func foregroundComposeUp(scan string) bool {
+	for _, seg := range segSplit.Split(scan, -1) {
+		if dockerComposeUpSeg.MatchString(seg) && !detachFlag.MatchString(seg) {
+			return true
+		}
+	}
+	return false
 }
 
 // scanTmux inspects each simple-command segment of scan for a command-position

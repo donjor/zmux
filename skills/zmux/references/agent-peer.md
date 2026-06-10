@@ -51,29 +51,47 @@ which task it is serving.
 
 ## Spawn
 
-Reuse first:
+**Pin the current session first.** With more than one session live, a same-named
+peer tab in another session satisfies a bare `zmux run -n <peer> -d` or
+`watch <peer>` — the peer then comes up, or is driven, in the wrong session on
+the wrong cwd (a real failure: a `claude-peer` review fired against the wrong
+repo). Resolve the session you are in and pass it explicitly on every call:
 
 ```bash
-zmux tabs
-zmux watch codex-peer
+zmux pane current --json   # "Session" → the session you are in
+zmux ls -s                 # how many sessions exist
 ```
 
-If the peer tab exists, read the screen before sending anything. If a human has
-typed partial input, or the peer is generating, stop and wait.
+Then pin that session on the spawn and every follow-up:
+`zmux run '…' -n <peer> -d -s <session>`, `zmux watch <peer> -s <session>`,
+`zmux type <peer> -s <session> …`, `zmux tab state … <peer> -s <session>`. zmux
+prints `tab "<peer>" resolved to session "X", outside the current session "Y"`
+when a bare name crosses sessions — seeing that means you skipped the pin.
+
+Reuse first — but verify identity:
+
+```bash
+zmux tabs <session>
+zmux watch <peer> -s <session>
+```
+
+If the peer tab exists, confirm it is in *this* session and on the right
+cwd/topic before sending anything; a same-named tab elsewhere is not your peer.
+If a human has typed partial input, or the peer is generating, stop and wait. If
+a peer already landed in the wrong session, recover with
+`zmux tab move <peer> <session>` (add `-f` to pull it across workspaces) or kill
+it and respawn pinned.
 
 Spawn detached with the max-permission profile:
 
 ```bash
-zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d
-zmux watch codex-peer --idle 3 -T 30
+zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session>
+zmux watch codex-peer -s <session> --idle 3 -T 30
 ```
 
 Do not start peers in OS read-only/workspace-write sandbox modes. The prompt is the
 read-only boundary; the CLI profile should be permissive enough that the peer can read,
 search, and inspect without permission flakiness.
-
-Outside tmux, or when targeting another session, pass `-s <session>` to each
-relevant zmux call.
 
 Startup interstitials are common. Self-updates, extension installs, auth
 changes, and network installs are consequential; decline or ask the user.

@@ -47,6 +47,14 @@ func resolveTabTarget(app *apppkg.App, session, name string) (resolvedTab, error
 		t, rerr := tabs.Resolve(all, name, session)
 		switch {
 		case rerr == nil:
+			// A bare name with no in-scope match still resolves when it is
+			// unique server-wide (tabs.Resolve convenience). That silently
+			// crossed into the wrong session in report 007 (a peer tab spawned
+			// elsewhere). Keep the convenience but make it loud: name the session
+			// it landed in so a wrong-session hit is caught and can be pinned -s.
+			if session != "" && !t.InScope(session) {
+				fmt.Fprintf(os.Stderr, "zmux: tab %q resolved to session %q, outside the current session %q — pass -s %s to target it explicitly\n", name, t.Session, session, t.Session)
+			}
 			return resolvedTab{
 				Target: t.PaneID,
 				Tab:    t,

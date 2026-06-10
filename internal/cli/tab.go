@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -32,13 +33,20 @@ func newTabCmd(app *apppkg.App) *cobra.Command {
 }
 
 func newTabMoveCmd(app *apppkg.App) *cobra.Command {
-	return &cobra.Command{
+	var moveForce bool
+	cmd := &cobra.Command{
 		Use:   "move <tab-name> <dest-session>",
-		Short: "Move a tab to another session in the workspace",
-		Args:  cobra.ExactArgs(2),
+		Short: "Move a tab to another session",
+		Long: `Move a full tab to another session.
+
+The destination must be in the same workspace as the source by default — moving
+a tab across workspaces mixes project contexts and is usually a mistake. Pass
+-f/--force to move it anyway (e.g. to recover a peer tab spawned in the wrong
+session).`,
+		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tabName := args[0]
-			destSession := args[1]
+			destInput := args[1]
 
 			// Get current session.
 			current, err := app.Runner.DisplayMessage("", "#{session_name}")
@@ -67,15 +75,22 @@ func newTabMoveCmd(app *apppkg.App) *cobra.Command {
 				src = fmt.Sprintf("%s:%d", current, rt.Win.Index)
 			}
 
-			// Validate destination is in the same workspace.
+			destSession, err := resolveSessionTarget(app, destInput)
+			if err != nil {
+				return fmt.Errorf("move tab %q (session %q) -> %q: %w", tabName, srcSession, destInput, err)
+			}
+
+			// Cross-workspace moves mix project contexts; gate behind -f. The
+			// refusal names both ends so the operator sees exactly what was
+			// resolved and why it stopped (the recovery path for a peer tab that
+			// landed in the wrong session).
 			srcWS, srcOK := app.WorkspaceStore.WorkspaceFor(srcSession)
 			dstWS, dstOK := app.WorkspaceStore.WorkspaceFor(destSession)
 			if srcOK && dstOK && srcWS != dstWS {
-				return fmt.Errorf("destination session %q is in workspace %q, not %q", destSession, dstWS, srcWS)
-			}
-
-			if !app.Runner.HasSession(destSession) {
-				return fmt.Errorf("session %q not found", destSession)
+				if !moveForce {
+					return fmt.Errorf("refused to move tab %q across workspaces: source session %q is in %q, destination %q is in %q — pass -f/--force to move anyway", tabName, srcSession, srcWS, destSession, dstWS)
+				}
+				fmt.Fprintf(os.Stderr, "moving tab %q across workspaces (%s → %s)\n", tabName, srcWS, dstWS)
 			}
 
 			// Check this isn't the source session's last tab.
@@ -87,9 +102,15 @@ func newTabMoveCmd(app *apppkg.App) *cobra.Command {
 				return fmt.Errorf("cannot move the last tab — use `zmux session kill %s` instead", srcSession)
 			}
 
-			return app.Runner.MoveWindow(src, destSession+":")
+			if err := app.Runner.MoveWindow(src, destSession+":"); err != nil {
+				return err
+			}
+			fmt.Fprintf(os.Stderr, "moved tab %q: %s → %s\n", tabName, srcSession, destSession)
+			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&moveForce, "force", "f", false, "move even if the destination session is in another workspace")
+	return cmd
 }
 
 func newTabLabelCmd(app *apppkg.App) *cobra.Command {
