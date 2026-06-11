@@ -5,9 +5,15 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: pending | Compare: `v0.8.0...HEAD`
+> Release tag: pending | Topics: `agents` | Compare: `v0.8.0...HEAD`
 
-No unreleased changes after the rewrite target.
+### Added
+
+- **`zmux session run`** `agents` - create a detached session in the current (or
+  `--workspace`) workspace and launch a command as its first/only tab — no focus
+  steal, no blank shell tab. The orchestration-safe worker-spawn primitive
+  (`tmux new-session -d -n <tab>`); the `agent-worker` and `orchestrate` doctrines
+  now teach it instead of the attach-oriented `zmux new <ws> <session>`.
 
 ## [0.8.0] - 2026-06-09
 > Release tag: `v0.8.0` | Topics: `watch`, `tabs`, `qa`, `recipes`, `agents`, `docs` | Compare: `v0.7.0...v0.8.0`
