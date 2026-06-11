@@ -34,6 +34,8 @@ demo.gif
 # Environment
 .env
 .env.*
+!.env.example
+/.dev.local.sh
 
 # Pi extension local deps
 /pi-extension/node_modules
