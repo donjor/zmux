@@ -2,8 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/config"
@@ -177,21 +175,4 @@ func loadRecipeDefinitions(app *apppkg.App) ([]recipe.Definition, error) {
 		return nil, err
 	}
 	return defs, nil
-}
-
-func recipePathSummary(app *apppkg.App) string {
-	cfg, err := loadConfig(app.FS)
-	if err != nil {
-		cfg = config.DefaultConfig()
-	}
-	dirs := recipe.ConfiguredDirs(app.FS, app.Profile, cfg)
-	clean := make([]string, 0, len(dirs))
-	for _, dir := range dirs {
-		if strings.HasPrefix(dir, "~") {
-			clean = append(clean, dir)
-			continue
-		}
-		clean = append(clean, filepath.Clean(dir))
-	}
-	return strings.Join(clean, ", ")
 }

@@ -76,6 +76,7 @@ func ShellQuote(input string) string {
 	}
 	safe := true
 	for _, r := range input {
+		//nolint:staticcheck // QF1001: negated allowed-set ("not a safe char") reads clearer than the De Morgan expansion.
 		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("_@%+=:,./-", r)) {
 			safe = false
 			break

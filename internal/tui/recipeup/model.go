@@ -306,19 +306,6 @@ func (m Model) configureSelectedWith(opts recipe.PlanOptions, items []string) (t
 	return m, m.form.Init()
 }
 
-func (m *Model) buildPlan(items []string) error {
-	def, ok := m.selected()
-	if !ok {
-		return fmt.Errorf("no recipe selected")
-	}
-	p, err := plan(m.app, def.Recipe, recipe.PlanOptions{Items: items})
-	if err != nil {
-		return err
-	}
-	m.plan = p
-	return nil
-}
-
 func (m *Model) buildPlanFromValues() error {
 	return m.buildPlanWithOptions(recipe.PlanOptions{
 		CWD:       strings.TrimSpace(m.values.CWD),
