@@ -1,0 +1,145 @@
+# zmux CLI catalog (cold reference)
+
+Full command tables for sessions/workspaces, tabs, placements, panes, terminal
+capabilities, snapshots, and config. The hot operational loop (run/watch/send,
+raw-tmux guard, tab states, peer/worker) lives in `SKILL.md`; this is the
+lookup-when-you-need-it reference, routed from there at point of use.
+
+## Sessions & workspaces
+
+```bash
+zmux ls [workspace]              # list workspaces, or sessions within one
+zmux ls -s                       # flat list of all sessions
+zmux new <workspace> [session…] # create workspace + sessions, attach (alias: n)
+zmux session run <session> -n <tab> [--workspace <ws>] [--cwd <dir>] -- <cmd…>
+                                 # create a DETACHED session, run <cmd> as its first tab
+                                 # (no focus steal, no blank tab) — worker/background spawn
+zmux run <recipe>               # recipe form with cwd/workspace/session defaults
+zmux run <recipe> -y            # run recipe defaults without prompting
+zmux run <recipe> --dry-run     # print the exact recipe plan
+zmux recipe list                # list bundled and user recipes
+zmux open <ws> [session]         # open/attach a workspace session (aliases: attach, a)
+zmux open <ws> <session> --hijack   # take over a session attached elsewhere (advanced)
+zmux kill <name>                 # smart kill, workspace-first (alias: k)
+zmux session kill <session>      # kill a single session explicitly
+
+zmux ws list                     # workspaces and their sessions
+zmux ws add <workspace> <session>   # tag a session to a workspace
+zmux ws remove <session>         # untag a session
+zmux ws show <workspace>         # sessions in a workspace
+zmux ws kill <workspace>         # kill a workspace and all its sessions
+```
+
+`zmux session run` is the orchestration-safe worker-spawn primitive: it creates
+the session detached in the current (or `--workspace`) workspace and launches
+the command as window 1, so it never steals the caller's focus and never leaves
+a blank shell tab. The command must follow `--`. It errors if the session
+already exists, and never makes the new session the workspace's default attach
+target. Contrast `zmux new` (attaches by design) — see the worker doctrine in
+`references/agent-worker.md`.
+
+## Tabs
+
+```bash
+zmux tabs [session]              # list tabs — riders nested under hosts, hidden marked ~ (alias: t)
+zmux tab move <tab> <dest-session>  # move a tab to another session in the workspace
+zmux tab label '<label>'         # set a stable zmux label for the current tab
+zmux tab label ''                # clear the label
+zmux tab kill <tab>              # kill a tab in the current session
+```
+
+Labels are zmux overlays (`label [auto-name]`); they don't disable tmux's automatic
+window renaming.
+
+### Placements (pane / full / hide / show)
+
+A zmux tab is a **stable logical unit** (id + label + state), not a window slot. It
+can live as a full window, as a pane inside another tab, or hidden in the dock —
+and `send`/`type`/`watch`/`run -n` keep reaching it by name in every placement.
+
+```bash
+zmux tab pane <tab>                      # join <tab> as a pane beside your current tab
+zmux tab pane <tab> --into <host> --down --size 30%   # explicit host + geometry
+zmux tab full <tab>                      # promote a pane back to its own tab (--after: next to old host)
+zmux tab hide <tab>                      # park it off the bar — process keeps running
+zmux tab show <tab>                      # bring it back to the session it was hidden from
+```
+
+States and labels ride along: a `running` glyph set on a full tab is still there
+when it's a pane or hidden. Placement verbs refuse while grouped viewports
+(`-b`/`-c` clones) are attached — detach the extra clients first. `tab show` never
+auto-joins; follow with `tab pane` if you want it back as a pane.
+
+## Panes & sidecars
+
+```bash
+zmux pane current --json         # current pane id + details
+zmux pane list --json            # panes in current window (also --session, --all, -q)
+zmux pane open <name> -r 35 -- <cmd>   # split right at 35%; also -l/-d/-u, --size
+zmux pane open --label-tab <name> -r 35 -- <cmd>   # preserve tab label across split
+zmux pane toggle <name> -r 35 -- <cmd> # open if absent, close if present (--focus/--replace)
+zmux pane focus <pane>           # focus by id/title/index
+zmux pane close <pane>           # close by id/title/index
+zmux pane resize <pane> --size 40%
+```
+
+Split direction: `-r` right, `-l` left, `-d` down, `-u` up (each takes a size).
+Use `--label-tab` for sidecars that would otherwise let tmux's auto-rename clobber
+the conceptual tab label.
+
+## Terminal capabilities
+
+```bash
+zmux terminal current --json       # the visible desktop terminal target (e.g. for screenshots)
+zmux terminal capabilities --json  # diagnose RGB/truecolor path (alias: caps)
+zmux terminal refresh              # reattach current client to re-resolve RGB features
+```
+
+`zmux terminal refresh` (and `zmux refresh` below) **reattaches/redraws the current
+client** — it can disturb an active agent connection. Don't run it from an automated
+session unless the user asked or disruption is acceptable; otherwise tell the user to
+run it.
+
+## Visual snapshots
+
+Capture terminal/TUI evidence when the *visual* state matters — debugging a TUI,
+showing a render, or grounding work on another app you're driving in a pane.
+
+```bash
+zmux snapshot                       # all panes in current window: text + ANSI + PNG
+zmux snapshot --no-png              # text + ANSI only (no screenshot)
+zmux snapshot --pane %5 --pane %6   # specific panes (PNG only if both are current-window)
+zmux snapshot --lines 400 --json    # more scrollback; print result as JSON
+zmux snapshot --out /tmp/run1       # custom output dir
+```
+
+Each run writes a bundle to `~/.zmux/snapshots/<timestamp>/` (override with `--out`):
+`<pane>.txt`, `<pane>.ansi` (colour-preserving), `<pane>.meta.json`, an optional
+`terminal.png`, and `snapshot.json` + `manifest.json` + `README.md`. Read `.ansi`
+with `less -R`, `.txt` for plain parsing; `snapshot.json` lists every artifact,
+the `modalities` captured, and any `warnings`.
+
+The PNG only ever covers the **current** terminal window (zmux resolves its geometry
+strictly and refuses hidden/ambiguous windows rather than screenshotting the wrong
+one). It's captured only when every requested pane is in the current window; target
+a pane elsewhere with `--pane` and the PNG is skipped (text/ANSI still captured).
+Check `warnings` and report blind spots rather than trusting a missing screenshot
+as evidence.
+
+## Config & maintenance
+
+```bash
+zmux status                      # current theme, bar, prefix, sync target, session count
+zmux apply                       # regenerate tmux.conf + apply theme/bar (non-disruptive)
+zmux refresh                     # apply config + reattach current client (disruptive — see above)
+zmux keys                        # keybinding help
+```
+
+Cosmetic/user-facing surfaces — drive these only when the user explicitly asks or
+for config troubleshooting, not as part of agent ops:
+
+```bash
+zmux theme set <name>            # set theme directly (also: list, sync, pull <target>)
+zmux bar [preset]                # list presets, or set one (also: bar show)
+zmux init                        # interactive setup wizard — MUST be run outside tmux
+```

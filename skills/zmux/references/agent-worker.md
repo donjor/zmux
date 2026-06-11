@@ -30,11 +30,24 @@ worker *inverts or adds*:
 
 A worker is bound to a pair: **(zmux session, worktree path)**. Honor both:
 
-- **Own session per concurrent worker.** Create with `zmux new <ws> <worker-session>`;
-  carry `-s <worker-session>` on every `run` / `watch` / `type` / `send` / `tabs` /
-  `tab state` for that worker. A single worker may just live as a tab in the current
-  session — separate sessions matter once workers run *concurrently*, so their tabs
-  and state don't collide.
+- **Own session per concurrent worker, spawned focus-safe.** Use
+  `zmux session run <worker-session> -n <worker-tab> -- <cli launch>` — it creates the
+  session **detached** in the current workspace (or `--workspace <ws>`) with the CLI as
+  its **first tab**: one call, no stolen focus, no blank shell tab. It hard-errors if the
+  session already exists, and never makes the worker the workspace's default attach
+  target. Then carry `-s <worker-session>` on every later `run` / `watch` / `type` /
+  `send` / `tabs` / `tab state` for that worker. A single worker may instead just live as
+  a tab in the current session (`zmux run … -n <tab> -d`) — separate sessions matter once
+  workers run *concurrently*, so their tabs and state don't collide.
+    ```bash
+    # current workspace (conductor inside tmux):
+    zmux session run worker-auth -n auth-worker -- codex -C ~/proj.auth -s workspace-write -a on-request
+    # named workspace (conductor outside tmux, or a dedicated workers ws):
+    zmux session run worker-auth --workspace dev -n auth-worker -- codex -C ~/proj.auth -s workspace-write -a on-request
+    ```
+  **Never** spawn an automated worker with `zmux new <ws> <worker-session>`: `new`
+  attaches (steals the conductor's focus) and births a blank shell tab beside the CLI —
+  the report-009 failure this primitive exists to fix.
 - **Spawn the CLI in the worktree.** Launch with the CLI's cwd set to the worktree
   (`codex -C <worktree>`, or `cd <worktree> && <cli>` inside the tab). The worker stays
   there for its whole life — it never wanders to the primary checkout or a sibling worktree.
