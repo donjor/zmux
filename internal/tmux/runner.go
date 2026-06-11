@@ -31,6 +31,12 @@ type Runner interface {
 	ListClients() ([]ClientInfo, error)
 	HasSession(name string) bool
 	NewSession(name, dir string) error
+	// NewSessionWindow creates a detached session whose first window is named
+	// `window`, returning that window's initial pane id (%N). No client is
+	// attached or switched, so worker/background session birth never steals
+	// focus; naming the first window at creation avoids a leftover blank shell
+	// tab (no follow-up NewWindow needed).
+	NewSessionWindow(session, window, dir string) (string, error)
 	NewGroupedSession(target, name string) error
 	KillSession(name string) error
 	AttachSession(name string) error

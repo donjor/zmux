@@ -53,6 +53,9 @@ type MockRunner struct {
 	// NewWindowPaneID is the pane id NewWindow returns ("" by default).
 	NewWindowPaneID string
 
+	// NewSessionWindowPaneID is the pane id NewSessionWindow returns ("" by default).
+	NewSessionWindowPaneID string
+
 	// BreakPaneWindowID is the window id BreakPane returns ("" by default).
 	BreakPaneWindowID string
 
@@ -106,6 +109,19 @@ func (m *MockRunner) HasSession(name string) bool {
 func (m *MockRunner) NewSession(name, dir string) error {
 	m.record("NewSession", name, dir)
 	return m.Err
+}
+
+// NewSessionWindow records the call, registers the session (so a later
+// HasSession is true), and returns NewSessionWindowPaneID. It deliberately does
+// NOT route through NewSession/NewWindow — tests must distinguish "session with
+// a named first window" from "session plus a second tab".
+func (m *MockRunner) NewSessionWindow(session, window, dir string) (string, error) {
+	m.record("NewSessionWindow", session, window, dir)
+	if m.Err != nil {
+		return "", m.Err
+	}
+	m.Sessions = append(m.Sessions, Session{Name: session})
+	return m.NewSessionWindowPaneID, nil
 }
 
 // NewGroupedSession records the call.

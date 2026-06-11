@@ -83,6 +83,7 @@ func printStyledHelp(app *apppkg.App) {
 				{"zmux workspace show <ws>", "Show workspace sessions"},
 				{"zmux workspace kill <ws>", "Kill workspace + all sessions"},
 				{"zmux session kill <session>", "Kill a session"},
+				{"zmux session run <s> -n <t> -- <cmd>", "Detached session + command as first tab (workers)"},
 				{"zmux tab move <tab> <dest>", "Move tab to another session"},
 				{"zmux tab label [label]", "Set/clear stable tab label"},
 				{"zmux tab state <state> [tab]", "Set/clear tab lifecycle glyph"},

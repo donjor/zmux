@@ -180,6 +180,16 @@ func (c *Client) NewSession(name, dir string) error {
 	return c.runSilent("new-session", "-d", "-s", name, "-c", dir)
 }
 
+// NewSessionWindow creates a detached session with its first window named
+// `window` and returns that window's initial pane id (%N). Detached (-d) means
+// no client attaches or switches, so worker/background session birth never
+// steals the user's focus; naming the first window at creation avoids a
+// leftover blank shell tab — the caller runs its command in this birth pane
+// instead of a follow-up NewWindow.
+func (c *Client) NewSessionWindow(session, window, dir string) (string, error) {
+	return c.run("new-session", "-d", "-P", "-F", "#{pane_id}", "-s", session, "-n", window, "-c", dir)
+}
+
 // NewGroupedSession creates a grouped session linked to target.
 // The new session shares windows with target but has an independent viewport.
 func (c *Client) NewGroupedSession(target, name string) error {
@@ -406,6 +416,12 @@ func shellCommand(argv []string) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// ShellCommand joins argv into a single shell-safe command string, quoting each
+// element only as needed. Exposed so CLI callers can faithfully reconstruct a
+// command from post-`--` argv — a raw space-join would drop quoting and change
+// the meaning of e.g. `bash -lc 'printf x; sleep 2'`.
+func ShellCommand(argv []string) string { return shellCommand(argv) }
 
 func shellQuote(s string) string {
 	if s == "" {

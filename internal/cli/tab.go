@@ -190,6 +190,7 @@ func newSessionCmd(app *apppkg.App) *cobra.Command {
 		Short: "Manage sessions",
 	}
 	cmd.AddCommand(newSessionKillCmd(app))
+	cmd.AddCommand(newSessionRunCmd(app))
 	return cmd
 }
 

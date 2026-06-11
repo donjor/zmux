@@ -128,6 +128,7 @@ zmux tab hide <tab>                 Park a tab off the bar in the hidden dock
 zmux tab show <tab>                 Return a hidden tab to its origin session
 zmux tab kill <tab>                 Kill a tab
 zmux session kill <session>         Kill a session
+zmux session run <s> -n <t> -- <cmd>  Create a detached session, run <cmd> as its first tab (no focus steal)
 zmux workspace list                 List workspaces (alias: zmux ws)
 zmux workspace kill <workspace>     Kill a workspace and all its sessions
 zmux workspace show <ws>            Show workspace sessions
