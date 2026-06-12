@@ -75,7 +75,7 @@ func runNewInWorkspace(app *apppkg.App, wsName string, sessionNames []string, di
 				wsName, "open "+wsName, wsName,
 			)
 		}
-		sessionNames = []string{session.DefaultName}
+		sessionNames = []string{workspaceSessionName(app, session.DefaultName, wsName)}
 	}
 
 	// Ensure workspace exists.

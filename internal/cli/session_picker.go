@@ -84,12 +84,7 @@ func runSessionPicker(app *apppkg.App) error {
 		if err := app.WorkspaceStore.CreateWorkspace(wsName, dir); err != nil {
 			return err
 		}
-		sessName := res.Name
-		if sessName == "" {
-			sessName = session.DefaultName
-		} else if app.Runner.HasSession(sessName) {
-			sessName = nextSessionName(app, sessName, wsName)
-		}
+		sessName := workspaceSessionName(app, res.Name, wsName)
 		if err := session.Create(app.Runner, sessName, dir); err != nil {
 			return err
 		}

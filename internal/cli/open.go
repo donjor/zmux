@@ -111,6 +111,19 @@ func nextSessionName(app *apppkg.App, base, workspace string) string {
 	return base + "-" + session.NextTmpName(app.Runner)
 }
 
+// workspaceSessionName resolves the requested session name for a workspace
+// against tmux's global session namespace.
+func workspaceSessionName(app *apppkg.App, requested, workspace string) string {
+	name := requested
+	if name == "" {
+		name = session.DefaultName
+	}
+	if app.Runner.HasSession(name) {
+		return nextSessionName(app, name, workspace)
+	}
+	return name
+}
+
 // attachSession handles the attach logic: normal attach, auto-clone, or hijack.
 func attachSession(app *apppkg.App, hijack bool, name string) error {
 	if hijack {
