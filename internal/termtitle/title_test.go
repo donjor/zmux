@@ -51,7 +51,7 @@ func TestParseMissingField(t *testing.T) {
 }
 
 func TestTmuxTitleFormatIsV1(t *testing.T) {
-	for _, want := range []string{"zmux:v1", "tty=#{client_tty}", "sid=#{session_id}", "wid=#{window_id}", "pane=#{pane_id}"} {
+	for _, want := range []string{"zmux:v1", "tty=#{client_tty}", "sid=#{session_id}", "wid=#{window_id}", "pane=#{pane_id}", "@zmux_workspace", "@zmux_session_label"} {
 		if !strings.Contains(TmuxTitleFormat, want) {
 			t.Fatalf("TmuxTitleFormat missing %q: %s", want, TmuxTitleFormat)
 		}

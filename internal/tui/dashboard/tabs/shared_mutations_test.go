@@ -85,8 +85,11 @@ func TestRenameSessionMutationCallsRunnerThenStore(t *testing.T) {
 		t.Fatalf("rename: %v", err)
 	}
 
-	if !mockHasCall(mock, "RenameSession", "old", "new") {
-		t.Errorf("expected RenameSession(old,new), got: %v", mock.Calls)
+	if !mockHasCall(mock, "RenameSession", "old", workspace.RawSessionName("ws", "new")) {
+		t.Errorf("expected RenameSession(old,%s), got: %v", workspace.RawSessionName("ws", "new"), mock.Calls)
+	}
+	if !mockHasCall(mock, "SetSessionOption", workspace.RawSessionName("ws", "new"), workspace.OptionSessionLabel, "new") {
+		t.Errorf("expected metadata stamp for renamed session, got: %v", mock.Calls)
 	}
 
 	// Store should have the new mapping.
@@ -127,7 +130,7 @@ func TestKillSessionMutationRemovesWorkspaceMembership(t *testing.T) {
 		t.Fatalf("kill: %v", err)
 	}
 
-	if sessions := store.SessionsIn("ws"); len(sessions) != 0 {
+	if sessions := store.SessionLabelsIn("ws"); len(sessions) != 0 {
 		t.Errorf("expected workspace to be empty after kill, got %v", sessions)
 	}
 }
@@ -150,7 +153,7 @@ func TestKillSessionMutationKeepsRootOnCloneDetach(t *testing.T) {
 		t.Fatalf("kill: %v", err)
 	}
 
-	got := store.SessionsIn("ws")
+	got := store.SessionLabelsIn("ws")
 	if len(got) != 1 || got[0] != "dev" {
 		t.Errorf("expected workspace to retain dev after dev-b detach, got %v", got)
 	}
@@ -178,7 +181,7 @@ func TestKillSessionMutationKeepsRootWhenCloneSurvives(t *testing.T) {
 		t.Fatalf("kill: %v", err)
 	}
 
-	got := store.SessionsIn("ws")
+	got := store.SessionLabelsIn("ws")
 	if len(got) != 1 || got[0] != "dev" {
 		t.Errorf("expected dev to remain in workspace while dev-b alive, got %v", got)
 	}

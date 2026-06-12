@@ -111,15 +111,9 @@ func newTestSessionsTab(t *testing.T) (*SessionsTab, *tmux.MockRunner, *workspac
 	if err := store.CreateWorkspace("empty", ""); err != nil {
 		t.Fatalf("create empty: %v", err)
 	}
-	if err := store.AddSession("dev", "dev"); err != nil {
-		t.Fatalf("add dev session: %v", err)
-	}
-	if err := store.AddSession("dev", "dev-2"); err != nil {
-		t.Fatalf("add dev-2 session: %v", err)
-	}
-	if err := store.AddSession("api", "api"); err != nil {
-		t.Fatalf("add api session: %v", err)
-	}
+	addLegacyWorkspaceSession(t, store, "dev", "dev")
+	addLegacyWorkspaceSession(t, store, "dev", "dev-2")
+	addLegacyWorkspaceSession(t, store, "api", "api")
 
 	loader := func() []workspaceview.WorkspaceViewModel {
 		ws, _ := store.ListWorkspaces()
@@ -348,21 +342,25 @@ func TestSessionsTabRenameSessionJumpsToNewID(t *testing.T) {
 	tab.renameInput.SetValue("dev-renamed")
 
 	// Update the mock so the post-mutation refetch reflects the rename.
-	prepareMockForRename(mock, "dev", "dev-renamed")
+	renamedRaw := workspace.RawSessionName("dev", "dev-renamed")
+	prepareMockForRename(mock, "dev", renamedRaw, "dev-renamed")
 
 	tab, cmd := sendKey(tab, "enter")
 	tab = runMutationCmd(tab, cmd)
 
 	row := tab.tree.Current()
-	if row == nil || row.ID != outline.SessionID("dev-renamed") {
+	if row == nil || row.ID != outline.SessionID(renamedRaw) {
 		t.Errorf("expected cursor on dev-renamed, got %+v", row)
 	}
 }
 
-func prepareMockForRename(mock *tmux.MockRunner, oldName, newName string) {
+func prepareMockForRename(mock *tmux.MockRunner, oldName, newName, label string) {
 	for i := range mock.Sessions {
 		if mock.Sessions[i].Name == oldName {
 			mock.Sessions[i].Name = newName
+			mock.Sessions[i].Managed = true
+			mock.Sessions[i].Workspace = "dev"
+			mock.Sessions[i].SessionLabel = label
 		}
 	}
 	if wins, ok := mock.Windows[oldName]; ok {
@@ -476,7 +474,7 @@ func TestSessionsTabMoveSession(t *testing.T) {
 	}
 	found := false
 	for _, s := range apiWS.Sessions {
-		if s == "dev-2" {
+		if s.Label == "dev-2" {
 			found = true
 		}
 	}

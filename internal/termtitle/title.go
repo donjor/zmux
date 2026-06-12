@@ -13,7 +13,7 @@ const (
 )
 
 // TmuxTitleFormat is the tmux set-titles-string fragment that zmux owns.
-const TmuxTitleFormat = "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{session_name}:#{window_index}:#{window_name}"
+const TmuxTitleFormat = "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{?#{@zmux_session_label},#{@zmux_workspace}/#{@zmux_session_label},#{session_name}}:#{window_index}:#{window_name}"
 
 var markerRE = regexp.MustCompile(`zmux:v([0-9]+);\S+`)
 

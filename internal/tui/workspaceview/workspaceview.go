@@ -50,9 +50,9 @@ func BuildWorkspaceViewModels(
 			Workspace: ws,
 		}
 
-		for _, sessName := range ws.Sessions {
+		for _, wsSess := range ws.Sessions {
 			// Check for the session itself and any grouped clones (e.g., dev-b).
-			root := session.RootName(sessName)
+			root := session.RootName(wsSess.TmuxName)
 			for _, ls := range liveSessions {
 				if session.RootName(ls.Name) == root {
 					vm.LiveSessions = append(vm.LiveSessions, ls)

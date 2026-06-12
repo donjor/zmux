@@ -47,17 +47,9 @@ Examples:
 				}
 			}
 
-			sessionName := watchSessionFlag
-			if sessionName == "" {
-				if app.Runner.IsInsideTmux() {
-					name, err := app.Runner.DisplayMessage("", "#{session_name}")
-					if err != nil {
-						return fmt.Errorf("not inside a tmux session")
-					}
-					sessionName = name
-				} else {
-					return fmt.Errorf("not inside tmux — use --session to specify target")
-				}
+			sessionName, err := resolveSessionTarget(app, watchSessionFlag)
+			if err != nil {
+				return err
 			}
 
 			rt, err := resolveTabTarget(app, sessionName, windowName)

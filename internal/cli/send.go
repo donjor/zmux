@@ -29,17 +29,9 @@ Examples:
 			keys := args[1:]
 
 			// Determine target session.
-			sessionName := sendSessionFlag
-			if sessionName == "" {
-				if app.Runner.IsInsideTmux() {
-					name, err := app.Runner.DisplayMessage("", "#{session_name}")
-					if err != nil {
-						return fmt.Errorf("not inside a tmux session")
-					}
-					sessionName = name
-				} else {
-					return fmt.Errorf("not inside tmux — use --session to specify target")
-				}
+			sessionName, err := resolveSessionTarget(app, sendSessionFlag)
+			if err != nil {
+				return err
 			}
 
 			rt, err := resolveTabTargetForMutation(app, sessionName, windowName, windowName)
@@ -79,17 +71,9 @@ Examples:
 			windowName := args[0]
 			text := strings.Join(args[1:], " ")
 
-			sessionName := sendSessionFlag
-			if sessionName == "" {
-				if app.Runner.IsInsideTmux() {
-					name, err := app.Runner.DisplayMessage("", "#{session_name}")
-					if err != nil {
-						return fmt.Errorf("not inside a tmux session")
-					}
-					sessionName = name
-				} else {
-					return fmt.Errorf("not inside tmux — use --session to specify target")
-				}
+			sessionName, err := resolveSessionTarget(app, sendSessionFlag)
+			if err != nil {
+				return err
 			}
 
 			rt, err := resolveTabTargetForMutation(app, sessionName, windowName, windowName)

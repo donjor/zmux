@@ -5,7 +5,7 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: `agents` | Compare: `v0.8.0...HEAD`
+> Release tag: pending | Topics: `agents`, `workspace` | Compare: `v0.8.0...HEAD`
 
 ### Added
 
@@ -14,6 +14,12 @@ versioning is semver-ish until the first public release.
   steal, no blank shell tab. The orchestration-safe worker-spawn primitive
   (`tmux new-session -d -n <tab>`); the `agent-worker` and `orchestrate` doctrines
   now teach it instead of the attach-oriented `zmux new <ws> <session>`.
+- **Workspace-local session identity** `workspace` - workspaces now store v3
+  session records with local labels, stable IDs, generated raw tmux names, and
+  `@zmux_*` tmux metadata. Commands accept `workspace/session` targets while
+  normal UI surfaces display local labels instead of raw `zws_...` names; legacy
+  v1/v2 sessions are repaired into managed names and clone-like labels such as
+  `worker-x` stay valid.
 
 ## [0.8.0] - 2026-06-09
 > Release tag: `v0.8.0` | Topics: `watch`, `tabs`, `qa`, `recipes`, `agents`, `docs` | Compare: `v0.7.0...v0.8.0`

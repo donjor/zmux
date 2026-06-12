@@ -73,8 +73,8 @@ func lsWorkspaces(app *apppkg.App) error {
 		liveCount := 0
 		var maxActivity time.Time
 		hasAttached := false
-		for _, sessName := range ws.Sessions {
-			if s, ok := sessionMap[sessName]; ok {
+		for _, sess := range ws.Sessions {
+			if s, ok := sessionMap[sess.TmuxName]; ok {
 				liveCount++
 				if s.Attached {
 					hasAttached = true
@@ -138,15 +138,15 @@ func lsWorkspaceSessions(app *apppkg.App, wsName string) error {
 		currentTab, _ = app.Runner.DisplayMessage("", "#{window_name}")
 	}
 
-	for _, sessName := range ws.Sessions {
-		s, alive := sessionMap[sessName]
+	for _, sess := range ws.Sessions {
+		s, alive := sessionMap[sess.TmuxName]
 		if !alive {
-			fmt.Printf("  ○ %-14s (dead)\n", sessName)
+			fmt.Printf("  ○ %-14s (dead)\n", sess.Label)
 			continue
 		}
 
 		icon := "○"
-		if sessName == currentSession {
+		if sess.TmuxName == currentSession {
 			icon = "◆"
 		} else if s.Attached {
 			icon = "●"
@@ -154,7 +154,7 @@ func lsWorkspaceSessions(app *apppkg.App, wsName string) error {
 
 		// Window names.
 		winStr := fmt.Sprintf("%dw", s.Windows)
-		if wins, err := app.Runner.ListWindows(sessName); err == nil && len(wins) > 0 {
+		if wins, err := app.Runner.ListWindows(sess.TmuxName); err == nil && len(wins) > 0 {
 			names := make([]string, len(wins))
 			for i, w := range wins {
 				names[i] = w.Name
@@ -163,11 +163,11 @@ func lsWorkspaceSessions(app *apppkg.App, wsName string) error {
 		}
 
 		marker := ""
-		if sessName == currentSession && currentTab != "" {
+		if sess.TmuxName == currentSession && currentTab != "" {
 			marker = fmt.Sprintf("  ← you (%s)", currentTab)
 		}
 
-		fmt.Printf("  %s %-14s %s%s\n", icon, sessName, winStr, marker)
+		fmt.Printf("  %s %-14s %s%s\n", icon, sess.Label, winStr, marker)
 	}
 
 	return nil

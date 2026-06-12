@@ -45,8 +45,8 @@ import (
 func newBehaviorPicker(t *testing.T) PickerModel {
 	t.Helper()
 	workspaces := []workspace.Workspace{
-		{Name: "myapp", Sessions: []string{"main", "api"}},
-		{Name: "tools", Sessions: []string{"monitor"}},
+		{Name: "myapp", Sessions: testWorkspaceSessions("main", "api")},
+		{Name: "tools", Sessions: testWorkspaceSessions("monitor")},
 		{Name: "empty", Sessions: nil},
 	}
 	sessions := []session.SessionInfo{

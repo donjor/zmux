@@ -36,14 +36,14 @@ If the workspace already exists:
 			}
 
 			wsName := args[0]
-			sessionNames := args[1:]
+			sessionLabels := args[1:]
 
 			// Validate workspace name.
 			if err := workspace.ValidateWorkspaceName(wsName); err != nil {
 				return err
 			}
 
-			return runNewInWorkspace(app, wsName, sessionNames, dir)
+			return runNewInWorkspace(app, wsName, sessionLabels, dir)
 		},
 	}
 
@@ -60,22 +60,22 @@ func runNewTmp(app *apppkg.App, dir string) error {
 }
 
 // runNewInWorkspace creates a workspace (if needed) and sessions within it.
-func runNewInWorkspace(app *apppkg.App, wsName string, sessionNames []string, dir string) error {
+func runNewInWorkspace(app *apppkg.App, wsName string, sessionLabels []string, dir string) error {
 	// Check if workspace exists.
 	ws, err := app.WorkspaceStore.GetWorkspace(wsName)
 	if err != nil {
 		return err
 	}
 
-	if len(sessionNames) == 0 || (len(sessionNames) == 1 && sessionNames[0] == "") {
-		// zmux new <workspace> — no session names.
+	if len(sessionLabels) == 0 || (len(sessionLabels) == 1 && sessionLabels[0] == "") {
+		// zmux new <workspace> — no session labels.
 		if ws != nil && len(ws.Sessions) > 0 {
 			return fmt.Errorf(
 				"workspace %q already exists — use zmux %s to attach or zmux new %s <session> to add a session",
 				wsName, "open "+wsName, wsName,
 			)
 		}
-		sessionNames = []string{workspaceSessionName(app, session.DefaultName, wsName)}
+		sessionLabels = []string{session.DefaultName}
 	}
 
 	// Ensure workspace exists.
@@ -84,33 +84,49 @@ func runNewInWorkspace(app *apppkg.App, wsName string, sessionNames []string, di
 	}
 
 	// Create each session.
-	var firstSession string
-	for _, sessName := range sessionNames {
-		if sessName == "" {
+	var firstSession workspace.WorkspaceSession
+	for _, label := range sessionLabels {
+		if label == "" {
 			continue
 		}
-		if err := session.ValidateName(sessName); err != nil {
-			return fmt.Errorf("invalid session name %q: %w", sessName, err)
+		if err := workspace.ValidateSessionLabel(label); err != nil {
+			return fmt.Errorf("invalid session label %q: %w", label, err)
 		}
-		if app.Runner.HasSession(sessName) {
-			return fmt.Errorf("session %q already exists", sessName)
-		}
-
-		if err := session.Create(app.Runner, sessName, dir); err != nil {
+		rec, err := createWorkspaceSession(app, wsName, label, dir)
+		if err != nil {
 			return err
 		}
-		if err := app.WorkspaceStore.AddSession(wsName, sessName); err != nil {
-			return err
-		}
-		if firstSession == "" {
-			firstSession = sessName
+		if firstSession.TmuxName == "" {
+			firstSession = rec
 		}
 	}
 
-	if firstSession == "" {
+	if firstSession.TmuxName == "" {
 		return fmt.Errorf("no sessions created")
 	}
 
-	_ = app.WorkspaceStore.SetLastActive(wsName, firstSession)
-	return session.Attach(app.Runner, firstSession)
+	_ = app.WorkspaceStore.SetLastActive(wsName, firstSession.ID)
+	return session.Attach(app.Runner, firstSession.TmuxName)
+}
+
+func createWorkspaceSession(app *apppkg.App, wsName, label, dir string) (workspace.WorkspaceSession, error) {
+	rec, err := workspace.NewSessionRecord(wsName, label)
+	if err != nil {
+		return workspace.WorkspaceSession{}, err
+	}
+	if app.Runner.HasSession(rec.TmuxName) {
+		return workspace.WorkspaceSession{}, fmt.Errorf("session %q already exists in workspace %q", label, wsName)
+	}
+	if err := session.Create(app.Runner, rec.TmuxName, dir); err != nil {
+		return workspace.WorkspaceSession{}, err
+	}
+	if err := workspace.StampSessionMetadata(app.Runner, wsName, rec); err != nil {
+		_ = app.Runner.KillSession(rec.TmuxName)
+		return workspace.WorkspaceSession{}, err
+	}
+	if err := app.WorkspaceStore.AddSessionRecord(wsName, rec); err != nil {
+		_ = app.Runner.KillSession(rec.TmuxName)
+		return workspace.WorkspaceSession{}, err
+	}
+	return rec, nil
 }

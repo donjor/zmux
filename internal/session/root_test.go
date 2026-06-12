@@ -19,6 +19,10 @@ func TestRootName(t *testing.T) {
 		{"x-b-c", "x-b"}, // only last suffix stripped
 		{"", ""},
 		{"dev-a", "dev-a"}, // -a is not a group suffix
+		{"zws_proj__worker-x", "zws_proj__worker-x"},
+		{"zws_ws__web-z", "zws_ws__web-z"},
+		{"zws_ws__web-x__clone_b", "zws_ws__web-x"},
+		{"zws_ws__web-x-b", "zws_ws__web-x-b"},
 	}
 
 	for _, tt := range tests {

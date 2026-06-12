@@ -78,14 +78,22 @@ func nextGroupName(runner tmux.Runner, base string) string {
 			taken[s.Name] = true
 		}
 	}
+	cloneFormat := "%s-%c"
+	if isManagedRawSession(base) {
+		cloneFormat = "%s__clone_%c"
+	}
 	for c := 'b'; c <= 'z'; c++ {
-		candidate := fmt.Sprintf("%s-%c", base, c)
+		candidate := fmt.Sprintf(cloneFormat, base, c)
 		if !taken[candidate] {
 			return candidate
 		}
 	}
 	// Fallback if somehow a-z are all taken.
 	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano()%10000)
+}
+
+func isManagedRawSession(name string) bool {
+	return len(name) > 4 && name[:4] == "zws_"
 }
 
 // Switch switches the current tmux client to the named session.

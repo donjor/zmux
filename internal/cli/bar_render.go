@@ -95,6 +95,10 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 
 			// Workspace lookup.
 			workspace, _ := app.WorkspaceStore.WorkspaceFor(sessionName)
+			displaySession := sessionName
+			if _, rec, ok := app.WorkspaceStore.SessionRecordFor(sessionName); ok {
+				displaySession = rec.Label
+			}
 
 			// Workspace position for status bar display.
 			wsPos, wsCount, _ := app.WorkspaceStore.SessionPosition(sessionName)
@@ -104,7 +108,7 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			preset, _ := bar.PresetFromString(cfg.Bar.Preset)
 
 			// Gather context + apply segment visibility from config.
-			ctx := bar.GatherContext(bar.ExecProber{}, sessionName, paneDir, paneCmd, prefixStr, groupID, workspace)
+			ctx := bar.GatherContext(bar.ExecProber{}, displaySession, paneDir, paneCmd, prefixStr, groupID, workspace)
 			ctx.WorkspacePos = wsPos
 			ctx.WorkspaceCount = wsCount
 			ctx.ShowWorkspace = cfg.Bar.Segments.Workspace
@@ -125,9 +129,10 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			switch cfg.Bar.Indicator {
 			case "dots":
 				if workspace != "" {
-					sessions := app.WorkspaceStore.SessionsIn(workspace)
-					states := workspaceAttachStates(app, sessions, sessionName)
-					ctx.SessionIndicator = bar.CompactDots(sessions, sessionName, states)
+					labels := app.WorkspaceStore.SessionLabelsIn(workspace)
+					targets := app.WorkspaceStore.SessionTargetsIn(workspace)
+					states := workspaceAttachStates(app, targets, sessionName)
+					ctx.SessionIndicator = bar.CompactDots(labels, displaySession, states)
 				}
 			case "none":
 				ctx.WorkspaceCount = 1 // suppress N/M in SessionLabel
@@ -147,11 +152,12 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 				// sessions (no workspace) still get a one-session top row
 				// so always-2-line never shows a blank top (plan 024).
 				if workspace != "" {
-					ctx.WorkspaceSessions = app.WorkspaceStore.SessionsIn(workspace)
-					ctx.WorkspaceSessionStates = workspaceAttachStates(app, ctx.WorkspaceSessions, sessionName)
+					ctx.WorkspaceSessions = app.WorkspaceStore.SessionLabelsIn(workspace)
+					targets := app.WorkspaceStore.SessionTargetsIn(workspace)
+					ctx.WorkspaceSessionStates = workspaceAttachStates(app, targets, sessionName)
 				}
-				if len(ctx.WorkspaceSessions) == 0 && sessionName != "" {
-					ctx.WorkspaceSessions = []string{sessionName}
+				if len(ctx.WorkspaceSessions) == 0 && displaySession != "" {
+					ctx.WorkspaceSessions = []string{displaySession}
 				}
 				topVariant := barRenderTopBar
 				if topVariant == "" {

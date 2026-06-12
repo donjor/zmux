@@ -42,7 +42,11 @@ Examples:
 			}
 
 			if sessionName != "" {
-				return listTabsForSession(app, sessionName)
+				target, err := resolveSessionTarget(app, sessionName)
+				if err != nil {
+					return err
+				}
+				return listTabsForSession(app, target)
 			}
 
 			return fmt.Errorf("specify a session: zmux tabs <session>\nlist sessions with: zmux ls")

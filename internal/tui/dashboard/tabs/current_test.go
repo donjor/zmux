@@ -67,15 +67,9 @@ func newTestCurrentTab(t *testing.T) (*CurrentTab, *tmux.MockRunner, *workspace.
 	if err := store.CreateWorkspace("api", ""); err != nil {
 		t.Fatalf("create api: %v", err)
 	}
-	if err := store.AddSession("dev", "dev"); err != nil {
-		t.Fatalf("add dev session: %v", err)
-	}
-	if err := store.AddSession("dev", "dev-2"); err != nil {
-		t.Fatalf("add dev-2: %v", err)
-	}
-	if err := store.AddSession("api", "api"); err != nil {
-		t.Fatalf("add api session: %v", err)
-	}
+	addLegacyWorkspaceSession(t, store, "dev", "dev")
+	addLegacyWorkspaceSession(t, store, "dev", "dev-2")
+	addLegacyWorkspaceSession(t, store, "api", "api")
 
 	loader := func() []workspaceview.WorkspaceViewModel {
 		ws, _ := store.ListWorkspaces()
@@ -327,7 +321,7 @@ func TestCurrentTabRenameSiblingSession(t *testing.T) {
 	}
 	tab.renameInput.SetValue("dev-renamed")
 
-	prepareMockForRename(mock, "dev-2", "dev-renamed")
+	prepareMockForRename(mock, "dev-2", workspace.RawSessionName("dev", "dev-renamed"), "dev-renamed")
 
 	_, cmd := sendCurrentKey(tab, "enter")
 	_ = runCurrentMutationCmd(tab, cmd)

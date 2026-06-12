@@ -35,15 +35,47 @@ func renameWorkspaceMutation(wsStore *workspace.Store, oldName, newName string) 
 // report happened — tmux renamed, store didn't, and nothing was visible
 // to the user.
 func renameSessionMutation(runner tmux.Runner, wsStore *workspace.Store, oldName, newName string) error {
-	if err := session.Rename(runner, oldName, newName); err != nil {
+	targetName := renamedSessionTarget(wsStore, oldName, newName)
+	var wsName string
+	var rec workspace.WorkspaceSession
+	if wsStore != nil {
+		if foundWS, oldRec, ok := wsStore.SessionRecordFor(session.RootName(oldName)); ok {
+			wsName = foundWS
+			nextRec, err := workspace.NewSessionRecord(foundWS, newName)
+			if err != nil {
+				return err
+			}
+			nextRec.CreatedAt = oldRec.CreatedAt
+			rec = nextRec
+			targetName = rec.TmuxName
+		}
+	}
+	if err := session.Rename(runner, oldName, targetName); err != nil {
 		return err
 	}
+	if rec.TmuxName != "" {
+		if err := workspace.StampSessionMetadata(runner, wsName, rec); err != nil {
+			return err
+		}
+	}
 	if wsStore != nil {
-		if err := wsStore.RenameSession(session.RootName(oldName), session.RootName(newName)); err != nil {
+		if err := wsStore.RenameSession(session.RootName(oldName), newName); err != nil {
 			return fmt.Errorf("workspace metadata: %w", err)
 		}
 	}
 	return nil
+}
+
+func renamedSessionTarget(wsStore *workspace.Store, oldName, newName string) string {
+	if wsStore == nil {
+		return newName
+	}
+	if wsName, _, ok := wsStore.SessionRecordFor(session.RootName(oldName)); ok {
+		if rec, err := workspace.NewSessionRecord(wsName, newName); err == nil {
+			return rec.TmuxName
+		}
+	}
+	return newName
 }
 
 // killWorkspaceMutation kills the given session names and then deletes the

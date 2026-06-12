@@ -98,9 +98,10 @@ zmux                                Workspace picker (outside tmux) / dashboard 
 
 zmux new                            Create tmp-N session (no workspace)
 zmux new <ws>                       Create workspace + 'main' session, attach
-zmux new <ws> <session>             Create workspace (if needed) + session, attach
+zmux new <ws> <session>             Create workspace (if needed) + local session label, attach
 zmux new <ws> <s1> <s2> <s3>        Variadic — create workspace + multiple sessions
-zmux open <ws> [session]            Open workspace explicitly (aliases: attach, a)
+zmux open <ws> [session]            Open workspace/local session (aliases: attach, a)
+zmux open <ws>/<session>            Same target grammar as command flags
 
 zmux run <recipe>                   Open the recipe form with defaults
 zmux run <recipe> -y                Run defaults without prompting
@@ -115,9 +116,9 @@ zmux recipe edit <recipe>           Edit a user recipe
 
 zmux kill <name>                    Smart kill — workspace-first, then session (confirms if live)
 zmux ls                             List workspaces (workspace-primary)
-zmux ls <ws>                        List sessions within a workspace
+zmux ls <ws>                        List local session labels within a workspace
 zmux ls -s                          Flat session list (legacy/debug)
-zmux tabs [session]                 List tabs in session (riders nested, hidden marked ~)
+zmux tabs [workspace/session]       List tabs in session (riders nested, hidden marked ~)
 
 zmux tab move <tab> <dest>          Move tab to another session
 zmux tab label [label]              Set/clear stable label for current tab
@@ -128,7 +129,7 @@ zmux tab hide <tab>                 Park a tab off the bar in the hidden dock
 zmux tab show <tab>                 Return a hidden tab to its origin session
 zmux tab kill <tab>                 Kill a tab
 zmux session kill <session>         Kill a session
-zmux session run <s> -n <t> -- <cmd>  Create a detached session, run <cmd> as its first tab (no focus steal)
+zmux session run <s> -n <t> -- <cmd>  Create a detached local session label, run <cmd> as first tab
 zmux workspace list                 List workspaces (alias: zmux ws)
 zmux workspace kill <workspace>     Kill a workspace and all its sessions
 zmux workspace show <ws>            Show workspace sessions
@@ -138,6 +139,8 @@ zmux workspace show <ws>            Show workspace sessions
 
 Run commands in named tmux windows, read their output, and send keystrokes.
 Designed for scripting and agent workflows (see [Agent Integration](#agent-integration)).
+When a command needs a session outside the current workspace, pass
+`--session <workspace>/<session>`.
 
 ```
 zmux run '<cmd>' -n <tab>      Run command, wait for completion
@@ -414,11 +417,11 @@ blocking their own shell or hiding process state.
 
 **Example workflow:**
 ```bash
-zmux run 'npm test' -n test               # waits for completion, returns exit code
-zmux run 'npm run dev' -n server -d       # detach for runtimes
-zmux watch server --until "listening"     # wait for ready signal
-zmux watch server -l 20                   # peek at output
-zmux send server C-c                      # stop server
+zmux run 'npm test' -n test --session app/main          # waits for completion
+zmux run 'npm run dev' -n server -d --session app/main   # detach for runtimes
+zmux watch server --session app/main --until "listening" # wait for ready signal
+zmux watch server --session app/main -l 20               # peek at output
+zmux send server C-c --session app/main                  # stop server
 ```
 
 Agent integration lives in this repo:

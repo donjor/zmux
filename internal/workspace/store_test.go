@@ -58,6 +58,14 @@ func storeFilePath() string {
 	return filepath.Join("/home/user", ".zmux", "workspaces.toml")
 }
 
+func recordLabels(records []WorkspaceSession) []string {
+	labels := make([]string, 0, len(records))
+	for _, rec := range records {
+		labels = append(labels, rec.Label)
+	}
+	return labels
+}
+
 // ── Load (v2) ──
 
 func TestLoadEmptyWhenFileAbsent(t *testing.T) {
@@ -66,8 +74,8 @@ func TestLoadEmptyWhenFileAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if st.Version != 2 {
-		t.Errorf("expected version 2, got %d", st.Version)
+	if st.Version != 3 {
+		t.Errorf("expected version 3, got %d", st.Version)
 	}
 	if len(st.Workspaces) != 0 {
 		t.Errorf("expected empty workspaces, got %v", st.Workspaces)
@@ -87,8 +95,8 @@ sessions = ["main", "server"]
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if st.Version != 2 {
-		t.Errorf("version = %d; want 2", st.Version)
+	if st.Version != 3 {
+		t.Errorf("version = %d; want 3", st.Version)
 	}
 	ws := st.Workspaces["myapp"]
 	if ws == nil {
@@ -103,14 +111,55 @@ sessions = ["main", "server"]
 	if ws.LastActiveSession != "main" {
 		t.Errorf("LastActiveSession = %q; want main", ws.LastActiveSession)
 	}
-	if len(ws.Sessions) != 2 || ws.Sessions[0] != "main" || ws.Sessions[1] != "server" {
+	labels := recordLabels(ws.Sessions)
+	if len(labels) != 2 || labels[0] != "main" || labels[1] != "server" {
 		t.Errorf("Sessions = %v; want [main server]", ws.Sessions)
+	}
+	if ws.Sessions[0].TmuxName != RawSessionName("myapp", "main") {
+		t.Errorf("TmuxName = %q; want generated raw name", ws.Sessions[0].TmuxName)
+	}
+	if ws.Sessions[0].LegacyTmuxName != "main" {
+		t.Errorf("LegacyTmuxName = %q; want main", ws.Sessions[0].LegacyTmuxName)
+	}
+}
+
+func TestLoadV2MainWorkspaceSessionKeepsLegacyRawForRepair(t *testing.T) {
+	store, fs := newTestStore()
+	fs.files[storeFilePath()] = []byte(`version = 2
+
+[workspaces.hello]
+last_active_session = "main-hello"
+sessions = ["main-hello", "zws_hello__main"]
+`)
+	st, err := store.Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ws := st.Workspaces["hello"]
+	if ws == nil {
+		t.Fatal("expected hello workspace")
+	}
+	if len(ws.Sessions) != 1 {
+		t.Fatalf("expected duplicate legacy/generated records to collapse, got %d: %v", len(ws.Sessions), ws.Sessions)
+	}
+	rec := ws.Sessions[0]
+	if rec.Label != "main" {
+		t.Errorf("Label = %q; want main", rec.Label)
+	}
+	if rec.TmuxName != RawSessionName("hello", "main") {
+		t.Errorf("TmuxName = %q; want %q", rec.TmuxName, RawSessionName("hello", "main"))
+	}
+	if rec.LegacyTmuxName != "main-hello" {
+		t.Errorf("LegacyTmuxName = %q; want main-hello", rec.LegacyTmuxName)
+	}
+	if ws.LastActiveSession != "main" {
+		t.Errorf("LastActiveSession = %q; want main", ws.LastActiveSession)
 	}
 }
 
 // ── Migration from v1 ──
 
-func TestMigrateV1ToV2(t *testing.T) {
+func TestMigrateV1ToV3(t *testing.T) {
 	store, fs := newTestStore()
 	fs.files[storeFilePath()] = []byte("[sessions]\ndev = \"bridge\"\nmonitor = \"bridge\"\n")
 
@@ -118,8 +167,8 @@ func TestMigrateV1ToV2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if st.Version != 2 {
-		t.Errorf("version = %d; want 2", st.Version)
+	if st.Version != 3 {
+		t.Errorf("version = %d; want 3", st.Version)
 	}
 	ws := st.Workspaces["bridge"]
 	if ws == nil {
@@ -129,12 +178,13 @@ func TestMigrateV1ToV2(t *testing.T) {
 		t.Fatalf("expected 2 sessions, got %d: %v", len(ws.Sessions), ws.Sessions)
 	}
 	// Sessions should be sorted.
-	if ws.Sessions[0] != "dev" || ws.Sessions[1] != "monitor" {
+	labels := recordLabels(ws.Sessions)
+	if labels[0] != "dev" || labels[1] != "monitor" {
 		t.Errorf("Sessions = %v; want [dev monitor]", ws.Sessions)
 	}
 }
 
-func TestMigrateV1AutoSavesV2(t *testing.T) {
+func TestMigrateV1AutoSavesV3(t *testing.T) {
 	store, fs := newTestStore()
 	fs.files[storeFilePath()] = []byte("[sessions]\ndev = \"bridge\"\n")
 
@@ -143,14 +193,14 @@ func TestMigrateV1AutoSavesV2(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// File should now be v2 format.
+	// File should now be v3 format.
 	data := string(fs.files[storeFilePath()])
-	if !strings.Contains(data, "version = 2") {
-		t.Error("expected v2 format after migration save")
+	if !strings.Contains(data, "version = 3") {
+		t.Error("expected v3 format after migration save")
 	}
 }
 
-func TestLoadV2DoesNotMigrate(t *testing.T) {
+func TestLoadV2MigratesToV3(t *testing.T) {
 	store, fs := newTestStore()
 	v2Content := `version = 2
 
@@ -163,8 +213,8 @@ sessions = ["main"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Version != 2 {
-		t.Errorf("version = %d; want 2", st.Version)
+	if st.Version != 3 {
+		t.Errorf("version = %d; want 3", st.Version)
 	}
 	if len(st.Workspaces) != 1 {
 		t.Errorf("expected 1 workspace, got %d", len(st.Workspaces))
@@ -236,7 +286,7 @@ func TestRenameWorkspace(t *testing.T) {
 	if ws == nil {
 		t.Fatal("expected renamed workspace")
 	}
-	if len(ws.Sessions) != 1 || ws.Sessions[0] != "dev" {
+	if len(ws.Sessions) != 1 || ws.Sessions[0].Label != "dev" {
 		t.Errorf("sessions lost after rename: %v", ws.Sessions)
 	}
 
@@ -254,7 +304,7 @@ func TestAddSession(t *testing.T) {
 	if err := store.AddSession("myapp", "main"); err != nil {
 		t.Fatal(err)
 	}
-	sessions := store.SessionsIn("myapp")
+	sessions := store.SessionLabelsIn("myapp")
 	if len(sessions) != 1 || sessions[0] != "main" {
 		t.Errorf("SessionsIn = %v; want [main]", sessions)
 	}
@@ -280,12 +330,12 @@ func TestAddSessionAlreadyInSameWorkspace(t *testing.T) {
 	}
 }
 
-func TestAddSessionAlreadyInOtherWorkspace(t *testing.T) {
+func TestAddSessionAllowsSameLabelInOtherWorkspace(t *testing.T) {
 	store, _ := newTestStore()
 	_ = store.AddSession("myapp", "dev")
 	err := store.AddSession("other", "dev")
-	if err == nil {
-		t.Error("expected error when session is in another workspace")
+	if err != nil {
+		t.Errorf("same local label should be allowed in another workspace: %v", err)
 	}
 }
 
@@ -300,7 +350,7 @@ func TestRemoveSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sessions := store.SessionsIn("myapp")
+	sessions := store.SessionLabelsIn("myapp")
 	if len(sessions) != 1 || sessions[0] != "server" {
 		t.Errorf("SessionsIn = %v; want [server]", sessions)
 	}
@@ -332,10 +382,10 @@ func TestMoveSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if sessions := store.SessionsIn("myapp"); len(sessions) != 0 {
+	if sessions := store.SessionLabelsIn("myapp"); len(sessions) != 0 {
 		t.Errorf("expected myapp empty, got %v", sessions)
 	}
-	if sessions := store.SessionsIn("other"); len(sessions) != 1 || sessions[0] != "dev" {
+	if sessions := store.SessionLabelsIn("other"); len(sessions) != 1 || sessions[0] != "dev" {
 		t.Errorf("expected other to have dev, got %v", sessions)
 	}
 }
@@ -351,7 +401,7 @@ func TestRenameSession(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sessions := store.SessionsIn("myapp")
+	sessions := store.SessionLabelsIn("myapp")
 	if len(sessions) != 1 || sessions[0] != "development" {
 		t.Errorf("SessionsIn = %v; want [development]", sessions)
 	}
@@ -369,7 +419,7 @@ func TestWorkspaceForGroupedSession(t *testing.T) {
 	store, _ := newTestStore()
 	_ = store.AddSession("bridge", "dev")
 
-	ws, ok := store.WorkspaceFor("dev-b")
+	ws, ok := store.WorkspaceFor(RawSessionName("bridge", "dev") + "__clone_b")
 	if !ok || ws != "bridge" {
 		t.Errorf("WorkspaceFor(dev-b) = %q, %v; want bridge, true", ws, ok)
 	}
@@ -391,7 +441,7 @@ func TestSessionsInReturnsOrdered(t *testing.T) {
 	_ = store.AddSession("myapp", "server")
 	_ = store.AddSession("myapp", "claude")
 
-	got := store.SessionsIn("myapp")
+	got := store.SessionLabelsIn("myapp")
 	// Order is insertion order.
 	want := []string{"main", "server", "claude"}
 	if len(got) != len(want) {
@@ -467,12 +517,12 @@ func TestReconcileRemovesDeadSessions(t *testing.T) {
 	_ = store.AddSession("myapp", "dead")
 	_ = store.AddSession("other", "zmux")
 
-	live := map[string]bool{"dev": true, "zmux": true}
+	live := map[string]bool{RawSessionName("myapp", "dev"): true, RawSessionName("other", "zmux"): true}
 	if err := store.Reconcile(live); err != nil {
 		t.Fatal(err)
 	}
 
-	sessions := store.SessionsIn("myapp")
+	sessions := store.SessionLabelsIn("myapp")
 	if len(sessions) != 1 || sessions[0] != "dev" {
 		t.Errorf("expected [dev], got %v", sessions)
 	}
@@ -498,7 +548,7 @@ func TestReconcileAutoHealsUnmanaged(t *testing.T) {
 	_ = store.AddSession("myapp", "dev")
 
 	// "unmanaged" is a live session not in any workspace.
-	live := map[string]bool{"dev": true, "unmanaged": true}
+	live := map[string]bool{RawSessionName("myapp", "dev"): true, "unmanaged": true}
 	if err := store.Reconcile(live); err != nil {
 		t.Fatal(err)
 	}
@@ -507,6 +557,30 @@ func TestReconcileAutoHealsUnmanaged(t *testing.T) {
 	ws, ok := store.WorkspaceFor("unmanaged")
 	if !ok || ws != "unmanaged" {
 		t.Errorf("WorkspaceFor(unmanaged) = %q, %v; want unmanaged, true", ws, ok)
+	}
+}
+
+func TestReconcileKeepsLegacyRawWhileAwaitingRepair(t *testing.T) {
+	store, _ := newTestStore()
+	rec, err := NewSessionRecord("hello", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.LegacyTmuxName = "main-hello"
+	if err := store.AddSessionRecord("hello", rec); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.Reconcile(map[string]bool{"main-hello": true}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok := store.SessionRecord("hello", "main")
+	if !ok {
+		t.Fatal("expected legacy-tracked session to be preserved")
+	}
+	if got.LegacyTmuxName != "main-hello" {
+		t.Errorf("LegacyTmuxName = %q; want main-hello", got.LegacyTmuxName)
 	}
 }
 
@@ -519,7 +593,7 @@ func TestReconcileSkipsOnEmptyLive(t *testing.T) {
 	}
 
 	// Should not have removed anything.
-	sessions := store.SessionsIn("myapp")
+	sessions := store.SessionLabelsIn("myapp")
 	if len(sessions) != 1 {
 		t.Errorf("expected session preserved, got %v", sessions)
 	}
@@ -527,7 +601,7 @@ func TestReconcileSkipsOnEmptyLive(t *testing.T) {
 
 // ── Save/Load round-trip ──
 
-func TestV2SaveLoadRoundTrip(t *testing.T) {
+func TestV3SaveLoadRoundTrip(t *testing.T) {
 	store, _ := newTestStore()
 	_ = store.CreateWorkspace("myapp", "/home/user/src/myapp")
 	_ = store.AddSession("myapp", "main")
@@ -539,8 +613,8 @@ func TestV2SaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Version != 2 {
-		t.Errorf("version = %d; want 2", st.Version)
+	if st.Version != 3 {
+		t.Errorf("version = %d; want 3", st.Version)
 	}
 	ws := st.Workspaces["myapp"]
 	if ws == nil {
@@ -554,7 +628,7 @@ func TestV2SaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
-func TestV2SaveLoadWithEmptyWorkspace(t *testing.T) {
+func TestV3SaveLoadWithEmptyWorkspace(t *testing.T) {
 	store, _ := newTestStore()
 	_ = store.CreateWorkspace("empty", "")
 

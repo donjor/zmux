@@ -12,6 +12,10 @@ type Session struct {
 	LastAttached time.Time
 	Dir          string
 	Group        string // session group name (empty if ungrouped)
+	Managed      bool
+	Workspace    string
+	SessionLabel string
+	SessionID    string
 }
 
 // ClientInfo represents an attached tmux client and its current view.

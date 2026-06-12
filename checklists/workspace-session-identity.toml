@@ -1,0 +1,88 @@
+# QA walkthrough for plan 031: workspace-local session labels with hidden raw
+# tmux names and workspace/session command targets.
+#
+# Targets the isolated zzmux edge profile — live zmux is untouched.
+# Setup: `./dev.sh zzmux`, then create two visible sessions in separate
+# terminals: `zzmux new qa-a` and `zzmux new qa-b`.
+# Drive from here: `./qa workspace-session-identity` or
+# `./qa run workspace-session-identity`.
+
+[checklist]
+name = "Workspace session identity (031)"
+doc = "Workspace-local session labels, generated raw tmux names, metadata-backed display, and workspace/session command targeting on the zzmux edge profile."
+
+[checklist.vars]
+bin = "zzmux"
+ws1 = "qa-a"
+ws2 = "qa-b"
+s = "main"
+
+[[step]]
+id = "workspace-a"
+name = "qa-a has local main"
+cmd = "{bin} ls {ws1}"
+expect = "workspace qa-a lists a local session label named main, not a raw zws_* name"
+check = "(?m)\\bmain\\b"
+
+[[step]]
+id = "workspace-b"
+name = "qa-b also has local main"
+cmd = "{bin} ls {ws2}"
+expect = "workspace qa-b also lists main; the duplicate local label is valid"
+check = "(?m)\\bmain\\b"
+
+[[step]]
+id = "target-run"
+name = "Run into qa-a/main"
+cmd = "{bin} run 'echo identity-ok' -n ident -s {ws1}/{s} -T 15"
+expect = "the command runs in qa-a/main and prints identity-ok"
+check = "identity-ok"
+needs = ["workspace-a"]
+
+[[step]]
+id = "target-watch"
+name = "Watch qa-a/main by target grammar"
+cmd = "{bin} watch ident -s {ws1}/{s} -l 10"
+expect = "the ident tab is reachable through qa-a/main"
+check = "identity-ok"
+needs = ["target-run"]
+
+[[step]]
+id = "session-run"
+name = "Detached local worker-x label"
+cmd = "{bin} session run worker-x -n worker --workspace {ws1} -- echo worker-ok"
+expect = "creates a detached local session label qa-a/worker-x without stealing focus; the -x suffix is not treated as a grouped-session clone"
+check = "created session qa-a/worker-x"
+needs = ["workspace-a"]
+
+[[step]]
+id = "worker-visible"
+name = "Worker label is displayed"
+cmd = "{bin} ls {ws1}"
+expect = "qa-a lists both main and worker-x labels; raw zws_* names do not appear"
+check = "(?s)\\bmain\\b.*\\bworker-x\\b|\\bworker-x\\b.*\\bmain\\b"
+needs = ["session-run"]
+
+[[step]]
+id = "title"
+name = "EYEBALL terminal title"
+expect = "the terminal/window title for managed sessions shows qa-a/main or qa-a/worker, not zws_*"
+needs = ["workspace-a"]
+
+[[step]]
+id = "manual-rename"
+name = "EYEBALL manual raw rename repair"
+expect = "if a managed raw tmux session is renamed with tmux directly, the next zmux reconcile/list/open restores or treats the generated name as authoritative"
+needs = ["workspace-a"]
+
+[[step]]
+id = "legacy-migration"
+name = "EYEBALL legacy v2 raw session repair"
+expect = "with a v2 workspaces.toml entry such as workspace hello containing live tmux session main-hello, the next zzmux reconcile/list renames the live session to its generated zws_hello__main target, stamps @zmux_* metadata, and continues to display hello/main"
+
+[[step]]
+id = "cleanup"
+name = "Kill QA workspaces"
+cmd = "{bin} kill {ws1}; {bin} kill {ws2}"
+expect = "qa-a and qa-b sessions are gone"
+needs = ["workspace-a", "workspace-b"]

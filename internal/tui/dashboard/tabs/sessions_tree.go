@@ -91,7 +91,7 @@ func (t *SessionsTab) buildWorkspaceRow(ws *workspaceview.WorkspaceViewModel, q 
 	var matchingSessions []int
 	if q != "" && !wsMatch {
 		for j := range ws.LiveSessions {
-			if matchQuery(q, ws.LiveSessions[j].Name) {
+			if matchQuery(q, sessionInfoLabel(&ws.LiveSessions[j])) {
 				matchingSessions = append(matchingSessions, j)
 			}
 		}
@@ -160,7 +160,7 @@ func (t *SessionsTab) buildSessionRow(s *session.SessionInfo, wsID string) outli
 		Kind:       outline.RowSession,
 		Depth:      1,
 		ParentID:   wsID,
-		Label:      s.Name,
+		Label:      sessionInfoLabel(s),
 		Selectable: true,
 		Current:    s.Name == t.current,
 		Attached:   s.Attached,
@@ -170,6 +170,13 @@ func (t *SessionsTab) buildSessionRow(s *session.SessionInfo, wsID string) outli
 		row.Badge = "→ moving"
 	}
 	return row
+}
+
+func sessionInfoLabel(s *session.SessionInfo) string {
+	if s.Label != "" {
+		return s.Label
+	}
+	return s.Name
 }
 
 // buildExternalRows constructs the external-source section of the outline.

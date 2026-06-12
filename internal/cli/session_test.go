@@ -6,6 +6,7 @@ import (
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/workspace"
 )
 
 // execSessionRun builds the `session run` subcommand and executes it with the
@@ -72,7 +73,7 @@ func TestSessionRunCurrentWorkspaceCreatesFirstTab(t *testing.T) {
 	if !ok {
 		t.Fatal("expected NewSessionWindow call")
 	}
-	if got, want := nsw.Args, []string{"worker-auth", "auth-worker", "/panedir"}; !equalArgs(got, want) {
+	if got, want := nsw.Args, []string{workspace.RawSessionName("proj", "worker-auth"), "auth-worker", "/panedir"}; !equalArgs(got, want) {
 		t.Errorf("NewSessionWindow args = %v, want %v", got, want)
 	}
 
@@ -97,7 +98,7 @@ func TestSessionRunCurrentWorkspaceCreatesFirstTab(t *testing.T) {
 	}
 
 	// Tagged into the workspace, but NOT made the default attach target.
-	sessions := app.WorkspaceStore.SessionsIn("proj")
+	sessions := app.WorkspaceStore.SessionLabelsIn("proj")
 	if !contains(sessions, "worker-auth") {
 		t.Errorf("workspace proj sessions = %v, want to include worker-auth", sessions)
 	}
@@ -126,7 +127,7 @@ func TestSessionRunNamedWorkspaceOutsideTmux(t *testing.T) {
 
 	// --cwd wins; no current-session DisplayMessage needed outside tmux.
 	nsw, _ := srFindCall(mock.Calls, "NewSessionWindow")
-	if got, want := nsw.Args, []string{"worker-x", "x-worker", "/worktree"}; !equalArgs(got, want) {
+	if got, want := nsw.Args, []string{workspace.RawSessionName("proj", "worker-x"), "x-worker", "/worktree"}; !equalArgs(got, want) {
 		t.Errorf("NewSessionWindow args = %v, want %v", got, want)
 	}
 	// No current-session resolution: --workspace means we never query
@@ -183,7 +184,7 @@ func TestSessionRunValidationErrors(t *testing.T) {
 		},
 		{
 			name:   "session already exists",
-			inside: true, seedWS: true, curSess: "main", preExist: "wk",
+			inside: true, seedWS: true, curSess: "main", preExist: workspace.RawSessionName("proj", "wk"),
 			args:    []string{"wk", "-n", "t", "--", "echo", "hi"},
 			wantErr: "already exists",
 		},
@@ -191,7 +192,7 @@ func TestSessionRunValidationErrors(t *testing.T) {
 			name:   "invalid session name (leading digit)",
 			inside: true, seedWS: true, curSess: "main",
 			args:    []string{"9bad", "-n", "t", "--", "echo", "hi"},
-			wantErr: "invalid session name",
+			wantErr: "invalid session label",
 		},
 		{
 			name:   "command not after --",
@@ -238,18 +239,20 @@ func TestSessionRunRollsBackOnTagFailure(t *testing.T) {
 	mock.DisplayMessageResult = "main"
 	_ = app.WorkspaceStore.CreateWorkspace("proj", "/repo")
 	_ = app.WorkspaceStore.AddSession("proj", "main")
-	// worker-z is already tagged to a different workspace, so AddSession("proj",
-	// "worker-z") will fail — but HasSession is false (not a live tmux session).
+	// worker-z's proj identity is already tagged to a different workspace, so
+	// AddSessionRecord("proj", rec) will fail — but HasSession is false (not a
+	// live tmux session).
 	_ = app.WorkspaceStore.CreateWorkspace("other", "/o")
-	_ = app.WorkspaceStore.AddSession("other", "worker-z")
+	rec, _ := workspace.NewSessionRecord("proj", "worker-z")
+	_ = app.WorkspaceStore.AddSessionRecord("other", rec)
 
 	err := execSessionRun(t, app, "worker-z", "--workspace", "proj", "-n", "zt", "--", "echo", "hi")
 	if err == nil {
 		t.Fatal("expected tag-failure error")
 	}
 	kill, ok := srFindCall(mock.Calls, "KillSession")
-	if !ok || len(kill.Args) == 0 || kill.Args[0] != "worker-z" {
-		t.Errorf("expected rollback KillSession(worker-z), calls = %v", mock.Calls)
+	if !ok || len(kill.Args) == 0 || kill.Args[0] != workspace.RawSessionName("proj", "worker-z") {
+		t.Errorf("expected rollback KillSession(%s), calls = %v", workspace.RawSessionName("proj", "worker-z"), mock.Calls)
 	}
 }
 

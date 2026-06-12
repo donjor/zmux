@@ -43,8 +43,8 @@ func newTestPickerWithWorkspaces() PickerModel {
 
 	sessions, _ := session.ListSessions(m)
 	workspaces := []workspace.Workspace{
-		{Name: "bridge", RootDir: "/home/user/bridge", Sessions: []string{"dev", "monitor"}, LastActiveSession: "dev"},
-		{Name: "zmux-dev", RootDir: "/home/user/zmux", Sessions: []string{"zmux"}, LastActiveSession: "zmux"},
+		{Name: "bridge", RootDir: "/home/user/bridge", Sessions: testWorkspaceSessions("dev", "monitor"), LastActiveSession: "dev"},
+		{Name: "zmux-dev", RootDir: "/home/user/zmux", Sessions: testWorkspaceSessions("zmux"), LastActiveSession: "zmux"},
 	}
 	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, sessions)
 	model.filteredWorkspaces = model.workspaces
@@ -341,7 +341,7 @@ func TestPickerEnterOnEmptyWorkspaceCreatesMain(t *testing.T) {
 	model.height = 40
 
 	workspaces := []workspace.Workspace{
-		{Name: "empty-ws", Sessions: []string{}},
+		{Name: "empty-ws", Sessions: testWorkspaceSessions()},
 	}
 	model.workspaces = workspaceview.BuildWorkspaceViewModels(workspaces, nil)
 	model.filteredWorkspaces = model.workspaces
@@ -614,7 +614,7 @@ func TestPickerCtrlXOnTopActionDoesNothing(t *testing.T) {
 func TestPickerDeleteAttachedWorkspaceTwoStep(t *testing.T) {
 	// Build a workspace with one attached session.
 	workspaces := []workspace.Workspace{
-		{Name: "webapp", Sessions: []string{"main"}},
+		{Name: "webapp", Sessions: testWorkspaceSessions("main")},
 	}
 	sessions := []session.SessionInfo{
 		{Name: "main", Activity: time.Now(), Attached: true},
@@ -692,7 +692,7 @@ func TestPickerDeleteAttachedWorkspaceTwoStep(t *testing.T) {
 // out of the second-step confirmation without killing anything.
 func TestPickerDeleteAttachedWorkspaceCancelledOnSecondStep(t *testing.T) {
 	workspaces := []workspace.Workspace{
-		{Name: "webapp", Sessions: []string{"main"}},
+		{Name: "webapp", Sessions: testWorkspaceSessions("main")},
 	}
 	sessions := []session.SessionInfo{
 		{Name: "main", Activity: time.Now(), Attached: true},
@@ -745,7 +745,7 @@ func TestPickerDeleteAttachedWorkspaceCancelledOnSecondStep(t *testing.T) {
 // (non-attached) flow — one y should be enough.
 func TestPickerDeleteUnattachedWorkspaceSingleStep(t *testing.T) {
 	workspaces := []workspace.Workspace{
-		{Name: "webapp", Sessions: []string{"main"}},
+		{Name: "webapp", Sessions: testWorkspaceSessions("main")},
 	}
 	sessions := []session.SessionInfo{
 		{Name: "main", Activity: time.Now(), Attached: false},
@@ -841,7 +841,7 @@ func TestPickerCtrlXEmptyWorkspaceDeletesImmediately(t *testing.T) {
 
 // ctrl+x again confirms a pending delete, exactly like y.
 func TestPickerCtrlXAgainConfirmsDelete(t *testing.T) {
-	workspaces := []workspace.Workspace{{Name: "webapp", Sessions: []string{"main"}}}
+	workspaces := []workspace.Workspace{{Name: "webapp", Sessions: testWorkspaceSessions("main")}}
 	sessions := []session.SessionInfo{{Name: "main", Activity: time.Now(), Attached: false}}
 
 	mm := tmux.NewMockRunner()
@@ -885,7 +885,7 @@ func TestPickerCtrlXAgainConfirmsDelete(t *testing.T) {
 // The delete confirmation renders inline on the cursor row (not a detached
 // overlay) and advertises the ctrl+x confirm affordance.
 func TestPickerInlineConfirmRendersOnRow(t *testing.T) {
-	workspaces := []workspace.Workspace{{Name: "webapp", Sessions: []string{"main"}}}
+	workspaces := []workspace.Workspace{{Name: "webapp", Sessions: testWorkspaceSessions("main")}}
 	sessions := []session.SessionInfo{{Name: "main", Activity: time.Now(), Attached: false}}
 
 	mm := tmux.NewMockRunner()
@@ -1010,7 +1010,7 @@ func TestPickerCapKeepsTmpPseudo(t *testing.T) {
 // Search always shows empty workspaces even when hidden by default.
 func TestPickerSearchShowsEmptyWorkspaces(t *testing.T) {
 	workspaces := []workspace.Workspace{
-		{Name: "withSess", Sessions: []string{"live"}},
+		{Name: "withSess", Sessions: testWorkspaceSessions("live")},
 		{Name: "empty-ws", Sessions: nil},
 	}
 	sessions := []session.SessionInfo{
@@ -1173,8 +1173,8 @@ func TestParseQuery(t *testing.T) {
 func TestBuildWorkspaceViewModels(t *testing.T) {
 	now := time.Now()
 	workspaces := []workspace.Workspace{
-		{Name: "app", Sessions: []string{"main", "test"}, RootDir: "/app"},
-		{Name: "empty-ws", Sessions: []string{"dead"}, RootDir: "/empty"},
+		{Name: "app", Sessions: testWorkspaceSessions("main", "test"), RootDir: "/app"},
+		{Name: "empty-ws", Sessions: testWorkspaceSessions("dead"), RootDir: "/empty"},
 	}
 	sessions := []session.SessionInfo{
 		{Name: "main", Windows: 3, Attached: true, Activity: now, IsTmp: false},

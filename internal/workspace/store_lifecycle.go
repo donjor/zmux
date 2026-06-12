@@ -17,8 +17,13 @@ func (s *Store) SetLastActive(workspace, sessionName string) error {
 		return nil // workspace not found, noop
 	}
 	root := session.RootName(sessionName)
-	ws.LastActiveSession = root
+	rec, _, found := findSessionRecord(ws.Sessions, root)
+	if !found {
+		return nil
+	}
+	ws.LastActiveSessionID = rec.ID
 	ws.UpdatedAt = time.Now()
+	ws.populateDerived()
 	return s.Save(st)
 }
 
@@ -40,9 +45,9 @@ func (s *Store) Reconcile(liveRoots map[string]bool) error {
 
 	// Remove dead sessions from workspace membership.
 	for _, ws := range st.Workspaces {
-		var alive []string
+		var alive []WorkspaceSession
 		for _, sess := range ws.Sessions {
-			if liveRoots[sess] {
+			if liveRoots[sess.TmuxName] || (sess.LegacyTmuxName != "" && liveRoots[sess.LegacyTmuxName]) {
 				alive = append(alive, sess)
 			} else {
 				changed = true
@@ -52,38 +57,64 @@ func (s *Store) Reconcile(liveRoots map[string]bool) error {
 			ws.Sessions = alive
 			ws.UpdatedAt = time.Now()
 			// Clear last_active if it was removed.
-			if ws.LastActiveSession != "" && !liveRoots[ws.LastActiveSession] {
-				if len(alive) > 0 {
-					ws.LastActiveSession = alive[0]
-				} else {
-					ws.LastActiveSession = ""
+			if ws.LastActiveSessionID != "" {
+				_, _, found := findSessionRecord(alive, ws.LastActiveSessionID)
+				if found {
+					ws.populateDerived()
+					continue
 				}
+				if len(alive) > 0 {
+					ws.LastActiveSessionID = alive[0].ID
+				} else {
+					ws.LastActiveSessionID = ""
+				}
+				ws.populateDerived()
 			}
 		}
 	}
 
 	// Auto-heal: live root sessions not in any workspace get their own.
 	for rootName := range liveRoots {
-		if !st.HasSession(rootName) {
-			now := time.Now()
-			wsName := rootName
-			ws, ok := st.Workspaces[wsName]
-			if !ok {
-				ws = &Workspace{
-					Name:      wsName,
-					Sessions:  []string{},
-					CreatedAt: now,
-					UpdatedAt: now,
-				}
-				st.Workspaces[wsName] = ws
-			}
-			ws.Sessions = append(ws.Sessions, rootName)
-			if ws.LastActiveSession == "" {
-				ws.LastActiveSession = rootName
-			}
-			ws.UpdatedAt = now
-			changed = true
+		if st.HasSession(rootName) {
+			continue
 		}
+
+		now := time.Now()
+		wsName := rootName
+		label := rootName
+		rec := WorkspaceSession{
+			ID:        StableSessionID(wsName, label),
+			Label:     label,
+			TmuxName:  rootName,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if parsedWS, parsedLabel, ok := ParseRawSessionName(rootName); ok {
+			wsName = parsedWS
+			label = parsedLabel
+			parsedRec, err := NewSessionRecord(wsName, label)
+			if err == nil {
+				rec = parsedRec
+			}
+		}
+
+		ws, ok := st.Workspaces[wsName]
+		if !ok {
+			ws = &Workspace{
+				Name:      wsName,
+				Sessions:  []WorkspaceSession{},
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			st.Workspaces[wsName] = ws
+		}
+		ws.Sessions = append(ws.Sessions, rec)
+		if ws.LastActiveSessionID == "" {
+			ws.LastActiveSessionID = rec.ID
+		}
+		ws.UpdatedAt = now
+		ws.populateDerived()
+		changed = true
 	}
 
 	if !changed {

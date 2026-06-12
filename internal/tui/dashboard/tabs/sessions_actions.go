@@ -362,7 +362,7 @@ func (t *SessionsTab) handleRenameKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 			jumpTo = outline.WorkspaceID(newName)
 		case "session":
 			cmd = t.renameSession(t.rename.oldName, newName)
-			jumpTo = outline.SessionID(newName)
+			jumpTo = outline.SessionID(renamedSessionTarget(t.wsStore, t.rename.oldName, newName))
 		}
 		t.exitMode()
 		t.pendingJumpTo = jumpTo

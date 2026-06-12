@@ -30,7 +30,7 @@ func TestGenerateConfContainsGeneral(t *testing.T) {
 		`set -g set-clipboard on`,
 		`set -g status-position top`,
 		`set -g set-titles on`,
-		`set -g set-titles-string "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{session_name}:#{window_index}:#{window_name}"`,
+		`set -g set-titles-string "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{?#{@zmux_session_label},#{@zmux_workspace}/#{@zmux_session_label},#{session_name}}:#{window_index}:#{window_name}"`,
 		`set -g focus-events on`,
 		`set -g extended-keys on`,
 		`set -g terminal-features[90] "xterm-256color:RGB:extkeys"`,

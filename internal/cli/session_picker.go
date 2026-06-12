@@ -60,22 +60,16 @@ func runSessionPicker(app *apppkg.App) error {
 		if name == "" {
 			name = session.NextTmpName(app.Runner)
 		}
-		// If the session already exists (e.g. "main" across workspaces),
-		// pick the next available name based on the workspace.
-		if app.Runner.HasSession(name) {
-			if res.Workspace != "" {
-				name = nextSessionName(app, name, res.Workspace)
-			} else {
-				name = session.NextTmpName(app.Runner)
+		if res.Workspace != "" {
+			rec, err := createWorkspaceSession(app, res.Workspace, name, dir)
+			if err != nil {
+				return err
 			}
+			_ = app.WorkspaceStore.SetLastActive(res.Workspace, rec.ID)
+			return session.Attach(app.Runner, rec.TmuxName)
 		}
 		if err := session.Create(app.Runner, name, dir); err != nil {
 			return err
-		}
-		// Auto-assign to workspace if specified.
-		if res.Workspace != "" {
-			_ = app.WorkspaceStore.AddSession(res.Workspace, name)
-			_ = app.WorkspaceStore.SetLastActive(res.Workspace, name)
 		}
 		return session.Attach(app.Runner, name)
 
@@ -84,13 +78,16 @@ func runSessionPicker(app *apppkg.App) error {
 		if err := app.WorkspaceStore.CreateWorkspace(wsName, dir); err != nil {
 			return err
 		}
-		sessName := workspaceSessionName(app, res.Name, wsName)
-		if err := session.Create(app.Runner, sessName, dir); err != nil {
+		label := res.Name
+		if label == "" {
+			label = session.DefaultName
+		}
+		rec, err := createWorkspaceSession(app, wsName, label, dir)
+		if err != nil {
 			return err
 		}
-		_ = app.WorkspaceStore.AddSession(wsName, sessName)
-		_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
-		return session.Attach(app.Runner, sessName)
+		_ = app.WorkspaceStore.SetLastActive(wsName, rec.ID)
+		return session.Attach(app.Runner, rec.TmuxName)
 
 	case "overmind-connect":
 		src := res.ExternalSource
@@ -115,11 +112,11 @@ func runSessionPicker(app *apppkg.App) error {
 			return fmt.Errorf("workspace %q not found", res.Workspace)
 		}
 		target := resolveLastActive(app, ws)
-		if target == "" {
+		if target.TmuxName == "" {
 			return fmt.Errorf("workspace %q has no live sessions", res.Workspace)
 		}
-		_ = app.WorkspaceStore.SetLastActive(res.Workspace, target)
-		return session.Attach(app.Runner, target)
+		_ = app.WorkspaceStore.SetLastActive(res.Workspace, target.ID)
+		return session.Attach(app.Runner, target.TmuxName)
 	}
 
 	return nil

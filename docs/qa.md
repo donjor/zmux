@@ -43,7 +43,7 @@ and an optional regexp check:
 Step commands run from the repo root through `sh -c` with a default timeout.
 Use checklist `vars` for repeated values like `bin = "zzmux"`.
 
-## Current Checklist
+## Current Checklists
 
 `checklists/tab-placements.toml` verifies the logical-tab placement work:
 
@@ -54,3 +54,14 @@ Use checklist `vars` for repeated values like `bin = "zzmux"`.
 
 It targets the isolated `zzmux` profile so QA does not disturb a live `zmux`
 session.
+
+`checklists/workspace-session-identity.toml` verifies the workspace/session
+identity model:
+
+- duplicate local labels such as `qa-a/main` and `qa-b/main`
+- `workspace/session` target grammar for `run` and `watch`
+- detached `session run` worker labels
+- labels ending in `-[b-z]`, which must not be treated as grouped-session clones
+- legacy v1/v2 raw session rename/stamp repair during reconcile
+- raw `zws_...` name hiding in normal lists and terminal titles
+- managed raw-name repair after direct tmux renames

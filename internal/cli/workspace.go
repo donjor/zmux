@@ -7,6 +7,7 @@ import (
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
+	workspacepkg "github.com/donjor/zmux/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -45,7 +46,7 @@ func newWsListCmd(app *apppkg.App) *cobra.Command {
 			}
 
 			for _, ws := range workspaces {
-				sessions := app.WorkspaceStore.SessionsIn(ws)
+				sessions := app.WorkspaceStore.SessionLabelsIn(ws)
 				fmt.Printf("  %s\n", ws)
 				for _, s := range sessions {
 					fmt.Printf("    %s\n", s)
@@ -112,7 +113,7 @@ func newWsShowCmd(app *apppkg.App) *cobra.Command {
 			}
 
 			ws := args[0]
-			sessions := app.WorkspaceStore.SessionsIn(ws)
+			sessions := app.WorkspaceStore.SessionLabelsIn(ws)
 			if len(sessions) == 0 {
 				fmt.Printf("Workspace %q has no sessions.\n", ws)
 				return nil
@@ -135,9 +136,56 @@ func liveRootSet(app *apppkg.App) map[string]bool {
 	}
 	roots := make(map[string]bool, len(sessions))
 	for _, s := range sessions {
-		roots[session.RootName(s.Name)] = true
+		name := repairManagedSessionName(app, s)
+		roots[session.RootName(name)] = true
 	}
 	return roots
+}
+
+func repairManagedSessionName(app *apppkg.App, s session.SessionInfo) string {
+	if !s.Managed || s.Workspace == "" || s.Label == "" {
+		return repairLegacySessionName(app, s.Name)
+	}
+	expected := workspacepkg.RawSessionName(s.Workspace, s.Label)
+	if s.Name == expected {
+		return s.Name
+	}
+	if app.Runner.HasSession(expected) {
+		return s.Name
+	}
+	if err := app.Runner.RenameSession(s.Name, expected); err != nil {
+		return s.Name
+	}
+	rec, err := workspacepkg.NewSessionRecord(s.Workspace, s.Label)
+	if err == nil {
+		_ = workspacepkg.StampSessionMetadata(app.Runner, s.Workspace, rec)
+	}
+	return expected
+}
+
+func repairLegacySessionName(app *apppkg.App, raw string) string {
+	if wsName, rec, ok := app.WorkspaceStore.SessionRecordForTmuxName(raw); ok {
+		if err := workspacepkg.StampSessionMetadata(app.Runner, wsName, rec); err == nil {
+			_ = app.WorkspaceStore.ClearLegacySessionName(wsName, rec.ID)
+		}
+		return raw
+	}
+
+	wsName, rec, ok := app.WorkspaceStore.LegacySessionRecordFor(raw)
+	if !ok || rec.TmuxName == "" || rec.TmuxName == raw {
+		return raw
+	}
+	if app.Runner.HasSession(rec.TmuxName) {
+		return raw
+	}
+	if err := app.Runner.RenameSession(raw, rec.TmuxName); err != nil {
+		return raw
+	}
+	if err := workspacepkg.StampSessionMetadata(app.Runner, wsName, rec); err != nil {
+		return rec.TmuxName
+	}
+	_ = app.WorkspaceStore.ClearLegacySessionName(wsName, rec.ID)
+	return rec.TmuxName
 }
 
 // workspaceViewOptions tunes loadWorkspaceView per browse surface.
@@ -203,7 +251,7 @@ func newWsKillCmd(app *apppkg.App) *cobra.Command {
 			}
 
 			wsName := args[0]
-			sessions := app.WorkspaceStore.SessionsIn(wsName)
+			sessions := app.WorkspaceStore.SessionTargetsIn(wsName)
 
 			// Kill all live tmux sessions in this workspace.
 			for _, sess := range sessions {
@@ -269,7 +317,7 @@ func cycleWorkspaceSession(app *apppkg.App, direction int) error {
 		return nil // not in a workspace
 	}
 
-	sessions := app.WorkspaceStore.SessionsIn(wsName)
+	sessions := app.WorkspaceStore.SessionTargetsIn(wsName)
 	if len(sessions) <= 1 {
 		return nil
 	}
@@ -304,7 +352,7 @@ func switchToWorkspacePosition(app *apppkg.App, pos int) error {
 		return nil
 	}
 
-	sessions := app.WorkspaceStore.SessionsIn(wsName)
+	sessions := app.WorkspaceStore.SessionTargetsIn(wsName)
 	idx := pos - 1 // 1-based to 0-based
 	if idx < 0 || idx >= len(sessions) {
 		return nil
@@ -341,22 +389,18 @@ func newWsNewSessionCmd(app *apppkg.App) *cobra.Command {
 				return fmt.Errorf("current session is not in a workspace")
 			}
 
-			if app.Runner.HasSession(sessName) {
-				return fmt.Errorf("session %q already exists", sessName)
-			}
-
 			dir, _ := app.Runner.DisplayMessage("", "#{pane_current_path}")
 			dir = strings.TrimSpace(dir)
 			if dir == "" {
 				dir = "."
 			}
 
-			if err := session.Create(app.Runner, sessName, dir); err != nil {
+			rec, err := createWorkspaceSession(app, wsName, sessName, dir)
+			if err != nil {
 				return err
 			}
-			_ = app.WorkspaceStore.AddSession(wsName, sessName)
-			_ = app.WorkspaceStore.SetLastActive(wsName, sessName)
-			return app.Runner.SwitchClient(sessName)
+			_ = app.WorkspaceStore.SetLastActive(wsName, rec.ID)
+			return app.Runner.SwitchClient(rec.TmuxName)
 		},
 	}
 }

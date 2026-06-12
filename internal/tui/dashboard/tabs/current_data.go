@@ -199,7 +199,7 @@ func (t *CurrentTab) renameSession(oldName, newName string) tea.Cmd {
 	runner := t.runner
 	wsStore := t.wsStore
 	reqID := t.reqID
-	t.pendingJumpTo = outline.SessionID(newName)
+	t.pendingJumpTo = outline.SessionID(renamedSessionTarget(wsStore, oldName, newName))
 	return func() tea.Msg {
 		if err := renameSessionMutation(runner, wsStore, oldName, newName); err != nil {
 			return dashboard.SetStatusIntent{

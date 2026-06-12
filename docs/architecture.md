@@ -189,11 +189,13 @@ The render pipeline reads from `time.Now()` for timestamps, `bar.Prober` for git
 
 ### Workspace + session model
 
-`internal/workspace` owns the user's workspaces (TOML files in `~/.zmux/workspaces/`). Each workspace tracks N sessions, each session tracks its name + tmux session group (clones share windows but have independent current-window pointers — see AGENTS.md "Gotchas").
+`internal/workspace` owns the user's workspaces (`workspaces.toml` under the active profile state dir). Workspace names are globally unique; session labels are local to a workspace, so every workspace can have natural labels like `main`, `dev`, and `server`.
 
-`internal/session` owns the per-session model and the `RootName()` helper that resolves clone names (`dev-b` → `dev`). `internal/recipe` owns declarative launch plans and bundled recipes.
+The durable store is v3: each workspace session has a stable ID, a local label, and a generated raw tmux name such as `zws_<workspace>__<label>`. Zmux stamps the live tmux session with `@zmux_managed`, `@zmux_workspace`, `@zmux_session_label`, and `@zmux_session_id`; tmux options are authoritative for live metadata, while raw names are debug/interop output. Migrated v1/v2 records can temporarily retain `legacy_tmux_name` so the next reconcile can rename the live old tmux session to its generated raw name, stamp metadata, and clear the hint.
 
-`workspace.Store.WorkspaceFor()` collapses clones internally — UI surfaces must resolve `#S` (raw tmux session name) to the root before display.
+`internal/session` owns the per-session model and the `RootName()` helper that resolves clone names (`dev-b` for legacy sessions, `__clone_b` for managed sessions). `internal/recipe` owns declarative launch plans and bundled recipes.
+
+User-facing command targets use `workspace/session`. Inside a workspace, local labels can resolve by context; raw tmux names remain a deliberate debug escape hatch. UI surfaces should display `@zmux_workspace` + `@zmux_session_label` and use raw names only as operation targets.
 
 ### Logical tabs, placement, and state
 
@@ -298,11 +300,11 @@ zmux
 ├── setup             — shell-rc integration (`setup shell`, via internal/setup)
 ├── apply             — regenerate tmux.conf and apply everything
 ├── refresh           — apply config and refresh the current tmux client
-├── new               — create a new session/workspace
+├── new               — create a workspace plus local session labels
 ├── open              — open a workspace/session (aliases: attach, a)
 ├── kill              — smart workspace/session kill
-├── ls                — list sessions
-├── tabs              — list tabs in current session
+├── ls                — list workspaces or local session labels
+├── tabs              — list tabs in current or targeted workspace/session
 ├── tab               — tab management (label, move, kill, state, hide/show/pane/full)
 ├── pane              — pane management (open/toggle/current/list/focus/resize/close)
 ├── send              — send keys to a window
@@ -372,7 +374,7 @@ A few rules worth re-stating here because they're easy to miss:
 - **Tests use `tmux.MockRunner`.** Never spin up real tmux in unit tests. Integration tests under `tests/` (build tag: `integration`) exercise the built `zmux` binary's CLI end-to-end (pure-output commands; no real tmux). Real-tmux coverage, if needed, belongs in future tmux-dependent integration tests.
 - **Don't run `zmux init` inside tmux.** It refuses; this is intentional, not a bug.
 - **Explicit DI, no package-global `app`** — `app.App` (in `internal/app`) is built once in `main` (`app.New()`) and threaded through `NewRootCmd(app)`. Each command is a `newXCmd(app)` constructor capturing it; flag state is constructor-local.
-- **Session-group clones** (`dev-b`, `dev-c`) collapse to root in `ListSessions()` and `WorkspaceFor()`. UI must resolve `#S` to root before display — search for `RootName` in code if you're touching session labels.
+- **Session-group clones** collapse to root in `ListSessions()` and `WorkspaceFor()`. Managed sessions use `__clone_b`-style raw clone names so local labels ending in `-b` are not misread as clones.
 
 ---
 

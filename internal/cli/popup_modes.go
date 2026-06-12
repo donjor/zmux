@@ -348,11 +348,11 @@ func runWorkspacePicker(app *apppkg.App) error {
 		return fmt.Errorf("workspace %q not found", wp.Result.Workspace)
 	}
 	target := resolveLastActive(app, ws)
-	if target == "" {
+	if target.TmuxName == "" {
 		return fmt.Errorf("workspace %q has no live sessions", wp.Result.Workspace)
 	}
-	_ = app.WorkspaceStore.SetLastActive(wp.Result.Workspace, target)
-	return session.Attach(app.Runner, target)
+	_ = app.WorkspaceStore.SetLastActive(wp.Result.Workspace, target.ID)
+	return session.Attach(app.Runner, target.TmuxName)
 }
 
 // handleDashboardResult applies the action chosen from inside the dashboard

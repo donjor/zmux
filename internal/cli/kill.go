@@ -50,8 +50,8 @@ Checks workspace names first, then session names.
 func killWorkspace(app *apppkg.App, ws *workspace.Workspace) error {
 	// Count live sessions.
 	liveCount := 0
-	for _, sessName := range ws.Sessions {
-		if app.Runner.HasSession(sessName) {
+	for _, sess := range ws.Sessions {
+		if app.Runner.HasSession(sess.TmuxName) {
 			liveCount++
 		}
 	}
@@ -73,9 +73,9 @@ func killWorkspace(app *apppkg.App, ws *workspace.Workspace) error {
 	}
 
 	// Kill all sessions.
-	for _, sessName := range ws.Sessions {
-		if app.Runner.HasSession(sessName) {
-			_ = session.Kill(app.Runner, sessName)
+	for _, sess := range ws.Sessions {
+		if app.Runner.HasSession(sess.TmuxName) {
+			_ = session.Kill(app.Runner, sess.TmuxName)
 		}
 	}
 

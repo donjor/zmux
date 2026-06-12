@@ -56,49 +56,57 @@ func (s *Store) path() (string, error) {
 	return s.file, nil
 }
 
-// Load reads StateV2 from disk. Auto-migrates from v1 transparently.
-// Returns an empty StateV2 (not error) if the file does not exist.
-func (s *Store) Load() (StateV2, error) {
+// Load reads StateV3 from disk. Auto-migrates from v1/v2 transparently.
+// Returns an empty StateV3 (not error) if the file does not exist.
+func (s *Store) Load() (StateV3, error) {
 	p, err := s.path()
 	if err != nil {
-		return emptyStateV2(), err
+		return emptyStateV3(), err
 	}
 
 	data, err := s.fs.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return emptyStateV2(), nil
+			return emptyStateV3(), nil
 		}
-		return emptyStateV2(), err
+		return emptyStateV3(), err
 	}
 
-	// Try v2 first.
-	var v2 StateV2
-	if err := toml.Unmarshal(data, &v2); err == nil && v2.Version >= 2 {
-		if v2.Workspaces == nil {
-			v2.Workspaces = make(map[string]*Workspace)
+	// Try v3 first.
+	var v3 StateV3
+	if err := toml.Unmarshal(data, &v3); err == nil && v3.Version >= 3 {
+		if v3.Workspaces == nil {
+			v3.Workspaces = make(map[string]*Workspace)
 		}
-		v2.populateNames()
-		return v2, nil
+		v3.populateNames()
+		return v3, nil
+	}
+
+	// Fall back to v2.
+	var v2 stateV2Disk
+	if err := toml.Unmarshal(data, &v2); err == nil && v2.Version >= 2 {
+		migrated := migrateV2toV3(v2)
+		_ = s.Save(migrated) // best-effort save
+		return migrated, nil
 	}
 
 	// Fall back to v1.
 	var v1 State
 	if err := toml.Unmarshal(data, &v1); err != nil {
-		return emptyStateV2(), err
+		return emptyStateV3(), err
 	}
 	if len(v1.Sessions) == 0 {
-		return emptyStateV2(), nil
+		return emptyStateV3(), nil
 	}
 
 	// Migrate and save immediately.
-	migrated := migrateV1toV2(v1)
+	migrated := migrateV1toV3(v1)
 	_ = s.Save(migrated) // best-effort save
 	return migrated, nil
 }
 
-// Save writes StateV2 to disk, creating parent directories as needed.
-func (s *Store) Save(st StateV2) error {
+// Save writes StateV3 to disk, creating parent directories as needed.
+func (s *Store) Save(st StateV3) error {
 	p, err := s.path()
 	if err != nil {
 		return err
@@ -108,7 +116,7 @@ func (s *Store) Save(st StateV2) error {
 		return err
 	}
 
-	st.Version = 2
+	st.Version = 3
 	data, err := toml.Marshal(st)
 	if err != nil {
 		return err

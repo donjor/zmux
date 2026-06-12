@@ -112,7 +112,7 @@ func (t *CurrentTab) buildRows() []outline.Row {
 			Kind:       outline.RowSession,
 			Depth:      1,
 			ParentID:   wsID,
-			Label:      s.Name,
+			Label:      sessionInfoLabel(&s),
 			Selectable: true,
 			Attached:   s.Attached,
 			Expanded:   true,

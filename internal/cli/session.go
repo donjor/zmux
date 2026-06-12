@@ -12,6 +12,7 @@ import (
 	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tabstate"
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -48,9 +49,9 @@ session is tagged into the workspace but never made the default attach target.`,
 			if cmd.ArgsLenAtDash() != 1 {
 				return fmt.Errorf("usage: zmux session run <session> -n <tab> -- <command...> (the command must follow `--`)")
 			}
-			sessionName := args[0]
-			if err := session.ValidateName(sessionName); err != nil {
-				return fmt.Errorf("invalid session name %q: %w", sessionName, err)
+			sessionLabel := args[0]
+			if err := workspace.ValidateSessionLabel(sessionLabel); err != nil {
+				return fmt.Errorf("invalid session label %q: %w", sessionLabel, err)
 			}
 			if strings.TrimSpace(tabName) == "" {
 				return fmt.Errorf("a tab name is required: pass -n <tab> (worker tabs are never name-derived)")
@@ -59,30 +60,38 @@ session is tagged into the workspace but never made the default attach target.`,
 			// space-join would corrupt quoting (e.g. `-- bash -lc 'a; b'`).
 			command := tmux.ShellCommand(args[1:])
 
-			// Hard-error if the session exists — a worker must not silently
-			// reuse a live session. Check before any tmux/workspace mutation.
-			if app.Runner.HasSession(sessionName) {
-				return fmt.Errorf("session %q already exists — choose a fresh name or reap it first", sessionName)
-			}
-
 			wsName, wsRootDir, err := resolveSessionRunWorkspace(app, wsFlag)
 			if err != nil {
 				return err
 			}
 			dir := resolveSessionRunDir(app, cwdFlag, wsRootDir)
+			rec, err := workspace.NewSessionRecord(wsName, sessionLabel)
+			if err != nil {
+				return err
+			}
+
+			// Hard-error if the session exists — a worker must not silently
+			// reuse a live session. Check before any tmux/workspace mutation.
+			if app.Runner.HasSession(rec.TmuxName) {
+				return fmt.Errorf("session %q already exists in workspace %q — choose a fresh name or reap it first", sessionLabel, wsName)
+			}
 
 			// Create the detached session with the command as its named first
 			// window. No attach/switch — the caller's focus stays put.
-			paneID, err := app.Runner.NewSessionWindow(sessionName, tabName, dir)
+			paneID, err := app.Runner.NewSessionWindow(rec.TmuxName, tabName, dir)
 			if err != nil {
 				return fmt.Errorf("create session: %w", err)
+			}
+			if err := workspace.StampSessionMetadata(app.Runner, wsName, rec); err != nil {
+				_ = app.Runner.KillSession(rec.TmuxName)
+				return err
 			}
 
 			// Tag into the workspace. Never SetLastActive — a background worker
 			// must not become the workspace's default attach target. Roll the
 			// session back if tagging fails so a half-built one never lingers.
-			if err := app.WorkspaceStore.AddSession(wsName, sessionName); err != nil {
-				_ = app.Runner.KillSession(sessionName)
+			if err := app.WorkspaceStore.AddSessionRecord(wsName, rec); err != nil {
+				_ = app.Runner.KillSession(rec.TmuxName)
 				return fmt.Errorf("tag session to workspace %q: %w", wsName, err)
 			}
 
@@ -90,7 +99,7 @@ session is tagged into the workspace but never made the default attach target.`,
 			// a later `type`/`watch`/`send -s <session>` finds the logical tab.
 			target := paneID
 			if target == "" {
-				target = fmt.Sprintf("%s:%s", sessionName, tabName)
+				target = fmt.Sprintf("%s:%s", rec.TmuxName, tabName)
 			} else {
 				if _, err := tabs.Stamp(app.Runner, paneID, paneID, tabName, tablabel.SourcePane); err != nil {
 					return fmt.Errorf("stamp tab: %w", err)
@@ -118,7 +127,7 @@ session is tagged into the workspace but never made the default attach target.`,
 			}
 			markTabState(app, target, tabstate.StateRunning, "run", "")
 
-			fmt.Fprintf(os.Stderr, "created session %s, running in %s:%s\n", sessionName, sessionName, tabName)
+			fmt.Fprintf(os.Stderr, "created session %s/%s, running in %s:%s\n", wsName, sessionLabel, rec.TmuxName, tabName)
 			return nil
 		},
 	}

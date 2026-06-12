@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/session"
@@ -26,7 +27,10 @@ If the target session is already attached elsewhere, a clone
 to take over instead.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wsName := args[0]
+			wsName, requestedLabel, err := parseWorkspaceSessionArgs(args)
+			if err != nil {
+				return err
+			}
 
 			// Look up workspace.
 			ws, err := app.WorkspaceStore.GetWorkspace(wsName)
@@ -43,37 +47,30 @@ to take over instead.`,
 			}
 
 			// Determine which session to attach.
-			var targetSession string
-			if len(args) >= 2 {
-				targetSession = args[1]
-				// Verify session belongs to this workspace.
-				found := false
-				for _, s := range ws.Sessions {
-					if s == targetSession {
-						found = true
-						break
-					}
-				}
+			var targetSession workspace.WorkspaceSession
+			if requestedLabel != "" {
+				var found bool
+				targetSession, found = app.WorkspaceStore.SessionRecord(wsName, requestedLabel)
 				if !found {
-					return fmt.Errorf("session %q is not in workspace %q", targetSession, wsName)
+					return fmt.Errorf("session %q is not in workspace %q", requestedLabel, wsName)
 				}
 			} else {
 				targetSession = resolveLastActive(app, ws)
 			}
 
-			if targetSession == "" {
+			if targetSession.TmuxName == "" {
 				return fmt.Errorf("workspace %q has no live sessions\n  Use: zmux new %s  (create one)", wsName, wsName)
 			}
 
 			// Verify session exists in tmux.
-			if !app.Runner.HasSession(targetSession) {
-				return fmt.Errorf("session %q not found in tmux", targetSession)
+			if !app.Runner.HasSession(targetSession.TmuxName) {
+				return fmt.Errorf("session %q not found in tmux", targetSession.Label)
 			}
 
 			// Update last active.
-			_ = app.WorkspaceStore.SetLastActive(wsName, targetSession)
+			_ = app.WorkspaceStore.SetLastActive(wsName, targetSession.ID)
 
-			return attachSession(app, openHijackFlag, targetSession)
+			return attachSession(app, openHijackFlag, targetSession.TmuxName)
 		},
 	}
 	cmd.Flags().BoolVar(&openHijackFlag, "hijack", false, "take over session from other client")
@@ -82,46 +79,33 @@ to take over instead.`,
 
 // resolveLastActive returns the best session to attach to in a workspace.
 // Prefers last_active, falls back to first live session.
-func resolveLastActive(app *apppkg.App, ws *workspace.Workspace) string {
-	if ws.LastActiveSession != "" && app.Runner.HasSession(ws.LastActiveSession) {
-		return ws.LastActiveSession
+func resolveLastActive(app *apppkg.App, ws *workspace.Workspace) workspace.WorkspaceSession {
+	if ws.LastActiveSessionID != "" {
+		if rec, ok := app.WorkspaceStore.SessionRecord(ws.Name, ws.LastActiveSessionID); ok && app.Runner.HasSession(rec.TmuxName) {
+			return rec
+		}
 	}
 	// Fallback: first live session.
 	for _, s := range ws.Sessions {
-		if app.Runner.HasSession(s) {
+		if app.Runner.HasSession(s.TmuxName) {
 			return s
 		}
 	}
-	return ""
-}
-
-// nextSessionName returns a session name that doesn't collide with an
-// existing tmux session. Prefers "<base>-<workspace>" then "<base>-N".
-func nextSessionName(app *apppkg.App, base, workspace string) string {
-	candidate := base + "-" + workspace
-	if !app.Runner.HasSession(candidate) {
-		return candidate
-	}
-	for i := 2; i < 100; i++ {
-		candidate = fmt.Sprintf("%s-%d", base, i)
-		if !app.Runner.HasSession(candidate) {
-			return candidate
-		}
-	}
-	return base + "-" + session.NextTmpName(app.Runner)
+	return workspace.WorkspaceSession{}
 }
 
 // workspaceSessionName resolves the requested session name for a workspace
 // against tmux's global session namespace.
 func workspaceSessionName(app *apppkg.App, requested, workspace string) string {
-	name := requested
-	if name == "" {
-		name = session.DefaultName
+	label := requested
+	if label == "" {
+		label = session.DefaultName
 	}
-	if app.Runner.HasSession(name) {
-		return nextSessionName(app, name, workspace)
+	rec, err := workspacepkgSessionRecord(workspace, label)
+	if err != nil {
+		return label
 	}
-	return name
+	return rec.TmuxName
 }
 
 // attachSession handles the attach logic: normal attach, auto-clone, or hijack.
@@ -132,4 +116,34 @@ func attachSession(app *apppkg.App, hijack bool, name string) error {
 	// session.Attach already handles auto-cloning (creates grouped session
 	// if already attached elsewhere).
 	return session.Attach(app.Runner, name)
+}
+
+func parseWorkspaceSessionArgs(args []string) (workspaceName, sessionLabel string, err error) {
+	workspaceName = args[0]
+	if strings.Count(workspaceName, "/") > 1 {
+		return "", "", fmt.Errorf("target must be workspace/session")
+	}
+	if strings.Contains(workspaceName, "/") {
+		parts := strings.SplitN(workspaceName, "/", 2)
+		workspaceName, sessionLabel = parts[0], parts[1]
+	}
+	if len(args) == 2 {
+		if sessionLabel != "" {
+			return "", "", fmt.Errorf("pass either workspace/session or workspace session, not both")
+		}
+		sessionLabel = args[1]
+	}
+	if err := workspace.ValidateWorkspaceName(workspaceName); err != nil {
+		return "", "", err
+	}
+	if sessionLabel != "" {
+		if err := workspace.ValidateSessionLabel(sessionLabel); err != nil {
+			return "", "", err
+		}
+	}
+	return workspaceName, sessionLabel, nil
+}
+
+func workspacepkgSessionRecord(workspaceName, label string) (workspace.WorkspaceSession, error) {
+	return workspace.NewSessionRecord(workspaceName, label)
 }

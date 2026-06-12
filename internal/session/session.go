@@ -24,6 +24,10 @@ type SessionInfo struct {
 	IsTmp           bool
 	Group           string // session group name (empty if ungrouped)
 	AttachedClients int    // number of attached clients (including grouped copies)
+	Managed         bool
+	Workspace       string
+	Label           string
+	SessionID       string
 }
 
 var tmpPattern = regexp.MustCompile(`^tmp-(\d+)$`)
@@ -127,6 +131,10 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 			IsTmp:           IsTemp(s.Name),
 			Group:           s.Group,
 			AttachedClients: 0,
+			Managed:         s.Managed,
+			Workspace:       s.Workspace,
+			Label:           s.SessionLabel,
+			SessionID:       s.SessionID,
 		}
 		if s.Attached {
 			info.AttachedClients = 1

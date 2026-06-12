@@ -88,17 +88,9 @@ Examples:
 			command := strings.Join(args, " ")
 
 			// Determine target session.
-			sessionName := runSessionFlag
-			if sessionName == "" {
-				if app.Runner.IsInsideTmux() {
-					name, err := app.Runner.DisplayMessage("", "#{session_name}")
-					if err != nil {
-						return fmt.Errorf("not inside a tmux session")
-					}
-					sessionName = name
-				} else {
-					return fmt.Errorf("not inside tmux — use --session to specify target")
-				}
+			sessionName, err := resolveSessionTarget(app, runSessionFlag)
+			if err != nil {
+				return err
 			}
 
 			if !app.Runner.HasSession(sessionName) {

@@ -3,24 +3,8 @@ package workspace
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 )
-
-// ValidateWorkspaceName checks if a workspace name is valid.
-// Names cannot be empty, contain whitespace, or use reserved names.
-func ValidateWorkspaceName(name string) error {
-	if name == "" {
-		return fmt.Errorf("workspace name cannot be empty")
-	}
-	if strings.ContainsAny(name, " \t\n\r") {
-		return fmt.Errorf("workspace name cannot contain spaces: %q", name)
-	}
-	if name == "__external__" || name == "temporary" {
-		return fmt.Errorf("workspace name %q is reserved", name)
-	}
-	return nil
-}
 
 // GetWorkspace returns the workspace by name, or nil if not found.
 func (s *Store) GetWorkspace(name string) (*Workspace, error) {
@@ -49,7 +33,7 @@ func (s *Store) CreateWorkspace(name, rootDir string) error {
 	st.Workspaces[name] = &Workspace{
 		Name:      name,
 		RootDir:   rootDir,
-		Sessions:  []string{},
+		Sessions:  []WorkspaceSession{},
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -73,7 +57,7 @@ func (s *Store) EnsureWorkspace(name, rootDir string) (*Workspace, error) {
 	ws = &Workspace{
 		Name:      name,
 		RootDir:   rootDir,
-		Sessions:  []string{},
+		Sessions:  []WorkspaceSession{},
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

@@ -35,7 +35,8 @@ func BuildState(runner tmux.Runner, store *workspace.Store) (State, error) {
 			for _, ws := range workspaces {
 				wss := WorkspaceState{Name: ws.Name, Sessions: map[string]bool{}}
 				for _, sess := range ws.Sessions {
-					wss.Sessions[sess] = true
+					wss.Sessions[sess.Label] = true
+					wss.Sessions[sess.TmuxName] = true
 				}
 				state.Workspaces[ws.Name] = wss
 			}
