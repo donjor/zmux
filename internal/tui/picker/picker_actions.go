@@ -76,13 +76,13 @@ func (m PickerModel) handleTopActionEnter() (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	// Typed workspace name → create workspace. If a session name was
-	// also typed (e.g. "myapp dev"), pass it through so root.go creates
-	// that session instead of the default "main".
+	// also typed (e.g. "myapp dev"), pass it through so the CLI creates
+	// that session instead of the default.
 	sessName := strings.TrimSpace(m.state.sessionQuery)
 	m.Result = PickerResult{
 		Action:    "workspace-create",
 		Workspace: wsName,
-		Name:      sessName, // "" → root.go defaults to "main"
+		Name:      sessName,
 	}
 	m.Quitting = true
 	return m, tea.Quit
@@ -106,11 +106,11 @@ func (m PickerModel) handleWorkspaceEnter(ws *workspaceview.WorkspaceViewModel) 
 		return m, tea.Quit
 	}
 
-	// No live sessions → create default session (named after workspace).
+	// No live sessions → create the default session in the workspace.
 	if len(ws.LiveSessions) == 0 {
 		m.Result = PickerResult{
 			Action:    "new",
-			Name:      ws.Name,
+			Name:      session.DefaultName,
 			Workspace: ws.Name,
 		}
 		m.Quitting = true

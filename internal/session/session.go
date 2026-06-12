@@ -28,6 +28,10 @@ type SessionInfo struct {
 
 var tmpPattern = regexp.MustCompile(`^tmp-(\d+)$`)
 
+// DefaultName is the primary session name created for a workspace when the
+// user does not provide an explicit session name.
+const DefaultName = "main"
+
 // ValidateName checks if a session name is valid.
 // Names cannot start with a digit (reserved for index-based selection).
 func ValidateName(name string) error {

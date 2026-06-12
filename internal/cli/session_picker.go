@@ -84,14 +84,9 @@ func runSessionPicker(app *apppkg.App) error {
 		if err := app.WorkspaceStore.CreateWorkspace(wsName, dir); err != nil {
 			return err
 		}
-		// Use the session name from the picker result if provided
-		// (e.g. "myapp dev" → Name="dev"), otherwise default to "main".
-		// For the default "main", use the workspace name as the tmux
-		// session name so multiple workspaces can each have a "main"
-		// without global tmux collisions.
 		sessName := res.Name
 		if sessName == "" {
-			sessName = wsName
+			sessName = session.DefaultName
 		} else if app.Runner.HasSession(sessName) {
 			sessName = nextSessionName(app, sessName, wsName)
 		}

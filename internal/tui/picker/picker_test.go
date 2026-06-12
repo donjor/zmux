@@ -362,8 +362,8 @@ func TestPickerEnterOnEmptyWorkspaceCreatesMain(t *testing.T) {
 	if m.Result.Action != "new" {
 		t.Errorf("expected action 'new' (create default session), got %q", m.Result.Action)
 	}
-	if m.Result.Name != "empty-ws" {
-		t.Errorf("expected session name 'empty-ws' (matches workspace), got %q", m.Result.Name)
+	if m.Result.Name != "main" {
+		t.Errorf("expected session name 'main', got %q", m.Result.Name)
 	}
 	if m.Result.Workspace != "empty-ws" {
 		t.Errorf("expected workspace 'empty-ws', got %q", m.Result.Workspace)

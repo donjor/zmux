@@ -104,7 +104,7 @@ func moveCursorTo(m PickerModel, pred func(outline.Row) bool) PickerModel {
 // | Empty input, top row | "" | top action | new (tmp) | zmux new  # tmp-N |
 // | Typed name, top row | "newproj" | top action | workspace-create "newproj" | zmux new newproj |
 // | Enter on workspace (has sessions) | "" | myapp ws | drill into sessions | zmux myapp # choose session |
-// | Enter on workspace (no sessions) | "" | empty ws | new main in ws | zmux new empty  # + main |
+// | Enter on workspace (no sessions) | "" | empty ws | new main in ws | zmux new empty |
 // | Enter on session row | "" | api session | attach api | zmux myapp api |
 // | Enter on attached session | "" | main session | attach → group | zmux myapp main → main-b |
 // | Type "myapp dev" → Enter on ws | "myapp dev" | myapp ws | new dev in myapp | zmux new myapp dev |  ← THE BUG
@@ -209,8 +209,8 @@ func TestPickerBehavior_EnterOnEmptyWorkspace(t *testing.T) {
 	if m.Result.Workspace != "empty" {
 		t.Errorf("workspace = %q, want 'empty'", m.Result.Workspace)
 	}
-	if m.Result.Name != "empty" {
-		t.Errorf("name = %q, want 'empty'", m.Result.Name)
+	if m.Result.Name != "main" {
+		t.Errorf("name = %q, want 'main'", m.Result.Name)
 	}
 }
 
@@ -408,7 +408,7 @@ func TestPickerBehavior_EmptyWorkspaceTypedSession(t *testing.T) {
 
 // TestPickerBehavior_ExistingSessionNameInWorkspace covers: typing
 // "myapp main" when "main" already exists in myapp. The picker should
-// still produce action="new" with Name="main" — root.go handles the
+// still produce action="new" with Name="main" — CLI dispatch handles the
 // name collision via nextSessionName (so the ghost prompt says
 // "zmux new myapp main" which is CLI-accurate).
 func TestPickerBehavior_ExistingSessionNameInWorkspace(t *testing.T) {
@@ -434,8 +434,7 @@ func TestPickerBehavior_ExistingSessionNameInWorkspace(t *testing.T) {
 
 // TestPickerBehavior_WorkspaceNoSessionsEnterCreatesMain covers:
 // pressing Enter on a workspace with 0 sessions and NO session query
-// should create "main". This is the existing behavior — make sure the
-// session-query fix didn't break it.
+// should create "main".
 func TestPickerBehavior_WorkspaceNoSessionsEnterCreatesMain(t *testing.T) {
 	m := newBehaviorPicker(t)
 
@@ -453,8 +452,8 @@ func TestPickerBehavior_WorkspaceNoSessionsEnterCreatesMain(t *testing.T) {
 	if m.Result.Action != "new" {
 		t.Errorf("action = %q, want 'new'", m.Result.Action)
 	}
-	if m.Result.Name != "empty" {
-		t.Errorf("name = %q, want 'empty'", m.Result.Name)
+	if m.Result.Name != "main" {
+		t.Errorf("name = %q, want 'main'", m.Result.Name)
 	}
 	if m.Result.Workspace != "empty" {
 		t.Errorf("workspace = %q, want 'empty'", m.Result.Workspace)
