@@ -182,5 +182,5 @@ func printStyledHelp(app *apppkg.App) {
 
 	// lipgloss v2 renders full-fidelity; the package Writer downsamples to the
 	// terminal's color profile (v1 did this implicitly via the global renderer).
-	lipgloss.Print(b.String())
+	_, _ = lipgloss.Fprint(os.Stdout, b.String())
 }

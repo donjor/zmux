@@ -14,6 +14,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -29,6 +30,11 @@ import (
 // this stays testable.
 func Run(a *apppkg.App, version string) int {
 	if err := NewRootCmd(a, version).Execute(); err != nil {
+		if errors.Is(err, errInvalidCommand) {
+			fmt.Fprintln(os.Stderr, errInvalidCommand)
+			printStyledHelp(a)
+			return exitCodeForError(err)
+		}
 		if m := formatError(err); m != "" {
 			fmt.Fprintln(os.Stderr, m)
 		}
@@ -84,7 +90,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 			}
 
 			if len(args) > 0 {
-				return resolveShorthand(a, args)
+				return errInvalidCommand
 			}
 
 			if a.Runner.IsInsideTmux() {
@@ -167,19 +173,6 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 	registerSyncCompletions(themePullCmd)
 
 	return rootCmd
-}
-
-// resolveShorthand rejects the removed top-level workspace/session shorthand.
-func resolveShorthand(app *apppkg.App, args []string) error {
-	bin := app.Profile.Name
-	if bin == "" {
-		bin = "zmux"
-	}
-	if len(args) == 1 {
-		return fmt.Errorf("top-level workspace shorthand was removed — use %s open %s to attach, %s new %s to create, or %s run %s to run a recipe", bin, args[0], bin, args[0], bin, args[0])
-	}
-	rest := strings.Join(args[1:], " ")
-	return fmt.Errorf("top-level workspace/session shorthand was removed — use %s open %s %s to attach, %s new %s %s to create, or %s run %s %s to run a recipe", bin, args[0], rest, bin, args[0], rest, bin, args[0], rest)
 }
 
 func checkTmuxVersion(app *apppkg.App) error {

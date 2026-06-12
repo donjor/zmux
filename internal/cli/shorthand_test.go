@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +10,6 @@ import (
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
-	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/workspace"
 )
@@ -89,39 +90,76 @@ func withMockAppAndStore(t *testing.T) (*apppkg.App, *tmux.MockRunner, *workspac
 	return a, mock, store
 }
 
-func TestShorthandSingleArgRemoved(t *testing.T) {
+func TestInvalidTopLevelCommandReturnsUsageError(t *testing.T) {
 	a, _, _ := withMockAppAndStore(t)
-	err := resolveShorthand(a, []string{"myapp"})
-	if err == nil {
-		t.Fatal("expected shorthand removal error")
+	rootCmd := NewRootCmd(a, testVersion)
+	rootCmd.SetArgs([]string{"reload"})
+
+	err := rootCmd.Execute()
+	if !errors.Is(err, errInvalidCommand) {
+		t.Fatalf("expected invalid command error, got %v", err)
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "shorthand was removed") || !strings.Contains(msg, "zmux open myapp") || !strings.Contains(msg, "zmux new myapp") || !strings.Contains(msg, "zmux run myapp") {
-		t.Fatalf("unexpected error: %q", msg)
+	if got := exitCodeForError(err); got != ExitUsage {
+		t.Fatalf("expected usage exit code, got %d", got)
 	}
 }
 
-func TestShorthandTwoArgRemoved(t *testing.T) {
+func TestRunInvalidTopLevelCommandPrintsHelp(t *testing.T) {
 	a, _, _ := withMockAppAndStore(t)
-	err := resolveShorthand(a, []string{"myapp", "main"})
-	if err == nil {
-		t.Fatal("expected shorthand removal error")
+	code, stdout, stderr := captureRunOutput(t, []string{"zmux", "reload"}, func() int {
+		return Run(a, testVersion)
+	})
+
+	if code != ExitUsage {
+		t.Fatalf("expected usage exit code, got %d", code)
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "shorthand was removed") || !strings.Contains(msg, "zmux open myapp main") || !strings.Contains(msg, "zmux new myapp main") || !strings.Contains(msg, "zmux run myapp main") {
-		t.Fatalf("unexpected error: %q", msg)
+	if strings.TrimSpace(stderr) != "invalid command" {
+		t.Fatalf("expected invalid command on stderr, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "Session Management") || !strings.Contains(stdout, "zmux open <ws> [session]") {
+		t.Fatalf("expected help on stdout, got %q", stdout)
+	}
+	if strings.Contains(stdout+stderr, "shorthand was removed") {
+		t.Fatalf("old shorthand guidance leaked into output:\nstdout=%q\nstderr=%q", stdout, stderr)
 	}
 }
 
-func TestShorthandRemovedUsesActiveProfileName(t *testing.T) {
-	a, _, _ := withMockAppAndStore(t)
-	a.Profile = config.ProfileFromArgv("zzmux", a.FS)
-	err := resolveShorthand(a, []string{"myapp"})
-	if err == nil {
-		t.Fatal("expected shorthand removal error")
+func captureRunOutput(t *testing.T, argv []string, run func() int) (int, string, string) {
+	t.Helper()
+
+	oldArgs := os.Args
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "zzmux open myapp") || !strings.Contains(msg, "zzmux new myapp") || !strings.Contains(msg, "zzmux run myapp") {
-		t.Fatalf("unexpected error: %q", msg)
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
 	}
+
+	os.Args = argv
+	os.Stdout = stdoutW
+	os.Stderr = stderrW
+
+	code := run()
+
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+	os.Args = oldArgs
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	stdout, err := io.ReadAll(stdoutR)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	stderr, err := io.ReadAll(stderrR)
+	if err != nil {
+		t.Fatalf("read stderr: %v", err)
+	}
+
+	return code, string(stdout), string(stderr)
 }

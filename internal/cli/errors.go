@@ -19,6 +19,8 @@ const (
 	ExitThemeNotFound = 5
 )
 
+var errInvalidCommand = errors.New("invalid command")
+
 // codedError carries an explicit exit code (and an already-formatted message),
 // bypassing the heuristic formatError/exitCodeForError mappings. A command that
 // has already printed its own output returns one with an empty msg so Run adds
@@ -95,6 +97,10 @@ func formatError(err error) string {
 func exitCodeForError(err error) int {
 	if err == nil {
 		return ExitOK
+	}
+
+	if errors.Is(err, errInvalidCommand) {
+		return ExitUsage
 	}
 
 	var coded *codedError
