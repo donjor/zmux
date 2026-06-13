@@ -19,6 +19,8 @@ node /home/user/donjor/skills/pi/sync-pi.mjs
 
 For this repo's maintainer loop, `./dev.sh zmux` only refreshes the mirrors and
 relinks the Pi extension; it does not rewrite global agent settings.
+The skill keeps its hot operational doctrine in `SKILL.md`, with deeper command
+lookup in [`references/cli-catalog.md`](../skills/zmux/references/cli-catalog.md).
 
 ## Purpose
 

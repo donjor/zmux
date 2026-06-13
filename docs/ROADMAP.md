@@ -6,25 +6,19 @@
 
 ## Now
 
-### SSH and nested-zmux support
+### QoL polish first
 
-- [ ] **`zmux ssh <host>` connects and auto-attaches a remote tmux session**
-  - Remote work should feel like opening a local workspace, not like manually
-    stitching SSH, tmux, and profile state together.
-  - Start with a narrow path: connect, detect or create the remote session, and
-    attach with clear errors when the remote host is unsupported.
+- [ ] **Sessionless startup and last-session closure fall back to the dashboard**
+  - `zmux` should stay usable when no workspace or session is currently active.
+  - If all tabs in a session close, attach to the last active remaining session
+    in the workspace when one exists; otherwise show the dashboard with a clear
+    exit path.
 
-- [ ] **Remote sessions appear in the local picker**
-  - A local user should see local and configured remote sessions in one place.
-  - The first version can be discovery-only; remote create, rename, and kill can
-    follow after attach/switch behavior is reliable.
-
-- [ ] **Nested zmux gets explicit prefix, bar, and theme coordination**
-  - Connecting into a host that also runs zmux needs predictable key handling
-    and visual cues for outer vs inner layers.
-  - Favor a small compatibility contract over broad terminal-emulator tricks.
-
-### Current workflow polish
+- [ ] **Top bar repairs stale and blank session/tab state**
+  - Dead or killed sessions should disappear from the bar without waiting for a
+    later interaction.
+  - On init/load, the second tab line should render its actual tabs instead of
+    staying blank until a new tab opens.
 
 - [ ] **Picker delete keeps cursor position**
   - In the outside-tmux picker, `ctrl+x` delete currently moves the cursor after
@@ -60,6 +54,24 @@
     positives remain explainable.
 
 ## Next
+
+### SSH and nested-zmux support
+
+- [ ] **`zmux ssh <host>` connects and auto-attaches a remote tmux session**
+  - Remote work should feel like opening a local workspace, not like manually
+    stitching SSH, tmux, and profile state together.
+  - Start with a narrow path: connect, detect or create the remote session, and
+    attach with clear errors when the remote host is unsupported.
+
+- [ ] **Remote sessions appear in the local picker**
+  - A local user should see local and configured remote sessions in one place.
+  - The first version can be discovery-only; remote create, rename, and kill can
+    follow after attach/switch behavior is reliable.
+
+- [ ] **Nested zmux gets explicit prefix, bar, and theme coordination**
+  - Connecting into a host that also runs zmux needs predictable key handling
+    and visual cues for outer vs inner layers.
+  - Favor a small compatibility contract over broad terminal-emulator tricks.
 
 ### Session persistence
 

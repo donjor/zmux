@@ -436,7 +436,8 @@ Agent integration lives in this repo:
   to isolated worktrees, spawn profiles, the `type` -> `watch --idle` loop,
   capture classification, and etiquette. The doctrine lives at
   `skills/zmux/references/agent-peer.md` and
-  `skills/zmux/references/agent-worker.md`.
+  `skills/zmux/references/agent-worker.md`; the exhaustive command catalog lives
+  at `skills/zmux/references/cli-catalog.md`.
   `./install.sh` does not mutate agent skill directories.
 - `pi-extension/` registers typed Pi tools and bash guardrails for deterministic
   runtime, tab/pane/send, sidecar, interactive-command, and terminal-capability
