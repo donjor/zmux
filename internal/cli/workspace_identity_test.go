@@ -93,6 +93,44 @@ func TestRepairLegacySessionNameStampsGeneratedRawWithoutMetadata(t *testing.T) 
 	}
 }
 
+func TestLiveWorkspaceSessionTargetRepairsLegacyNameBeforePrefixMatch(t *testing.T) {
+	app, mock := newTestApp(t)
+	rec, err := workspace.NewSessionRecord("skills", "skills")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec.LegacyTmuxName = "skills"
+	if err := app.WorkspaceStore.AddSessionRecord("skills", rec); err != nil {
+		t.Fatal(err)
+	}
+	peer, err := workspace.NewSessionRecord("skills", "skills-peer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WorkspaceStore.AddSessionRecord("skills", peer); err != nil {
+		t.Fatal(err)
+	}
+	mock.Sessions = []tmux.Session{{Name: "skills"}, {Name: peer.TmuxName}}
+
+	got := liveWorkspaceSessionTarget(app, "skills", rec)
+	if got != rec.TmuxName {
+		t.Fatalf("liveWorkspaceSessionTarget = %q, want %q", got, rec.TmuxName)
+	}
+	if !workspaceIdentityMockHasCall(mock.Calls, "RenameSession", "skills", rec.TmuxName) {
+		t.Fatalf("expected legacy rename before targeting peer prefix, calls = %v", mock.Calls)
+	}
+	if !workspaceIdentityMockHasCall(mock.Calls, "SetSessionOption", rec.TmuxName, workspace.OptionSessionLabel, "skills") {
+		t.Fatalf("expected repaired session metadata stamp, calls = %v", mock.Calls)
+	}
+	stored, ok := app.WorkspaceStore.SessionRecord("skills", "skills")
+	if !ok {
+		t.Fatal("expected skills session to remain tracked")
+	}
+	if stored.LegacyTmuxName != "" {
+		t.Fatalf("LegacyTmuxName = %q; want cleared after repair", stored.LegacyTmuxName)
+	}
+}
+
 func TestResolveSessionTargetPrefersCurrentWorkspaceLabelOverRawName(t *testing.T) {
 	app, mock := newTestApp(t)
 	if err := app.WorkspaceStore.AddSession("proj", "main"); err != nil {

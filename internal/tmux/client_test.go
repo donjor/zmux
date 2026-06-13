@@ -33,8 +33,8 @@ esac
 	if len(calls) != 2 {
 		t.Fatalf("expected list-windows then new-window, got %v", calls)
 	}
-	if !strings.Contains(calls[1], "new-window") || !strings.Contains(calls[1], "-t dev:3") {
-		t.Fatalf("new-window should target next free index dev:3, calls = %v", calls)
+	if !strings.Contains(calls[1], "new-window") || !strings.Contains(calls[1], "-t =dev:3") {
+		t.Fatalf("new-window should target next free index =dev:3, calls = %v", calls)
 	}
 	if !strings.Contains(calls[1], "-d") {
 		t.Fatalf("detached option missing from new-window call: %v", calls)
@@ -68,8 +68,39 @@ esac
 	if len(calls) != 2 {
 		t.Fatalf("expected list-windows then new-window, got %v", calls)
 	}
-	if !strings.Contains(calls[1], "new-window") || !strings.Contains(calls[1], "-t dev -c") {
-		t.Fatalf("new-window should fall back to bare session target, calls = %v", calls)
+	if !strings.Contains(calls[1], "new-window") || !strings.Contains(calls[1], "-t =dev -c") {
+		t.Fatalf("new-window should fall back to exact session target, calls = %v", calls)
+	}
+}
+
+func TestClientSessionTargetsUseExactMatch(t *testing.T) {
+	t.Setenv("TMUX", "")
+	logPath := filepath.Join(t.TempDir(), "tmux-args.log")
+	client := &Client{bin: fakeTmux(t, logPath, `
+exit 0
+`)}
+
+	_ = client.HasSession("zws_skills__skills")
+	_, _ = client.ListWindows("zws_skills__skills")
+	_ = client.SwitchClient("zws_skills__skills")
+	_ = client.KillSession("zws_skills__skills")
+	_ = client.RenameSession("zws_skills__skills", "zws_skills__renamed")
+
+	calls := readFakeTmuxCalls(t, logPath)
+	wantTargets := []string{
+		"-t =zws_skills__skills",
+		"-t =zws_skills__skills",
+		"-t =zws_skills__skills",
+		"-t =zws_skills__skills",
+		"-t =zws_skills__skills",
+	}
+	if len(calls) != len(wantTargets) {
+		t.Fatalf("calls = %v", calls)
+	}
+	for i, want := range wantTargets {
+		if !strings.Contains(calls[i], want) {
+			t.Fatalf("call %d = %q, want target %q", i, calls[i], want)
+		}
 	}
 }
 

@@ -33,27 +33,27 @@ func resolveSessionTarget(app *apppkg.App, input string) (string, error) {
 		if !ok {
 			return "", fmt.Errorf("session %q is not in workspace %q", label, ws)
 		}
-		return rec.TmuxName, nil
+		return liveWorkspaceSessionTarget(app, ws, rec), nil
 	}
 
 	if app.Runner.IsInsideTmux() {
 		current, _ := app.Runner.DisplayMessage("", "#{session_name}")
 		if wsName, ok := app.WorkspaceStore.WorkspaceFor(session.RootName(strings.TrimSpace(current))); ok {
 			if rec, ok := app.WorkspaceStore.SessionRecord(wsName, input); ok {
-				return rec.TmuxName, nil
+				return liveWorkspaceSessionTarget(app, wsName, rec), nil
 			}
 		}
 	}
 
 	if wsName, ok := workspaceForCWD(app); ok {
 		if rec, ok := app.WorkspaceStore.SessionRecord(wsName, input); ok {
-			return rec.TmuxName, nil
+			return liveWorkspaceSessionTarget(app, wsName, rec), nil
 		}
 	}
 
 	matches := matchingSessionLabels(app, input)
 	if len(matches) == 1 {
-		return matches[0].TmuxName, nil
+		return liveWorkspaceSessionTarget(app, matches[0].Workspace, matches[0].Record), nil
 	}
 	if len(matches) > 1 {
 		return "", fmt.Errorf("session label %q is ambiguous; use workspace/session", input)
@@ -110,16 +110,21 @@ func workspaceForCWD(app *apppkg.App) (string, bool) {
 	return match, match != ""
 }
 
-func matchingSessionLabels(app *apppkg.App, label string) []workspace.WorkspaceSession {
+type sessionLabelMatch struct {
+	Workspace string
+	Record    workspace.WorkspaceSession
+}
+
+func matchingSessionLabels(app *apppkg.App, label string) []sessionLabelMatch {
 	workspaces, err := app.WorkspaceStore.ListWorkspaces()
 	if err != nil {
 		return nil
 	}
-	var matches []workspace.WorkspaceSession
+	var matches []sessionLabelMatch
 	for _, ws := range workspaces {
 		for _, rec := range ws.Sessions {
 			if rec.Label == label {
-				matches = append(matches, rec)
+				matches = append(matches, sessionLabelMatch{Workspace: ws.Name, Record: rec})
 			}
 		}
 	}

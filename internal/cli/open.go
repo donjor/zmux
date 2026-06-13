@@ -62,15 +62,16 @@ to take over instead.`,
 				return fmt.Errorf("workspace %q has no live sessions\n  Use: zmux new %s  (create one)", wsName, wsName)
 			}
 
+			targetName := liveWorkspaceSessionTarget(app, wsName, targetSession)
 			// Verify session exists in tmux.
-			if !app.Runner.HasSession(targetSession.TmuxName) {
+			if !app.Runner.HasSession(targetName) {
 				return fmt.Errorf("session %q not found in tmux", targetSession.Label)
 			}
 
 			// Update last active.
 			_ = app.WorkspaceStore.SetLastActive(wsName, targetSession.ID)
 
-			return attachSession(app, openHijackFlag, targetSession.TmuxName)
+			return attachSession(app, openHijackFlag, targetName)
 		},
 	}
 	cmd.Flags().BoolVar(&openHijackFlag, "hijack", false, "take over session from other client")
@@ -81,17 +82,37 @@ to take over instead.`,
 // Prefers last_active, falls back to first live session.
 func resolveLastActive(app *apppkg.App, ws *workspace.Workspace) workspace.WorkspaceSession {
 	if ws.LastActiveSessionID != "" {
-		if rec, ok := app.WorkspaceStore.SessionRecord(ws.Name, ws.LastActiveSessionID); ok && app.Runner.HasSession(rec.TmuxName) {
+		if rec, ok := app.WorkspaceStore.SessionRecord(ws.Name, ws.LastActiveSessionID); ok && app.Runner.HasSession(liveWorkspaceSessionTarget(app, ws.Name, rec)) {
 			return rec
 		}
 	}
 	// Fallback: first live session.
 	for _, s := range ws.Sessions {
-		if app.Runner.HasSession(s.TmuxName) {
+		if app.Runner.HasSession(liveWorkspaceSessionTarget(app, ws.Name, s)) {
 			return s
 		}
 	}
 	return workspace.WorkspaceSession{}
+}
+
+func liveWorkspaceSessionTarget(app *apppkg.App, wsName string, rec workspace.WorkspaceSession) string {
+	if rec.TmuxName != "" && app.Runner.HasSession(rec.TmuxName) {
+		return rec.TmuxName
+	}
+	if rec.LegacyTmuxName == "" || !app.Runner.HasSession(rec.LegacyTmuxName) {
+		return rec.TmuxName
+	}
+	if rec.TmuxName == "" {
+		return rec.LegacyTmuxName
+	}
+	if err := app.Runner.RenameSession(rec.LegacyTmuxName, rec.TmuxName); err != nil {
+		return rec.LegacyTmuxName
+	}
+	if err := workspace.StampSessionMetadata(app.Runner, wsName, rec); err != nil {
+		return rec.TmuxName
+	}
+	_ = app.WorkspaceStore.ClearLegacySessionName(wsName, rec.ID)
+	return rec.TmuxName
 }
 
 // workspaceSessionName resolves the requested session name for a workspace

@@ -171,7 +171,7 @@ func (c *Client) HasSession(name string) bool {
 	if c.ambientSocketMismatch() != nil {
 		return false
 	}
-	err := exec.Command(c.bin, c.buildArgs("has-session", "-t", name)...).Run()
+	err := exec.Command(c.bin, c.buildArgs("has-session", "-t", exactSessionTarget(name))...).Run()
 	return err == nil
 }
 
@@ -193,12 +193,12 @@ func (c *Client) NewSessionWindow(session, window, dir string) (string, error) {
 // NewGroupedSession creates a grouped session linked to target.
 // The new session shares windows with target but has an independent viewport.
 func (c *Client) NewGroupedSession(target, name string) error {
-	return c.runSilent("new-session", "-d", "-t", target, "-s", name)
+	return c.runSilent("new-session", "-d", "-t", exactSessionTarget(target), "-s", name)
 }
 
 // KillSession kills a session by name.
 func (c *Client) KillSession(name string) error {
-	return c.runSilent("kill-session", "-t", name)
+	return c.runSilent("kill-session", "-t", exactSessionTarget(name))
 }
 
 // AttachSession attaches to a session, taking over the terminal.
@@ -206,7 +206,7 @@ func (c *Client) AttachSession(name string) error {
 	if err := c.ambientSocketMismatch(); err != nil {
 		return err
 	}
-	cmd := exec.Command(c.bin, c.buildArgs("attach-session", "-t", name)...)
+	cmd := exec.Command(c.bin, c.buildArgs("attach-session", "-t", exactSessionTarget(name))...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -219,7 +219,7 @@ func (c *Client) AttachSessionDetach(name string) error {
 	if err := c.ambientSocketMismatch(); err != nil {
 		return err
 	}
-	cmd := exec.Command(c.bin, c.buildArgs("attach-session", "-d", "-t", name)...)
+	cmd := exec.Command(c.bin, c.buildArgs("attach-session", "-d", "-t", exactSessionTarget(name))...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -242,17 +242,17 @@ func (c *Client) RefreshClient(targetClient, session string) error {
 
 // SwitchClient switches the current client to a different session.
 func (c *Client) SwitchClient(target string) error {
-	return c.runSilent("switch-client", "-t", target)
+	return c.runSilent("switch-client", "-t", exactSessionTarget(target))
 }
 
 // RenameSession renames a session.
 func (c *Client) RenameSession(old, new string) error {
-	return c.runSilent("rename-session", "-t", old, new)
+	return c.runSilent("rename-session", "-t", exactSessionTarget(old), new)
 }
 
 // ListWindows lists all windows in a session.
 func (c *Client) ListWindows(session string) ([]Window, error) {
-	out, err := c.run("list-windows", "-t", session, "-F",
+	out, err := c.run("list-windows", "-t", exactSessionTarget(session), "-F",
 		"#{window_index}\t#{window_name}\t#{window_active}\t#{pane_current_path}\t#{@zmux_label}")
 	if err != nil {
 		return nil, err
@@ -286,9 +286,9 @@ func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) (string
 	// max+1 always appends past every existing window, free of that collision
 	// and identical across tmux versions. Falls back to the bare target if the
 	// window list is unreadable.
-	target := session
+	target := exactSessionTarget(session)
 	if idx, err := c.nextWindowIndex(session); err == nil {
-		target = fmt.Sprintf("%s:%d", session, idx)
+		target = fmt.Sprintf("%s:%d", exactSessionTarget(session), idx)
 	}
 	args := []string{"new-window", "-P", "-F", "#{pane_id}", "-t", target, "-c", dir}
 	if o.detached {
@@ -298,6 +298,13 @@ func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) (string
 		args = append(args, "-n", name)
 	}
 	return c.run(args...)
+}
+
+func exactSessionTarget(name string) string {
+	if name == "" || strings.HasPrefix(name, "=") {
+		return name
+	}
+	return "=" + name
 }
 
 // nextWindowIndex returns one past the highest window index in session, the
@@ -355,7 +362,7 @@ const paneListFormat = "#{session_name}\t#{pane_id}\t#{pane_index}\t#{pane_activ
 func (c *Client) ListPanes(target string) ([]Pane, error) {
 	args := []string{"list-panes"}
 	if target != "" {
-		args = append(args, "-t", target)
+		args = append(args, "-t", exactSessionTarget(target))
 	}
 	args = append(args, "-s", "-F", paneListFormat)
 	out, err := c.run(args...)
