@@ -9,6 +9,14 @@ versioning is semver-ish until the first public release.
 
 ### Added
 
+- **Sessionless dashboard fallback** `workspace` - `zmux` stays usable when no
+  workspace or session is active. A zmux-owned attach whose session disappears
+  reattaches to the workspace's best remaining live session; with none left it
+  lands in the sessionless dashboard with a clear exit path instead of an opaque
+  error or dead terminal. The tab-picker `close` action gains the same last-window
+  guard `zmux tab kill` already enforces. Bounded retries with seen-set
+  termination, `RootName`-aware for grouped sessions, and a `detach-on-destroy`
+  precondition check.
 - **`zmux session run`** `agents` - create a detached session in the current (or
   `--workspace`) workspace and launch a command as its first/only tab — no focus
   steal, no blank shell tab. The orchestration-safe worker-spawn primitive

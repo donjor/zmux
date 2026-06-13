@@ -8,12 +8,6 @@
 
 ### QoL polish first
 
-- [ ] **Sessionless startup and last-session closure fall back to the dashboard**
-  - `zmux` should stay usable when no workspace or session is currently active.
-  - If all tabs in a session close, attach to the last active remaining session
-    in the workspace when one exists; otherwise show the dashboard with a clear
-    exit path.
-
 - [ ] **Top bar repairs stale and blank session/tab state**
   - Dead or killed sessions should disappear from the bar without waiting for a
     later interaction.
