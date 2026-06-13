@@ -6,6 +6,7 @@ import (
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
 
 // currentPaneID returns the tmux pane id of the running shell, or "" if
@@ -56,7 +57,7 @@ func (t *CurrentTab) buildRows() []outline.Row {
 		Kind:       outline.RowSession,
 		Depth:      1,
 		ParentID:   wsID,
-		Label:      t.sessionName,
+		Label:      currentSessionLabel(t.sessionName, t.wsModel),
 		Selectable: true,
 		Current:    true,
 		Attached:   t.attached > 0,
@@ -146,6 +147,18 @@ func (t *CurrentTab) buildRows() []outline.Row {
 	}
 
 	return rows
+}
+
+func currentSessionLabel(name string, ws *workspaceview.WorkspaceViewModel) string {
+	if ws != nil {
+		for i := range ws.LiveSessions {
+			s := ws.LiveSessions[i]
+			if s.Name == name {
+				return session.LocalDisplayName(s)
+			}
+		}
+	}
+	return name
 }
 
 // windowSelectable reports whether window rows belonging to the given

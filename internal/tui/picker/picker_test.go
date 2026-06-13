@@ -115,6 +115,53 @@ func TestPickerShowsTmpSessionTopAction(t *testing.T) {
 	}
 }
 
+func TestPickerManagedSessionShowsLocalLabelButTargetsRawName(t *testing.T) {
+	raw := workspace.RawSessionName("skills", "skills-peer")
+	now := time.Now()
+	ws := []workspace.Workspace{{
+		Name: "skills",
+		Sessions: []workspace.WorkspaceSession{{
+			ID:       "test-skills-peer",
+			Label:    "skills-peer",
+			TmuxName: raw,
+		}},
+	}}
+	sessions := []session.SessionInfo{{
+		Name:      raw,
+		Workspace: "skills",
+		Label:     "skills-peer",
+		Windows:   1,
+		Activity:  now,
+	}}
+
+	model := NewPickerModel(tmux.NewMockRunner(), styles.DefaultStyles())
+	model.width = 120
+	model.height = 40
+	model.workspaces = workspaceview.BuildWorkspaceViewModels(ws, sessions)
+	model.filteredWorkspaces = model.workspaces
+	model.buildOutlineWithFocus(outline.WorkspaceID("skills"))
+
+	idx := findRowIndex(model, func(row outline.Row) bool {
+		return row.Kind == outline.RowSession
+	})
+	if idx < 0 {
+		t.Fatal("managed session row not found")
+	}
+	row := model.tree.Rows[idx]
+	if row.Label != "skills-peer" {
+		t.Fatalf("row label = %q, want local label", row.Label)
+	}
+	if strings.Contains(model.view(), raw) {
+		t.Fatalf("picker view leaked raw managed name %q:\n%s", raw, model.view())
+	}
+
+	model.tree.Cursor = idx
+	model = enterPicker(model)
+	if model.Result.Session != raw {
+		t.Fatalf("picker target = %q, want raw target %q", model.Result.Session, raw)
+	}
+}
+
 func TestPickerShowsCreateOnType(t *testing.T) {
 	model := newTestPickerWithWorkspaces()
 	model.input.SetValue("myapp")

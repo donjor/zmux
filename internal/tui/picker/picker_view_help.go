@@ -125,16 +125,21 @@ func (m PickerModel) ghostCmd() string {
 			return "zmux"
 		}
 		wsName := parentWorkspaceName(row, m.tree)
+		label := session.LocalDisplayName(*s)
 		if s.Attached {
-			if wsName != "" {
-				return "zmux " + wsName + " " + s.Name + "  →  " + s.Name + "-b"
+			cloneHint := "clone"
+			if !s.Managed && !strings.HasPrefix(s.Name, "zws_") {
+				cloneHint = s.Name + "-b"
 			}
-			return "zmux " + s.Name + "  →  " + s.Name + "-b"
+			if wsName != "" {
+				return "zmux " + wsName + " " + label + "  →  " + cloneHint
+			}
+			return "zmux " + label + "  →  " + cloneHint
 		}
 		if wsName != "" {
-			return "zmux " + wsName + " " + s.Name
+			return "zmux " + wsName + " " + label
 		}
-		return "zmux " + s.Name
+		return "zmux " + label
 	case outline.RowExternalEntry:
 		return "# " + row.Label
 	case outline.RowExternalGroup:

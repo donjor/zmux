@@ -109,6 +109,10 @@ func lsWorkspaces(app *apppkg.App) error {
 }
 
 func lsWorkspaceSessions(app *apppkg.App, wsName string) error {
+	if roots := liveRootSet(app); roots != nil {
+		_ = app.WorkspaceStore.Reconcile(roots)
+	}
+
 	ws, err := app.WorkspaceStore.GetWorkspace(wsName)
 	if err != nil {
 		return err
@@ -174,6 +178,10 @@ func lsWorkspaceSessions(app *apppkg.App, wsName string) error {
 }
 
 func lsSessionsFlat(app *apppkg.App) error {
+	if roots := liveRootSet(app); roots != nil {
+		_ = app.WorkspaceStore.Reconcile(roots)
+	}
+
 	sessions, err := session.ListSessions(app.Runner)
 	if err != nil {
 		// "No server running" degrades to an empty list; a cross-profile
@@ -225,7 +233,7 @@ func lsSessionsFlat(app *apppkg.App) error {
 		if s.Name == currentSession && currentTab != "" {
 			marker = fmt.Sprintf("  ← you (%s)", currentTab)
 		}
-		fmt.Printf("  %s %-14s %s  %s  %s%s\n", icon, s.Name, winStr, dir, age, marker)
+		fmt.Printf("  %s %-22s %s  %s  %s%s\n", icon, session.QualifiedDisplayName(s), winStr, dir, age, marker)
 	}
 
 	return nil

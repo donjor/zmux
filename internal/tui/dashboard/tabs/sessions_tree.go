@@ -173,10 +173,10 @@ func (t *SessionsTab) buildSessionRow(s *session.SessionInfo, wsID string) outli
 }
 
 func sessionInfoLabel(s *session.SessionInfo) string {
-	if s.Label != "" {
-		return s.Label
+	if s == nil {
+		return ""
 	}
-	return s.Name
+	return session.LocalDisplayName(*s)
 }
 
 // buildExternalRows constructs the external-source section of the outline.
@@ -325,7 +325,7 @@ func (t *SessionsTab) View() string {
 		header = "1 workspace"
 	}
 	if t.current != "" {
-		header += "  " + t.styles.Dim.Render("|") + "  " + t.styles.Success.Render(t.current)
+		header += "  " + t.styles.Dim.Render("|") + "  " + t.styles.Success.Render(sessionLabelForName(t.current, t.workspaces))
 	}
 	// Active-filter chip (shown while a committed filter narrows the tree).
 	if t.mode != sessionsModeSearch && t.searchQuery != "" {
@@ -367,6 +367,18 @@ func (t *SessionsTab) View() string {
 	t.vp.SetContent(b.String())
 	ensureCursorVisible(&t.vp, cursorLine)
 	return renderScrollable(t.vp, t.styles)
+}
+
+func sessionLabelForName(name string, workspaces []workspaceview.WorkspaceViewModel) string {
+	for i := range workspaces {
+		for j := range workspaces[i].LiveSessions {
+			s := workspaces[i].LiveSessions[j]
+			if s.Name == name {
+				return session.QualifiedDisplayName(s)
+			}
+		}
+	}
+	return name
 }
 
 // renderRow paints a single row with kind-specific formatting.

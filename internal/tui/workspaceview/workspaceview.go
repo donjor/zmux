@@ -52,17 +52,30 @@ func BuildWorkspaceViewModels(
 
 		for _, wsSess := range ws.Sessions {
 			// Check for the session itself and any grouped clones (e.g., dev-b).
-			root := session.RootName(wsSess.TmuxName)
+			roots := []string{session.RootName(wsSess.TmuxName)}
+			if wsSess.LegacyTmuxName != "" {
+				roots = append(roots, session.RootName(wsSess.LegacyTmuxName))
+			}
 			for _, ls := range liveSessions {
-				if session.RootName(ls.Name) == root {
-					vm.LiveSessions = append(vm.LiveSessions, ls)
-					claimed[ls.Name] = true
-					if ls.Attached {
-						vm.HasAttached = true
-					}
-					if ls.Activity.After(vm.LastActivity) {
-						vm.LastActivity = ls.Activity
-					}
+				if !matchesAnyRoot(session.RootName(ls.Name), roots) || claimed[ls.Name] {
+					continue
+				}
+				if ls.Workspace == "" {
+					ls.Workspace = ws.Name
+				}
+				if ls.Label == "" {
+					ls.Label = wsSess.Label
+				}
+				if ls.SessionID == "" {
+					ls.SessionID = wsSess.ID
+				}
+				vm.LiveSessions = append(vm.LiveSessions, ls)
+				claimed[ls.Name] = true
+				if ls.Attached {
+					vm.HasAttached = true
+				}
+				if ls.Activity.After(vm.LastActivity) {
+					vm.LastActivity = ls.Activity
 				}
 			}
 		}
@@ -106,4 +119,13 @@ func BuildWorkspaceViewModels(
 	}
 
 	return models
+}
+
+func matchesAnyRoot(root string, candidates []string) bool {
+	for _, candidate := range candidates {
+		if candidate != "" && root == candidate {
+			return true
+		}
+	}
+	return false
 }

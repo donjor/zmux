@@ -1,6 +1,7 @@
 package picker
 
 import (
+	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
@@ -164,7 +165,7 @@ func (m *PickerModel) buildOutlineWithFocus(forceFocusWS string) {
 					Kind:       outline.RowSession,
 					Depth:      1,
 					ParentID:   wsID,
-					Label:      s.Name,
+					Label:      pickerSessionLabel(s),
 					Selectable: true,
 					Attached:   s.Attached,
 					Data:       &s,
@@ -177,6 +178,10 @@ func (m *PickerModel) buildOutlineWithFocus(forceFocusWS string) {
 	rows = append(rows, buildExternalRows(m.catalog, m.tree)...)
 
 	m.tree.SetRows(rows)
+}
+
+func pickerSessionLabel(s session.SessionInfo) string {
+	return session.LocalDisplayName(s)
 }
 
 // topActionLabel returns the display label for the top action row based

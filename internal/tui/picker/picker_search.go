@@ -54,7 +54,7 @@ func matchSessions(query string, sessions []session.SessionInfo) []session.Sessi
 	}
 	names := make([]string, len(sessions))
 	for i, s := range sessions {
-		names[i] = s.Name
+		names[i] = session.QualifiedDisplayName(s)
 	}
 	matches := fuzzy.Find(query, names)
 	result := make([]session.SessionInfo, len(matches))

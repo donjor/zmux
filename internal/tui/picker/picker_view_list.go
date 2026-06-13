@@ -244,7 +244,7 @@ func (m PickerModel) renderSessionRow(s session.SessionInfo, selected bool) stri
 		attachedTag = "  " + m.styles.Info.Render("attached")
 	}
 
-	line := "  " + cursor + iconStyle.Render(icon) + " " + nameStyle.Render(fmt.Sprintf("%-14s", s.Name))
+	line := "  " + cursor + iconStyle.Render(icon) + " " + nameStyle.Render(fmt.Sprintf("%-14s", session.LocalDisplayName(s)))
 	if winStr != "" {
 		line += "  " + m.styles.Dim.Render(winStr)
 	}
