@@ -195,7 +195,11 @@ The durable store is v3: each workspace session has a stable ID, a local label, 
 
 `internal/session` owns the per-session model and the `RootName()` helper that resolves clone names (`dev-b` for legacy sessions, `__clone_b` for managed sessions). `internal/recipe` owns declarative launch plans and bundled recipes.
 
-User-facing command targets use `workspace/session`. Inside a workspace, local labels can resolve by context; raw tmux names remain a deliberate debug escape hatch. UI surfaces should display `@zmux_workspace` + `@zmux_session_label` and use raw names only as operation targets.
+User-facing command targets use `workspace/session`. `internal/cli/session_target.go`
+resolves explicit `workspace/session` targets, current-workspace or cwd-local
+labels, unique labels across workspaces, and finally raw tmux names as a debug
+escape hatch. UI surfaces should display `@zmux_workspace` +
+`@zmux_session_label` and use raw names only as operation targets.
 
 ### Logical tabs, placement, and state
 
@@ -362,7 +366,7 @@ These flags live in `root.go` and route into the corresponding `tui/` flow.
 | Add a bar preset | `internal/bar/bar.go` — preset table + segment definitions. Update preview in `internal/bar/preview.go` if visual changes need preview. |
 | Add a theme | Drop a new file into `internal/theme/bundled/` (iterm2-color-schemes format). It will be `go:embed`'d on next build. |
 | Change a generated tmux behavior | `internal/tmux/conf.go` — but verify `internal/tmux/conf_test.go` still covers the new section. |
-| Change session/workspace behavior | `internal/workspace/` (workspace-level) or `internal/session/` (per-session). Run integration tests (`make test-integration`) — they exercise the built `zmux` CLI end-to-end (binary output, not real tmux). |
+| Change session/workspace behavior | `internal/workspace/` (workspace-level), `internal/session/` (per-session), and `internal/cli/session_target.go` for CLI targeting. Run integration tests (`make test-integration`) — they exercise the built `zmux` CLI end-to-end (binary output, not real tmux). |
 
 ---
 

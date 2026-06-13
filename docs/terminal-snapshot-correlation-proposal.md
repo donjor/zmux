@@ -11,7 +11,9 @@ Audience: zmux implementation agent
 > `zmux` skill). The PNG covers only the current terminal; off-current-window
 > `--pane` targets get text/ANSI plus a warning, never a mismatched screenshot.
 > `zmux terminals` plural listing remains unbuilt; it is not needed by snapshot.
-> The bundle path is zmux-native (`~/.zmux/snapshots`).
+> The bundle path is zmux-native (`~/.zmux/snapshots`). The implemented title
+> marker is `zmux:v1;...`, and its human suffix uses managed `workspace/session`
+> labels when available.
 
 ## Prompt for the implementation agent
 
@@ -66,13 +68,14 @@ Configure tmux titles so the desktop window title includes zmux identity when po
 
 ```tmux
 set -g set-titles on
-set -g set-titles-string "zmux #{session_name}:#{window_index}:#{window_name} #{client_tty}"
+set -g set-titles-string "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{?#{@zmux_session_label},#{@zmux_workspace}/#{@zmux_session_label},#{session_name}}:#{window_index}:#{window_name}"
 ```
 
 The exact string should be tested with Ghostty and grouped sessions. Good title properties:
 
 - starts with `zmux` for easy WM filtering;
-- includes session name;
+- includes managed workspace/session labels when present, otherwise the session
+  name;
 - includes active window index/name;
 - includes client tty if tmux exposes it reliably;
 - stays compact enough for terminal title bars.
@@ -80,7 +83,7 @@ The exact string should be tested with Ghostty and grouped sessions. Good title 
 Example title:
 
 ```text
-zmux pi:2:pi-clean-ui /dev/pts/13
+zmux:v1;tty=/dev/pts/13;sid=$1;wid=@2;pane=%58 pi/main:2:pi-clean-ui
 ```
 
 This alone greatly improves `hyprctl clients -j` matching.

@@ -43,10 +43,12 @@ Generated zmux tmux config owns this title marker:
 
 ```tmux
 set -g set-titles on
-set -g set-titles-string "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{session_name}:#{window_index}:#{window_name}"
+set -g set-titles-string "zmux:v1;tty=#{client_tty};sid=#{session_id};wid=#{window_id};pane=#{pane_id} #{?#{@zmux_session_label},#{@zmux_workspace}/#{@zmux_session_label},#{session_name}}:#{window_index}:#{window_name}"
 ```
 
-Only the `zmux:v1;...` token is parsed. The human-readable suffix is informational.
+Only the `zmux:v1;...` token is parsed. The human-readable suffix is
+informational; managed sessions show `workspace/session` labels when tmux
+metadata is present and fall back to the raw tmux session name otherwise.
 
 Correlation uses raw tmux IDs and does not normalize grouped sessions such as `dev-b` to `dev`. After the title token matches, zmux also verifies that the tmux client process is a descendant of the Hyprland terminal process before returning geometry.
 
