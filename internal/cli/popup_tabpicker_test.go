@@ -115,6 +115,23 @@ func TestApplyClosePaneKillsPaneOnly(t *testing.T) {
 	}
 }
 
+func TestApplyCloseRefusesLastWindow(t *testing.T) {
+	a, mock := newTestApp(t)
+	mock.Windows["dev"] = []tmux.Window{{Index: 1, Name: "main"}}
+
+	err := applyTabPickerResult(a, "dev", tabpicker.TabPickerResult{
+		Action: "close", Session: "dev", Index: 1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "last tab") {
+		t.Fatalf("expected last-tab refusal, got %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "KillWindow" {
+			t.Fatalf("must not kill the last window: %+v", c)
+		}
+	}
+}
+
 // show from the picker mirrors `zmux tab show`: clone-block on the origin,
 // move the window home, record the selection in the origin's MRU.
 func TestApplyShowReturnsDockedTab(t *testing.T) {

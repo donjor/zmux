@@ -97,6 +97,10 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 				return launchDashboardPopup(a)
 			}
 
+			if !hasLiveSessions(a) {
+				return runSessionlessDashboard(a)
+			}
+
 			return runSessionPicker(a)
 		},
 	}

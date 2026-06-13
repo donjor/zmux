@@ -56,7 +56,7 @@ func runNewTmp(app *apppkg.App, dir string) error {
 	if err := session.Create(app.Runner, name, dir); err != nil {
 		return err
 	}
-	return session.Attach(app.Runner, name)
+	return attachOwnedSession(app, name)
 }
 
 // runNewInWorkspace creates a workspace (if needed) and sessions within it.
@@ -106,7 +106,7 @@ func runNewInWorkspace(app *apppkg.App, wsName string, sessionLabels []string, d
 	}
 
 	_ = app.WorkspaceStore.SetLastActive(wsName, firstSession.ID)
-	return session.Attach(app.Runner, firstSession.TmuxName)
+	return attachOwnedSession(app, firstSession.TmuxName)
 }
 
 func createWorkspaceSession(app *apppkg.App, wsName, label, dir string) (workspace.WorkspaceSession, error) {

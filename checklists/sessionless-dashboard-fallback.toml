@@ -1,0 +1,74 @@
+# QA walkthrough for plan 032: sessionless dashboard fallback and owned
+# attach-return recovery.
+#
+# Targets the isolated zzmux edge profile — live zmux is untouched.
+# Setup: `./dev.sh zzmux`. Use two terminals: one for the attached zzmux client,
+# one controller shell for kill/open commands.
+# Drive from here: `./qa sessionless-dashboard-fallback`.
+
+[checklist]
+name = "Sessionless dashboard fallback (032)"
+doc = "Owned attach-return fallback, outside dashboard actions, and tab-picker last-window protection on the zzmux edge profile."
+
+[checklist.vars]
+bin = "zzmux"
+ws = "qa-fallback"
+solo = "qa-solo"
+
+[[step]]
+id = "setup"
+name = "Edge binary is installed"
+cmd = "{bin} version"
+expect = "zzmux is installed and uses the isolated edge profile"
+check = "zzmux|v[0-9]"
+
+[[step]]
+id = "no-session-dashboard"
+name = "EYEBALL no-session startup"
+expect = "with no zzmux sessions alive, running `zzmux` opens the dashboard on Workspaces; Esc and Ctrl-C exit cleanly to the shell"
+needs = ["setup"]
+
+[[step]]
+id = "current-tab-new"
+name = "EYEBALL Current tab create path"
+expect = "from the sessionless dashboard, switch to Session & Workspace, press n, and confirm a temporary session is created and attached"
+needs = ["no-session-dashboard"]
+
+[[step]]
+id = "sibling-setup"
+name = "Create fallback workspace"
+cmd = "{bin} new {ws} main sibling"
+expect = "creates workspace qa-fallback with main and sibling sessions, then attaches main"
+needs = ["setup"]
+
+[[step]]
+id = "sibling-reattach"
+name = "EYEBALL destroyed target reattaches sibling"
+expect = "from the controller shell, kill the attached qa-fallback/main tmux session; the attached zzmux terminal reattaches to qa-fallback/sibling instead of exiting"
+needs = ["sibling-setup"]
+
+[[step]]
+id = "solo-setup"
+name = "Create solo workspace"
+cmd = "{bin} new {solo} main"
+expect = "creates workspace qa-solo/main and attaches it"
+needs = ["setup"]
+
+[[step]]
+id = "solo-dashboard"
+name = "EYEBALL destroyed only session opens dashboard"
+expect = "from the controller shell, kill qa-solo/main; the attached zzmux terminal returns to the sessionless dashboard with create and exit paths"
+needs = ["solo-setup"]
+
+[[step]]
+id = "tab-picker-last-window"
+name = "EYEBALL tab-picker close refuses last tab"
+expect = "inside a one-tab zzmux session, open Alt+`, press Ctrl+X on the only tab, and confirm the close is refused; the session stays attached"
+needs = ["setup"]
+
+[[step]]
+id = "cleanup"
+name = "Kill QA workspaces"
+cmd = "{bin} kill {ws}; {bin} kill {solo}"
+expect = "qa-fallback and qa-solo sessions are gone"
+needs = ["sibling-setup", "solo-setup"]

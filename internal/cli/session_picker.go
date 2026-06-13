@@ -50,10 +50,10 @@ func runSessionPicker(app *apppkg.App) error {
 
 	switch res.Action {
 	case "attach":
-		return session.Attach(app.Runner, res.Session)
+		return attachOwnedSession(app, res.Session)
 
 	case "hijack":
-		return session.AttachHijack(app.Runner, res.Session)
+		return attachOwnedSessionWith(app, res.Session, session.AttachHijack)
 
 	case "new":
 		name := res.Name
@@ -66,12 +66,12 @@ func runSessionPicker(app *apppkg.App) error {
 				return err
 			}
 			_ = app.WorkspaceStore.SetLastActive(res.Workspace, rec.ID)
-			return session.Attach(app.Runner, rec.TmuxName)
+			return attachOwnedSession(app, rec.TmuxName)
 		}
 		if err := session.Create(app.Runner, name, dir); err != nil {
 			return err
 		}
-		return session.Attach(app.Runner, name)
+		return attachOwnedSession(app, name)
 
 	case "workspace-create":
 		wsName := res.Workspace
@@ -87,7 +87,7 @@ func runSessionPicker(app *apppkg.App) error {
 			return err
 		}
 		_ = app.WorkspaceStore.SetLastActive(wsName, rec.ID)
-		return session.Attach(app.Runner, rec.TmuxName)
+		return attachOwnedSession(app, rec.TmuxName)
 
 	case "overmind-connect":
 		src := res.ExternalSource
@@ -116,7 +116,7 @@ func runSessionPicker(app *apppkg.App) error {
 			return fmt.Errorf("workspace %q has no live sessions", res.Workspace)
 		}
 		_ = app.WorkspaceStore.SetLastActive(res.Workspace, target.ID)
-		return session.Attach(app.Runner, target.TmuxName)
+		return attachOwnedSession(app, target.TmuxName)
 	}
 
 	return nil

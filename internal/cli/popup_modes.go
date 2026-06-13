@@ -107,8 +107,13 @@ func runNewDashboard(app *apppkg.App, dashboardTabFlag string) error {
 		tabs.NewHelpTab(styles),
 	}
 
-	// Parse initial tab (handle deprecated names).
+	// Parse initial tab (handle deprecated names). Outside tmux there is no
+	// current session for the Session tab, so default to the global workspace
+	// surface while still honoring an explicit --dashboard-tab.
 	initialTab := resolveDashboardTab(dashboardTabFlag)
+	if dashboardTabFlag == "" && !app.Runner.IsInsideTmux() {
+		initialTab = dashboard.TabWorkspaces
+	}
 
 	model := dashboard.NewDashboardApp(services, tabImpls, initialTab)
 
@@ -265,6 +270,9 @@ func applyTabPickerResult(app *apppkg.App, sessionName string, res tabpicker.Tab
 		old := fmt.Sprintf("%d", res.Index)
 		return app.Runner.RenameWindow(target, old, res.Name)
 	case "close":
+		if err := guardNotLastTab(app.Runner, target); err != nil {
+			return err
+		}
 		return app.Runner.KillWindow(target, res.Index)
 	case "close-pane":
 		return app.Runner.KillPane(res.Pane)
@@ -352,20 +360,40 @@ func runWorkspacePicker(app *apppkg.App) error {
 		return fmt.Errorf("workspace %q has no live sessions", wp.Result.Workspace)
 	}
 	_ = app.WorkspaceStore.SetLastActive(wp.Result.Workspace, target.ID)
-	return session.Attach(app.Runner, target.TmuxName)
+	return attachOwnedSession(app, target.TmuxName)
 }
 
 // handleDashboardResult applies the action chosen from inside the dashboard
-// popup. Runs after the dashboard's bubbletea Program returns.
+// popup or from the sessionless dashboard. Runs after the dashboard's
+// bubbletea Program returns.
 func handleDashboardResult(app *apppkg.App, action, chosen string) error {
 	switch action {
 	case "switch":
+		if chosen == "" {
+			return nil
+		}
+		if !app.Runner.IsInsideTmux() {
+			return attachOwnedSession(app, chosen)
+		}
 		return session.Switch(app.Runner, chosen)
+
+	case "focus":
+		if chosen == "" || app.Runner.IsInsideTmux() {
+			return nil
+		}
+		return attachOwnedSession(app, chosen)
 
 	case "new":
 		name := session.NextTmpName(app.Runner)
-		if err := session.Create(app.Runner, name, "."); err != nil {
+		dir, err := os.Getwd()
+		if err != nil {
+			dir = "."
+		}
+		if err := session.Create(app.Runner, name, dir); err != nil {
 			return err
+		}
+		if !app.Runner.IsInsideTmux() {
+			return attachOwnedSession(app, name)
 		}
 		return session.Switch(app.Runner, name)
 

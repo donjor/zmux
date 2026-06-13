@@ -64,6 +64,15 @@ func (t *CurrentTab) handleListKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t.exitWindowLevel()
 	}
 
+	if t.sessionName == "" {
+		if msg.String() == "n" {
+			return t, func() tea.Msg {
+				return dashboard.QuitIntent{Action: "new"}
+			}
+		}
+		return t, nil
+	}
+
 	row := t.tree.Current()
 	if row == nil {
 		return t, nil

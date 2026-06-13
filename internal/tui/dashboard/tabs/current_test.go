@@ -777,6 +777,39 @@ func TestCurrentTabShortHelp(t *testing.T) {
 	}
 }
 
+func TestCurrentTabNoActiveSessionState(t *testing.T) {
+	tab := NewCurrentTab(tmux.NewMockRunner(), styles.DefaultStyles(), nil, nil)
+	tab.Resize(80, 24)
+
+	view := tab.View()
+	if !strings.Contains(view, "No active session") {
+		t.Fatalf("expected no-active-session view, got:\n%s", view)
+	}
+	if !strings.Contains(view, "Press n") {
+		t.Fatalf("expected create affordance in no-session view, got:\n%s", view)
+	}
+	if help := tab.ShortHelp(); !strings.Contains(help, "n:new tmp") || !strings.Contains(help, "esc:exit") {
+		t.Fatalf("unexpected no-session help: %q", help)
+	}
+}
+
+func TestCurrentTabNoActiveSessionNewQuitsWithIntent(t *testing.T) {
+	tab := NewCurrentTab(tmux.NewMockRunner(), styles.DefaultStyles(), nil, nil)
+
+	_, cmd := sendCurrentKey(tab, "n")
+	if cmd == nil {
+		t.Fatal("expected n to emit a dashboard quit intent")
+	}
+	msg := cmd()
+	intent, ok := msg.(dashboard.QuitIntent)
+	if !ok {
+		t.Fatalf("expected QuitIntent, got %T", msg)
+	}
+	if intent.Action != "new" {
+		t.Fatalf("QuitIntent action = %q, want new", intent.Action)
+	}
+}
+
 // ── View smoke ──
 
 func TestCurrentTabViewRendersTree(t *testing.T) {

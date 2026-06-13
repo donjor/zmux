@@ -132,11 +132,11 @@ func workspaceSessionName(app *apppkg.App, requested, workspace string) string {
 // attachSession handles the attach logic: normal attach, auto-clone, or hijack.
 func attachSession(app *apppkg.App, hijack bool, name string) error {
 	if hijack {
-		return session.AttachHijack(app.Runner, name)
+		return attachOwnedSessionWith(app, name, session.AttachHijack)
 	}
 	// session.Attach already handles auto-cloning (creates grouped session
 	// if already attached elsewhere).
-	return session.Attach(app.Runner, name)
+	return attachOwnedSession(app, name)
 }
 
 func parseWorkspaceSessionArgs(args []string) (workspaceName, sessionLabel string, err error) {

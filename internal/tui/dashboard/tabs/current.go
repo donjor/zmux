@@ -315,6 +315,10 @@ func (t *CurrentTab) ShortHelp() string {
 		return "enter:move  esc:cancel"
 	}
 
+	if t.sessionName == "" {
+		return "n:new tmp  tab:workspaces  esc:exit"
+	}
+
 	row := t.tree.Current()
 	if row == nil {
 		return "r:rename  x:kill  n:new"
@@ -367,7 +371,7 @@ func (t *CurrentTab) View() string {
 
 	if t.sessionName == "" {
 		b.WriteString("  " + t.styles.Dim.Render("No active session.") + "\n")
-		b.WriteString("  " + t.styles.Dim.Render("Open this dashboard from within a tmux session.") + "\n")
+		b.WriteString("  " + t.styles.Dim.Render("Press n to create a temporary session, or Tab for Workspaces.") + "\n")
 		return b.String()
 	}
 

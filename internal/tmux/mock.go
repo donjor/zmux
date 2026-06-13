@@ -108,7 +108,11 @@ func (m *MockRunner) HasSession(name string) bool {
 // NewSession records the call.
 func (m *MockRunner) NewSession(name, dir string) error {
 	m.record("NewSession", name, dir)
-	return m.Err
+	if m.Err != nil {
+		return m.Err
+	}
+	m.Sessions = append(m.Sessions, Session{Name: name, Dir: dir})
+	return nil
 }
 
 // NewSessionWindow records the call, registers the session (so a later
@@ -127,13 +131,26 @@ func (m *MockRunner) NewSessionWindow(session, window, dir string) (string, erro
 // NewGroupedSession records the call.
 func (m *MockRunner) NewGroupedSession(target, name string) error {
 	m.record("NewGroupedSession", target, name)
-	return m.Err
+	if m.Err != nil {
+		return m.Err
+	}
+	m.Sessions = append(m.Sessions, Session{Name: name, Group: target})
+	return nil
 }
 
 // KillSession records the call.
 func (m *MockRunner) KillSession(name string) error {
 	m.record("KillSession", name)
-	return m.Err
+	if m.Err != nil {
+		return m.Err
+	}
+	for i, s := range m.Sessions {
+		if s.Name == name {
+			m.Sessions = append(m.Sessions[:i], m.Sessions[i+1:]...)
+			break
+		}
+	}
+	return nil
 }
 
 // AttachSession records the call.
@@ -163,7 +180,16 @@ func (m *MockRunner) SwitchClient(target string) error {
 // RenameSession records the call.
 func (m *MockRunner) RenameSession(old, new string) error {
 	m.record("RenameSession", old, new)
-	return m.Err
+	if m.Err != nil {
+		return m.Err
+	}
+	for i := range m.Sessions {
+		if m.Sessions[i].Name == old {
+			m.Sessions[i].Name = new
+			break
+		}
+	}
+	return nil
 }
 
 // ListWindows returns the configured windows for a session.

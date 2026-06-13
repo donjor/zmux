@@ -186,12 +186,8 @@ func newTabKillCmd(app *apppkg.App) *cobra.Command {
 			if rt.Tab != nil {
 				session = rt.Tab.Session
 			}
-			windows, wErr := app.Runner.ListWindows(session)
-			if wErr != nil {
-				return fmt.Errorf("cannot list tabs: %w", wErr)
-			}
-			if len(windows) <= 1 {
-				return fmt.Errorf("cannot kill the last tab — use `zmux session kill %s` instead", session)
+			if err := guardNotLastTab(app.Runner, session); err != nil {
+				return err
 			}
 
 			switch {
@@ -203,6 +199,17 @@ func newTabKillCmd(app *apppkg.App) *cobra.Command {
 			return fmt.Errorf("tab %q not found in session %q", tabName, current)
 		},
 	}
+}
+
+func guardNotLastTab(runner tmux.Runner, sessionName string) error {
+	windows, err := runner.ListWindows(sessionName)
+	if err != nil {
+		return fmt.Errorf("cannot list tabs: %w", err)
+	}
+	if len(windows) <= 1 {
+		return fmt.Errorf("cannot kill the last tab — use `zmux session kill %s` instead", sessionName)
+	}
+	return nil
 }
 
 func newSessionCmd(app *apppkg.App) *cobra.Command {

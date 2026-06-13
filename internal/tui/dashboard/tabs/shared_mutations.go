@@ -95,5 +95,8 @@ func killWorkspaceMutation(runner tmux.Runner, wsStore *workspace.Store, name st
 // killSessionMutation kills a single tmux session and removes it from
 // workspace membership when appropriate (see workspace.KillSession).
 func killSessionMutation(runner tmux.Runner, wsStore *workspace.Store, name string) error {
+	if wsStore == nil {
+		return session.Kill(runner, name)
+	}
 	return workspace.KillSession(runner, wsStore, name)
 }

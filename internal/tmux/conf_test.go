@@ -326,6 +326,16 @@ func TestGenerateConfPopupBorderRounded(t *testing.T) {
 	}
 }
 
+func TestGenerateConfLeavesDetachOnDestroyDefault(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	if strings.Contains(conf, "detach-on-destroy") {
+		t.Error("generated config must leave tmux detach-on-destroy at its default/on value")
+	}
+}
+
 func TestGenerateConfContainsReload(t *testing.T) {
 	cfg := config.DefaultConfig()
 	palette := testPalette()
