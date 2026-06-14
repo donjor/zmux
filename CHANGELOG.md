@@ -26,6 +26,17 @@ versioning is semver-ish until the first public release.
   `xargs tmux …`, and shell-fed here-doc bodies — so a raw tmux or background
   job one indirection deep is still flagged. Command substitution stays a
   documented gap.
+- **`zmux session run`** `agents` - create a detached session in the current (or
+  `--workspace`) workspace and launch a command as its first/only tab — no focus
+  steal, no blank shell tab. The orchestration-safe worker-spawn primitive
+  (`tmux new-session -d -n <tab>`); the `agent-worker` and `orchestrate` doctrines
+  now teach it instead of the attach-oriented `zmux new <ws> <session>`.
+- **Workspace-local session identity** `workspace` - workspaces now store v3
+  session records with local labels, stable IDs, generated raw tmux names, and
+  `@zmux_*` tmux metadata. Commands accept `workspace/session` targets while
+  normal UI surfaces display local labels instead of raw `zws_...` names; legacy
+  v1/v2 sessions are repaired into managed names and clone-like labels such as
+  `worker-x` stay valid.
 
 ### Fixed
 
@@ -45,7 +56,6 @@ versioning is semver-ish until the first public release.
   managed session is killable by the same address `run`, `send`, and `watch`
   use. `kill -y/--yes` skips the workspace teardown confirmation for scripted
   and agent use.
-
 - **Sessionless dashboard fallback** `workspace` - `zmux` stays usable when no
   workspace or session is active. A zmux-owned attach whose session disappears
   reattaches to the workspace's best remaining live session; with none left it
@@ -54,17 +64,6 @@ versioning is semver-ish until the first public release.
   guard `zmux tab kill` already enforces. Bounded retries with seen-set
   termination, `RootName`-aware for grouped sessions, and a `detach-on-destroy`
   precondition check.
-- **`zmux session run`** `agents` - create a detached session in the current (or
-  `--workspace`) workspace and launch a command as its first/only tab — no focus
-  steal, no blank shell tab. The orchestration-safe worker-spawn primitive
-  (`tmux new-session -d -n <tab>`); the `agent-worker` and `orchestrate` doctrines
-  now teach it instead of the attach-oriented `zmux new <ws> <session>`.
-- **Workspace-local session identity** `workspace` - workspaces now store v3
-  session records with local labels, stable IDs, generated raw tmux names, and
-  `@zmux_*` tmux metadata. Commands accept `workspace/session` targets while
-  normal UI surfaces display local labels instead of raw `zws_...` names; legacy
-  v1/v2 sessions are repaired into managed names and clone-like labels such as
-  `worker-x` stay valid.
 
 ## [0.8.0] - 2026-06-09
 > Release tag: `v0.8.0` | Topics: `watch`, `tabs`, `qa`, `recipes`, `agents`, `docs` | Compare: `v0.7.0...v0.8.0`

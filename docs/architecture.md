@@ -67,20 +67,20 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 
 | Package | Lines | Role |
 |---------|-------|------|
-| `config` | ~250 | TOML config loading, defaults, `FS` interface for tests |
+| `config` | ~325 | TOML config loading, defaults, `FS` interface for tests |
 | `debug` | ~70 | Opt-in debug logging (`ZMUX_DEBUG=1`) |
 | `procfs` | ~65 | Linux `/proc` process-tree inspection |
 | `tablabel` | ~30 | Stable optional tab-label overlay format |
 | `termtitle` | ~80 | tmux terminal-title format contract + parser (no zmux deps; dissolves the latent tmux↔terminal cycle) |
 | `terminal` | ~240 | Resolves strict screenshot targets for the current tmux client |
 | `keys` | ~280 | Keybinding registry — single source of truth for `conf.go`, help surfaces, and the generated `docs/keybindings.md` |
-| `guard` | ~270 | Classifies a shell command for agent terminal-hygiene (raw-tmux / background-job / shared-interaction); ruleset shares `testdata/zmux-guard-corpus.jsonl` with the Claude hook + pi classifier. Pure leaf, no deps |
+| `guard` | ~480 | Classifies a shell command for agent terminal-hygiene (raw-tmux / background-job / shared-interaction), recursively scanning nested-form payloads (`sh -c`, env/path-prefixed shells, `xargs`, here-docs); ruleset shares `testdata/zmux-guard-corpus.jsonl` with the Claude hook + pi classifier. Pure leaf, no deps |
 
 ### tmux boundary
 
 | Package | Lines | Role |
 |---------|-------|------|
-| `tmux` | ~2300 | Typed wrapper around the `tmux` CLI — `Runner` interface, `MockRunner` for tests, generated `tmux.conf`, logical-pane scan, and placement primitives |
+| `tmux` | ~2450 | Typed wrapper around the `tmux` CLI — `Runner` interface, `MockRunner` for tests, generated `tmux.conf`, logical-pane scan, and placement primitives |
 
 **`Runner` is the boundary.** Production uses `tmux.NewRunner()` which shells out to `tmux`. Tests use `tmux.MockRunner` for deterministic, observable interactions. Anything that calls `os/exec` for tmux **must** route through `Runner`.
 
@@ -89,18 +89,18 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 | Package | Lines | Role |
 |---------|-------|------|
 | `session` | ~430 | Session model, CRUD, tmp-session helpers |
-| `recipe` | ~620 | Recipe discovery, TOML parsing, pure planning, dry-run rendering, execution |
-| `workspace` | ~630 | Workspace state (TOML), session tracking, reconciliation |
+| `recipe` | ~1650 | Recipe discovery, TOML parsing, pure planning, dry-run rendering, execution, plus fork/extend/create authoring |
+| `workspace` | ~1250 | Workspace state (TOML), v3 local-label session identity, session tracking, reconciliation |
 | `tabs` | ~950 | Logical-tab identity, scanning, placement, dock hide/show, MRU, and reconciliation |
 | `tabstate` | ~280 | Pane-canonical tab lifecycle state (`running` / `done` / `failed` / `attention`) and bar glyph formatting |
 | `theme` | ~650 | Theme parsing, semantic palette, resolver, embed of bundled themes |
 | `bar` | ~2700 | Status bar generation, presets, two-line logical-tabs rendering, preview |
 | `sync` | ~220 | Pull-only theme sync targets (Ghostty, Neovim) |
-| `source` | ~430 | External source discovery (tmux sockets, catalog) + generic attach fallback |
+| `source` | ~545 | External source discovery (tmux sockets, catalog) + generic attach fallback |
 | `overmind` | ~120 | Overmind control client (`Client` interface: connect/restart/stop/logs) |
 | `setup` | ~190 | Shell-rc integration: pure plan + apply behind `config.FS` (markers, `.bak`, dry-run, removal) |
 | `wm` | ~150 | Window manager adapters (Hyprland today) |
-| `snapshot` | ~470 | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver` |
+| `snapshot` | ~525 | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver` |
 | `qa` | ~1320 | Repo-local QA walkthrough framework: checklist parse/lint, scorecard state, shell runner, and `cmd/qa` CLI |
 
 ### UI
@@ -117,6 +117,7 @@ The flat `tui` root package was dissolved into focused leaf/surface packages; th
 | `tui/tabpicker` | Alt+` tab switcher; understands full, pane-of, and hidden logical tabs |
 | `tui/themepicker` | Standalone theme picker |
 | `tui/wizard` | First-run `zmux init` setup wizard |
+| `tui/recipeup` | Recipe create/edit form wizard (`recipe create` / `recipe edit`) |
 | `tui/qapicker` | Human-facing QA walkthrough picker for `./qa` |
 | `tui/tkey` | Small key helpers shared by TUI surfaces |
 | `tui/palette` | Command palette: registry, providers, executor |
@@ -249,6 +250,7 @@ internal/tui/                 — no flat package; focused leaves + surfaces
 ├── qapicker/                 — QA walkthrough picker for ./qa
 ├── tkey/                     — shared key helpers
 ├── wizard/                   — zmux init setup wizard
+├── recipeup/                 — recipe create/edit form wizard
 ├── outline/                  — tree-outline subcomponent
 ├── views/                    — shared row/column components
 ├── palette/                  — command palette
@@ -259,7 +261,7 @@ internal/tui/                 — no flat package; focused leaves + surfaces
     ├── tab.go                — Tab interface + msg routing
     ├── app.go                — DashboardApp (bubbletea Model)
     └── tabs/
-        ├── current.go        — Session tab (active workspace's sessions)
+        ├── current.go        — Session & Workspace tab (active workspace's sessions)
         ├── sessions.go       — Workspaces tab (all workspaces)
         ├── themes.go         — Themes tab (pick/clone/edit)
         ├── bar.go            — Bar tab (preset + segment toggle)

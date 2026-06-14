@@ -6,7 +6,7 @@ status bar presets, and a popup dashboard — in a single binary.
 ## Features
 
 - **Workspace-primary picker** — single flat list of workspaces with inline session expansion, fuzzy search, ghost tab completion, matched-char underlines
-- **Dashboard** — 5-tab popup (prefix+Space): Session, Workspaces, Themes, Settings, Help
+- **Dashboard** — 6-tab popup (prefix+Space): Session & Workspace, Workspaces, Themes, Bar, Settings, Help
 - **Command palette** — spotlight-style quick actions (prefix+p)
 - **Theming** — 300+ themes (iterm2-color-schemes format), semantic palette, color swatches
 - **Theme sync** — pull your theme from Ghostty or Neovim
