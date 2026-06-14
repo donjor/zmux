@@ -60,6 +60,12 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set -g status-right-length 100\n")
 	// Rounded popup chrome for dashboard, pickers, scratch — quieter framing.
 	b.WriteString("set -g popup-border-lines rounded\n")
+	// Faint border in the theme's dim color, so a popup reads as a layer
+	// floating above the host rather than another framed pane. Always-on and
+	// regenerated on theme change (apply re-runs GenerateConf).
+	if palette != nil {
+		fmt.Fprintf(&b, "set -g popup-border-style fg=%s\n", palette.Dim.Hex())
+	}
 	b.WriteString("\n")
 
 	// Prefix

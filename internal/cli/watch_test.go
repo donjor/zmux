@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -230,6 +232,103 @@ func TestWatchIdleRejectsInvalidValues(t *testing.T) {
 		if err := rootCmd.Execute(); err == nil {
 			t.Errorf("expected error for args %v", args)
 		}
+	}
+}
+
+// ── --lines bounds capture height (P2) ──
+
+// captureStdout redirects os.Stdout for the duration of fn and returns
+// everything written to it. watch prints via fmt.Print (os.Stdout), so this
+// is the only way to assert the printed line count.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = w
+	done := make(chan string, 1)
+	go func() {
+		var b strings.Builder
+		_, _ = io.Copy(&b, r)
+		done <- b.String()
+	}()
+	fn()
+	_ = w.Close()
+	os.Stdout = orig
+	return <-done
+}
+
+func nonEmptyLineCount(s string) int {
+	n := 0
+	for _, line := range strings.Split(s, "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// bigCapture returns n numbered lines ("line 1\n…line n\n").
+func bigCapture(n int) string {
+	var b strings.Builder
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&b, "line %d\n", i)
+	}
+	return b.String()
+}
+
+func TestWatchPlainRespectsLines(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.CapturedPaneContent = bigCapture(10) // capture is larger than --lines
+
+	out := captureStdout(t, func() {
+		rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--lines", "3"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("watch failed: %v", err)
+		}
+	})
+
+	if got := nonEmptyLineCount(out); got > 3 {
+		t.Errorf("watch --lines 3 printed %d lines, want <= 3:\n%q", got, out)
+	}
+	// And it must be the tail, not the head.
+	if !strings.Contains(out, "line 10") || strings.Contains(out, "line 1\n") {
+		t.Errorf("watch --lines 3 should print the tail (line 10, not line 1), got:\n%q", out)
+	}
+}
+
+func TestWatchUntilTimeoutCaptureRespectsLines(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.CapturedPaneContent = bigCapture(10) // pattern never matches → timeout prints capture
+
+	out := captureStdout(t, func() {
+		rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--until", "NEVER_MATCHES", "--lines", "3", "-T", "1"})
+		_ = rootCmd.Execute() // expected timeout
+	})
+
+	if got := nonEmptyLineCount(out); got > 3 {
+		t.Errorf("watch --until best-effort capture printed %d lines, want <= 3:\n%q", got, out)
+	}
+}
+
+func TestWatchIdleStableCaptureRespectsLines(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.CapturedPaneContent = bigCapture(10) // stable from the start
+
+	out := captureStdout(t, func() {
+		rootCmd.SetArgs([]string{"watch", "server", "-s", "test-session", "--idle", "1", "--lines", "3", "-T", "5"})
+		if err := rootCmd.Execute(); err != nil {
+			t.Fatalf("watch --idle on a stable pane should succeed: %v", err)
+		}
+	})
+
+	if got := nonEmptyLineCount(out); got > 3 {
+		t.Errorf("watch --idle capture printed %d lines, want <= 3:\n%q", got, out)
 	}
 }
 

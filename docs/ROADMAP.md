@@ -6,46 +6,11 @@
 
 ## Now
 
-### QoL polish first
-
-- [ ] **Top bar repairs stale and blank session/tab state**
-  - Dead or killed sessions should disappear from the bar without waiting for a
-    later interaction.
-  - On init/load, the second tab line should render its actual tabs instead of
-    staying blank until a new tab opens.
-
-- [ ] **Picker delete keeps cursor position**
-  - In the outside-tmux picker, `ctrl+x` delete currently moves the cursor after
-    removal, which makes repeated cleanup awkward.
-  - Preserve the nearest stable row after deletion and keep confirm/cancel
-    behavior unchanged.
-
-- [ ] **Session tab gets search, numbering, and clearer scope**
-  - The dashboard's current-session tab still lacks the search and quick index
-    affordances users get in the main picker.
-  - Keep the tab explicitly scoped to the active workspace while adding fast
-    navigation for sessions and tabs inside it.
-
-- [ ] **Popup focus gets background dimming**
-  - The dashboard and scratch shell now have clearer borders, but the underlying
-    terminal can still read as active.
-  - Add a theme-safe dimming strategy or a documented fallback when tmux/terminal
-    constraints make dimming unreliable.
-
-### Agent terminal reliability
-
-- [ ] **`watch --lines` respects the requested capture height**
-  - The agent driver path expects small captures when it asks for a bounded
-    screen window.
-  - Fix the capture path so `--lines` limits output height without breaking idle
-    detection or full capture use cases.
-
-- [ ] **Guardrails catch hidden tmux/background invocations**
-  - The shared guard corpus covers direct shell surfaces, but nested forms such
-    as command substitution, `sh -c`, `xargs tmux`, and here-doc bodies can still
-    escape scanning.
-  - Extend parsing carefully so normal one-shot shell work stays cheap and false
-    positives remain explainable.
+> The QoL polish batch cleared this shelf — top-bar repairs, picker-cursor
+> stability, session-tab search/numbering/scope, popup focus framing,
+> `watch --lines`, and nested-form guard coverage all shipped (see
+> [../CHANGELOG.md](../CHANGELOG.md), Unreleased). Promote the next batch from
+> **Next** below.
 
 ## Next
 

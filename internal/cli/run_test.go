@@ -255,6 +255,26 @@ func TestRunWaitIgnoresStaleSentinel(t *testing.T) {
 	}
 }
 
+// run --wait scans the bounded tail capture, so --lines must bound what it
+// reads/prints the same way watch does (shared CapturePane wrapper, P2).
+func TestRunWaitCaptureRespectsLines(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.CapturedPaneContent = bigCapture(10) // sentinel never appears → timeout
+
+	out := captureStdout(t, func() {
+		rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "--lines", "3", "-T", "1"})
+		_ = rootCmd.Execute()
+	})
+
+	if strings.Contains(out, "line 7\n") {
+		t.Errorf("run --lines 3 should not surface head line 7 (only last 3 lines):\n%q", out)
+	}
+	if !strings.Contains(out, "line 10") {
+		t.Errorf("run --lines 3 should surface tail line 10:\n%q", out)
+	}
+}
+
 func TestRunFailsWithoutSession(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.InsideTmux = false

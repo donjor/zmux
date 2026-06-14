@@ -177,6 +177,14 @@ func (m *PickerModel) buildOutlineWithFocus(forceFocusWS string) {
 	// External sources below the workspaces.
 	rows = append(rows, buildExternalRows(m.catalog, m.tree)...)
 
+	// After a delete reload, land on the neighbor captured at delete-commit
+	// (the next cleanup row, else the previous one) rather than letting the
+	// old-ID restore chain snap to the workspace header. Consume once.
+	if m.postDeleteJump != "" {
+		m.tree.SetRowsAndJumpTo(rows, m.postDeleteJump)
+		m.postDeleteJump = ""
+		return
+	}
 	m.tree.SetRows(rows)
 }
 

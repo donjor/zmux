@@ -73,6 +73,51 @@ func loadActiveStyles(app *apppkg.App) (styles.Styles, *theme.Palette, *theme.Re
 	return styles.NewStyles(&p), &p, resolver
 }
 
+// dimHostBehindPopup tints the host window's background while a blocking popup
+// TUI is on screen, restoring it when the returned func runs (defer it right
+// after calling). Best-effort focus polish: it reads the window's current
+// window-style / window-active-style, overwrites both with the theme's BGDim
+// background, and on restore puts the saved value back (or unsets it when there
+// was none). Tints background only — text foreground is untouched.
+//
+// Called from inside the popup process (runNewDashboard / runPalette), which
+// covers every popup entry point — the prefix+Space keybind, the bare `zmux`
+// launch, and the palette→dashboard relaunch — with one seam, since they all
+// converge on the same blocking p.Run(). A SIGKILL of the popup skips the
+// restore; the next `zmux apply` / attach re-asserts the theme default.
+//
+// Returns a no-op when there's no palette (theme unresolved) or no tmux server
+// (the sessionless dashboard runs outside tmux), so callers can defer
+// unconditionally.
+func dimHostBehindPopup(runner tmux.Runner, pal *theme.Palette) func() {
+	if pal == nil || !runner.IsInsideTmux() {
+		return func() {}
+	}
+	const target = "" // current window of the launching client
+
+	prevActive, _ := runner.ShowWindowOption(target, "window-active-style")
+	prevStyle, _ := runner.ShowWindowOption(target, "window-style")
+
+	dim := "bg=" + pal.BGDim.Hex()
+	_ = runner.SetWindowOption(target, "window-active-style", dim)
+	_ = runner.SetWindowOption(target, "window-style", dim)
+
+	return func() {
+		restoreWindowStyle(runner, target, "window-active-style", prevActive)
+		restoreWindowStyle(runner, target, "window-style", prevStyle)
+	}
+}
+
+// restoreWindowStyle puts a saved window style back, or unsets the per-window
+// override when there was none (falling back to the global/theme default).
+func restoreWindowStyle(runner tmux.Runner, target, key, prev string) {
+	if prev == "" {
+		_ = runner.UnsetWindowOption(target, key)
+		return
+	}
+	_ = runner.SetWindowOption(target, key, prev)
+}
+
 func runDashboard(app *apppkg.App, dashboardTabFlag string) error {
 	return runNewDashboard(app, dashboardTabFlag)
 }
@@ -117,6 +162,11 @@ func runNewDashboard(app *apppkg.App, dashboardTabFlag string) error {
 
 	model := dashboard.NewDashboardApp(services, tabImpls, initialTab)
 
+	// Dim the host window behind the popup while the dashboard is open (no-op
+	// outside tmux / without a palette). Covers the keybind + bare-launch paths.
+	restoreDim := dimHostBehindPopup(app.Runner, pal)
+	defer restoreDim()
+
 	p := tea.NewProgram(model)
 	result, err := p.Run()
 	if err != nil {
@@ -132,12 +182,17 @@ func runNewDashboard(app *apppkg.App, dashboardTabFlag string) error {
 }
 
 func runPalette(app *apppkg.App) error {
-	styles, _, resolver := loadActiveStyles(app)
+	styles, pal, resolver := loadActiveStyles(app)
 
 	// Build registry with all providers.
 	reg := palette.NewDefaultRegistry(app.Runner, resolver, app.FS)
 
 	model := palette.NewPaletteModel(reg, styles)
+
+	// Dim the host window behind the palette popup while it's open.
+	restoreDim := dimHostBehindPopup(app.Runner, pal)
+	defer restoreDim()
+
 	p := tea.NewProgram(model)
 	result, err := p.Run()
 	if err != nil {

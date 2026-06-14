@@ -74,4 +74,13 @@ func reconcileBarStatusLines(runner tmux.Runner, layout, topBar, zmuxBin string)
 			_ = runner.SetSessionOption(sess.Name, "status-format[0]", bottomRow)
 		}
 	}
+
+	// Force a redraw now that the formats are (re)set, so tmux re-runs the
+	// tabs-row #() job and paints the second line immediately instead of leaving
+	// it blank until the next status-interval tick. This is the fix for the
+	// blank-on-attach second tab line: bar-adjust runs on client-session-changed
+	// AFTER the conf's own refresh hook, so without this the freshly-set format's
+	// #() output never lands until a later tab/window event. Best-effort — with
+	// no client attached (bootstrap) refresh-client -S is a silent no-op.
+	_ = runner.RefreshStatus()
 }

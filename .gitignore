@@ -37,9 +37,9 @@ demo.gif
 !.env.example
 /.dev.local.sh
 
-# Pi extension local deps
-/pi-extension/node_modules
+# Pi extension local deps (peerDeps model — lockfile is dev-install noise, not tracked)
 /pi-extension/node_modules/
+/pi-extension/package-lock.json
 
 # v0 downloaded theme cache (if v0 init is ever run)
 legacy/v0/themes/iterm2/

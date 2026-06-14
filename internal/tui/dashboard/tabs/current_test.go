@@ -872,7 +872,238 @@ func TestIsIdleWindow(t *testing.T) {
 	}
 }
 
+// ── Search / filter (P5) ──
+
+// typeCurrentSearch enters search mode via "/" (when not already there) and
+// types each rune of query as a separate keystroke, driving the live-filter
+// path through handleSearchKey exactly as a real user would.
+func typeCurrentSearch(tab *CurrentTab, query string) *CurrentTab {
+	if tab.mode != currentModeSearch {
+		tab, _ = sendCurrentKey(tab, "/")
+	}
+	for _, r := range query {
+		tab, _ = sendCurrentKey(tab, string(r))
+	}
+	return tab
+}
+
+func TestCurrentTabSearchEntersMode(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	tab, _ = sendCurrentKey(tab, "/")
+	if tab.mode != currentModeSearch {
+		t.Fatalf("expected search mode, got %d", tab.mode)
+	}
+	if !tab.CapturesEscape() {
+		t.Error("expected CapturesEscape true while in search mode")
+	}
+}
+
+func TestCurrentTabSearchFiltersBySessionName(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	// "dev-2" matches only the sibling session, not the current "dev".
+	tab = typeCurrentSearch(tab, "dev-2")
+
+	if findCurrentRowByID(tab, outline.SessionID("dev-2")) < 0 {
+		t.Error("expected matching session dev-2 to show")
+	}
+	if findCurrentRowByID(tab, outline.SessionID("dev")) >= 0 {
+		t.Error("expected non-matching current session dev to be hidden")
+	}
+}
+
+func TestCurrentTabSearchFiltersByWindowName(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	// "editor" is a window of the current session "dev"; "dev-2" only has a
+	// "shell" window, so it drops out.
+	tab = typeCurrentSearch(tab, "editor")
+
+	if findCurrentRowByID(tab, outline.SessionID("dev")) < 0 {
+		t.Error("expected current session dev kept for its matching window")
+	}
+	if findCurrentRowByID(tab, outline.SessionID("dev-2")) >= 0 {
+		t.Error("expected dev-2 filtered out by window-name query 'editor'")
+	}
+}
+
+func TestCurrentTabSearchEscCancelsFilter(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	tab = typeCurrentSearch(tab, "dev-2")
+	tab, _ = sendCurrentKey(tab, "esc")
+
+	if tab.mode != currentModeList {
+		t.Errorf("expected list mode after esc, got %d", tab.mode)
+	}
+	if tab.searchQuery != "" {
+		t.Errorf("expected filter cleared, got %q", tab.searchQuery)
+	}
+	if findCurrentRowByID(tab, outline.SessionID("dev")) < 0 {
+		t.Error("expected current session restored after clearing filter")
+	}
+}
+
+func TestCurrentTabSearchEnterCommitsFilter(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	tab = typeCurrentSearch(tab, "dev-2")
+	tab, _ = sendCurrentKey(tab, "enter")
+
+	if tab.mode != currentModeList {
+		t.Errorf("expected list mode after enter, got %d", tab.mode)
+	}
+	if tab.searchQuery != "dev-2" {
+		t.Errorf("expected committed filter dev-2, got %q", tab.searchQuery)
+	}
+	if !tab.CapturesEscape() {
+		t.Error("expected CapturesEscape true while a committed filter is active")
+	}
+
+	// A second esc in list mode clears the committed filter.
+	tab, _ = sendCurrentKey(tab, "esc")
+	if tab.searchQuery != "" {
+		t.Errorf("expected filter cleared by list-mode esc, got %q", tab.searchQuery)
+	}
+}
+
+// ── Numbered quick-jump (P5) ──
+
+func TestCurrentTabDigitJumpsToNthSession(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	// #1 = current "dev", #2 = sibling "dev-2". Pressing 2 switches to dev-2.
+	_, cmd := sendCurrentKey(tab, "2")
+	intent := currentQuitIntent(t, cmd)
+	if intent.Action != "switch" || intent.Chosen != "dev-2" {
+		t.Fatalf("digit 2: got action=%q chosen=%q, want switch/dev-2", intent.Action, intent.Chosen)
+	}
+}
+
+func TestCurrentTabDigitJumpsToCurrentSession(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	// #1 is the current session → focus (no switch).
+	_, cmd := sendCurrentKey(tab, "1")
+	intent := currentQuitIntent(t, cmd)
+	if intent.Action != "focus" || intent.Chosen != "dev" {
+		t.Fatalf("digit 1: got action=%q chosen=%q, want focus/dev", intent.Action, intent.Chosen)
+	}
+}
+
+func TestCurrentTabDigitRespectsFilter(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	// Filter to dev-2 only, then commit. It becomes the sole visible session,
+	// so digit 1 targets it.
+	tab = typeCurrentSearch(tab, "dev-2")
+	tab, _ = sendCurrentKey(tab, "enter")
+
+	_, cmd := sendCurrentKey(tab, "1")
+	intent := currentQuitIntent(t, cmd)
+	if intent.Action != "switch" || intent.Chosen != "dev-2" {
+		t.Fatalf("digit 1 under filter: got action=%q chosen=%q, want switch/dev-2", intent.Action, intent.Chosen)
+	}
+}
+
+func TestCurrentTabDigitOutOfRangeNoOp(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	// Only 2 sessions exist; digit 9 is a no-op (no quit intent, no panic).
+	_, cmd := sendCurrentKey(tab, "9")
+	if cmd != nil {
+		t.Fatalf("expected no command for out-of-range digit, got one yielding %T", cmd())
+	}
+}
+
+// Clearing a committed filter from window-level nav must leave a sane state:
+// the full session list returns and the cursor stays on a selectable row
+// (regression guard for the filter + window-level + Esc transition).
+func TestCurrentTabClearFilterFromWindowLevel(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	// Filter to keep the current session (matches its "editor" window), commit.
+	tab = typeCurrentSearch(tab, "editor")
+	tab, _ = sendCurrentKey(tab, "enter")
+
+	// Descend into window-level nav on the current session.
+	tab.tree.JumpToID(outline.SessionID("dev"))
+	_, _ = tab.enterWindowLevel()
+	if tab.navLevel != navLevelWindow {
+		t.Fatal("expected to descend to window level")
+	}
+
+	// Esc clears the committed filter from window level.
+	tab, _ = sendCurrentKey(tab, "esc")
+	if tab.searchQuery != "" {
+		t.Errorf("expected filter cleared, got %q", tab.searchQuery)
+	}
+	if findCurrentRowByID(tab, outline.SessionID("dev-2")) < 0 {
+		t.Error("expected dev-2 restored after clearing the filter")
+	}
+	if cur := tab.tree.Current(); cur == nil || !cur.Selectable {
+		t.Error("expected cursor on a selectable row after clearing the filter")
+	}
+}
+
+// ── Scope cue (P5) ──
+
+func TestCurrentTabScopeCueAboveRows(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	view := tab.View()
+	cue := "2 sessions in dev"
+	idxCue := strings.Index(view, cue)
+	if idxCue < 0 {
+		t.Fatalf("expected scope cue %q in view, got:\n%s", cue, view)
+	}
+	// The cue must sit above the banner's horizontal rule (i.e. in the pinned
+	// chrome, not in the scrolling rows).
+	idxRule := strings.Index(view, "───")
+	if idxRule < 0 || idxCue >= idxRule {
+		t.Errorf("expected scope cue above the banner rule (cue@%d, rule@%d)", idxCue, idxRule)
+	}
+}
+
+func TestCurrentTabScopeCueShowsFilterChip(t *testing.T) {
+	tab, _, _ := newTestCurrentTab(t)
+	tab = simulateCurrentActivate(tab)
+
+	tab = typeCurrentSearch(tab, "dev-2")
+	tab, _ = sendCurrentKey(tab, "enter")
+
+	view := tab.View()
+	if !strings.Contains(view, "filter: dev-2") {
+		t.Errorf("expected committed filter chip in view, got:\n%s", view)
+	}
+}
+
 // ── Helpers ──
+
+func currentQuitIntent(t *testing.T, cmd tea.Cmd) dashboard.QuitIntent {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected a command, got nil")
+	}
+	msg := cmd()
+	intent, ok := msg.(dashboard.QuitIntent)
+	if !ok {
+		t.Fatalf("expected QuitIntent, got %T", msg)
+	}
+	return intent
+}
 
 func currentMockCalled(mock *tmux.MockRunner, method string) bool {
 	for _, c := range mock.Calls {

@@ -13,41 +13,53 @@ import (
 )
 
 func newKillCmd(app *apppkg.App) *cobra.Command {
-	return &cobra.Command{
+	var assumeYes bool
+	cmd := &cobra.Command{
 		Use:     "kill <name>",
 		Aliases: []string{"k"},
 		Short:   "Kill a workspace or session",
 		Long: `Kill a workspace (and all its sessions) or a single session.
 
-Checks workspace names first, then session names.
+Workspace names are checked first; otherwise the argument is resolved as a
+session target — workspace/session, a workspace-local label, or a raw tmux name —
+the same way run, send, type, and watch address sessions.
 
-  zmux kill myapp    Kill workspace 'myapp' and all its sessions (confirms if live)
-  zmux kill auth     Kill session 'auth' (cleans up workspace membership)`,
+  zmux kill myapp        Kill workspace 'myapp' and all its sessions (confirms if live)
+  zmux kill myapp/api    Kill the 'api' session in workspace 'myapp'
+  zmux kill auth         Kill session 'auth' (cleans up workspace membership)`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 
-			// Check if it's a workspace.
+			// Workspace names win over bare session labels. A workspace/session
+			// target can never match a workspace name, so it falls straight
+			// through to the session path below.
 			ws, err := app.WorkspaceStore.GetWorkspace(name)
 			if err != nil {
 				return err
 			}
-
 			if ws != nil {
-				return killWorkspace(app, ws)
+				return killWorkspace(app, ws, assumeYes)
 			}
 
-			// Fall back to session kill.
-			if !app.Runner.HasSession(name) {
-				return fmt.Errorf("%q is not a workspace or session", name)
+			// Resolve the session through the shared resolver so kill honors
+			// workspace/session targets and local labels instead of only raw
+			// tmux names.
+			target, err := resolveSessionTarget(app, name)
+			if err != nil {
+				return err
 			}
-
-			return workspace.KillSession(app.Runner, app.WorkspaceStore, name)
+			if !app.Runner.HasSession(target) {
+				return fmt.Errorf("session %q is not live", name)
+			}
+			return workspace.KillSession(app.Runner, app.WorkspaceStore, target)
 		},
 	}
+	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "skip the workspace kill confirmation prompt")
+	return cmd
 }
 
-func killWorkspace(app *apppkg.App, ws *workspace.Workspace) error {
+func killWorkspace(app *apppkg.App, ws *workspace.Workspace, assumeYes bool) error {
 	// Count live sessions.
 	liveCount := 0
 	for _, sess := range ws.Sessions {
@@ -56,7 +68,7 @@ func killWorkspace(app *apppkg.App, ws *workspace.Workspace) error {
 		}
 	}
 
-	if liveCount > 0 {
+	if liveCount > 0 && !assumeYes {
 		// Confirm with user.
 		plural := "session"
 		if liveCount > 1 {

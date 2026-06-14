@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/donjor/zmux/internal/tui/tkey"
 
 	"github.com/donjor/zmux/internal/session"
@@ -494,6 +496,99 @@ func TestPickerBehavior_WorkspaceHintDiscoverability(t *testing.T) {
 // and asserts that the ghost prompt starts with "zmux" (or "# " for
 // pseudo/external rows). This is a sanity check that ghostCmd doesn't
 // produce empty or nonsensical output for any row type.
+// ── Delete keeps cursor on the nearest stable row (P1) ──
+
+// pressKeyStr feeds a single key by its tea String() form.
+func pressKey(m PickerModel, k tea.KeyPressMsg) PickerModel {
+	res, _ := m.Update(k)
+	return res.(PickerModel)
+}
+
+// feedReload simulates the post-delete workspacesLoadedMsg the reload cmd
+// would produce, with the given workspaces/sessions as the new live set.
+func feedReload(m PickerModel, wss []workspace.Workspace, sessions []session.SessionInfo) PickerModel {
+	res, _ := m.Update(workspacesLoadedMsg{
+		workspaces: workspaceview.BuildWorkspaceViewModels(wss, sessions),
+	})
+	return res.(PickerModel)
+}
+
+func TestPickerBehavior_DeleteSessionKeepsCursorOnNeighbor(t *testing.T) {
+	m := newBehaviorPicker(t)
+	// Expand myapp's sessions (main, api) by searching for the workspace.
+	m = typeInPicker(m, "myapp")
+	// Cursor on the first session "main"; its neighbor is the sibling "api".
+	m = moveCursorTo(m, func(r outline.Row) bool {
+		s := rowSession(r)
+		return s != nil && s.Name == "main"
+	})
+
+	want := m.tree.NeighborID()
+	if want != outline.SessionID("api") {
+		t.Fatalf("precondition: neighbor of 'main' = %q, want %q", want, outline.SessionID("api"))
+	}
+
+	// ctrl+x → confirm → y commits the delete and returns a reload cmd.
+	m = pressKey(m, tkey.Ctrl('x'))
+	m = pressKey(m, tkey.Rune('y'))
+
+	// Reload with "main" gone.
+	m = feedReload(m,
+		[]workspace.Workspace{
+			{Name: "myapp", Sessions: testWorkspaceSessions("api")},
+			{Name: "tools", Sessions: testWorkspaceSessions("monitor")},
+			{Name: "empty", Sessions: nil},
+		},
+		[]session.SessionInfo{
+			{Name: "api", Activity: time.Now().Add(-1 * time.Hour), Windows: 1},
+			{Name: "monitor", Activity: time.Now().Add(-2 * time.Hour), Windows: 1},
+		},
+	)
+
+	got := m.tree.Current()
+	if got == nil || got.ID != want {
+		t.Errorf("cursor after session delete = %#v, want neighbor %q", got, want)
+	}
+}
+
+func TestPickerBehavior_DeleteEmptyWorkspaceKeepsCursorOnNeighbor(t *testing.T) {
+	m := newBehaviorPicker(t)
+	// Cursor on the empty workspace header (deletes outright, no confirm).
+	m = moveCursorTo(m, func(r outline.Row) bool {
+		ws := rowWorkspace(r)
+		return ws != nil && ws.Name == "empty"
+	})
+
+	want := m.tree.NeighborID()
+	if want == "" {
+		t.Fatal("precondition: empty workspace should have a selectable neighbor")
+	}
+
+	// ctrl+x on an empty workspace deletes immediately (no live sessions).
+	m = pressKey(m, tkey.Ctrl('x'))
+
+	// Reload with "empty" gone.
+	m = feedReload(m,
+		[]workspace.Workspace{
+			{Name: "myapp", Sessions: testWorkspaceSessions("main", "api")},
+			{Name: "tools", Sessions: testWorkspaceSessions("monitor")},
+		},
+		[]session.SessionInfo{
+			{Name: "main", Activity: time.Now(), Attached: true, Windows: 3},
+			{Name: "api", Activity: time.Now().Add(-1 * time.Hour), Windows: 1},
+			{Name: "monitor", Activity: time.Now().Add(-2 * time.Hour), Windows: 1},
+		},
+	)
+
+	got := m.tree.Current()
+	if got == nil || got.ID != want {
+		t.Errorf("cursor after empty-workspace delete = %#v, want neighbor %q", got, want)
+	}
+	if got != nil && got.ID == outline.WorkspaceID("empty") {
+		t.Error("cursor should not land back on the deleted 'empty' workspace")
+	}
+}
+
 func TestPickerBehavior_GhostPromptConsistency(t *testing.T) {
 	m := newBehaviorPicker(t)
 

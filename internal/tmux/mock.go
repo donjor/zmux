@@ -348,13 +348,16 @@ func (m *MockRunner) DisplayMessage(target, format string) (string, error) {
 	return m.DisplayMessageResult, m.Err
 }
 
-// CapturePane records the call and returns the configured content.
+// CapturePane records the call and returns the configured content, honoring
+// the same "at most `lines` logical lines" contract as the real client so
+// bounded-capture behavior is testable through the mock.
 func (m *MockRunner) CapturePane(target string, lines int) (string, error) {
 	m.record("CapturePane", target, fmt.Sprintf("%d", lines))
 	if m.CapturePaneFunc != nil {
-		return m.CapturePaneFunc(target, lines)
+		out, err := m.CapturePaneFunc(target, lines)
+		return tailLines(out, lines), err
 	}
-	return m.CapturedPaneContent, m.Err
+	return tailLines(m.CapturedPaneContent, lines), m.Err
 }
 
 // CapturePaneOpts records the call and returns the configured content.

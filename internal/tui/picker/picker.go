@@ -80,6 +80,12 @@ type PickerModel struct {
 	// row (which could change if a background refresh lands).
 	confirm *pickerConfirmTarget
 
+	// Stable row ID to land the cursor on after a delete reload. Captured at
+	// delete-commit via tree.NeighborID() (before the row is removed) and
+	// consumed by the next buildOutline so the cursor lands on the next
+	// cleanup row instead of snapping to the workspace header.
+	postDeleteJump string
+
 	// Window names per session (cached).
 	windows map[string][]tmux.Window
 

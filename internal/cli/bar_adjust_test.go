@@ -69,6 +69,32 @@ func TestReconcileBarStatusLines_NonTwoLineClearsStale(t *testing.T) {
 	}
 }
 
+// Reconcile must force a status redraw AFTER (re)setting the formats, so the
+// tabs-row #() repaints immediately instead of leaving the second tab line
+// blank until the next status-interval tick (the blank-on-attach fix). The
+// refresh must come after the last format set, not before.
+func TestReconcileBarStatusLines_RefreshesAfterSettingFormats(t *testing.T) {
+	mock := &tmux.MockRunner{Sessions: []tmux.Session{{Name: "dev"}}}
+
+	reconcileBarStatusLines(mock, "two-line", "tabs", "zmux")
+
+	lastSet, refresh := -1, -1
+	for i, c := range mock.Calls {
+		switch c.Method {
+		case "SetSessionOption":
+			lastSet = i
+		case "RefreshStatus":
+			refresh = i
+		}
+	}
+	if refresh == -1 {
+		t.Fatal("reconcile must refresh the status line after setting formats")
+	}
+	if refresh < lastSet {
+		t.Errorf("refresh (call %d) must come after the last format set (call %d)", refresh, lastSet)
+	}
+}
+
 func hasSessionOption(calls []tmux.MockCall, target, key, value string) bool {
 	for _, c := range calls {
 		if c.Method == "SetSessionOption" && len(c.Args) == 3 &&

@@ -326,6 +326,31 @@ func TestGenerateConfPopupBorderRounded(t *testing.T) {
 	}
 }
 
+func TestGenerateConfPopupBorderStyleUsesDim(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	want := "set -g popup-border-style fg=" + palette.Dim.Hex()
+	if !strings.Contains(conf, want) {
+		t.Errorf("conf missing popup-border-style in dim color; want %q", want)
+	}
+}
+
+// A nil palette (theme unresolved) must skip the colored border-style without
+// panicking, while the palette-independent border-lines option still ships.
+func TestGenerateConfNilPaletteSkipsBorderStyle(t *testing.T) {
+	cfg := config.DefaultConfig()
+	conf := GenerateConf(&cfg, nil, "/usr/local/bin/zmux")
+
+	if strings.Contains(conf, "popup-border-style") {
+		t.Error("nil palette should not emit a popup-border-style line")
+	}
+	if !strings.Contains(conf, "set -g popup-border-lines rounded") {
+		t.Error("border-lines should ship regardless of palette")
+	}
+}
+
 func TestGenerateConfLeavesDetachOnDestroyDefault(t *testing.T) {
 	cfg := config.DefaultConfig()
 	palette := testPalette()

@@ -75,6 +75,22 @@ const segSplit = /[;&|\n]+/u;
 // capturing the delimiter word so stripHeredocs can close the body by line scan.
 const heredocStart = /<<-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?/u;
 
+// Pulls the payload out of a command-position `sh -c '…'` / `bash -lc "…"` so the
+// inner command can be recursively classified — a raw tmux or `&` in the quoted
+// `-c` arg would otherwise be blanked by the quote-strip and escape. Anchored at
+// segment position so a quoted mention or argument isn't matched; an optional
+// `env ` wrapper and path prefix keep `env sh -c …` / `/bin/sh -c …` from slipping
+// past. Mirrors internal/guard/guard.go's shellCExtract. Global for matchAll;
+// capture 1 is the payload.
+const shellCExtract = /(?:^|[;&|\n]\s*)(?:env\s+)?(?:\S*\/)?(?:sh|bash|zsh|dash|ksh)\s+-[a-zA-Z]*c[a-zA-Z]*\s+('[^']*'|"[^"]*"|`[^`]*`|[^\s;&|]+)/gu;
+// Command words that EXECUTE a here-doc body fed on stdin (`bash <<EOF … EOF`).
+// A file-writer receiver (cat/tee) makes the body inert data and is skipped.
+const shellReceivers = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+// xargs options that consume the next token as their value.
+const xargsValueFlags = new Set(["-I", "-i", "-n", "-P", "-s", "-d", "-E", "-a", "-L"]);
+// Bounds the recursive payload scan so a pathological nest can't loop.
+const maxClassifyDepth = 4;
+
 function tmuxSubcommand(rest: string): string {
 	const toks = rest.trim().split(/\s+/u).filter(Boolean);
 	for (let i = 0; i < toks.length; ) {
@@ -102,8 +118,19 @@ function hasSocketFlag(args: string[]): boolean {
 function classifyTmux(scan: string): BashClassification | null {
 	for (const seg of scan.split(segSplit)) {
 		const toks = seg.trim().split(/\s+/u).filter(Boolean);
-		if (toks.length === 0 || toks[0] !== "tmux") continue;
-		const args = toks.slice(1);
+		if (toks.length === 0) continue;
+		// Raw tmux at command position, or `xargs … tmux …` where tmux is the
+		// command xargs execs. Either way `args` is everything after tmux.
+		let args: string[];
+		if (toks[0] === "tmux") {
+			args = toks.slice(1);
+		} else if (toks[0] === "xargs") {
+			const cmd = xargsCommand(toks);
+			if (cmd.length === 0 || cmd[0] !== "tmux") continue;
+			args = cmd.slice(1);
+		} else {
+			continue;
+		}
 		if (hasSocketFlag(args)) continue; // socket-scoped (zzmux/profile) → exempt
 		const redirect = tmuxSubcommandRedirects[tmuxSubcommand(args.join(" "))];
 		if (redirect) {
@@ -112,6 +139,93 @@ function classifyTmux(scan: string): BashClassification | null {
 		// unmapped subcommand (info, has-session, ...) — no zmux verb; keep scanning
 	}
 	return null;
+}
+
+// xargsCommand returns the command (word + args) an `xargs …` segment would
+// execute, skipping xargs's own flags. toks[0] is "xargs". Combined flags
+// (`-n1`, `-I{}`) skip as one token; value-taking flags spelled apart (`-n 1`)
+// skip their value too. Returns [] if no command word follows. Mirrors guard.go.
+function xargsCommand(toks: string[]): string[] {
+	for (let i = 1; i < toks.length; ) {
+		const t = toks[i];
+		if (t.startsWith("-")) {
+			i += xargsValueFlags.has(t) ? 2 : 1;
+			continue;
+		}
+		return toks.slice(i);
+	}
+	return [];
+}
+
+// executablePayloads returns inner command strings a segment would itself
+// execute — `sh -c '<payload>'` args and here-doc bodies fed to a shell — so
+// classifyBash can recurse into them. Env prefixes stripped first so
+// `FOO=bar sh -c …` still matches; here-doc bodies blanked before the
+// shellCExtract scan so a `sh -c '…'` inside an INERT file-writer here-doc
+// (`cat > run.sh <<'EOF' … EOF`) isn't falsely extracted — executable
+// shell-receiver bodies are recovered separately by shellHeredocBodies on the
+// raw command. Mirrors internal/guard/guard.go's executablePayloads.
+function executablePayloads(command: string): string[] {
+	const out: string[] = [];
+	for (const m of stripHeredocs(stripEnvPrefix(command)).matchAll(shellCExtract)) {
+		out.push(unquotePayload(m[1]));
+	}
+	return out.concat(shellHeredocBodies(command));
+}
+
+// heredocReceiver returns the command word of a here-doc's opening line,
+// normalized so a here-doc fed to a path-qualified or env-wrapped shell still
+// matches shellReceivers (env assignments + a bare `env` dropped, path
+// basename'd). Mirrors internal/guard/guard.go's heredocReceiver.
+function heredocReceiver(openLine: string): string {
+	const toks = stripEnvPrefix(openLine).trim().split(/\s+/u).filter(Boolean);
+	if (toks.length === 0) return "";
+	let word = toks[0];
+	if (word === "env" && toks.length > 1) word = toks[1];
+	return word.slice(word.lastIndexOf("/") + 1);
+}
+
+// unquotePayload strips a single wrapping quote pair from a captured `-c` arg.
+function unquotePayload(p: string): string {
+	if (p.length >= 2) {
+		const q = p[0];
+		if ((q === "'" || q === '"' || q === "`") && p[p.length - 1] === q) {
+			return p.slice(1, -1);
+		}
+	}
+	return p;
+}
+
+// shellHeredocBodies returns the bodies of here-documents whose receiver is a
+// shell (`bash <<EOF … EOF`), which executes the body. A file-writer receiver
+// (`cat > f <<EOF`, `tee`) makes the body inert data and is skipped. Mirrors
+// internal/guard/guard.go's shellHeredocBodies.
+function shellHeredocBodies(command: string): string[] {
+	if (!command.includes("<<")) return [];
+	const bodies: string[] = [];
+	let cur: string[] = [];
+	let tag = "";
+	let capturing = false;
+	for (const line of command.split("\n")) {
+		if (tag) {
+			if (line.trim() === tag) {
+				if (capturing) bodies.push(cur.join("\n"));
+				tag = "";
+				cur = [];
+				capturing = false;
+				continue;
+			}
+			if (capturing) cur.push(line);
+			continue;
+		}
+		const m = line.match(heredocStart);
+		if (m) {
+			tag = m[1];
+			capturing = shellReceivers.has(heredocReceiver(line));
+			cur = [];
+		}
+	}
+	return bodies;
 }
 
 const runtimePatterns: Array<{ re: RegExp; reason: string }> = [
@@ -242,9 +356,27 @@ function stripHeredocs(command: string): string {
 	return lines.join("\n");
 }
 
-export function classifyBash(command: string, config: PiZmuxConfig): BashClassification {
+// Payload kinds that represent a blockable slip on the shell surface (matching
+// the Go classifier's Block decisions) — used to decide when a recursively
+// classified `sh -c …` / here-doc payload should win.
+const blockablePayloadKinds = new Set(["direct_tmux", "runtime", "background"]);
+
+export function classifyBash(command: string, config: PiZmuxConfig, depth = 0): BashClassification {
 	const normalized = command.trim();
 	if (!normalized) return { kind: "safe", reason: "empty command" };
+
+	// Recursive "executable payload" pass FIRST: a raw tmux or background job
+	// hidden inside a `sh -c '…'` arg or a shell-fed here-doc body would be blanked
+	// by the quote/heredoc stripping below and escape. Extract those inner commands
+	// and classify them; a blockable verdict from any of them wins. (`xargs tmux …`
+	// is handled in classifyTmux — its payload isn't quoted.)
+	if (depth < maxClassifyDepth) {
+		for (const payload of executablePayloads(normalized)) {
+			const sub = classifyBash(payload, config, depth + 1);
+			if (blockablePayloadKinds.has(sub.kind)) return sub;
+		}
+	}
+
 	// Pipeline: env-strip (quote-aware) → blank here-doc bodies → blank quoted
 	// spans, all before the dimension scans. Env-strip first so `FOO="bar baz" npm
 	// run dev` classifies on `npm`; heredoc-strip before quote-strip so a `<<'EOF'`

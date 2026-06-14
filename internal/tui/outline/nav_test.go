@@ -104,3 +104,88 @@ func TestJumpToIDMisses(t *testing.T) {
 		t.Errorf("JumpToID should return false on miss")
 	}
 }
+
+// ── NeighborID (delete-jump primitive) ──
+
+func TestNeighborIDMiddleRowTakesNext(t *testing.T) {
+	tr := NewTree()
+	tr.SetRows([]Row{
+		mkRow("a", RowWorkspaceHeader, 0, "", true),
+		mkRow("b", RowWorkspaceHeader, 0, "", true),
+		mkRow("c", RowWorkspaceHeader, 0, "", true),
+	})
+	tr.Cursor = 1 // on "b"
+	if got := tr.NeighborID(); got != "c" {
+		t.Errorf("NeighborID on middle row should be next 'c', got %q", got)
+	}
+}
+
+func TestNeighborIDLastRowFallsBackToPrev(t *testing.T) {
+	tr := NewTree()
+	tr.SetRows([]Row{
+		mkRow("a", RowWorkspaceHeader, 0, "", true),
+		mkRow("b", RowWorkspaceHeader, 0, "", true),
+		mkRow("c", RowWorkspaceHeader, 0, "", true),
+	})
+	tr.Cursor = 2 // on "c", nothing after
+	if got := tr.NeighborID(); got != "b" {
+		t.Errorf("NeighborID on last row should fall back to prev 'b', got %q", got)
+	}
+}
+
+func TestNeighborIDSkipsNonSelectable(t *testing.T) {
+	tr := NewTree()
+	tr.SetRows([]Row{
+		mkRow("a", RowWorkspaceHeader, 0, "", true),
+		mkRow("sep", RowDivider, 0, "", false),
+		mkRow("b", RowWorkspaceHeader, 0, "", true),
+	})
+	tr.Cursor = 0 // on "a"; next selectable skips the divider
+	if got := tr.NeighborID(); got != "b" {
+		t.Errorf("NeighborID should skip divider and take 'b', got %q", got)
+	}
+
+	tr.Cursor = 2 // on "b"; only the divider precedes, fall back to "a"
+	if got := tr.NeighborID(); got != "a" {
+		t.Errorf("NeighborID should skip divider backwards to 'a', got %q", got)
+	}
+}
+
+func TestNeighborIDSkipsRemovedSubtree(t *testing.T) {
+	tr := NewTree()
+	tr.SetRows([]Row{
+		mkRow("ws:app", RowWorkspaceHeader, 0, "", true),
+		mkRow("session:a", RowSession, 1, "ws:app", true),
+		mkRow("session:b", RowSession, 1, "ws:app", true),
+		mkRow("ws:other", RowWorkspaceHeader, 0, "", true),
+	})
+	tr.Cursor = 0 // deleting the whole "ws:app" workspace + its sessions
+	if got := tr.NeighborID(); got != "ws:other" {
+		t.Errorf("NeighborID should skip the workspace's sessions to 'ws:other', got %q", got)
+	}
+}
+
+func TestNeighborIDSessionTakesSibling(t *testing.T) {
+	tr := NewTree()
+	tr.SetRows([]Row{
+		mkRow("ws:app", RowWorkspaceHeader, 0, "", true),
+		mkRow("session:a", RowSession, 1, "ws:app", true),
+		mkRow("session:b", RowSession, 1, "ws:app", true),
+	})
+	tr.Cursor = 1 // deleting session:a; the next cleanup row is its sibling
+	if got := tr.NeighborID(); got != "session:b" {
+		t.Errorf("NeighborID on a session should take the sibling 'session:b', got %q", got)
+	}
+}
+
+func TestNeighborIDEmptyAndSingle(t *testing.T) {
+	tr := NewTree()
+	if got := tr.NeighborID(); got != "" {
+		t.Errorf("NeighborID on empty tree should be \"\", got %q", got)
+	}
+	tr.SetRows([]Row{mkRow("only", RowWorkspaceHeader, 0, "", true)})
+	tr.Cursor = 0
+	if got := tr.NeighborID(); got != "" {
+		t.Errorf("NeighborID on single-row tree should be \"\", got %q", got)
+	}
+}

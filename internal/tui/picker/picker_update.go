@@ -23,6 +23,7 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.mode = modeConfirmDeleteAttached
 				return m, nil
 			}
+			m.postDeleteJump = m.tree.NeighborID()
 			m.applyConfirmedDelete()
 			m.mode = modeNormal
 			m.confirm = nil
@@ -38,6 +39,7 @@ func (m PickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeConfirmDeleteAttached {
 		switch msg.String() {
 		case "y", "Y", "ctrl+x":
+			m.postDeleteJump = m.tree.NeighborID()
 			m.applyConfirmedDelete()
 			m.mode = modeNormal
 			m.confirm = nil
@@ -108,6 +110,7 @@ func (m PickerModel) handleNormalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Empty workspace (nothing live to kill) — delete outright,
 				// no confirmation step.
 				if len(ws.LiveSessions) == 0 {
+					m.postDeleteJump = m.tree.NeighborID()
 					m.applyConfirmedDelete()
 					m.confirm = nil
 					return m, m.reloadWorkspaces()

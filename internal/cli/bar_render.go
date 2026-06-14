@@ -152,9 +152,19 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 				// sessions (no workspace) still get a one-session top row
 				// so always-2-line never shows a blank top (plan 024).
 				if workspace != "" {
-					ctx.WorkspaceSessions = app.WorkspaceStore.SessionLabelsIn(workspace)
+					labels := app.WorkspaceStore.SessionLabelsIn(workspace)
 					targets := app.WorkspaceStore.SessionTargetsIn(workspace)
-					ctx.WorkspaceSessionStates = workspaceAttachStates(app, targets, sessionName)
+					// Drop pills for sessions the store still lists but tmux no
+					// longer has, so a killed session disappears without waiting
+					// for a later interaction. Read-only: never reconcile the
+					// store from this hot, side-effect-free #() render. Compute
+					// the live set once and share it with the attach-state pass.
+					live, err := session.ListSessions(app.Runner)
+					if err == nil {
+						labels, targets = filterLiveSessions(labels, targets, live)
+					}
+					ctx.WorkspaceSessions = labels
+					ctx.WorkspaceSessionStates = attachStatesFor(live, targets, sessionName)
 				}
 				if len(ctx.WorkspaceSessions) == 0 && displaySession != "" {
 					ctx.WorkspaceSessions = []string{displaySession}
@@ -221,6 +231,17 @@ func workspaceAttachStates(app *apppkg.App, sessions []string, currentSession st
 	if err != nil {
 		return nil
 	}
+	return attachStatesFor(live, sessions, currentSession)
+}
+
+// attachStatesFor builds attach states from an already-fetched live session
+// list, so a caller that also needs the live set (e.g. the top row's
+// dead-session filter) queries tmux once. A nil/empty live list yields all
+// Unknown. See workspaceAttachStates for the per-state semantics.
+func attachStatesFor(live []session.SessionInfo, sessions []string, currentSession string) []bar.AttachState {
+	if len(sessions) == 0 {
+		return nil
+	}
 	liveByName := make(map[string]session.SessionInfo, len(live))
 	for _, s := range live {
 		liveByName[s.Name] = s
@@ -239,4 +260,28 @@ func workspaceAttachStates(app *apppkg.App, sessions []string, currentSession st
 		}
 	}
 	return states
+}
+
+// filterLiveSessions keeps only the index-aligned (labels, targets) entries
+// whose target maps to a live tmux session (matched by root, so grouped clones
+// like dev-b keep the root alive). Used by the top row to drop pills for
+// sessions the workspace store still lists but tmux has killed. Pure: the store
+// is never mutated from the render path (a separate reconcile owns that).
+func filterLiveSessions(labels, targets []string, live []session.SessionInfo) ([]string, []string) {
+	liveRoots := make(map[string]bool, len(live))
+	for _, s := range live {
+		liveRoots[session.RootName(s.Name)] = true
+	}
+	outLabels := make([]string, 0, len(targets))
+	outTargets := make([]string, 0, len(targets))
+	for i, t := range targets {
+		if !liveRoots[session.RootName(t)] {
+			continue
+		}
+		outTargets = append(outTargets, t)
+		if i < len(labels) {
+			outLabels = append(outLabels, labels[i])
+		}
+	}
+	return outLabels, outTargets
 }

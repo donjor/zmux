@@ -2,6 +2,7 @@ package tabs
 
 import (
 	"os"
+	"strings"
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
@@ -27,8 +28,15 @@ func currentPaneID() string { return os.Getenv("TMUX_PANE") }
 // windows carry rich windowDetail (CPU/mem/uptime); sibling windows
 // carry plain tmux.Window since we don't fetch process stats for them.
 //
+// When a search filter is active (t.searchQuery) the session list is narrowed
+// to the current workspace: a session is kept if its name or any of its window
+// names fuzzy-matches, and kept sessions render in full. The workspace banner
+// is always emitted (it is the scope cue's actionable anchor).
+//
 // Rendering for each row kind lives in current_tree_render.go.
 func (t *CurrentTab) buildRows() []outline.Row {
+	q := strings.TrimSpace(t.searchQuery)
+
 	paneCount := 0
 	for _, w := range t.windows {
 		paneCount += len(w.Panes)
@@ -48,62 +56,71 @@ func (t *CurrentTab) buildRows() []outline.Row {
 		Expanded:   true,
 		Data:       t.wsModel,
 	})
-	rows = append(rows, separatorRow("sep:ws"))
+
+	matched := 0
 
 	// ── Current session + its windows ──
 	currID := outline.SessionID(t.sessionName)
-	rows = append(rows, outline.Row{
-		ID:         currID,
-		Kind:       outline.RowSession,
-		Depth:      1,
-		ParentID:   wsID,
-		Label:      currentSessionLabel(t.sessionName, t.wsModel),
-		Selectable: true,
-		Current:    true,
-		Attached:   t.attached > 0,
-		Expanded:   true,
-	})
-	if len(t.windows) == 0 {
+	if t.currentSessionVisible(q) {
+		matched++
+		rows = append(rows, separatorRow("sep:ws"))
 		rows = append(rows, outline.Row{
-			ID:       "placeholder:nowindows",
-			Kind:     outline.RowPlaceholder,
-			Depth:    2,
-			ParentID: currID,
-			Label:    "(no windows)",
+			ID:         currID,
+			Kind:       outline.RowSession,
+			Depth:      1,
+			ParentID:   wsID,
+			Label:      currentSessionLabel(t.sessionName, t.wsModel),
+			Selectable: true,
+			Current:    true,
+			Attached:   t.attached > 0,
+			Expanded:   true,
 		})
-	}
-	for i := range t.windows {
-		w := t.windows[i]
-		winID := outline.WindowID(t.sessionName, w.Index)
-		rows = append(rows, outline.Row{
-			ID:         winID,
-			Kind:       outline.RowWindow,
-			Depth:      2,
-			ParentID:   currID,
-			Label:      w.Name,
-			Selectable: t.windowSelectable(currID),
-			Attached:   w.Active,
-			Data:       &t.windows[i],
-		})
-		for j := range t.windows[i].Panes {
-			p := t.windows[i].Panes[j]
+		if len(t.windows) == 0 {
 			rows = append(rows, outline.Row{
-				ID:         outline.PaneID(t.sessionName, p.ID),
-				Kind:       outline.RowPane,
-				Depth:      3,
-				ParentID:   winID,
-				Label:      p.ID,
-				Selectable: t.windowSelectable(currID),
-				Current:    p.ID != "" && p.ID == currentPaneID(),
-				Attached:   p.Active,
-				Data:       &t.windows[i].Panes[j],
+				ID:       "placeholder:nowindows",
+				Kind:     outline.RowPlaceholder,
+				Depth:    2,
+				ParentID: currID,
+				Label:    "(no windows)",
 			})
+		}
+		for i := range t.windows {
+			w := t.windows[i]
+			winID := outline.WindowID(t.sessionName, w.Index)
+			rows = append(rows, outline.Row{
+				ID:         winID,
+				Kind:       outline.RowWindow,
+				Depth:      2,
+				ParentID:   currID,
+				Label:      w.Name,
+				Selectable: t.windowSelectable(currID),
+				Attached:   w.Active,
+				Data:       &t.windows[i],
+			})
+			for j := range t.windows[i].Panes {
+				p := t.windows[i].Panes[j]
+				rows = append(rows, outline.Row{
+					ID:         outline.PaneID(t.sessionName, p.ID),
+					Kind:       outline.RowPane,
+					Depth:      3,
+					ParentID:   winID,
+					Label:      p.ID,
+					Selectable: t.windowSelectable(currID),
+					Current:    p.ID != "" && p.ID == currentPaneID(),
+					Attached:   p.Active,
+					Data:       &t.windows[i].Panes[j],
+				})
+			}
 		}
 	}
 
 	// ── Sibling sessions, each expanded with its windows ──
 	for i := range t.siblings {
 		s := t.siblings[i]
+		if !t.siblingVisible(&s, q) {
+			continue
+		}
+		matched++
 		sessID := outline.SessionID(s.Name)
 
 		rows = append(rows, separatorRow("sep:"+s.Name))
@@ -146,7 +163,53 @@ func (t *CurrentTab) buildRows() []outline.Row {
 		}
 	}
 
+	if q != "" && matched == 0 {
+		rows = append(rows, outline.Row{
+			ID:       "placeholder:nomatch",
+			Kind:     outline.RowPlaceholder,
+			Depth:    1,
+			ParentID: wsID,
+			Label:    "no matches for " + q,
+		})
+	}
+
 	return rows
+}
+
+// currentSessionVisible reports whether the current session survives the
+// active filter q (empty q always matches). Matches on the session's display
+// label, its raw name, or any of its window names.
+func (t *CurrentTab) currentSessionVisible(q string) bool {
+	if q == "" {
+		return true
+	}
+	if matchQuery(q, currentSessionLabel(t.sessionName, t.wsModel)) || matchQuery(q, t.sessionName) {
+		return true
+	}
+	for i := range t.windows {
+		if matchQuery(q, t.windows[i].Name) {
+			return true
+		}
+	}
+	return false
+}
+
+// siblingVisible reports whether a sibling session survives the active filter
+// q. Matches on the session's display label, its raw name, or any of its
+// window names.
+func (t *CurrentTab) siblingVisible(s *session.SessionInfo, q string) bool {
+	if q == "" {
+		return true
+	}
+	if matchQuery(q, sessionInfoLabel(s)) || matchQuery(q, s.Name) {
+		return true
+	}
+	for _, w := range t.siblingWindows[s.Name] {
+		if matchQuery(q, w.Name) {
+			return true
+		}
+	}
+	return false
 }
 
 func currentSessionLabel(name string, ws *workspaceview.WorkspaceViewModel) string {

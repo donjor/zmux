@@ -5,9 +5,46 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: `agents`, `workspace` | Compare: `v0.8.0...HEAD`
+> Release tag: pending | Topics: `agents`, `workspace`, `dashboard`, `ui` | Compare: `v0.8.0...HEAD`
 
 ### Added
+
+- **Session tab search, quick-jump, and pinned scope** `dashboard` `ui` - the
+  dashboard's Session & Workspace tab gains the search model from the Workspaces
+  tab, scoped to the active workspace: `/` filters sessions by session name or
+  any tab name, `1`–`9` quick-jump to (and activate) the nth visible session
+  with matching `[N]` badges, and the `N sessions in <ws>` scope cue is pinned
+  above the list so it stays visible while rows scroll.
+- **Popup focus framing** `ui` - tmux popups (dashboard, palette, pickers) get a
+  faint themed border (`popup-border-style` in the palette's dim color) and a
+  best-effort host-background dim while a popup is open, restored on close. The
+  dim degrades to a no-op outside tmux or without a resolved theme; a hard kill
+  of the popup self-heals on the next `apply`/attach.
+- **Guard catches nested tmux/background forms** `agents` - the shared classifier
+  corpus and all three guards (Go, Claude hook, pi) now recursively scan the
+  payloads a segment executes — `sh -c '…'`, `env`/path-prefixed shells,
+  `xargs tmux …`, and shell-fed here-doc bodies — so a raw tmux or background
+  job one indirection deep is still flagged. Command substitution stays a
+  documented gap.
+
+### Fixed
+
+- **Top bar drops dead sessions and repaints the tabs row on attach** `ui` -
+  killed sessions disappear from the bar at the next render instead of lingering,
+  and the second (logical tabs) status line renders immediately on attach rather
+  than staying blank until the next tab event.
+- **Picker delete keeps the cursor in place** `ui` - deleting a row in the
+  outside-tmux picker now lands the cursor on the nearest stable neighbor so
+  repeated cleanup stays put, via a shared outline neighbor primitive.
+- **`watch --lines` bounds capture height** `agents` - a bounded screen-window
+  request now tail-trims the plain capture to the requested line count without
+  affecting snapshot/full-capture or idle-detection paths.
+- **`kill` addresses managed sessions by target** `workspace` - `zmux kill
+  workspace/session` (and bare workspace-local labels) now routes through the
+  shared session-target resolver instead of only matching raw tmux names, so a
+  managed session is killable by the same address `run`, `send`, and `watch`
+  use. `kill -y/--yes` skips the workspace teardown confirmation for scripted
+  and agent use.
 
 - **Sessionless dashboard fallback** `workspace` - `zmux` stays usable when no
   workspace or session is active. A zmux-owned attach whose session disappears

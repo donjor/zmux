@@ -107,7 +107,26 @@ var (
 	// `<< "EOF"`) and captures the delimiter word. RE2 can't backreference it, so
 	// stripHeredocs closes the body with a line scan rather than one regex.
 	heredocStart = regexp.MustCompile(`<<-?\s*["']?([A-Za-z_][A-Za-z0-9_]*)["']?`)
+
+	// shellCExtract pulls the payload out of a command-position `sh -c '…'` /
+	// `bash -lc "…"` so the inner command can be recursively classified — a raw
+	// tmux or `&` hidden in the quoted `-c` arg would otherwise be blanked by the
+	// quote-strip and escape. Anchored at segment position so a quoted mention
+	// (`echo "sh -c 'tmux'"`) or an argument (`sudo sh -c …`) is not matched. An
+	// optional `env ` wrapper and a path prefix are allowed so `env sh -c …` and
+	// `/bin/sh -c …` don't slip past. The `-[a-z]*c[a-z]*` flag class accepts
+	// `-c`, `-lc`, `-ic`. Capture 1 is the payload; unquotePayload strips a quote.
+	shellCExtract = regexp.MustCompile(`(?:^|[;&|\n]\s*)(?:env\s+)?(?:\S*/)?(?:sh|bash|zsh|dash|ksh)\s+-[a-zA-Z]*c[a-zA-Z]*\s+('[^']*'|"[^"]*"|` + "`[^`]*`" + `|[^\s;&|]+)`)
 )
+
+// shellReceivers are the command words that *execute* a here-doc body fed on
+// stdin (`bash <<EOF … EOF`). A file-writer receiver (`cat`/`tee`) makes the
+// body inert data, so only these get their body recursively classified.
+var shellReceivers = map[string]bool{"sh": true, "bash": true, "zsh": true, "dash": true, "ksh": true}
+
+// maxClassifyDepth bounds the recursive payload scan so a pathological
+// `sh -c 'sh -c "…"'` nest can't loop. Real commands nest one or two deep.
+const maxClassifyDepth = 4
 
 // tmuxTargets maps a raw tmux subcommand (long form + common alias) to the
 // semantic zmux suggestion key. A subcommand absent here has no clean zmux
@@ -138,7 +157,7 @@ var tmuxTargets = map[string]string{
 // natural Kind but forces the Decision to Allow — so logs still show what was
 // waved through.
 func Classify(command string, opts Options) Result {
-	res := classify(command, opts)
+	res := classify(command, opts, 0)
 	if res.Decision != Allow && (bypassEnv.MatchString(command) || bypassComment.MatchString(command)) {
 		res.Decision = Allow
 		res.Reason = "explicit bypass (" + string(res.Kind) + ")"
@@ -146,7 +165,27 @@ func Classify(command string, opts Options) Result {
 	return res
 }
 
-func classify(command string, opts Options) Result {
+func classify(command string, opts Options, depth int) Result {
+	// Normalize leading/trailing whitespace up front so the `^`-anchored
+	// shellCExtract sees `sh -c …` at true command position — without this a
+	// single leading space (`   sh -c 'tmux …'`) slips the recursive scan and
+	// the command is allowed. Mirrors the pi classifier's `command.trim()` so
+	// all three classifiers agree (corpus parity gate).
+	command = strings.TrimSpace(command)
+
+	// Recursive "executable payload" pass FIRST: a raw tmux or background job
+	// hidden inside a `sh -c '…'` arg or a shell-fed here-doc body would be
+	// blanked by quote/heredoc stripping below and escape. Extract those inner
+	// commands and classify them; a Block from any of them is the verdict.
+	// (`xargs tmux …` is handled in scanTmux — its payload isn't quoted.)
+	if depth < maxClassifyDepth {
+		for _, payload := range executablePayloads(command) {
+			if sub := classify(payload, opts, depth+1); sub.Decision == Block {
+				return sub
+			}
+		}
+	}
+
 	// Pipeline: strip env-var prefixes (quote-aware) → blank here-doc bodies →
 	// blank quoted spans, all BEFORE the dimension scans. Env-strip is first so
 	// `FOO="bar baz" npm run dev` classifies on `npm`; heredoc-strip is before
@@ -209,10 +248,24 @@ func scanTmux(scan string, opts Options) (*Result, bool) {
 	exemptSeen := false
 	for _, seg := range segSplit.Split(scan, -1) {
 		toks := strings.Fields(seg)
-		if len(toks) == 0 || toks[0] != "tmux" {
+		if len(toks) == 0 {
 			continue
 		}
-		args := toks[1:]
+		// Raw tmux at command position, or `xargs … tmux …` where tmux is the
+		// command xargs execs. Either way `args` is everything after tmux.
+		var args []string
+		switch toks[0] {
+		case "tmux":
+			args = toks[1:]
+		case "xargs":
+			cmd := xargsCommand(toks)
+			if len(cmd) == 0 || cmd[0] != "tmux" {
+				continue
+			}
+			args = cmd[1:]
+		default:
+			continue
+		}
 		if opts.RepoCwd || hasSocketFlag(args) {
 			exemptSeen = true
 			continue
@@ -224,6 +277,112 @@ func scanTmux(scan string, opts Options) (*Result, bool) {
 		// unmapped subcommand (info, has-session, ...) — no zmux verb; keep scanning
 	}
 	return nil, exemptSeen
+}
+
+// xargsValueFlags are xargs options that consume the following token as their
+// value, so the command-word scan must skip both.
+var xargsValueFlags = map[string]bool{
+	"-I": true, "-i": true, "-n": true, "-P": true, "-s": true,
+	"-d": true, "-E": true, "-a": true, "-L": true,
+}
+
+// xargsCommand returns the command (word + args) that an `xargs …` segment would
+// execute, skipping xargs's own flags. toks[0] is "xargs". Combined flags
+// (`-n1`, `-I{}`) are skipped as one token; value-taking flags spelled
+// separately (`-n 1`, `-I {}`) skip their value too. Returns nil if no command
+// word follows. Used to catch `find … | xargs tmux capture-pane`.
+func xargsCommand(toks []string) []string {
+	for i := 1; i < len(toks); {
+		t := toks[i]
+		if strings.HasPrefix(t, "-") {
+			if xargsValueFlags[t] {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		}
+		return toks[i:]
+	}
+	return nil
+}
+
+// executablePayloads returns inner command strings that a segment would itself
+// execute — `sh -c '<payload>'` args and here-doc bodies fed to a shell — so
+// classify can recurse into them. Env prefixes are stripped first so
+// `FOO=bar sh -c …` still matches; here-doc bodies are blanked before the
+// shellCExtract scan so a `sh -c '…'` sitting inside an INERT file-writer
+// here-doc (`cat > run.sh <<'EOF' … EOF`) isn't falsely extracted — executable
+// shell-receiver bodies are recovered separately by shellHeredocBodies on the
+// raw command, so nesting one inside a shell here-doc still blocks.
+func executablePayloads(command string) []string {
+	var out []string
+	for _, m := range shellCExtract.FindAllStringSubmatch(stripHeredocs(stripEnvPrefix(command)), -1) {
+		out = append(out, unquotePayload(m[1]))
+	}
+	return append(out, shellHeredocBodies(command)...)
+}
+
+// heredocReceiver returns the command word of a here-doc's opening line,
+// normalized so a here-doc fed to a path-qualified or env-wrapped shell still
+// matches shellReceivers: env assignments and a leading bare `env` are dropped,
+// and a `/bin/bash`-style path collapses to its basename.
+func heredocReceiver(openLine string) string {
+	toks := strings.Fields(stripEnvPrefix(openLine))
+	if len(toks) == 0 {
+		return ""
+	}
+	word := toks[0]
+	if word == "env" && len(toks) > 1 {
+		word = toks[1]
+	}
+	return word[strings.LastIndex(word, "/")+1:]
+}
+
+// unquotePayload strips a single wrapping quote pair from a captured `-c` arg.
+func unquotePayload(p string) string {
+	if len(p) >= 2 {
+		q := p[0]
+		if (q == '\'' || q == '"' || q == '`') && p[len(p)-1] == q {
+			return p[1 : len(p)-1]
+		}
+	}
+	return p
+}
+
+// shellHeredocBodies returns the bodies of here-documents whose receiver is a
+// shell (`bash <<EOF … EOF`), which executes the body. A file-writer receiver
+// (`cat > f <<EOF`, `tee`) makes the body inert data and is skipped — its body
+// is still blanked by stripHeredocs for the main scan.
+func shellHeredocBodies(command string) []string {
+	if !strings.Contains(command, "<<") {
+		return nil
+	}
+	var bodies []string
+	var cur []string
+	tag := ""
+	capturing := false
+	for _, line := range strings.Split(command, "\n") {
+		if tag != "" {
+			if strings.TrimSpace(line) == tag {
+				if capturing {
+					bodies = append(bodies, strings.Join(cur, "\n"))
+				}
+				tag, cur, capturing = "", nil, false
+				continue
+			}
+			if capturing {
+				cur = append(cur, line)
+			}
+			continue
+		}
+		if m := heredocStart.FindStringSubmatch(line); m != nil {
+			tag = m[1]
+			capturing = shellReceivers[heredocReceiver(line)]
+			cur = nil
+		}
+	}
+	return bodies
 }
 
 // hasSocketFlag reports whether a tmux arg list is socket-scoped (`-L <socket>`),

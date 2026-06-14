@@ -50,7 +50,10 @@ func (t *CurrentTab) renderRow(row *outline.Row, selected bool) string {
 	return ""
 }
 
-// renderWorkspaceRow renders the workspace banner + a horizontal rule.
+// renderWorkspaceRow renders the workspace banner + a horizontal rule. The
+// "N sessions in <ws>" scope meta lives in the pinned chrome above the
+// viewport (renderScopeCue) so it stays visible while rows scroll; the banner
+// row itself is just the actionable workspace target (rename / kill / new).
 func (t *CurrentTab) renderWorkspaceRow(row *outline.Row, selected bool) string {
 	cursor := "  "
 	if selected {
@@ -61,17 +64,7 @@ func (t *CurrentTab) renderWorkspaceRow(row *outline.Row, selected bool) string 
 		nameStyle = t.styles.Accent.Bold(true)
 	}
 
-	sessionCount := 1 + len(t.siblings)
-	// Banner meta anchors the rows below as "scoped to <workspace>" — the
-	// only signal that distinguishes session rows here from workspace rows
-	// elsewhere in the dashboard.
-	meta := fmt.Sprintf("%d %s in %s", sessionCount, pluralize("session", sessionCount), row.Label)
-	if row.Attached {
-		meta += " · attached"
-	}
-
-	line := "  " + cursor + nameStyle.Render(row.Label) +
-		"   " + t.styles.Dim.Render(meta) + "\n"
+	line := "  " + cursor + nameStyle.Render(row.Label) + "\n"
 
 	// Horizontal rule under the banner.
 	ruleWidth := t.width - 4
@@ -106,6 +99,18 @@ func (t *CurrentTab) renderSessionRow(row *outline.Row, selected bool) string {
 		nameStyle = t.styles.Accent.Bold(true)
 	}
 
+	// Quick-jump number badge (matches the 1-9 digit handler). Only the first
+	// nine sessions are jumpable, so only those are numbered; others get an
+	// equal-width blank so the icon column stays aligned.
+	num := "    "
+	if n := t.sessionNumberForRow(row.ID); n >= 1 && n <= 9 {
+		numStyle := t.styles.Dim
+		if selected {
+			numStyle = t.styles.Accent
+		}
+		num = numStyle.Render(fmt.Sprintf("[%d]", n)) + " "
+	}
+
 	// Pad the name to a consistent column for alignment (visual width,
 	// not byte length, so wide-rune names line up).
 	padded := padVisual(row.Label, 24)
@@ -130,7 +135,7 @@ func (t *CurrentTab) renderSessionRow(row *outline.Row, selected bool) string {
 		}
 	}
 
-	return "  " + cursor + iconStyle.Render(icon) + " " + nameStyle.Render(padded) + "   " + meta + "\n"
+	return "  " + cursor + num + iconStyle.Render(icon) + " " + nameStyle.Render(padded) + "   " + meta + "\n"
 }
 
 // renderPaneRow renders a pane row nested under its window.

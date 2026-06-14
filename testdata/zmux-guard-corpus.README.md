@@ -28,7 +28,8 @@ This is a **build/test artifact, not a runtime asset** — never link it from `S
 
 Before classifying, all three strip **quoted spans** (so `echo "tmux …"` is safe) and
 **leading env assignments** (`NODE_ENV=prod npm run dev` / `env FOO=bar …` classify on
-the real verb, not the assignment).
+the real verb, not the assignment). They also run a **recursive executable-payload pass**
+first (below) so a raw tmux or background job hidden one indirection deep is still caught.
 
 ## Row schema (JSONL)
 
@@ -62,23 +63,58 @@ classes in its corpus test):
 - **repo-cwd exemption**: the Go classifier/CLI exempt raw tmux inside the zmux repo via
   cwd; pi's `classifyBash` can't see cwd, so it still reports `direct_tmux` (kind unchanged).
 
-## Known gaps (segment model)
+## Recursive executable-payload pass
 
 All three classifiers parse **command position** per simple-command segment (split on
-`;`, `&`, `|`, newline). That deliberately ignores a few ways a raw `tmux` could still
-reach a shell — accepted as low-risk because agents almost never use them, and the cost
-of a false *positive* (blocking legit work) outweighs catching these:
+`;`, `&`, `|`, newline). On its own that misses a raw `tmux`/background job that a segment
+*executes indirectly*. Before the segment scan, each classifier extracts and recursively
+classifies the inner commands a segment would itself run — a Block from any of them is the
+verdict (depth-bounded so a pathological nest can't loop):
+
+- **Shell `-c` payloads** — `sh -c 'tmux capture-pane -p'`, `bash -lc '… &'`: the quoted
+  `-c` arg is pulled out *before* quote-blanking and classified. Matched only at command
+  position, so `echo "sh -c 'tmux'"` (quoted) and `sudo sh -c …` (argument) stay safe. An
+  `env ` wrapper and a path prefix are tolerated, so `env sh -c …` and `/bin/sh -c …` are
+  caught too. The command is **trimmed at entry** (all three classifiers) so a leading-space
+  `   sh -c …` is still at command position, and the `-c` scan runs on **here-doc-stripped**
+  text so a `sh -c …` inside an inert `cat <<'EOF'` body is not falsely extracted.
+- **`xargs tmux …`** — the command `xargs` execs is checked; if it's `tmux`, the rest is
+  classified as a raw tmux call. `xargs grep tmux` (tmux as a pattern) stays safe.
+- **Shell-fed here-doc bodies** — `bash <<EOF … tmux … EOF`: the body is *executed* by the
+  shell receiver, so it is scanned. The receiver is normalized (path basename'd, leading
+  `env` dropped) so `/bin/bash <<EOF` / `env bash <<EOF` count. A **file-writer** receiver
+  (`cat > f <<EOF`, `tee`) makes the body inert data — still blanked, never scanned.
+
+## Known gaps (segment model)
+
+Accepted as low-risk — agents almost never use these, and the cost of a false *positive*
+(blocking legit work) outweighs catching them:
 
 - **Command substitution** — `echo $(tmux capture-pane -p)`: `tmux` isn't at segment
-  command-position, so it's `safe`. (Corpus row marks this contract explicitly.)
-- **Indirection** — `sh -c "tmux capture-pane"`, `xargs tmux …`: the wrapper is the
-  command; the inner `tmux` is an argument, so it passes.
-- **Here-doc bodies are stripped, not scanned** — `cat <<EOF … tmux … EOF` blanks the
-  body before classifying. This is *correct*: a here-doc body is stdin data, never
-  executed, so a `tmux`/`&` inside it is not an invocation (and not backgrounding).
+  command-position and isn't an executable payload, so it's `safe`. (Corpus row marks this
+  contract explicitly.) A full shell parser is a deliberate non-goal.
+- **Deeper / unanchored indirection** — `time bash -c …`, `nice`/`command`/`exec` wrapper
+  chains, `find … -exec tmux …`, `xargs sh -c 'tmux …'` (xargs→shell→tmux, two hops), a
+  shell `-c` nested past the recursion depth: the payload pass anchors at command position
+  (after an `env`/path prefix only) and is depth-bounded, so these pass. (`nohup bash <<EOF`
+  is still caught — as `background`, via the nohup word.)
+- **`xargs` long value-flags** — `xargs --max-args 1 tmux …`: `xargsCommand` models only the
+  short value-taking flags (`-n`, `-I`, …), so a `--long N` form leaves `N` read as the
+  command word and the `tmux` after it escapes. Obscure, fail-open; mirrors all three impls.
 
-A bypass token (`ZMUX_ALLOW=1` / `# zmux: allow`) covers the inverse — a legit raw tmux
-the classifier *does* flag.
+### Known false positives (fail-safe)
+
+The inverse of a gap — a **legit** command the classifier over-blocks. Fail-safe (it errs
+toward blocking, never toward leaking a raw tmux), and the bypass token clears it, so these
+are accepted rather than chased into a shell parser:
+
+- **Separator inside quotes** — `echo 'ok; sh -c "tmux …"'`: the `;` inside the quoted string
+  is read as a segment boundary, so the embedded `sh -c …` is matched at a false command
+  position and blocked. A clean fix needs quote-aware segmentation (a deliberate non-goal).
+  Pinned in the corpus so all three classifiers stay in lockstep on it.
+
+A bypass token (`ZMUX_ALLOW=1` / `# zmux: allow`) covers any over-block — a legit raw tmux,
+or a false positive above — that the classifier flags.
 
 ## Decision choices baked in
 

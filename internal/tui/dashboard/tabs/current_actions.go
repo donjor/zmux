@@ -37,6 +37,8 @@ func (t *CurrentTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t.handleConfirmKillKey(msg)
 	case currentModeMoveWindow:
 		return t.handleMoveKey(msg)
+	case currentModeSearch:
+		return t.handleSearchKey(msg)
 	default:
 		return t.handleListKey(msg)
 	}
@@ -71,6 +73,22 @@ func (t *CurrentTab) handleListKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 			}
 		}
 		return t, nil
+	}
+
+	// Search + quick-jump require an active session (the no-session view has no
+	// list to filter or number, and would show no search input).
+	switch msg.String() {
+	case "/":
+		return t.enterSearchMode()
+	case "esc":
+		// Reaches the tab only when a filter is active (see CapturesEscape);
+		// the first Esc clears the filter, a second closes the dashboard.
+		if t.searchQuery != "" {
+			t.clearSearch()
+		}
+		return t, nil
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		return t.handleSessionDigit(int(msg.String()[0] - '0'))
 	}
 
 	row := t.tree.Current()

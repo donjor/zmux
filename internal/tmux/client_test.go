@@ -125,3 +125,29 @@ func readFakeTmuxCalls(t *testing.T, logPath string) []string {
 	}
 	return strings.Split(strings.TrimSpace(string(raw)), "\n")
 }
+
+func TestTailLines(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		n    int
+		want string
+	}{
+		{"trim to last 2 with trailing newline", "a\nb\nc\nd\n", 2, "c\nd\n"},
+		{"trim to last 2 no trailing newline", "a\nb\nc\nd", 2, "c\nd"},
+		{"fewer lines than n unchanged", "a\nb\n", 5, "a\nb\n"},
+		{"exact count unchanged", "a\nb\nc\n", 3, "a\nb\nc\n"},
+		{"n<=0 no trim", "a\nb\nc\n", 0, "a\nb\nc\n"},
+		{"negative n no trim", "a\nb\nc\n", -10, "a\nb\nc\n"},
+		{"empty input", "", 5, ""},
+		{"single newline preserved", "\n", 1, "\n"},
+		{"joined wrapped line counts once", "wrapped-long-single-logical-line\n", 1, "wrapped-long-single-logical-line\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tailLines(tt.in, tt.n); got != tt.want {
+				t.Errorf("tailLines(%q, %d) = %q, want %q", tt.in, tt.n, got, tt.want)
+			}
+		})
+	}
+}

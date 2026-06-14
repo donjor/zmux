@@ -30,6 +30,7 @@ const (
 	currentModeConfirmKill                            // y/N confirmation
 	currentModeConfirmKillAttached                    // second-step confirm for killing attached ws
 	currentModeMoveWindow                             // session picker for moving a window
+	currentModeSearch                                 // inline `/` search input over the session list
 )
 
 // currentNavLevel tracks the two-level cursor model. In sessionLevel,
@@ -131,9 +132,16 @@ type CurrentTab struct {
 	// Inputs / overlay state.
 	renameInput textinput.Model
 	createInput textinput.Model
+	searchInput textinput.Model
 	rename      *renameState
 	confirm     *confirmState
 	moveSt      *moveState
+
+	// searchQuery is the active filter over the session list, scoped to the
+	// current workspace. Independent of currentModeSearch: editing the query
+	// lives in that mode, but a committed query keeps filtering while the user
+	// browses in list mode (mirrors the Workspaces tab).
+	searchQuery string
 
 	// Move-window overlay state.
 	moveTargets []currentMoveTarget
@@ -157,6 +165,10 @@ func NewCurrentTab(runner tmux.Runner, styles styles.Styles, wsLoader workspacev
 	ci.Placeholder = "session name..."
 	ci.CharLimit = 64
 
+	si := textinput.New()
+	si.Placeholder = "search sessions & tabs..."
+	si.CharLimit = 64
+
 	return &CurrentTab{
 		runner:      runner,
 		styles:      styles,
@@ -165,6 +177,7 @@ func NewCurrentTab(runner tmux.Runner, styles styles.Styles, wsLoader workspacev
 		tree:        outline.NewTree(),
 		renameInput: ri,
 		createInput: ci,
+		searchInput: si,
 	}
 }
 
@@ -174,10 +187,13 @@ func (t *CurrentTab) ID() dashboard.TabID { return dashboard.TabSession }
 func (t *CurrentTab) Title() string       { return "Session & Workspace" }
 func (t *CurrentTab) Init() tea.Cmd       { return nil }
 
-// CapturesEscape reports that Esc should cancel the active mode (inline
-// rename/create, move-window picker, y/N confirm) rather than close the
-// dashboard.
-func (t *CurrentTab) CapturesEscape() bool { return t.mode != currentModeList }
+// CapturesEscape reports that Esc should be handled by the tab rather than
+// close the dashboard: while in a capturing mode (rename/create/move/confirm/
+// search), or while a committed search filter is active in list mode (Esc
+// clears it).
+func (t *CurrentTab) CapturesEscape() bool {
+	return t.mode != currentModeList || t.searchQuery != ""
+}
 
 func (t *CurrentTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	// Fresh activation always starts at session level so session-hopping
@@ -197,6 +213,10 @@ func (t *CurrentTab) Deactivate() {
 	t.pendingJumpTo = ""
 	t.renameInput.Blur()
 	t.createInput.Blur()
+	// Drop any active search filter so the tab is fresh on re-entry.
+	t.searchQuery = ""
+	t.searchInput.SetValue("")
+	t.searchInput.Blur()
 }
 
 func (t *CurrentTab) Resize(width, height int) {
@@ -247,6 +267,10 @@ func (t *CurrentTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 		var cmd tea.Cmd
 		t.createInput, cmd = t.createInput.Update(msg)
 		return t, cmd
+	case currentModeSearch:
+		var cmd tea.Cmd
+		t.searchInput, cmd = t.searchInput.Update(msg)
+		return t, cmd
 	}
 	return t, nil
 }
@@ -280,6 +304,14 @@ func (t *CurrentTab) applyData(msg currentDataMsg) {
 	t.wsModel = msg.wsModel
 	rows := t.buildRows()
 	if t.pendingJumpTo != "" {
+		// A committed filter may hide the row we just acted on (the new/renamed
+		// session): drop the filter and rebuild so the jump lands on the real
+		// target instead of SetRowsAndJumpTo's silent fallback row.
+		if t.searchQuery != "" && !rowsContain(rows, t.pendingJumpTo) {
+			t.searchQuery = ""
+			t.searchInput.SetValue("")
+			rows = t.buildRows()
+		}
 		t.tree.SetRowsAndJumpTo(rows, t.pendingJumpTo)
 		t.pendingJumpTo = ""
 	} else {
@@ -295,6 +327,7 @@ func (t *CurrentTab) exitMode() {
 	t.moveSt = nil
 	t.renameInput.Blur()
 	t.createInput.Blur()
+	t.searchInput.Blur()
 	if t.pending != nil {
 		t.applyData(*t.pending)
 		t.pending = nil
@@ -315,35 +348,48 @@ func (t *CurrentTab) ShortHelp() string {
 		return "enter:move  esc:cancel"
 	}
 
+	if t.mode == currentModeSearch {
+		return "type:filter  ↑↓:move  enter:apply  esc:cancel"
+	}
+
 	if t.sessionName == "" {
 		return "n:new tmp  tab:workspaces  esc:exit"
 	}
 
+	// List mode: the trailing hint advertises search + digit quick-jump, plus
+	// esc:clear when a committed filter is active. "switch" (not "jump") signals
+	// that a digit activates the session — focuses the current one, switches to
+	// a sibling — rather than only moving the cursor.
+	tail := "  /:search  1-9:switch"
+	if t.searchQuery != "" {
+		tail += "  esc:clear"
+	}
+
 	row := t.tree.Current()
 	if row == nil {
-		return "r:rename  x:kill  n:new"
+		return "r:rename  x:kill  n:new" + tail
 	}
 
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
-		return strings.Join([]string{"r:rename", "x:kill", "n:new session"}, "  ")
+		return strings.Join([]string{"r:rename", "x:kill", "n:new session"}, "  ") + tail
 	case outline.RowSession:
 		// Session-level cursor: show session ops + the "l:tabs" hint to
 		// descend into window navigation. "n" creates a new tab in the
 		// session (mirrors the behavior on window rows).
-		return strings.Join([]string{"enter:switch", "l:tabs", "r:rename", "x:kill", "n:new tab"}, "  ")
+		return strings.Join([]string{"enter:switch", "l:tabs", "r:rename", "x:kill", "n:new tab"}, "  ") + tail
 	case outline.RowPane:
-		return strings.Join([]string{"enter:focus", "h:back", "x:kill pane"}, "  ")
+		return strings.Join([]string{"enter:focus", "h:back", "x:kill pane"}, "  ") + tail
 	case outline.RowWindow:
 		// Window-level cursor: differentiate current-session windows
 		// (full action set) from sibling-session windows (move + reorder
 		// aren't wired for those yet).
 		if _, ok := outline.RowData[windowDetail](row); ok {
-			return strings.Join([]string{"enter:focus", "h:back", "r:rename", "x:kill", "m:move", "</>:reorder", "n:new"}, "  ")
+			return strings.Join([]string{"enter:focus", "h:back", "r:rename", "x:kill", "m:move", "</>:reorder", "n:new"}, "  ") + tail
 		}
-		return strings.Join([]string{"enter:switch", "h:back", "r:rename", "x:kill", "n:new"}, "  ")
+		return strings.Join([]string{"enter:switch", "h:back", "r:rename", "x:kill", "n:new"}, "  ") + tail
 	}
-	return "r:rename  x:kill  n:new"
+	return "r:rename  x:kill  n:new" + tail
 }
 
 // ── View ──
@@ -355,27 +401,28 @@ func (t *CurrentTab) View() string {
 		return t.viewMove()
 	}
 
-	var b strings.Builder
-
-	// Overlays render above the scrollable content.
-	switch t.mode {
-	case currentModeRename:
-		b.WriteString(t.renderRenameOverlay())
-	case currentModeCreate:
-		b.WriteString(t.renderCreateOverlay())
-	case currentModeConfirmKill:
-		b.WriteString(t.renderConfirmOverlay(1))
-	case currentModeConfirmKillAttached:
-		b.WriteString(t.renderConfirmOverlay(2))
-	}
-
 	if t.sessionName == "" {
+		var b strings.Builder
 		b.WriteString("  " + t.styles.Dim.Render("No active session.") + "\n")
 		b.WriteString("  " + t.styles.Dim.Render("Press n to create a temporary session, or Tab for Workspaces.") + "\n")
 		return b.String()
 	}
 
-	// Render ALL rows — viewport handles clipping.
+	// Fixed chrome pinned above the scrollable rows: the workspace scope cue
+	// (always visible even when the row list scrolls) plus any active overlay.
+	chrome := t.renderChrome()
+
+	// Reserve the chrome's height so the viewport's rows take the remainder —
+	// the cue never scrolls off and the row area is sized to what's left.
+	if t.height > 0 {
+		vpHeight := t.height - strings.Count(chrome, "\n")
+		if vpHeight < 1 {
+			vpHeight = 1
+		}
+		t.vp.SetHeight(vpHeight)
+	}
+
+	var b strings.Builder
 	rows := t.tree.Rows
 	cursorLine := 0
 	lineCount := 0
@@ -394,7 +441,50 @@ func (t *CurrentTab) View() string {
 	// Set content on viewport and scroll to keep cursor visible.
 	t.vp.SetContent(b.String())
 	ensureCursorVisible(&t.vp, cursorLine)
-	return renderScrollable(t.vp, t.styles)
+	return chrome + renderScrollable(t.vp, t.styles)
+}
+
+// renderChrome builds the fixed block pinned above the scrollable rows: a
+// blank spacer, the workspace scope cue, and whichever overlay (rename /
+// create / confirm / search) is active — or a blank spacer when none. Kept
+// out of the viewport content so the scope cue stays visible while rows
+// scroll under it.
+func (t *CurrentTab) renderChrome() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString("  " + t.renderScopeCue() + "\n")
+
+	switch t.mode {
+	case currentModeRename:
+		b.WriteString(t.renderRenameOverlay())
+	case currentModeCreate:
+		b.WriteString(t.renderCreateOverlay())
+	case currentModeConfirmKill:
+		b.WriteString(t.renderConfirmOverlay(1))
+	case currentModeConfirmKillAttached:
+		b.WriteString(t.renderConfirmOverlay(2))
+	case currentModeSearch:
+		b.WriteString(t.renderSearchOverlay())
+	default:
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// renderScopeCue renders the "N sessions in <ws>" scope line, the only signal
+// that anchors these rows as scoped to one workspace. A committed filter adds
+// a "filter: <q>" chip (suppressed while the search input is open, since the
+// query is visible there).
+func (t *CurrentTab) renderScopeCue() string {
+	sessionCount := 1 + len(t.siblings)
+	cue := t.styles.Dim.Render(fmt.Sprintf("%d %s in %s", sessionCount, pluralize("session", sessionCount), t.wsName))
+	if t.attached > 0 {
+		cue += t.styles.Dim.Render(" · attached")
+	}
+	if t.mode != currentModeSearch && t.searchQuery != "" {
+		cue += "  " + t.styles.Dim.Render("|") + "  " + t.styles.Info.Render("filter: "+t.searchQuery)
+	}
+	return cue
 }
 
 // viewMove renders the window-move destination picker (full-screen overlay).

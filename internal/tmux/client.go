@@ -512,10 +512,41 @@ type CapturePaneOptions struct {
 	Join  bool // join wrapped lines into single logical lines (-J)
 }
 
-// CapturePane captures pane content as plain text. Retained with stable plain
-// semantics because run/watch depend on it; richer captures use CapturePaneOpts.
+// CapturePane captures at most `lines` logical lines of pane content as plain
+// text, counting from the bottom. Retained with stable plain semantics because
+// run/watch depend on it; richer captures use CapturePaneOpts.
+//
+// tmux's `-S -N` start line is N lines of *history before* the visible pane, so
+// `capture-pane -S -N` returns N history lines PLUS the full visible pane — more
+// than N. Bounded callers (watch --lines, run follow) want N total, so the
+// result is tail-trimmed to the last `lines` lines in Go. lines <= 0 is left
+// untrimmed (capture the visible pane as tmux returns it).
 func (c *Client) CapturePane(target string, lines int) (string, error) {
-	return c.run("capture-pane", "-t", target, "-p", "-S", strconv.Itoa(-lines))
+	out, err := c.run("capture-pane", "-t", target, "-p", "-S", strconv.Itoa(-lines))
+	if err != nil {
+		return out, err
+	}
+	return tailLines(out, lines), nil
+}
+
+// tailLines returns at most the last n lines of s. n <= 0 returns s unchanged.
+// A single trailing newline is preserved (it does not count as a line), so the
+// capture keeps its shape and successive captures stay byte-comparable for idle
+// detection.
+func tailLines(s string, n int) string {
+	if n <= 0 || s == "" {
+		return s
+	}
+	trailing := ""
+	body := s
+	if strings.HasSuffix(body, "\n") {
+		trailing, body = "\n", body[:len(body)-1]
+	}
+	lines := strings.Split(body, "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[len(lines)-n:], "\n") + trailing
 }
 
 // CapturePaneOpts captures pane content with options (ANSI escapes, line join).

@@ -1,0 +1,83 @@
+# QA walkthrough for plan 033: QoL polish batch (the timing/glyph-sensitive
+# slices that unit tests can't cover — top bar P4, session tab P5, popup P6).
+#
+# Targets the isolated zzmux edge profile — live zmux is untouched.
+# Setup: `./dev.sh zzmux`. Use two terminals: one attached zzmux client, one
+# controller shell for kill/open commands.
+# Drive from here: `./qa qol-polish`.
+
+[checklist]
+name = "QoL polish batch (033)"
+doc = "Top bar dead/blank state (P4), session-tab search+numbering+scope (P5), and popup focus dimming (P6) on the zzmux edge profile."
+
+[checklist.vars]
+bin = "zzmux"
+ws = "qa-qol"
+
+[[step]]
+id = "setup"
+name = "Edge binary is installed"
+cmd = "{bin} version"
+expect = "zzmux is installed and uses the isolated edge profile"
+check = "zzmux|v[0-9]"
+
+[[step]]
+id = "bar-setup"
+name = "Create a multi-session workspace (manual — run in your attached terminal)"
+expect = "In your OWN attached zzmux terminal — not the qa runner, which has no tty so `new` aborts with 'open terminal failed: not a terminal' — run `zzmux new qa-qol main api worker`. It creates workspace qa-qol with sessions main, api, worker and attaches main. Mark pass once you are attached to qa-qol with all three sessions live."
+needs = ["setup"]
+
+[[step]]
+id = "bar-dead-session"
+name = "EYEBALL P4 killed session drops from the top bar"
+expect = "with qa-qol attached, kill the `api` session from the controller shell (`zzmux kill qa-qol/api` or raw `tmux -L zzmux kill-session -t api`); within one status refresh the `api` pill disappears from the top bar WITHOUT touching the attached client — no stale dead-session label lingers"
+needs = ["bar-setup"]
+
+[[step]]
+id = "bar-blank-second-line"
+name = "EYEBALL P4 second tab line renders on fresh attach"
+expect = "detach and re-attach qa-qol (or open it fresh after a `tmux -L zzmux kill-server`); the SECOND status line (logical tabs row) shows its tabs IMMEDIATELY on attach — it is never blank-until-a-new-tab-opens"
+needs = ["bar-setup"]
+
+[[step]]
+id = "p5-scope-cue"
+name = "EYEBALL P5 scope cue stays pinned while rows scroll"
+expect = "with qa-qol attached, open the zmux dashboard (prefix + Space) — it opens on the Session & Workspace tab. The line `3 sessions in qa-qol` sits ABOVE the session list. Press l to descend into a session's tabs and scroll down (j) through windows/panes; the `3 sessions in qa-qol` cue stays pinned at the top and never scrolls away"
+needs = ["bar-setup"]
+
+[[step]]
+id = "p5-numbering"
+name = "EYEBALL P5 session rows carry [N] quick-jump badges"
+expect = "on the Session & Workspace tab, each session row shows a `[1]` `[2]` `[3]` badge to the left of its name, numbered top-to-bottom (current session is [1])"
+needs = ["bar-setup"]
+
+[[step]]
+id = "p5-digit-jump"
+name = "EYEBALL P5 digit 1-9 jumps to the numbered session"
+expect = "on the Session & Workspace tab, press the digit shown in a session's [N] badge (e.g. 2) — zmux closes the dashboard and switches to (or focuses, for the current session) that exact session. The digit matches the badge"
+needs = ["bar-setup"]
+
+[[step]]
+id = "p5-search"
+name = "EYEBALL P5 `/` filters sessions by name and tab name"
+expect = "on the Session & Workspace tab, press `/` and type part of a session name (e.g. `api`) or a window/tab name; the list live-narrows to matching sessions and a `filter: <q>` chip appears in the scope cue. Enter keeps the filter (digits re-number over the visible set); Esc clears it and restores all sessions"
+needs = ["bar-setup"]
+
+[[step]]
+id = "p6-popup-border"
+name = "EYEBALL P6 popups get a faint themed border"
+expect = "with qa-qol attached, open the zmux dashboard (prefix + Space). The popup's rounded border is drawn in the theme's faint/dim color (not bright/default), reading as a quiet frame. Same for the command palette (prefix + p) and pickers"
+needs = ["bar-setup"]
+
+[[step]]
+id = "p6-popup-dim"
+name = "EYEBALL P6 host background dims behind the popup and restores"
+expect = "open the dashboard (prefix + Space): the panes visible AROUND the popup (the margin) take on a slightly shifted (dimmed/tinted) background while the popup is open, so focus sits on the popup. Close it (q/esc); the host background returns to normal immediately — no lingering tint. Best-effort: a hard kill -9 of the popup may leave the tint until the next `{bin} apply`/attach"
+needs = ["bar-setup"]
+
+[[step]]
+id = "cleanup"
+name = "Kill QA workspace"
+cmd = "{bin} kill {ws} --yes"
+expect = "qa-qol sessions are gone (--yes skips the confirm prompt so the runner's non-tty stdin doesn't cancel the teardown)"
+needs = ["bar-setup"]
