@@ -356,7 +356,7 @@ func (c *Client) SwapWindow(session string, idx1, idx2 int) error {
 	return c.runSilent("swap-window", "-s", src, "-t", dst)
 }
 
-const paneListFormat = "#{session_name}\t#{pane_id}\t#{pane_index}\t#{pane_active}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_width}\t#{pane_height}\t#{pane_title}\t#{window_index}"
+const paneListFormat = "#{session_name}\t#{pane_id}\t#{pane_index}\t#{pane_active}\t#{pane_current_command}\t#{pane_pid}\t#{pane_current_path}\t#{pane_width}\t#{pane_height}\t#{pane_title}\t#{window_index}\t#{window_name}"
 
 // ListPanes lists all panes across all windows in a target session. Empty target uses tmux's current session.
 func (c *Client) ListPanes(target string) ([]Pane, error) {
@@ -560,6 +560,19 @@ func (c *Client) CapturePaneOpts(target string, opts CapturePaneOptions) (string
 	}
 	args = append(args, "-S", strconv.Itoa(-opts.Lines))
 	return c.run(args...)
+}
+
+// PipePane opens or closes a tmux output pipe on target. A non-empty command is
+// handed to tmux as a single shell string (run via /bin/sh -c) and streams the
+// pane's raw output to that command's stdin until the pipe is closed or the
+// pane dies; an empty command closes any pipe currently open on the target.
+// Unlike capture-pane this is continuous and server-side, so it keeps recording
+// with no client attached. State is queryable via #{pane_pipe}.
+func (c *Client) PipePane(target, command string) error {
+	if command == "" {
+		return c.runSilent("pipe-pane", "-t", target)
+	}
+	return c.runSilent("pipe-pane", "-t", target, command)
 }
 
 // SetOption sets a tmux option. scope is e.g. "-g", "-s", "-w", etc.

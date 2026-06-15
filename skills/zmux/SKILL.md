@@ -16,44 +16,20 @@ every example below is a shell command.
 ## Never reach past zmux to raw tmux
 
 zmux **is** the tmux wrapper. Raw `tmux` drops the `@zmux_label` pin + session/
-workspace bookkeeping that keep tabs stably addressable — the window can auto-rename
-out from under you and your next command lands on the wrong slot. Use the zmux verb;
-it's almost always shorter:
+workspace bookkeeping that keep tabs stably addressable — the window auto-renames out
+from under you and your next command lands on the wrong slot. Reach for the zmux verb
+(almost always shorter): `watch`/`send`/`type` over `capture-pane`/`send-keys`,
+`tabs`/`ls` over `list-windows`/`list-sessions`, `pane open` over `split-window`,
+`run -n` over `new-window`.
 
-| reaching for…                       | use instead                                        |
-| ----------------------------------- | -------------------------------------------------- |
-| `tmux capture-pane -t X`            | `zmux watch <tab>` (read-only; `--until` baselines)|
-| `tmux send-keys -t X …`             | `zmux send <tab> <keys>` / `zmux type <tab> '…'`   |
-| `tmux list-windows`                 | `zmux tabs`                                         |
-| `tmux list-sessions` / `tmux ls`    | `zmux ls` (`-s` for a flat list)                   |
-| `tmux list-panes`                   | `zmux pane list --json`                            |
-| `tmux split-window …`               | `zmux pane open <name> -r 35 -- …`                 |
-| `tmux select/kill/resize-pane`      | `zmux pane focus / close / resize`                 |
-| `tmux new/kill/rename/move-window`  | `zmux run -n` / `zmux tab kill / label / move`     |
-| `tmux new-session` / `attach`       | `zmux new` / `zmux open`                           |
+A `PreToolUse` guard (`hooks/zmux-guard.mjs`, symlinked into `~/.claude/hooks/`)
+**blocks** raw tmux and ad-hoc background jobs (`&`, `nohup`, `npm run dev`) and
+prints the right verb back, so a slip self-corrects. The full mapping table, guard
+exemptions, and tab-state glyph behavior → **`references/guard-and-tab-states.md`**.
 
-A `PreToolUse` guard (`skills/zmux/hooks/zmux-guard.mjs`, symlinked into
-`~/.claude/hooks/`) **blocks** these raw calls and prints the mapping back to you —
-so a slip self-corrects instead of silently targeting the wrong window. The same
-guard enforces the rest of this skill's hygiene: a dev server / background job
-(`npm run dev`, `&`, `nohup`) is **blocked** toward `zmux run -n <name> -d`, and an
-interactive/remote command (`sudo`, `ssh`, a REPL) draws a non-blocking **warn**
-nudging it into a shared tab. Genuinely need the raw command (zmux development,
-socket inspection, a one-off)? Prefix `ZMUX_ALLOW=1`, append `# zmux: allow`, use an
-explicit `-L <socket>`, or run from the zmux repo — all are exempt.
-
-## Tab states (attention glyphs in the bar)
-
-`zmux tab state <attention|running|done|failed|clear> [tab]` marks a tab's
-lifecycle; the bar renders a colored glyph (● needs-human / ◐ running /
-✓ done / ✗ failed) visible from any tab. Mostly automatic: `zmux run` sets
-running→done/failed; `zmux send`/`type` clear a stale done/failed; focusing
-a tab clears attention. Set `attention` manually when handing the human a
-prompt they must act on (sudo, permission prompt): `zmux tab state attention
-admin --msg 'sudo password'`. A `Stop` hook
-(`skills/zmux/hooks/zmux-tab-state-stop.mjs`, symlink into
-`~/.claude/hooks/` like the guard) marks the agent's own tab done/attention
-when a turn ends — no transcript parsing, just "the turn ended".
+A tab also carries a lifecycle glyph in the bar (● needs-human / ◐ running / ✓ done /
+✗ failed), mostly set automatically by `run`/`send`/`type` + a `Stop` hook. Set it by
+hand only to flag the human: `zmux tab state attention <tab> --msg 'sudo password'`.
 
 ## Agent peer
 
@@ -94,50 +70,52 @@ zmux watch worker-auth-cli --idle 3 -T 600 -s worker-auth  # long, often async
 
 Use `zmux session run`, **never** `zmux new <ws> <worker-session>` for automated
 spawn — `new` attaches (steals the conductor's focus) and births a blank shell tab.
-
-The worktree is the sandbox: writes/exec inside it are routine; network, installs,
-auth, and out-of-worktree writes still surface. zmux owns the terminal + lifecycle;
-the *fan-out policy* (which worktrees, merge order, who tests in the browser) lives
-in the workflow skill above, never here.
+The worktree is the sandbox; zmux owns the terminal + lifecycle, while *fan-out
+policy* (which worktrees, merge order, who tests) lives in the workflow skill above,
+never here. Permission posture + boundaries → `references/agent-worker.md`.
 
 ## Am I in zmux?
 
 ```bash
 [ -n "$TMUX" ] && echo inside-tmux   # inside a session — commands work without -s
-zmux ls                              # workspaces / sessions (works even outside tmux)
+zmux where                           # current context: workspace / session / tab / pane / cwd (alias: whoami)
+zmux ls                              # all workspaces / sessions (works even outside tmux)
 zmux tabs                            # tabs in the current session
-zmux pane current --json            # current pane/session details
 ```
 
-If `$TMUX` is unset but `zmux ls` shows sessions, you can still drive them — pass
-`-s <session>` on the commands that accept it (`run`, `watch`, `send`, `type`,
-`tabs`); `open` takes the workspace/session positionally and `pane` uses `--target`.
-**Never fall back to running processes directly just because you're not inside tmux.**
+`zmux where` is the one-shot "where am I" — the raw `zws_…` name it prints under
+`session` is exactly what you pass as `-s`. (`zmux pane current --json` stays the
+pane-only primitive.)
 
-When multiple sessions/workspaces are attached, **do not guess** — inspect with `zmux
-ls` / `zmux tabs` / `zmux pane current --json` and target explicitly.
+Outside tmux but `zmux ls` shows sessions? Drive them with `-s <session>` (accepted
+by `run`/`watch`/`send`/`type`/`tabs`/`log`/`tab state` + `tab` placements; the three
+forms and ambiguity rules → `references/cli-catalog.md`). **Never** run processes
+directly just because you're outside tmux, and **never** guess between attached
+sessions — list them with `zmux ls` first (`zmux where` is in-tmux only).
 
 ## When to use zmux vs. your shell
 
-Use your **shell directly** for:
+Your **shell** for: quick reads/searches (`rg`, `cat`, `git diff`); bounded
+builds/tests/checks that finish this turn; scripts where the captured stdout is the
+artifact.
 
-- quick reads/searches (`rg`, `ls`, `cat`, `git diff`);
-- bounded builds/tests/checks that finish within this turn;
-- scripts where the captured stdout/stderr is the artifact.
+**zmux** for: anything that keeps running (dev servers, watchers, queues, REPLs);
+commands needing input/passwords/sudo/manual control; shared visibility in a named
+tab; stopping/inspecting an existing long-running process; sidecars; terminal
+capability diagnosis.
 
-Use **zmux** for:
+**Never:**
 
-- dev servers, file watchers, queues, REPLs — anything that keeps running;
-- commands needing user input, passwords, sudo, or manual control;
-- shared visibility with the user in a named tab/pane;
-- stopping/restarting or inspecting an existing long-running process;
-- sidecars / persistent UI panes;
-- terminal capability / truecolor diagnosis.
-
-**Never** use `&`, `nohup`, `disown`, or ad-hoc background jobs — use zmux so
-processes are named, visible, and controllable. **Never** create unnamed tabs
-(always `-n`). **Never** use raw `tmux` for app-level actions; zmux wrappers carry
-the labels and session/workspace bookkeeping tmux doesn't.
+- `&`, `nohup`, `disown`, or any ad-hoc background job — use `zmux run -d` so
+  processes stay named, visible, and controllable.
+- unnamed tabs — always `-n`.
+- raw `tmux` for app-level actions (the guard blocks it).
+- your own `:::DONE:::` markers (`zmux run` handles sentinels) or `sleep N && watch`
+  (`run` already waits).
+- guessing process state — read it with `zmux watch` / `zmux tabs`.
+- `zmux refresh` / `terminal refresh` from an agent session without weighing the
+  client-reattach disruption.
+- `zmux init` inside tmux — it refuses; exit the session first.
 
 ## Run & observe (core)
 
@@ -178,6 +156,20 @@ zmux watch <tab> --until 'ready|listening' -T 60   # wait for regex, 60s timeout
 `zmux watch --until` snapshots the buffer when it starts and matches only **new**
 output after that baseline — stale "ready" text from a prior run won't cause a false
 match. Use `zmux watch` to read state instead of re-running probes that disturb it.
+
+For **persistent** recording that survives detach and self-truncates, use `zmux log`
+— `watch` only reads the live buffer:
+
+```bash
+zmux log start <tab>          # record output to a bounded file (background, survives detach)
+zmux log start <tab> --ansi   # keep colour instead of stripping to plain
+zmux log tail <tab>           # print the recorded log
+zmux log status               # what's being recorded
+zmux log stop <tab>           # stop
+```
+
+`log` is for line-oriented output (servers, builds, tests); a fullscreen TUI records
+as escape soup. For live following use `zmux watch <tab> -f`.
 
 ### Send keys / type
 
@@ -220,40 +212,7 @@ Address tabs by their zmux name, never a tmux window index.
 
 ## Full command catalog → `references/cli-catalog.md`
 
-Sessions/workspaces, tabs, placements (`tab pane/full/hide/show`), panes &
-sidecars, terminal capabilities, visual snapshots, and config/maintenance — the
-exhaustive verb tables live in **`references/cli-catalog.md`**. Read it when you
-need a specific verb. The ones you'll reach for most:
-
-```bash
-zmux ls -s                             # flat list of all sessions
-zmux session kill <session>            # kill a session
-zmux tab move <tab> <dest>             # move a tab to another session
-zmux tab pane <tab> / full / hide / show   # placements (pane / promote / dock)
-zmux pane open <name> -r 35 -- <cmd>   # split a sidecar pane
-zmux snapshot                          # capture text + ANSI + PNG of the current window
-```
-
-## Naming conventions
-
-Stable, descriptive tab names:
-
-- `server` — dev servers
-- `test` — test runners/watchers
-- `build` — builds
-- `logs` — log tails
-- `admin` — sudo/interactive commands
-- `<tool>-sidecar` — UI sidecars
-
-## Avoid
-
-- Starting servers/watchers in your own shell — use `zmux run -d`.
-- `&`, `nohup`, `disown`, or any ad-hoc background job.
-- Creating unnamed tabs — always `-n`.
-- Guessing process state instead of reading it with `zmux watch` / `zmux tabs`.
-- Adding your own `:::DONE:::` markers — `zmux run` handles sentinels.
-- `sleep N && zmux watch` — `zmux run` already waits.
-- Raw `tmux` for ordinary zmux-managed actions.
-- `zmux refresh` / `zmux terminal refresh` from an agent session without weighing the
-  client-reattach disruption.
-- `zmux init` inside tmux — it refuses; exit the session first.
+The exhaustive verb tables live in **`references/cli-catalog.md`** — sessions/
+workspaces, tabs, placements (`tab pane/full/hide/show`), panes & sidecars, terminal
+capabilities, visual snapshots, output recording (`zmux log`), `-s` session-targeting
+forms, and naming conventions. Read it when you need a specific verb.

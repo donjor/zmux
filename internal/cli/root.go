@@ -137,6 +137,8 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newInitCmd(a, version),
 		newKeysCmd(),
 		newKillCmd(a),
+		newLogCmd(a),
+		newLogSinkCmd(a),
 		newLsCmd(a),
 		newNewCmd(a),
 		newOpenCmd(a),
@@ -160,6 +162,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newUpCmd(a),
 		newVersionCmd(version),
 		newWatchCmd(a),
+		newWhereCmd(a),
 		newWorkspaceCmd(a),
 	)
 

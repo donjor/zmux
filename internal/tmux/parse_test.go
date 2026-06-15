@@ -199,8 +199,8 @@ func TestParseClientsInvalidFields(t *testing.T) {
 }
 
 func TestParsePanes(t *testing.T) {
-	input := "dev\t%57\t1\t1\tnvim\t1234\t/home/user/dev\t120\t40\tclean-ui\t2\n" +
-		"dev\t%58\t2\t0\tzsh\t1235\t/home/user/dev\t80\t40\tlogs\t2\n"
+	input := "dev\t%57\t1\t1\tnvim\t1234\t/home/user/dev\t120\t40\tclean-ui\t2\teditor\n" +
+		"dev\t%58\t2\t0\tzsh\t1235\t/home/user/dev\t80\t40\tlogs\t2\teditor\n"
 
 	panes, err := parsePanes(input)
 	if err != nil {
@@ -210,7 +210,7 @@ func TestParsePanes(t *testing.T) {
 		t.Fatalf("expected 2 panes, got %d", len(panes))
 	}
 	p := panes[0]
-	if p.Session != "dev" || p.ID != "%57" || p.Index != 1 || !p.Active || p.Command != "nvim" || p.PID != 1234 || p.Dir != "/home/user/dev" || p.Width != 120 || p.Height != 40 || p.Title != "clean-ui" || p.WindowIndex != 2 {
+	if p.Session != "dev" || p.ID != "%57" || p.Index != 1 || !p.Active || p.Command != "nvim" || p.PID != 1234 || p.Dir != "/home/user/dev" || p.Width != 120 || p.Height != 40 || p.Title != "clean-ui" || p.WindowIndex != 2 || p.WindowName != "editor" {
 		t.Fatalf("unexpected pane[0]: %#v", p)
 	}
 	if panes[1].ID != "%58" || panes[1].Active {

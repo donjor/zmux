@@ -154,7 +154,7 @@ func parsePanes(output string) ([]Pane, error) {
 			continue
 		}
 
-		fields := strings.SplitN(line, "\t", 11)
+		fields := strings.SplitN(line, "\t", 12)
 		if len(fields) < 10 {
 			continue // skip malformed lines gracefully
 		}
@@ -169,12 +169,17 @@ func parsePanes(output string) ([]Pane, error) {
 		if len(fields) >= 11 {
 			windowIndex, _ = strconv.Atoi(fields[10])
 		}
+		windowName := ""
+		if len(fields) >= 12 {
+			windowName = fields[11]
+		}
 
 		panes = append(panes, Pane{
 			Session:     fields[0],
 			ID:          fields[1],
 			Index:       index,
 			WindowIndex: windowIndex,
+			WindowName:  windowName,
 			Active:      active,
 			Command:     fields[4],
 			PID:         pid,

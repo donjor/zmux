@@ -20,6 +20,7 @@ type Profile struct {
 	ThemesDir    string // <StateDir>/themes
 	RecipesDir   string // <StateDir>/recipes
 	SnapshotsDir string // <StateDir>/snapshots
+	LogsDir      string // <StateDir>/logs — `zmux log` pane recordings
 	DebugLog     string // <StateDir>/debug.log
 }
 
@@ -48,6 +49,7 @@ func profileFor(home, name, socket, stateName, cfgName, confName string) Profile
 		ThemesDir:    filepath.Join(dir, "themes"),
 		RecipesDir:   filepath.Join(dir, "recipes"),
 		SnapshotsDir: filepath.Join(dir, "snapshots"),
+		LogsDir:      filepath.Join(dir, "logs"),
 		DebugLog:     filepath.Join(dir, "debug.log"),
 	}
 }

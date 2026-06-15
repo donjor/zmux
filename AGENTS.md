@@ -46,8 +46,8 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
 - Keybindings come from `internal/keys`; run `make keys-gen` after changes and
   let `TestKeybindingsDocInSync` verify `docs/keybindings.md`.
 - Logical tabs are pane-canonical. Route name/address changes through
-  `internal/cli/tab_target.go` so `run`, `watch`, `send`, `type`, `state`, and
-  tab verbs keep working for full, pane, and hidden tabs.
+  `internal/cli/tab_target.go` so `run`, `watch`, `log`, `send`, `type`,
+  `state`, and tab verbs keep working for full, pane, and hidden tabs.
 - Workspace/session targets are local-label aware. Route CLI target changes
   through `internal/cli/session_target.go`; raw tmux names are debug/interop
   fallbacks, not the normal user-facing address.

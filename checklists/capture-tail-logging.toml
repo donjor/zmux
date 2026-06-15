@@ -1,0 +1,100 @@
+# QA walkthrough for plan 035: tail-style output logging (`zmux log`).
+#
+# Targets the isolated zzmux edge profile — live zmux is untouched.
+# Setup: `./dev.sh zzmux`. Use two terminals: terminal A stays attached to the
+# QA session; a controller shell runs the `log` verbs (they work detached, which
+# is the point). Drive from here: `./qa capture-tail-logging`.
+
+[checklist]
+name = "Tail-style output logging (035)"
+doc = "zmux log start/stop/status/tail over tmux pipe-pane + a bounded sink: detached recording, truncation, plain-vs-ansi, and the line-output-vs-TUI boundary."
+
+[checklist.vars]
+bin = "zzmux"
+ws = "qa-log"
+sess = "zws_qa-log__main"
+tab = "emitter"
+
+[[step]]
+id = "setup"
+name = "Edge binary is installed"
+cmd = "{bin} version"
+expect = "zzmux is installed and uses the isolated edge profile"
+check = "zzmux|v[0-9]|dev"
+
+[[step]]
+id = "spawn"
+name = "EYEBALL attach + spawn a line emitter"
+expect = "in terminal A: `{bin} new {ws} main` (attaches), then `{bin} run -n {tab} -- sh -c 'i=0; while :; do echo build-line-$i; i=$((i+1)); sleep 1; done'`. The {tab} tab prints an increasing build-line-N every second."
+needs = ["setup"]
+
+[[step]]
+id = "start"
+name = "Start recording (detached works)"
+cmd = "{bin} log start {tab} -s {sess}"
+expect = "prints `● logging {tab} → …/logs/…log`; recording runs server-side, no attach needed"
+check = "logging|●"
+needs = ["spawn"]
+
+[[step]]
+id = "status-active"
+name = "status shows the active recording"
+cmd = "{bin} log status"
+expect = "a row for {tab} marked ● with its pane id, a non-zero SIZE, and the log path"
+check = "{tab}|●"
+needs = ["start"]
+
+[[step]]
+id = "tail-clean"
+name = "tail prints clean line output"
+cmd = "{bin} log tail {tab} -s {sess}"
+expect = "the recorded log shows build-line-N lines as plain text, no escape codes"
+check = "build-line-[0-9]"
+needs = ["start"]
+
+[[step]]
+id = "persist"
+name = "EYEBALL recording survives detach + keeps growing"
+expect = "detach terminal A (prefix d). From the controller, run `{bin} log tail {tab} -s {sess}` twice a few seconds apart — the highest build-line-N grows even with no client attached."
+needs = ["start"]
+
+[[step]]
+id = "truncation"
+name = "EYEBALL the log is bounded, not unbounded"
+expect = "stop, then `{bin} log start {tab} -s {sess} --max-bytes 2048`; let it run a minute. `{bin} log status` SIZE stays near 2K (oldest build-line-N dropped, newest retained) — it does not grow without limit."
+needs = ["start"]
+
+[[step]]
+id = "ansi"
+name = "EYEBALL --ansi keeps colour, default strips it"
+expect = "log a tab that emits colour (e.g. `ls --color=always` output or a build with colour). Default `log tail` is plain; a recording started with `--ansi` shows the raw escape codes / colour when catted."
+needs = ["setup"]
+
+[[step]]
+id = "tui-caveat"
+name = "EYEBALL fullscreen TUI logs as escape soup (documented boundary)"
+expect = "start logging an interactive shell or a TUI tab (vim, the dashboard). `log tail` shows cursor-move/redraw noise, not clean lines — confirming logging is for line-oriented output; snapshot stays the tool for screen state."
+needs = ["setup"]
+
+[[step]]
+id = "stop"
+name = "stop ends the recording"
+cmd = "{bin} log stop {tab} -s {sess}"
+expect = "prints `○ stopped logging {tab}`"
+check = "stopped"
+needs = ["start"]
+
+[[step]]
+id = "status-empty"
+name = "status is clear after stop"
+cmd = "{bin} log status"
+expect = "no active recordings remain"
+check = "no tabs are being logged"
+needs = ["stop"]
+
+[[step]]
+id = "cleanup"
+name = "Kill the QA workspace"
+cmd = "{bin} kill {ws}"
+expect = "the qa-log workspace/session is gone"
+needs = ["spawn"]

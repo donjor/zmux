@@ -86,6 +86,13 @@ type Runner interface {
 	DisplayMessage(target, format string) (string, error)
 	CapturePane(target string, lines int) (string, error)
 	CapturePaneOpts(target string, opts CapturePaneOptions) (string, error)
+	// PipePane streams a pane's output to a shell command continuously via tmux
+	// pipe-pane (server-side, survives client detach). A non-empty command opens
+	// the pipe — tmux runs it through /bin/sh -c and feeds the pane's raw output
+	// to its stdin until the pipe closes or the pane dies. An empty command
+	// closes any pipe open on the target. The on/off bit is queryable via
+	// DisplayMessage(target, "#{pane_pipe}").
+	PipePane(target, command string) error
 
 	// Config
 	SetOption(scope, key, value string) error

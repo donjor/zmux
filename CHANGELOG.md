@@ -9,6 +9,22 @@ versioning is semver-ish until the first public release.
 
 ### Added
 
+- **`zmux where` (alias `whoami`) — one-shot current context** `agents`
+  `workspace` - report the current context as a single answer: workspace,
+  session (local label + raw `zws_…` tmux name), tab, pane id, and cwd. Composes
+  the same identity other verbs resolve, so you know what to pass as `-s` without
+  parsing the session name. `--json` for tooling. Complements `pane current`
+  (pane facts) and `status` (config); it does not replace either.
+- **`zmux log` — tail-style output recording** `agents` - record a tab's output
+  stream to a bounded file in the background, distinct from one-shot `snapshot`
+  and interactive `watch`. `log start <tab>` opens a `tmux pipe-pane` into a
+  hidden `zmux log-sink`; recording runs server-side and survives detach.
+  `log status` lists active recordings, `log tail <tab>` prints the log, and
+  `log stop <tab>` ends it. The sink keeps only the trailing `--max-bytes`
+  (default 1 MiB; oldest dropped) so disk never runs away, and strips ANSI for a
+  readable plain log unless `--ansi` is passed. Built for line-oriented output
+  (servers, builds, tests); fullscreen TUIs log as escape soup — use `snapshot`
+  for screen state and `watch -f` for live following.
 - **Picker ↔ dashboard convergence on shared workspace/session logic**
   `dashboard` `ui` `workspace` - the workspace+session picker and the dashboard
   Workspaces tab no longer reimplement the same listing/creation logic and drift

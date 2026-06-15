@@ -119,6 +119,8 @@ zmux ls                             List workspaces (workspace-primary)
 zmux ls <ws>                        List local session labels within a workspace
 zmux ls -s                          Flat session list (legacy/debug)
 zmux tabs [workspace/session]       List tabs in session (riders nested, hidden marked ~)
+zmux where                          Current context: workspace/session/tab/pane/cwd (alias: whoami)
+zmux where --json                   Same, as JSON (for tooling)
 
 zmux tab move <tab> <dest>          Move tab to another session
 zmux tab label [label]              Set/clear stable label for current tab
@@ -150,6 +152,11 @@ zmux watch <tab>               Capture tab output
 zmux watch <tab> --until <pat> Wait for pattern match
 zmux watch <tab> --idle 3      Wait until the visible screen is quiet for 3s
 zmux watch <tab> -f            Follow output (tail -f)
+zmux log start <tab>           Record tab output to a bounded file (background)
+zmux log start <tab> --ansi    Keep ANSI colour instead of stripping to plain
+zmux log status                List tabs currently being recorded
+zmux log tail <tab>            Print a tab's recorded log
+zmux log stop <tab>            Stop recording
 zmux send <tab> <keys>         Send keystrokes to tab
 zmux type <tab> '<text>'       Type text + Enter
 

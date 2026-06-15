@@ -372,6 +372,12 @@ func (m *MockRunner) CapturePaneOpts(target string, opts CapturePaneOptions) (st
 	return m.CapturedPaneContent, m.Err
 }
 
+// PipePane records the call. An empty command models closing the pipe.
+func (m *MockRunner) PipePane(target, command string) error {
+	m.record("PipePane", target, command)
+	return m.Err
+}
+
 // ListPaneOptionValues returns the configured per-pane values for key.
 func (m *MockRunner) ListPaneOptionValues(key string) ([]string, error) {
 	m.record("ListPaneOptionValues", key)

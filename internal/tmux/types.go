@@ -52,7 +52,8 @@ type Pane struct {
 	Session     string // session_name
 	ID          string // opaque tmux pane id, e.g. %57
 	Index       int
-	WindowIndex int // which window this pane belongs to
+	WindowIndex int    // which window this pane belongs to
+	WindowName  string // window_name (the tab-like window identity)
 	Active      bool
 	Command     string // pane_current_command
 	PID         int    // pane_pid

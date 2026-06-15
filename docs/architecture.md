@@ -101,6 +101,7 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 | `setup` | ~190 | Shell-rc integration: pure plan + apply behind `config.FS` (markers, `.bak`, dry-run, removal) |
 | `wm` | ~150 | Window manager adapters (Hyprland today) |
 | `snapshot` | ~525 | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver` |
+| `capturelog` | ~155 | Bounded sink behind `zmux log` (tail-style logging). A `tmux pipe-pane` feeds the hidden `zmux log-sink`; the sink keeps only the trailing `--max-bytes` in memory (exact cap, no rotation files) and flushes the whole buffer via `config.FS`. Optional stateful ANSI/control stripping for a readable plain log |
 | `qa` | ~1320 | Repo-local QA walkthrough framework: checklist parse/lint, scorecard state, shell runner, and `cmd/qa` CLI |
 
 ### UI
@@ -315,6 +316,7 @@ zmux
 ├── kill              — smart workspace/session kill
 ├── ls                — list workspaces or local session labels
 ├── tabs              — list tabs in current or targeted workspace/session
+├── where             — current context: workspace/session/tab/pane/cwd (alias: whoami)
 ├── tab               — tab management (label, move, kill, state, hide/show/pane/full)
 ├── pane              — pane management (open/toggle/current/list/focus/resize/close)
 ├── send              — send keys to a window
@@ -328,6 +330,8 @@ zmux
 ├── bar               — bar preset commands
 ├── terminal          — current/capabilities/refresh probes
 ├── snapshot          — per-pane text/ANSI plus optional PNG evidence bundle
+├── log               — start/stop/status/tail tab output recording (pipe-pane → bounded sink)
+├── log-sink (hidden) — internal stdin→bounded-file sink the pipe feeds
 ├── help              — top-level help (prefix+? popup)
 ├── status            — internal status JSON
 ├── completion        — shell completion (cobra-generated)

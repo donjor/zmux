@@ -1,7 +1,7 @@
 # zmux CLI catalog (cold reference)
 
 Full command tables for sessions/workspaces, tabs, placements, panes, terminal
-capabilities, snapshots, and config. The hot operational loop (run/watch/send,
+capabilities, snapshots, output recording, and config. The hot operational loop (run/watch/send,
 raw-tmux guard, tab states, peer/worker) lives in `SKILL.md`; this is the
 lookup-when-you-need-it reference, routed from there at point of use.
 
@@ -10,6 +10,8 @@ lookup-when-you-need-it reference, routed from there at point of use.
 ```bash
 zmux ls [workspace]              # list workspaces, or sessions within one
 zmux ls -s                       # flat list of all sessions
+zmux where                       # current context: workspace/session/tab/pane/cwd (alias: whoami)
+zmux where --json                # same, machine-readable — `session_tmux` is the raw -s handle
 zmux new <workspace> [session…] # create workspace + sessions, attach (alias: n)
 zmux session run <session> -n <tab> [--workspace <ws>] [--cwd <dir>] -- <cmd…>
                                  # create a DETACHED session, run <cmd> as its first tab
@@ -37,6 +39,21 @@ a blank shell tab. The command must follow `--`. It errors if the session
 already exists, and never makes the new session the workspace's default attach
 target. Contrast `zmux new` (attaches by design) — see the worker doctrine in
 `references/agent-worker.md`.
+
+### Session targeting (`-s`)
+
+`-s <session>` is accepted by `run`, `watch`, `send`, `type`, `tabs`, `log`,
+`tab state`, and the `tab pane/full/hide/show` placements. (`open` takes the
+workspace/session positionally; `zmux pane` uses `--target`.) It accepts three
+forms:
+
+- **bare session label** — `-s server`
+- **`workspace/session`** — `-s app/main`
+- **raw tmux name** — `-s zws_app__main` (debug/interop)
+
+A bare label that exists in more than one workspace is **refused, not guessed** —
+qualify it as `workspace/session`. Omit `-s` and the **current** session is used
+(error when run outside tmux). `zmux where` prints the raw name to pass here.
 
 ## Tabs
 
@@ -126,6 +143,30 @@ a pane elsewhere with `--pane` and the PNG is skipped (text/ANSI still captured)
 Check `warnings` and report blind spots rather than trusting a missing screenshot
 as evidence.
 
+## Output recording (`zmux log`)
+
+Persistent, background recording of a tab's output stream to a **bounded** file. It
+keeps recording with no client attached (tmux `pipe-pane`) and self-truncates so
+disk never runs away — use it to walk away and read the stream back later. Contrast
+`zmux watch` (reads the live buffer only) and `zmux snapshot` (one-shot screen state).
+
+```bash
+zmux log start <tab>                  # begin recording to a bounded file (background)
+zmux log start <tab> --ansi           # keep ANSI colour/escapes instead of stripping to plain
+zmux log start <tab> --max-bytes 4096 # cap before oldest output is dropped (default 1 MiB)
+zmux log start <tab> -s <session>     # target a tab in another session
+zmux log status                       # tabs recording now: mark, pane, size, file
+zmux log tail <tab>                   # print the recorded log (already bounded)
+zmux log tail <tab> -n 50             # last 50 lines only
+zmux log stop <tab>                   # stop recording
+```
+
+Logs land in `<state-dir>/logs/` (`~/.zmux/logs/`). The cap keeps only the trailing
+`--max-bytes`, trimmed at a line boundary — oldest dropped, newest retained, no
+rotation files. Best for **line-oriented** output (servers, builds, tests); a
+fullscreen TUI records as escape soup even with stripping. For live following of a
+running tab use `zmux watch <tab> -f`.
+
 ## Config & maintenance
 
 ```bash
@@ -143,3 +184,14 @@ zmux theme set <name>            # set theme directly (also: list, sync, pull <t
 zmux bar [preset]                # list presets, or set one (also: bar show)
 zmux init                        # interactive setup wizard — MUST be run outside tmux
 ```
+
+## Naming conventions
+
+Stable, descriptive tab names so `run -n`/`send`/`type`/`watch` keep reaching them:
+
+- `server` — dev servers
+- `test` — test runners/watchers
+- `build` — builds
+- `logs` — log tails
+- `admin` — sudo/interactive commands
+- `<tool>-sidecar` — UI sidecars

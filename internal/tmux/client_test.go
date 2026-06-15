@@ -126,6 +126,31 @@ func readFakeTmuxCalls(t *testing.T, logPath string) []string {
 	return strings.Split(strings.TrimSpace(string(raw)), "\n")
 }
 
+func TestClientPipePaneOpensAndClosesPipe(t *testing.T) {
+	t.Setenv("TMUX", "")
+	logPath := filepath.Join(t.TempDir(), "tmux-args.log")
+	client := &Client{bin: fakeTmux(t, logPath, "")}
+
+	if err := client.PipePane("%7", "zmux log-sink --file /tmp/x.log"); err != nil {
+		t.Fatalf("PipePane open failed: %v", err)
+	}
+	if err := client.PipePane("%7", ""); err != nil {
+		t.Fatalf("PipePane close failed: %v", err)
+	}
+
+	calls := readFakeTmuxCalls(t, logPath)
+	if len(calls) != 2 {
+		t.Fatalf("expected open then close, got %v", calls)
+	}
+	if !strings.Contains(calls[0], "pipe-pane -t %7 zmux log-sink --file /tmp/x.log") {
+		t.Fatalf("open call should carry the sink command: %v", calls[0])
+	}
+	// Close must NOT pass a command (a bare pipe-pane -t target closes the pipe).
+	if strings.TrimSpace(calls[1]) != "pipe-pane -t %7" {
+		t.Fatalf("close call should be a bare pipe-pane with no command: %q", calls[1])
+	}
+}
+
 func TestTailLines(t *testing.T) {
 	tests := []struct {
 		name string
