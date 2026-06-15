@@ -8,6 +8,7 @@ import (
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceoutline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/donjor/zmux/internal/workspace"
 )
@@ -45,7 +46,7 @@ func (m PickerModel) handleExternalEntryEnter(row *outline.Row) (tea.Model, tea.
 	if entry == nil {
 		return m, nil
 	}
-	src := externalEntrySource(m.catalog, row)
+	src := workspaceoutline.ExternalSourceForRow(m.catalog, row)
 	if src == nil {
 		return m, nil
 	}

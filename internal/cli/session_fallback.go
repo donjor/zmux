@@ -76,11 +76,6 @@ func runSessionlessDashboard(app *apppkg.App) error {
 	return runNewDashboard(app, string(dashboard.TabWorkspaces))
 }
 
-func hasLiveSessions(app *apppkg.App) bool {
-	sessions, err := session.ListSessions(app.Runner)
-	return err == nil && len(sessions) > 0
-}
-
 func attachFallbackWorkspace(app *apppkg.App, name string) (string, bool) {
 	if app.WorkspaceStore == nil {
 		return "", false

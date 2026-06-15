@@ -15,6 +15,7 @@ type docData struct {
 	NoPrefix  []Binding
 	CopyMode  []Binding
 	Inherited []Binding
+	Dashboard []Binding
 }
 
 // mdCode wraps s as a markdown inline code span, using double-backtick
@@ -42,6 +43,7 @@ func GenerateDoc() (string, error) {
 		NoPrefix:  NoPrefixBindings,
 		CopyMode:  CopyModeBindings,
 		Inherited: InheritedBindings,
+		Dashboard: DashboardBindings,
 	}
 	if err := tmpl.Execute(&b, data); err != nil {
 		return "", err

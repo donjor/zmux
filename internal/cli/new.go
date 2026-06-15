@@ -83,14 +83,11 @@ func runNewInWorkspace(app *apppkg.App, wsName string, sessionLabels []string, d
 		return err
 	}
 
-	// Create each session.
+	// Create each session via the shared canonical path (same as the dashboard).
 	var firstSession workspace.WorkspaceSession
 	for _, label := range sessionLabels {
 		if label == "" {
 			continue
-		}
-		if err := workspace.ValidateSessionLabel(label); err != nil {
-			return fmt.Errorf("invalid session label %q: %w", label, err)
 		}
 		rec, err := createWorkspaceSession(app, wsName, label, dir)
 		if err != nil {
@@ -109,24 +106,10 @@ func runNewInWorkspace(app *apppkg.App, wsName string, sessionLabels []string, d
 	return attachOwnedSession(app, firstSession.TmuxName)
 }
 
+// createWorkspaceSession creates a managed session in the workspace via the
+// shared canonical path (workspace.CreateManagedSession), the single create
+// implementation used by both the CLI and the dashboard. Thin wrapper kept for
+// the CLI call sites that pass *App.
 func createWorkspaceSession(app *apppkg.App, wsName, label, dir string) (workspace.WorkspaceSession, error) {
-	rec, err := workspace.NewSessionRecord(wsName, label)
-	if err != nil {
-		return workspace.WorkspaceSession{}, err
-	}
-	if app.Runner.HasSession(rec.TmuxName) {
-		return workspace.WorkspaceSession{}, fmt.Errorf("session %q already exists in workspace %q", label, wsName)
-	}
-	if err := session.Create(app.Runner, rec.TmuxName, dir); err != nil {
-		return workspace.WorkspaceSession{}, err
-	}
-	if err := workspace.StampSessionMetadata(app.Runner, wsName, rec); err != nil {
-		_ = app.Runner.KillSession(rec.TmuxName)
-		return workspace.WorkspaceSession{}, err
-	}
-	if err := app.WorkspaceStore.AddSessionRecord(wsName, rec); err != nil {
-		_ = app.Runner.KillSession(rec.TmuxName)
-		return workspace.WorkspaceSession{}, err
-	}
-	return rec, nil
+	return workspace.CreateManagedSession(app.Runner, app.WorkspaceStore, wsName, label, dir)
 }

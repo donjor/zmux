@@ -9,9 +9,11 @@
 //   - `zmux help` + dashboard  — render the live keybinding reference
 //   - docs/keybindings.md       — generated via `zmux keys gen` (CI golden check)
 //
-// Component-local TUI keys (picker/tabpicker cursor nav, etc.) remain defined in
-// their own packages; this registry documents them but does not own them at
-// runtime.
+// The dashboard popup's keys are owned here too (the Dashboard context) and
+// routed at runtime by internal/tui/dashboard via Binding.Matches, so the
+// create/rename/kill/move grammar has one definition shared with the docs. The
+// remaining component-local TUI keys (picker/tabpicker cursor nav, etc.) are
+// still defined in their own packages; this registry documents them.
 package keys
 
 // Context identifies where a binding is active.
@@ -27,18 +29,23 @@ const (
 	// Inherited bindings are tmux defaults zmux deliberately keeps (documented,
 	// not generated).
 	Inherited Context = "inherited"
+	// DashboardCtx bindings are the dashboard popup's component-local keys. They
+	// are not emitted into tmux.conf; the dashboard TUI routes them via
+	// Binding.Matches and the docs render them from the same registry.
+	DashboardCtx Context = "dashboard"
 )
 
 // Category groups bindings for help and documentation rendering.
 type Category string
 
 const (
-	CatPopups   Category = "Popups"
-	CatTabs     Category = "Tabs"
-	CatSessions Category = "Sessions"
-	CatPanes    Category = "Panes"
-	CatGeneral  Category = "General"
-	CatCopyMode Category = "Copy mode"
+	CatPopups    Category = "Popups"
+	CatTabs      Category = "Tabs"
+	CatSessions  Category = "Sessions"
+	CatPanes     Category = "Panes"
+	CatGeneral   Category = "General"
+	CatCopyMode  Category = "Copy mode"
+	CatDashboard Category = "Dashboard"
 )
 
 // Binding is one canonical, documented keybinding.

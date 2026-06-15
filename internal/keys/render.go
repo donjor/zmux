@@ -29,6 +29,33 @@ func humanizeKey(k string) string {
 	return r.Replace(k)
 }
 
+// Matches reports whether key activates this binding, checking the primary Key
+// and any Aliases by exact match. Dashboard bindings store Bubble Tea key
+// strings ("c", "enter", "up", "ctrl+c"), so the dashboard TUI can route a
+// tea.KeyMsg.String() straight through this without redefining the letters.
+func (b Binding) Matches(key string) bool {
+	if key == b.Key {
+		return true
+	}
+	for _, alias := range b.Aliases {
+		if key == alias {
+			return true
+		}
+	}
+	return false
+}
+
+// DisplayKeys renders the primary key plus any aliases joined with " / " using
+// the raw labels. The component-local TUI tables (dashboard) store Bubble Tea
+// key strings that are already human-facing ("up / k", "esc / ctrl+c"), so they
+// render verbatim rather than through Humanize (which translates tmux syntax).
+func (b Binding) DisplayKeys() string {
+	if len(b.Aliases) == 0 {
+		return b.Key
+	}
+	return b.Key + " / " + strings.Join(b.Aliases, " / ")
+}
+
 // DisplayKey returns the key label decorated for its context: prefix-table and
 // inherited tmux bindings are reached via the prefix, so they are shown as
 // "prefix + <key>"; instant and copy-mode bindings stand alone.

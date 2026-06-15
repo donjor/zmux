@@ -353,7 +353,7 @@ func (t *CurrentTab) ShortHelp() string {
 	}
 
 	if t.sessionName == "" {
-		return "n:new tmp  tab:workspaces  esc:exit"
+		return "c:new tmp  tab:workspaces  esc:exit"
 	}
 
 	// List mode: the trailing hint advertises search + digit quick-jump, plus
@@ -367,17 +367,17 @@ func (t *CurrentTab) ShortHelp() string {
 
 	row := t.tree.Current()
 	if row == nil {
-		return "r:rename  x:kill  n:new" + tail
+		return "r:rename  x:kill  c:new" + tail
 	}
 
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
-		return strings.Join([]string{"r:rename", "x:kill", "n:new session"}, "  ") + tail
+		return strings.Join([]string{"r:rename", "x:kill", "c:new session"}, "  ") + tail
 	case outline.RowSession:
 		// Session-level cursor: show session ops + the "l:tabs" hint to
-		// descend into window navigation. "n" creates a new tab in the
+		// descend into window navigation. "c" creates a new tab in the
 		// session (mirrors the behavior on window rows).
-		return strings.Join([]string{"enter:switch", "l:tabs", "r:rename", "x:kill", "n:new tab"}, "  ") + tail
+		return strings.Join([]string{"enter:switch", "l:tabs", "r:rename", "x:kill", "c:new tab"}, "  ") + tail
 	case outline.RowPane:
 		return strings.Join([]string{"enter:focus", "h:back", "x:kill pane"}, "  ") + tail
 	case outline.RowWindow:
@@ -385,11 +385,11 @@ func (t *CurrentTab) ShortHelp() string {
 		// (full action set) from sibling-session windows (move + reorder
 		// aren't wired for those yet).
 		if _, ok := outline.RowData[windowDetail](row); ok {
-			return strings.Join([]string{"enter:focus", "h:back", "r:rename", "x:kill", "m:move", "</>:reorder", "n:new"}, "  ") + tail
+			return strings.Join([]string{"enter:focus", "h:back", "r:rename", "x:kill", "m:move", "</>:reorder", "c:new"}, "  ") + tail
 		}
-		return strings.Join([]string{"enter:switch", "h:back", "r:rename", "x:kill", "n:new"}, "  ") + tail
+		return strings.Join([]string{"enter:switch", "h:back", "r:rename", "x:kill", "c:new"}, "  ") + tail
 	}
-	return "r:rename  x:kill  n:new" + tail
+	return "r:rename  x:kill  c:new" + tail
 }
 
 // ── View ──
@@ -404,7 +404,7 @@ func (t *CurrentTab) View() string {
 	if t.sessionName == "" {
 		var b strings.Builder
 		b.WriteString("  " + t.styles.Dim.Render("No active session.") + "\n")
-		b.WriteString("  " + t.styles.Dim.Render("Press n to create a temporary session, or Tab for Workspaces.") + "\n")
+		b.WriteString("  " + t.styles.Dim.Render("Press c to create a temporary session, or Tab for Workspaces.") + "\n")
 		return b.String()
 	}
 

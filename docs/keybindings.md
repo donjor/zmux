@@ -88,9 +88,11 @@ but zmux does not generate `bind-key` lines for them.
 
 ## TUI surfaces
 
-Component-local keys for the interactive surfaces. These keys live in their
-surface packages (`internal/tui/...`), not the shared registry, because they are
-scoped to a single Bubble Tea model.
+Keys for the interactive surfaces. The **dashboard** keys are defined in the
+shared registry (`internal/keys`, Dashboard context) and routed from there by
+`internal/tui/dashboard`, so this table is generated. The picker, tab-picker,
+and command-palette keys still live in their surface packages
+(`internal/tui/...`), scoped to a single Bubble Tea model.
 
 ### Picker (workspace picker — outside tmux or popup)
 
@@ -128,23 +130,29 @@ Text input active → `ctrl+` modifiers.
 
 ### Dashboard tabs
 
-Single-letter keys (the popup captures input directly).
+Single-letter keys — the popup captures input directly. Generated from the
+registry (Dashboard context); individual tabs add a few surface-local keys (the
+Current tab's `h`/`l` window-level nav, the Settings tab's `s` save, the Themes
+tab's `e`/`q`) documented in the dashboard's in-app Help.
 
-| Action | Key | Notes |
-|--------|-----|-------|
-| `select` | `enter` | Focus / switch / edit, depending on tab |
-| `new` | `n` | New tab or workspace |
+| Action | Key | Description |
+|--------|-----|-------------|
+| `select` | `enter` | Focus / switch / edit / expand (depends on row) |
+| `create` | `c` | Create at cursor scope (session in workspace, window in session) |
+| `create.workspace` | `C` | Create a new workspace |
 | `rename` | `r` | Rename selected item |
-| `kill` | `x` | Kill / close (with confirmation) |
-| `move` | `m` | Move tab/session to another parent |
-| `preview` | `p` | Preview selected item (Workspaces tab) |
-| `cleanup` | `c` | Clean up tmp sessions (Workspaces tab) |
-| `save` | `s` | Save config changes (Settings tab) |
-| `filter` | `/` | Filter (Settings/Themes tabs) |
-| `navigate.up` / `down` | `up` / `k`, `down` / `j` | |
-| `navigate.top` / `bottom` | `g` / `G` | |
-| switch tab | `1`-`5`, `Tab`, `Shift+Tab` | |
-| `quit` | `esc` / `ctrl+c` | Close dashboard |
+| `kill` | `x` | Kill / close selected item (confirms) |
+| `move` | `m` | Move session / window to another parent |
+| `search` | `/` | Filter the list |
+| `nav.up` | `up / k` | Move cursor up |
+| `nav.down` | `down / j` | Move cursor down |
+| `nav.top` | `g` | Jump to top |
+| `nav.bottom` | `G` | Jump to bottom |
+| `session.goto.N` | `1-9` | Quick-jump to session N (Current tab) |
+| `tab.switch.N` | `alt+1-9` | Switch to dashboard tab N |
+| `tab.cycle` | `tab / shift+tab` | Cycle to next / previous tab |
+| `quit` | `esc / ctrl+c` | Close the dashboard |
+
 
 ### Command palette (prefix+p)
 
@@ -163,11 +171,12 @@ Single-letter keys (the popup captures input directly).
 2. **`d` always means detach** — never kill/delete.
 3. **`enter` always means confirm/select.**
 4. **`esc` always means cancel/back/quit.**
-5. **Pickers use `ctrl+` modifiers** because text input is always active.
-6. **Dashboard tabs use single letters** because the popup captures input.
-7. **Prefix keys are for tmux-level ops** (tabs, sessions, config).
-8. **No-prefix `Alt+` keys are instant** — direct tab/pane actions; `prefix + Alt+1-9` is the matching session jump.
-9. **Context resolves same-key conflicts** — `n` = new (dashboard) vs next tab (prefix); `r` = rename (dashboard) vs reload (prefix). Different input contexts mean no real conflict.
+5. **`c` always means create** — `prefix+c` new tab, `prefix+C` new session, dashboard `c` create at the cursor's scope, dashboard `C` new workspace. Lowercase = narrower scope, uppercase = broader scope.
+6. **Pickers use `ctrl+` modifiers** because text input is always active.
+7. **Dashboard tabs use single letters** because the popup captures input.
+8. **Prefix keys are for tmux-level ops** (tabs, sessions, config).
+9. **No-prefix `Alt+` keys are instant** — direct tab/pane actions; `prefix + Alt+1-9` is the matching session jump.
+10. **Context resolves same-key conflicts** — `r` = rename (dashboard) vs reload (prefix); `c` = create at scope (dashboard) vs new tab (prefix). Different input contexts mean no real conflict.
 
 ## Collision notes for terminal / WM / editor
 

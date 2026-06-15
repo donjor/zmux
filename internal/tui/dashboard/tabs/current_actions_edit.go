@@ -9,6 +9,7 @@ import (
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/workspace"
 )
 
 // ── rename ──
@@ -116,7 +117,7 @@ func (t *CurrentTab) actionNew(row *outline.Row) (dashboard.Tab, tea.Cmd) {
 		return t, t.newWindow(target, dir)
 
 	case outline.RowWindow:
-		// "n" on a window creates a new tab in that window's session
+		// "c" on a window creates a new tab in that window's session
 		// (which may be a sibling, not the current session).
 		spec, ok := t.windowSpecFromRow(row)
 		if !ok {
@@ -143,9 +144,12 @@ func (t *CurrentTab) handleCreateKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		t.exitMode()
 		// Re-set pendingJumpTo AFTER exitMode — exitMode may apply stale
 		// pending data which consumes pendingJumpTo with old rows. The
-		// mutation-triggered refetch needs it to land the cursor on the
-		// newly created session.
-		t.pendingJumpTo = outline.SessionID(name)
+		// mutation-triggered refetch needs it to land the cursor on the newly
+		// created session, addressed by its canonical tmux name (the session is
+		// created as zws_<ws>__<label>, not the bare label).
+		if rec, err := workspace.NewSessionRecord(t.wsName, name); err == nil {
+			t.pendingJumpTo = outline.SessionID(rec.TmuxName)
+		}
 		return t, cmd
 
 	case "esc":

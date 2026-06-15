@@ -102,7 +102,7 @@ func newTestSessionsTab(t *testing.T) (*SessionsTab, *tmux.MockRunner, *workspac
 
 	fs := newSessionsMemFS("/home/user")
 	store := workspace.NewStore(fs)
-	if err := store.CreateWorkspace("dev", ""); err != nil {
+	if err := store.CreateWorkspace("dev", "/home/user/dev"); err != nil {
 		t.Fatalf("create dev: %v", err)
 	}
 	if err := store.CreateWorkspace("api", ""); err != nil {
@@ -269,7 +269,7 @@ func TestSessionsTabCreateWorkspace(t *testing.T) {
 	tab, _, store := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 
-	tab, _ = sendKey(tab, "n")
+	tab, _ = sendKey(tab, "C")
 	if tab.mode != sessionsModeCreate {
 		t.Fatalf("expected create mode, got %d", tab.mode)
 	}
@@ -284,6 +284,103 @@ func TestSessionsTabCreateWorkspace(t *testing.T) {
 	}
 	if findRowIndexByID(tab, outline.WorkspaceID("brand-new")) < 0 {
 		t.Error("expected new workspace row to appear after refetch")
+	}
+}
+
+// TestSessionsTabCreateOnNoContextRowMakesWorkspace covers the empty/sessionless
+// path: on a no-context row (the "no workspaces yet" placeholder, an external
+// entry, a pseudo workspace) there is nothing to nest a session under, so c
+// escalates to create-WORKSPACE exactly like C — matching the placeholder's
+// "press C to create one" hint.
+func TestSessionsTabCreateOnNoContextRowMakesWorkspace(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	placeholder := &outline.Row{ID: "placeholder:noworkspaces", Kind: outline.RowPlaceholder}
+	if _, _ = tab.enterCreateSessionMode(placeholder); tab.mode != sessionsModeCreate {
+		t.Fatalf("expected create mode, got %d", tab.mode)
+	}
+	if tab.createWsTarget != "" {
+		t.Errorf("createWsTarget = %q, want empty (workspace-create, not session)", tab.createWsTarget)
+	}
+	if tab.createInput.Placeholder != "workspace name..." {
+		t.Errorf("placeholder = %q, want %q", tab.createInput.Placeholder, "workspace name...")
+	}
+}
+
+// ── Create session in workspace (Facet B) ──
+
+// TestSessionsTabCreateSessionInWorkspace exercises the c=create-session flow on
+// the Workspaces tab end to end: the ghost-prompt (mode + target + placeholder),
+// the action (canonical tmux session + identity stamp, never a raw-label
+// session), and the result (store record + force-expand reveals the new row).
+func TestSessionsTabCreateSessionInWorkspace(t *testing.T) {
+	tab, mock, store := newTestSessionsTab(t)
+	tab = simulateActivate(tab)
+
+	// Collapse "dev" so force-expand-on-create is observable: its child session
+	// rows must reappear only because create re-expands the workspace.
+	tab.tree.SetExpanded(outline.WorkspaceID("dev"), false)
+	tab.tree.SetRows(tab.buildRows())
+
+	idx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	if idx < 0 {
+		t.Fatal("dev workspace header not found")
+	}
+	tab.tree.Cursor = idx
+
+	// Ghost-prompt: c opens the create-SESSION input targeting dev.
+	tab, _ = sendKey(tab, "c")
+	if tab.mode != sessionsModeCreate {
+		t.Fatalf("expected create mode, got %d", tab.mode)
+	}
+	if tab.createWsTarget != "dev" {
+		t.Fatalf("createWsTarget = %q, want dev", tab.createWsTarget)
+	}
+	if tab.createInput.Placeholder != "session name..." {
+		t.Fatalf("placeholder = %q, want %q", tab.createInput.Placeholder, "session name...")
+	}
+
+	// Action: type a label and confirm.
+	tab.createInput.SetValue("worker")
+	tab, cmd := sendKey(tab, "enter")
+	tab = runMutationCmd(tab, cmd)
+
+	canonical := workspace.RawSessionName("dev", "worker")
+
+	// Action result 1: a canonically-named tmux session was created — NOT the
+	// bare label (the old dashboard bug the picker/bar could not resolve) — in
+	// the workspace's RootDir (the primary create-dir precedence).
+	if !mockHasCall(mock, "NewSession", canonical, "/home/user/dev") {
+		t.Errorf("expected NewSession(%s, \"/home/user/dev\"), got: %v", canonical, mock.Calls)
+	}
+	if mockHasCall(mock, "NewSession", "worker", "") {
+		t.Error("created a raw-label session 'worker' — canonical identity regressed")
+	}
+	// Action result 2: identity metadata stamped on the canonical session.
+	if !mockHasCall(mock, "SetSessionOption", canonical, workspace.OptionManaged, "1") {
+		t.Errorf("expected managed-option stamp on %s, got: %v", canonical, mock.Calls)
+	}
+
+	// Result 3: the store records the session under dev.
+	ws, _ := store.GetWorkspace("dev")
+	if ws == nil {
+		t.Fatal("dev workspace missing from store")
+	}
+	found := false
+	for _, s := range ws.Sessions {
+		if s.Label == "worker" && s.TmuxName == canonical {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected session 'worker' (%s) recorded under dev, got %+v", canonical, ws.Sessions)
+	}
+
+	// Result 4: force-expand re-revealed dev's children — the new session row is
+	// visible (and the cursor landed on it via the canonical jump target).
+	if findRowIndexByID(tab, outline.SessionID(canonical)) < 0 {
+		t.Error("new session row not visible — force-expand-on-create regressed")
 	}
 }
 
@@ -579,8 +676,13 @@ func TestSessionsTabShortHelpListMode(t *testing.T) {
 	tab, _, _ := newTestSessionsTab(t)
 	tab = simulateActivate(tab)
 	help := tab.ShortHelp()
-	if !strings.Contains(help, "n:new") {
-		t.Errorf("expected 'n:new' in help, got %q", help)
+	// The footer advertises the relettered create keys (c = session in the
+	// workspace at the cursor, C = new workspace) — never the retired n:new.
+	if !strings.Contains(help, "c:session") || !strings.Contains(help, "C:workspace") {
+		t.Errorf("expected 'c:session' and 'C:workspace' in help, got %q", help)
+	}
+	if strings.Contains(help, "n:new") {
+		t.Errorf("retired 'n:new' still present in help: %q", help)
 	}
 }
 
@@ -759,7 +861,7 @@ func TestSessionsTabSearchMutationUnderFilterClearsAndJumps(t *testing.T) {
 	}
 
 	// Create a workspace that the filter would hide.
-	tab, _ = sendKey(tab, "n")
+	tab, _ = sendKey(tab, "C")
 	if tab.mode != sessionsModeCreate {
 		t.Fatalf("expected create mode, got %d", tab.mode)
 	}

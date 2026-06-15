@@ -3,11 +3,11 @@ package dashboard
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/styles"
@@ -210,23 +210,24 @@ func (m *DashboardApp) view() string {
 }
 
 // handleGlobalKey handles keys that always work regardless of active tab.
+// The quit keys come from the keys registry (DashQuit = esc / ctrl+c) so the
+// dashboard's global keys share the same source of truth as its tab keys.
 func (m *DashboardApp) handleGlobalKey(msg tea.KeyMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+c"))):
-		m.Quitting = true
-		return tea.Quit
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
-		// A tab in a capturing mode (inline rename/create/search/edit input,
-		// a y/N confirm) owns Esc — let it cancel that mode rather than
-		// closing the dashboard. Returning nil here lets Update fall through
-		// to forwarding the key to the active tab.
+	s := msg.String()
+	if !keys.DashQuit.Matches(s) {
+		return nil
+	}
+	// A tab in a capturing mode (inline rename/create/search/edit input, a y/N
+	// confirm) owns Esc — let it cancel that mode rather than closing the
+	// dashboard. Returning nil here lets Update fall through to forwarding the
+	// key to the active tab. Ctrl+C always quits.
+	if s == "esc" {
 		if tab, ok := m.tabs[m.activeTab]; ok && tab.CapturesEscape() {
 			return nil
 		}
-		m.Quitting = true
-		return tea.Quit
 	}
-	return nil
+	m.Quitting = true
+	return tea.Quit
 }
 
 // handleTabSwitchKey handles tab navigation keys.
@@ -235,18 +236,20 @@ func (m *DashboardApp) handleGlobalKey(msg tea.KeyMsg) tea.Cmd {
 // Returns (true, cmd) if the key was a tab switch, (false, nil) otherwise.
 func (m *DashboardApp) handleTabSwitchKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	s := msg.String()
-	// Alt+1 through Alt+9.
+	// Alt+1 through Alt+9. This is a key RANGE (registry binding DashTabSwitch
+	// documents it), so it's parsed directly rather than matched per-key.
 	if len(s) == 5 && s[:4] == "alt+" && s[4] >= '1' && s[4] <= '9' {
 		idx := int(s[4] - '1')
 		if idx < len(m.tabOrder) {
 			return true, m.switchToIndex(idx)
 		}
 	}
-	switch s {
-	case "tab":
+	// Cycle keys from the registry (DashTabCycle = tab / shift+tab).
+	if keys.DashTabCycle.Matches(s) {
+		if s == "shift+tab" {
+			return true, m.cycleTab(-1)
+		}
 		return true, m.cycleTab(1)
-	case "shift+tab":
-		return true, m.cycleTab(-1)
 	}
 	return false, nil
 }

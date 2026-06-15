@@ -2,6 +2,7 @@ package tabs
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
@@ -76,6 +77,38 @@ func renamedSessionTarget(wsStore *workspace.Store, oldName, newName string) str
 		}
 	}
 	return newName
+}
+
+// createSessionMutation creates a canonically-named managed session in the
+// workspace via the shared workspace.CreateManagedSession path (identical to
+// `zmux new`), so dashboard-created sessions are addressable by the picker, bar,
+// and CLI just like CLI-created ones. Returns the created record so the caller
+// can land the cursor on the new session.
+func createSessionMutation(runner tmux.Runner, wsStore *workspace.Store, wsName, label, dir string) (workspace.WorkspaceSession, error) {
+	if wsStore == nil {
+		return workspace.WorkspaceSession{}, fmt.Errorf("workspace store unavailable")
+	}
+	return workspace.CreateManagedSession(runner, wsStore, wsName, label, dir)
+}
+
+// createSessionDir picks the working directory for a new managed session,
+// preferring the most specific known root: the workspace's recorded RootDir,
+// then the caller's fallback (the current session's dir — empty in the
+// sessionless Workspaces tab), then the dashboard process's cwd. Returns "" only
+// if all three are unavailable, leaving tmux to use its own default.
+func createSessionDir(wsStore *workspace.Store, wsName, fallback string) string {
+	if wsStore != nil {
+		if ws, err := wsStore.GetWorkspace(wsName); err == nil && ws != nil && ws.RootDir != "" {
+			return ws.RootDir
+		}
+	}
+	if fallback != "" {
+		return fallback
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return ""
 }
 
 // killWorkspaceMutation kills the given session names and then deletes the

@@ -7,16 +7,18 @@ import (
 	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/session"
-	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceoutline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
 
-// buildRows constructs the flat outline rows from the current snapshot data.
-// Workspaces come first, followed by an external sources section (with a
-// divider) when the catalog has any external groups. When a search filter is
-// active (t.searchQuery), rows are filtered across all kinds — see
-// buildWorkspaceRow / buildExternalRows.
+// buildRows constructs the flat outline rows from the current snapshot data via
+// the shared workspaceoutline builder: workspaces first, then an external
+// sources section (with a divider) when the catalog has any external groups.
+// The builder owns row STRUCTURE; this tab supplies the dashboard policy
+// (chevrons, the current marker, move-mode badges, the empty-workspace line)
+// plus the filtering that diverges from the picker — see rowPolicy /
+// visibleWorkspaces. Top-level empty states are layered on after the build.
 func (t *SessionsTab) buildRows() []outline.Row {
 	q := strings.TrimSpace(t.searchQuery)
 	// The move-target picker must list every workspace, so a committed filter
@@ -25,25 +27,18 @@ func (t *SessionsTab) buildRows() []outline.Row {
 	if t.mode == sessionsModeMove {
 		q = ""
 	}
-	rows := make([]outline.Row, 0, 32)
 
-	// ── Workspaces ──
+	rows := workspaceoutline.Build(t.visibleWorkspaces(q), t.catalog, t.tree, t.rowPolicy(q))
+
 	if len(t.workspaces) == 0 && q == "" {
-		rows = append(rows, outline.Row{
+		// No workspaces and no filter: lead with a hint; any external rows the
+		// builder produced still follow.
+		return append([]outline.Row{{
 			ID:    "placeholder:noworkspaces",
 			Kind:  outline.RowPlaceholder,
-			Label: "No workspaces yet — press n to create one",
-		})
-	} else {
-		for i := range t.workspaces {
-			ws := &t.workspaces[i]
-			rows = append(rows, t.buildWorkspaceRow(ws, q)...)
-		}
+			Label: "No workspaces yet — press C to create one",
+		}}, rows...)
 	}
-
-	// ── External sources ──
-	rows = append(rows, t.buildExternalRows(q)...)
-
 	if q != "" && len(rows) == 0 {
 		rows = append(rows, outline.Row{
 			ID:    "placeholder:nomatch",
@@ -53,6 +48,91 @@ func (t *SessionsTab) buildRows() []outline.Row {
 	}
 
 	return rows
+}
+
+// visibleWorkspaces returns the workspaces to emit under the active filter. An
+// empty query keeps every workspace; a non-empty query keeps a workspace whose
+// name matches (all its sessions show) or that owns a matching session (only
+// those show — the row filtering happens in rowPolicy's Sessions callback).
+func (t *SessionsTab) visibleWorkspaces(q string) []workspaceview.WorkspaceViewModel {
+	if q == "" {
+		return t.workspaces
+	}
+	var out []workspaceview.WorkspaceViewModel
+	for i := range t.workspaces {
+		ws := &t.workspaces[i]
+		if matchQuery(q, ws.Name) {
+			out = append(out, *ws)
+			continue
+		}
+		for j := range ws.LiveSessions {
+			if matchQuery(q, sessionInfoLabel(&ws.LiveSessions[j])) {
+				out = append(out, *ws)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// rowPolicy maps the dashboard's presentation onto the shared builder: full
+// chevrons, the tree's saved expansion (force-expanded while filtering), the
+// current-session marker, move-mode badges, and the "(no live sessions)" line.
+// Session filtering under a query stays here so the builder owns only structure.
+func (t *SessionsTab) rowPolicy(q string) workspaceoutline.Policy {
+	moving := ""
+	if t.mode == sessionsModeMove && t.moveSt != nil {
+		moving = t.moveSt.sessionName
+	}
+	return workspaceoutline.Policy{
+		WorkspaceLabel: formatSessionsWorkspaceLabel,
+		ShowChevron:    true,
+		Expanded: func(wsID string, _ *workspaceview.WorkspaceViewModel) bool {
+			if q != "" {
+				return true
+			}
+			return t.tree.IsExpanded(wsID)
+		},
+		Sessions: func(ws *workspaceview.WorkspaceViewModel) []session.SessionInfo {
+			if q == "" || matchQuery(q, ws.Name) {
+				return ws.LiveSessions
+			}
+			var out []session.SessionInfo
+			for j := range ws.LiveSessions {
+				if matchQuery(q, sessionInfoLabel(&ws.LiveSessions[j])) {
+					out = append(out, ws.LiveSessions[j])
+				}
+			}
+			return out
+		},
+		DecorateWorkspace: func(row *outline.Row, _ *workspaceview.WorkspaceViewModel) {
+			if t.mode == sessionsModeMove && t.moveSt != nil {
+				row.Badge = "target"
+			}
+		},
+		DecorateSession: func(row *outline.Row, s *session.SessionInfo) {
+			if s.Name == t.current {
+				row.Current = true
+			}
+			if moving != "" && s.Name == moving {
+				row.Badge = "→ moving"
+			}
+		},
+		EmptyWorkspaceRow: func(ws *workspaceview.WorkspaceViewModel) *outline.Row {
+			if q != "" {
+				// Matched on workspace name but no sessions — header only.
+				return nil
+			}
+			return &outline.Row{
+				ID:       "placeholder:" + ws.Name,
+				Kind:     outline.RowPlaceholder,
+				Depth:    1,
+				ParentID: outline.WorkspaceID(ws.Name),
+				Label:    "(no live sessions)",
+			}
+		},
+		ExternalQuery: q,
+	}
 }
 
 // matchQuery reports whether target fuzzy-matches the (non-empty) query.
@@ -75,201 +155,11 @@ func rowsContain(rows []outline.Row, id string) bool {
 	return false
 }
 
-// buildWorkspaceRow returns the workspace header row plus its session rows
-// when expanded. Pseudo workspaces (e.g. "temporary") are emitted but never
-// participate in mutations.
-//
-// When q is non-empty the workspace is filtered: the header is kept if the
-// workspace name matches (then all its sessions show) or if any session name
-// matches (then only the matching sessions show); a workspace with no match
-// is dropped entirely. While filtering, children are force-expanded for
-// visibility without touching the tree's saved expansion state.
-func (t *SessionsTab) buildWorkspaceRow(ws *workspaceview.WorkspaceViewModel, q string) []outline.Row {
-	wsID := outline.WorkspaceID(ws.Name)
-
-	wsMatch := q == "" || matchQuery(q, ws.Name)
-	var matchingSessions []int
-	if q != "" && !wsMatch {
-		for j := range ws.LiveSessions {
-			if matchQuery(q, sessionInfoLabel(&ws.LiveSessions[j])) {
-				matchingSessions = append(matchingSessions, j)
-			}
-		}
-		if len(matchingSessions) == 0 {
-			return nil
-		}
-	}
-
-	expanded := t.tree.IsExpanded(wsID)
-	if q != "" {
-		expanded = true
-	}
-
-	header := outline.Row{
-		ID:         wsID,
-		Kind:       outline.RowWorkspaceHeader,
-		Depth:      0,
-		Label:      formatSessionsWorkspaceLabel(ws),
-		Selectable: true,
-		Expanded:   expanded,
-		Attached:   ws.HasAttached,
-		Data:       ws,
-	}
-	if t.mode == sessionsModeMove && t.moveSt != nil {
-		header.Badge = "target"
-	}
-
-	rows := []outline.Row{header}
-
-	if !expanded {
-		return rows
-	}
-
-	if len(ws.LiveSessions) == 0 {
-		if q != "" {
-			// Matched on workspace name but has no sessions — header only.
-			return rows
-		}
-		rows = append(rows, outline.Row{
-			ID:       "placeholder:" + ws.Name,
-			Kind:     outline.RowPlaceholder,
-			Depth:    1,
-			ParentID: wsID,
-			Label:    "(no live sessions)",
-		})
-		return rows
-	}
-
-	if q != "" && !wsMatch {
-		for _, j := range matchingSessions {
-			rows = append(rows, t.buildSessionRow(&ws.LiveSessions[j], wsID))
-		}
-	} else {
-		for j := range ws.LiveSessions {
-			rows = append(rows, t.buildSessionRow(&ws.LiveSessions[j], wsID))
-		}
-	}
-
-	return rows
-}
-
-// buildSessionRow builds a single session row under the given workspace.
-func (t *SessionsTab) buildSessionRow(s *session.SessionInfo, wsID string) outline.Row {
-	row := outline.Row{
-		ID:         outline.SessionID(s.Name),
-		Kind:       outline.RowSession,
-		Depth:      1,
-		ParentID:   wsID,
-		Label:      sessionInfoLabel(s),
-		Selectable: true,
-		Current:    s.Name == t.current,
-		Attached:   s.Attached,
-		Data:       s,
-	}
-	if t.mode == sessionsModeMove && t.moveSt != nil && s.Name == t.moveSt.sessionName {
-		row.Badge = "→ moving"
-	}
-	return row
-}
-
 func sessionInfoLabel(s *session.SessionInfo) string {
 	if s == nil {
 		return ""
 	}
 	return session.LocalDisplayName(*s)
-}
-
-// buildExternalRows constructs the external-source section of the outline.
-// Returns nil if there are no external groups (or none survive the filter).
-//
-// When q is non-empty a group is kept if its source label or kind matches
-// (then all its entries show) or if any entry matches (then only the matching
-// entries show). The divider is emitted only when at least one group survives.
-func (t *SessionsTab) buildExternalRows(q string) []outline.Row {
-	if t.catalog == nil || len(t.catalog.External) == 0 {
-		return nil
-	}
-
-	var body []outline.Row
-	for i := range t.catalog.External {
-		g := &t.catalog.External[i]
-		kind := string(g.Source.Kind)
-		key := source.GroupKey(g)
-		groupID := outline.ExternalGroupID(kind, key)
-
-		groupMatch := q == "" || matchQuery(q, g.Source.Label) || matchQuery(q, kind)
-		var matchingEntries []int
-		if q != "" && !groupMatch {
-			for j := range g.Entries {
-				if matchQuery(q, g.Entries[j].Session) {
-					matchingEntries = append(matchingEntries, j)
-				}
-			}
-			if len(matchingEntries) == 0 {
-				continue
-			}
-		}
-
-		label := fmt.Sprintf("%s: %s", kind, g.Source.Label)
-		if n := len(g.Entries); n > 0 {
-			label += fmt.Sprintf("  (%d)", n)
-		}
-		if g.Source.Health == source.HealthDegraded {
-			label += "  [degraded]"
-		}
-
-		expanded := t.tree.IsExpanded(groupID)
-		if q != "" {
-			expanded = true
-		}
-
-		body = append(body, outline.Row{
-			ID:         groupID,
-			Kind:       outline.RowExternalGroup,
-			Label:      label,
-			Selectable: true,
-			Expanded:   expanded,
-			Data:       g,
-		})
-
-		if !expanded {
-			continue
-		}
-
-		emit := func(j int) {
-			entry := g.Entries[j]
-			body = append(body, outline.Row{
-				ID:         outline.ExternalEntryID(kind, entry.Session),
-				Kind:       outline.RowExternalEntry,
-				Label:      entry.Session,
-				Depth:      1,
-				ParentID:   groupID,
-				Selectable: true,
-				Attached:   entry.Attached,
-				Data:       &entry,
-			})
-		}
-		if q != "" && !groupMatch {
-			for _, j := range matchingEntries {
-				emit(j)
-			}
-		} else {
-			for j := range g.Entries {
-				emit(j)
-			}
-		}
-	}
-
-	if len(body) == 0 {
-		return nil
-	}
-
-	rows := []outline.Row{{
-		ID:    "divider:external",
-		Kind:  outline.RowDivider,
-		Label: "── external ──",
-	}}
-	return append(rows, body...)
 }
 
 // formatSessionsWorkspaceLabel renders the workspace header label with
@@ -284,32 +174,6 @@ func formatSessionsWorkspaceLabel(ws *workspaceview.WorkspaceViewModel) string {
 		label += "  [attached]"
 	}
 	return label
-}
-
-// externalGroupForRow looks up the source group that owns an external entry
-// or group row. Returns (group, true) on hit.
-func externalGroupForRow(cat *source.Catalog, row *outline.Row) (*source.SourceGroup, bool) {
-	if cat == nil || row == nil {
-		return nil, false
-	}
-	switch row.Kind {
-	case outline.RowExternalGroup:
-		if g, ok := outline.RowData[source.SourceGroup](row); ok {
-			return g, true
-		}
-	case outline.RowExternalEntry:
-		// Walk catalog to find the parent group of this entry's ID.
-		for i := range cat.External {
-			g := &cat.External[i]
-			kind := string(g.Source.Kind)
-			for j := range g.Entries {
-				if outline.ExternalEntryID(kind, g.Entries[j].Session) == row.ID {
-					return g, true
-				}
-			}
-		}
-	}
-	return nil, false
 }
 
 // ── View rendering ──

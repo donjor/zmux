@@ -572,9 +572,9 @@ func TestCurrentTabNewWindowOnWindowRow(t *testing.T) {
 	idx := findCurrentRowByID(tab, outline.WindowID("dev", 1))
 	tab.tree.Cursor = idx
 
-	_, cmd := sendCurrentKey(tab, "n")
+	_, cmd := sendCurrentKey(tab, "c")
 	if cmd == nil {
-		t.Fatal("expected command from n")
+		t.Fatal("expected command from c")
 	}
 	msg := cmd()
 	if msg != nil {
@@ -593,7 +593,7 @@ func TestCurrentTabNewSessionInWorkspace(t *testing.T) {
 	idx := findCurrentRowByID(tab, outline.WorkspaceID("dev"))
 	tab.tree.Cursor = idx
 
-	tab, _ = sendCurrentKey(tab, "n")
+	tab, _ = sendCurrentKey(tab, "c")
 	if tab.mode != currentModeCreate {
 		t.Fatalf("expected create mode, got %d", tab.mode)
 	}
@@ -785,10 +785,10 @@ func TestCurrentTabNoActiveSessionState(t *testing.T) {
 	if !strings.Contains(view, "No active session") {
 		t.Fatalf("expected no-active-session view, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Press n") {
+	if !strings.Contains(view, "Press c") {
 		t.Fatalf("expected create affordance in no-session view, got:\n%s", view)
 	}
-	if help := tab.ShortHelp(); !strings.Contains(help, "n:new tmp") || !strings.Contains(help, "esc:exit") {
+	if help := tab.ShortHelp(); !strings.Contains(help, "c:new tmp") || !strings.Contains(help, "esc:exit") {
 		t.Fatalf("unexpected no-session help: %q", help)
 	}
 }
@@ -796,9 +796,9 @@ func TestCurrentTabNoActiveSessionState(t *testing.T) {
 func TestCurrentTabNoActiveSessionNewQuitsWithIntent(t *testing.T) {
 	tab := NewCurrentTab(tmux.NewMockRunner(), styles.DefaultStyles(), nil, nil)
 
-	_, cmd := sendCurrentKey(tab, "n")
+	_, cmd := sendCurrentKey(tab, "c")
 	if cmd == nil {
-		t.Fatal("expected n to emit a dashboard quit intent")
+		t.Fatal("expected c to emit a dashboard quit intent")
 	}
 	msg := cmd()
 	intent, ok := msg.(dashboard.QuitIntent)

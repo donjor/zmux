@@ -1136,12 +1136,47 @@ func TestPickerCtrlCQuits(t *testing.T) {
 
 // ── Empty state ──
 
-func TestPickerEmptyShowsLogo(t *testing.T) {
-	model := newEmptyPicker()
-	view := model.view()
+// TestPickerSplashByTerminalHeight pins the header rule: the picker chooses the
+// block-art splash vs the compact one-line header purely on terminal height,
+// independent of how many workspaces/sessions exist, and always renders one or
+// the other (never blank). This guards the regression where the splash was gated
+// on len(workspaces)==0 and the compact path rendered nothing.
+func TestPickerSplashByTerminalHeight(t *testing.T) {
+	const (
+		logoMark    = "░█████████"
+		compactMark = "prefix: ctrl+space"
+	)
 
-	if !strings.Contains(view, "░█████████") {
-		t.Error("expected big logo when no workspaces")
+	cases := []struct {
+		name  string
+		build func() PickerModel
+	}{
+		{"empty", newEmptyPicker},                        // 0 workspaces
+		{"with workspaces", newTestPickerWithWorkspaces}, // 2 workspaces
+	}
+
+	// Tall terminal (height 40): block-art splash, regardless of workspace count.
+	for _, tc := range cases {
+		view := tc.build().view()
+		if !strings.Contains(view, logoMark) {
+			t.Errorf("tall/%s: expected block-art splash", tc.name)
+		}
+		if strings.Contains(view, compactMark) {
+			t.Errorf("tall/%s: expected splash, got compact header", tc.name)
+		}
+	}
+
+	// Short terminal: compact header — never the big splash, never blank.
+	for _, tc := range cases {
+		m := tc.build()
+		m.height = bigSplashMinHeight - 1
+		view := m.view()
+		if strings.Contains(view, logoMark) {
+			t.Errorf("short/%s: expected no block-art splash", tc.name)
+		}
+		if !strings.Contains(view, compactMark) {
+			t.Errorf("short/%s: expected the compact header (never blank)", tc.name)
+		}
 	}
 }
 

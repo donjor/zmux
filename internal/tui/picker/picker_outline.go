@@ -3,6 +3,7 @@ package picker
 import (
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceoutline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
 
@@ -108,15 +109,6 @@ func (m *PickerModel) buildOutline() {
 // the exact-match flow in onInputChanged where the cursor hasn't moved yet
 // but we want the matched workspace expanded.
 func (m *PickerModel) buildOutlineWithFocus(forceFocusWS string) {
-	rows := []outline.Row{
-		{
-			ID:         outline.TopActionID(),
-			Kind:       outline.RowTopAction,
-			Label:      topActionLabel(m.state.workspaceQuery),
-			Selectable: true,
-		},
-	}
-
 	hasSearch := m.state.workspaceQuery != "" || m.state.sessionQuery != ""
 
 	// Which workspace is "focused" for expansion purposes?
@@ -132,50 +124,23 @@ func (m *PickerModel) buildOutlineWithFocus(forceFocusWS string) {
 		}
 	}
 
-	for i := range m.filteredWorkspaces {
-		ws := &m.filteredWorkspaces[i]
-		wsID := outline.WorkspaceID(ws.Name)
-
-		// Filter sessions by session query.
-		sessions := ws.LiveSessions
-		if m.state.sessionQuery != "" {
-			sessions = matchSessions(m.state.sessionQuery, sessions)
-		}
-
-		// Expand when searching, or when this is the focused workspace.
-		// Note: Expanded isn't set on the row because picker_view doesn't
-		// render expansion chevrons — whether children follow is the
-		// only signal it needs.
-		expanded := hasSearch || wsID == focusedWS
-
-		rows = append(rows, outline.Row{
-			ID:         wsID,
-			Kind:       outline.RowWorkspaceHeader,
-			Label:      formatWorkspaceLabel(ws),
-			Selectable: true,
-			Attached:   ws.HasAttached,
-			Data:       ws,
-		})
-
-		if expanded {
-			for j := range sessions {
-				s := sessions[j]
-				rows = append(rows, outline.Row{
-					ID:         outline.SessionID(s.Name),
-					Kind:       outline.RowSession,
-					Depth:      1,
-					ParentID:   wsID,
-					Label:      pickerSessionLabel(s),
-					Selectable: true,
-					Attached:   s.Attached,
-					Data:       &s,
-				})
+	// The picker policy: a leading "+ new" action, focus/search-driven
+	// expansion with no chevron state (picker_view shows no chevrons —
+	// whether children follow is its only signal), the default
+	// LocalDisplayName session label, and unfiltered external sources.
+	rows := workspaceoutline.Build(m.filteredWorkspaces, m.catalog, m.tree, workspaceoutline.Policy{
+		TopAction:      func() string { return topActionLabel(m.state.workspaceQuery) },
+		WorkspaceLabel: formatWorkspaceLabel,
+		Expanded: func(wsID string, _ *workspaceview.WorkspaceViewModel) bool {
+			return hasSearch || wsID == focusedWS
+		},
+		Sessions: func(ws *workspaceview.WorkspaceViewModel) []session.SessionInfo {
+			if m.state.sessionQuery != "" {
+				return matchSessions(m.state.sessionQuery, ws.LiveSessions)
 			}
-		}
-	}
-
-	// External sources below the workspaces.
-	rows = append(rows, buildExternalRows(m.catalog, m.tree)...)
+			return ws.LiveSessions
+		},
+	})
 
 	// After a delete reload, land on the neighbor captured at delete-commit
 	// (the next cleanup row, else the previous one) rather than letting the
@@ -186,10 +151,6 @@ func (m *PickerModel) buildOutlineWithFocus(forceFocusWS string) {
 		return
 	}
 	m.tree.SetRows(rows)
-}
-
-func pickerSessionLabel(s session.SessionInfo) string {
-	return session.LocalDisplayName(s)
 }
 
 // topActionLabel returns the display label for the top action row based

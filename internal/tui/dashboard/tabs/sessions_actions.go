@@ -6,11 +6,14 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/workspaceoutline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
+	"github.com/donjor/zmux/internal/workspace"
 )
 
 // handleKey dispatches key presses based on the current mode.
@@ -34,22 +37,23 @@ func (t *SessionsTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 // handleNormalKey routes single-key shortcuts in list mode. The same key
 // can mean different things depending on the row kind under the cursor.
 func (t *SessionsTab) handleNormalKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
+	s := msg.String()
+	switch {
+	case keys.DashNavUp.Matches(s):
 		t.tree.MoveUp()
 		return t, nil
-	case "down", "j":
+	case keys.DashNavDown.Matches(s):
 		t.tree.MoveDown()
 		return t, nil
-	case "g":
+	case keys.DashNavTop.Matches(s):
 		t.tree.JumpTop()
 		return t, nil
-	case "G":
+	case keys.DashNavBottom.Matches(s):
 		t.tree.JumpBottom()
 		return t, nil
-	case "/":
+	case keys.DashSearch.Matches(s):
 		return t.enterSearchMode()
-	case "esc":
+	case s == "esc":
 		// Reaches the tab only when a filter is active (see CapturesEscape);
 		// the first Esc clears the filter, a second closes the dashboard.
 		if t.searchQuery != "" {
@@ -63,16 +67,18 @@ func (t *SessionsTab) handleNormalKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t, nil
 	}
 
-	switch msg.String() {
-	case "enter":
+	switch {
+	case keys.DashSelect.Matches(s):
 		return t.handleEnter(row)
-	case "n":
+	case keys.DashCreate.Matches(s):
+		return t.enterCreateSessionMode(row)
+	case keys.DashCreateWorkspace.Matches(s):
 		return t.enterCreateMode()
-	case "r":
+	case keys.DashRename.Matches(s):
 		return t.handleRenameRequest(row)
-	case "x":
+	case keys.DashKill.Matches(s):
 		return t.handleKillRequest(row)
-	case "m":
+	case keys.DashMove.Matches(s):
 		return t.handleMoveRequest(row)
 	}
 	return t, nil
@@ -147,8 +153,8 @@ func (t *SessionsTab) handleEnter(row *outline.Row) (dashboard.Tab, tea.Cmd) {
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
 		// While a filter is active rows are force-expanded for visibility
-		// (buildWorkspaceRow), so toggling would only mutate saved expansion
-		// state invisibly — make it a no-op until the filter clears.
+		// (rowPolicy's Expanded callback), so toggling would only mutate saved
+		// expansion state invisibly — make it a no-op until the filter clears.
 		if t.searchQuery == "" {
 			t.tree.ToggleExpand(row.ID)
 			t.tree.SetRows(t.buildRows())
@@ -180,7 +186,7 @@ func (t *SessionsTab) handleEnter(row *outline.Row) (dashboard.Tab, tea.Cmd) {
 
 // handleExternalEntryEnter converts an external row into a quit intent.
 func (t *SessionsTab) handleExternalEntryEnter(row *outline.Row) (dashboard.Tab, tea.Cmd) {
-	g, ok := externalGroupForRow(t.catalog, row)
+	g, ok := workspaceoutline.ExternalGroupForRow(t.catalog, row)
 	if !ok || g == nil {
 		return t, nil
 	}
@@ -208,11 +214,57 @@ func (t *SessionsTab) handleExternalEntryEnter(row *outline.Row) (dashboard.Tab,
 
 // ── Mode entry helpers ──
 
+// enterCreateMode opens the create-WORKSPACE input (the C key). createWsTarget
+// is cleared so handleCreateKey commits a new workspace.
 func (t *SessionsTab) enterCreateMode() (dashboard.Tab, tea.Cmd) {
+	t.createWsTarget = ""
 	t.mode = sessionsModeCreate
+	t.createInput.Placeholder = "workspace name..."
 	t.createInput.SetValue("")
 	t.createInput.Focus()
 	return t, textinput.Blink
+}
+
+// enterCreateSessionMode opens the create-SESSION input (the c key), targeting
+// the workspace at the cursor's scope: the workspace header itself, or the
+// parent workspace of the session under the cursor. When no real workspace
+// resolves (placeholder / external / pseudo rows, e.g. the empty sessionless
+// tab), c escalates to create-WORKSPACE — so c and C both create a workspace
+// when there is nothing to nest a session under.
+func (t *SessionsTab) enterCreateSessionMode(row *outline.Row) (dashboard.Tab, tea.Cmd) {
+	wsName := t.workspaceForRow(row)
+	if wsName == "" {
+		return t.enterCreateMode()
+	}
+	t.createWsTarget = wsName
+	t.mode = sessionsModeCreate
+	t.createInput.Placeholder = "session name..."
+	t.createInput.SetValue("")
+	t.createInput.Focus()
+	return t, textinput.Blink
+}
+
+// workspaceForRow resolves the real workspace a row belongs to: a workspace
+// header's own name, or the parent workspace of a session row. Returns "" for
+// pseudo workspaces and non-workspace rows (external groups/entries).
+func (t *SessionsTab) workspaceForRow(row *outline.Row) string {
+	switch row.Kind {
+	case outline.RowWorkspaceHeader:
+		ws, _ := outline.RowData[workspaceview.WorkspaceViewModel](row)
+		if ws == nil || ws.IsPseudo {
+			return ""
+		}
+		return ws.Name
+	case outline.RowSession:
+		parentRow, _ := t.tree.FindByID(row.ParentID)
+		if parentRow == nil {
+			return ""
+		}
+		if ws, ok := outline.RowData[workspaceview.WorkspaceViewModel](parentRow); ok && ws != nil && !ws.IsPseudo {
+			return ws.Name
+		}
+	}
+	return ""
 }
 
 // handleRenameRequest enters rename mode for a workspace or session row.
@@ -242,7 +294,7 @@ func (t *SessionsTab) handleRenameRequest(row *outline.Row) (dashboard.Tab, tea.
 
 	case outline.RowExternalEntry:
 		// 'r' on overmind process = restart.
-		g, ok := externalGroupForRow(t.catalog, row)
+		g, ok := workspaceoutline.ExternalGroupForRow(t.catalog, row)
 		if !ok || g == nil || g.Source.Kind != source.SourceOvermind || g.Source.Overmind == nil {
 			return t, nil
 		}
@@ -283,7 +335,7 @@ func (t *SessionsTab) handleKillRequest(row *outline.Row) (dashboard.Tab, tea.Cm
 		return t, nil
 
 	case outline.RowExternalEntry:
-		g, ok := externalGroupForRow(t.catalog, row)
+		g, ok := workspaceoutline.ExternalGroupForRow(t.catalog, row)
 		if !ok || g == nil || g.Source.Kind != source.SourceOvermind || g.Source.Overmind == nil {
 			return t, nil
 		}
@@ -386,11 +438,24 @@ func (t *SessionsTab) handleCreateKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 			t.exitMode()
 			return t, nil
 		}
-		cmd := t.createWorkspace(name)
+		// createWsTarget discriminates the two create flows: empty = new
+		// workspace (C), set = new session in that workspace (c).
+		target := t.createWsTarget
+		var cmd tea.Cmd
+		var jumpTo string
+		if target == "" {
+			cmd = t.createWorkspace(name)
+			jumpTo = outline.WorkspaceID(name)
+		} else {
+			cmd = t.createSessionInWorkspace(target, name)
+			if rec, err := workspace.NewSessionRecord(target, name); err == nil {
+				jumpTo = outline.SessionID(rec.TmuxName)
+			}
+		}
 		t.exitMode()
 		// Re-set pendingJumpTo AFTER exitMode — see current_actions.go for
 		// the full explanation of the stale-pending-data race.
-		t.pendingJumpTo = outline.WorkspaceID(name)
+		t.pendingJumpTo = jumpTo
 		return t, cmd
 
 	case "esc":

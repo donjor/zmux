@@ -93,15 +93,12 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 				return errInvalidCommand
 			}
 
-			if a.Runner.IsInsideTmux() {
+			switch defaultRootEntry(a) {
+			case entryDashboardPopup:
 				return launchDashboardPopup(a)
+			default:
+				return runSessionPicker(a)
 			}
-
-			if !hasLiveSessions(a) {
-				return runSessionlessDashboard(a)
-			}
-
-			return runSessionPicker(a)
 		},
 	}
 
@@ -177,6 +174,28 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 	registerSyncCompletions(themePullCmd)
 
 	return rootCmd
+}
+
+// rootEntryKind is the surface a bare `zmux` (no args, no popup flags) lands on.
+type rootEntryKind int
+
+const (
+	entryPicker rootEntryKind = iota
+	entryDashboardPopup
+)
+
+// defaultRootEntry decides the surface for a bare `zmux` invocation. Inside tmux
+// → the dashboard popup; outside tmux → the workspace+session picker, regardless
+// of live-session count. The picker owns the cold-start/empty state (create a
+// workspace or tmp session and attach); the sessionless dashboard is reserved
+// for the attach-fallback path in session_fallback.go (close-last-session /
+// vanished target), never the explicit invocation. Pure decision over the runner
+// so routing is unit-testable without driving Bubble Tea.
+func defaultRootEntry(a *apppkg.App) rootEntryKind {
+	if a.Runner.IsInsideTmux() {
+		return entryDashboardPopup
+	}
+	return entryPicker
 }
 
 func checkTmuxVersion(app *apppkg.App) error {

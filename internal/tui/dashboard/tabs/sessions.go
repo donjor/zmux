@@ -16,6 +16,7 @@ import (
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/styles"
+	"github.com/donjor/zmux/internal/tui/workspaceoutline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/donjor/zmux/internal/workspace"
 )
@@ -87,6 +88,11 @@ type SessionsTab struct {
 	rename      *renameState
 	confirm     *confirmState
 	moveSt      *moveState
+
+	// createWsTarget is the workspace a pending create targets. Empty means
+	// create-mode is creating a workspace (C); non-empty means creating a
+	// session in that workspace (c).
+	createWsTarget string
 
 	// searchQuery is the active filter over the tree. It is independent of
 	// sessionsModeSearch: editing the query lives in that mode, but a
@@ -255,6 +261,7 @@ func (t *SessionsTab) exitMode() {
 	t.confirm = nil
 	t.rename = nil
 	t.moveSt = nil
+	t.createWsTarget = ""
 	t.renameInput.Blur()
 	t.createInput.Blur()
 	t.searchInput.Blur()
@@ -379,6 +386,27 @@ func (t *SessionsTab) createWorkspace(name string) tea.Cmd {
 	}
 }
 
+// createSessionInWorkspace creates a canonically-named managed session in the
+// target workspace (shared workspace.CreateManagedSession path, same as the CLI
+// and the Current tab) and force-expands that workspace so the new session row
+// is visible after the refetch. The caller queues the jump-to on the new row.
+func (t *SessionsTab) createSessionInWorkspace(wsName, label string) tea.Cmd {
+	runner := t.runner
+	wsStore := t.wsStore
+	reqID := t.reqID
+	dir := createSessionDir(wsStore, wsName, "")
+	t.tree.SetExpanded(outline.WorkspaceID(wsName), true)
+	return func() tea.Msg {
+		if _, err := createSessionMutation(runner, wsStore, wsName, label, dir); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("create session failed: %v", err),
+				IsError: true,
+			}
+		}
+		return sessionsMutationDoneMsg{reqID: reqID}
+	}
+}
+
 // moveSessionTo commits an inline move and queues a jump-to on the moved row.
 func (t *SessionsTab) moveSessionTo(sessionName, destWorkspace string) tea.Cmd {
 	wsStore := t.wsStore
@@ -417,21 +445,21 @@ func (t *SessionsTab) ShortHelp() string {
 
 	row := t.tree.Current()
 	if row == nil {
-		return "n:new" + tail
+		return "C:workspace" + tail
 	}
 
 	switch row.Kind {
 	case outline.RowWorkspaceHeader:
-		return strings.Join([]string{"enter:expand", "n:new", "r:rename", "x:kill"}, "  ") + tail
+		return strings.Join([]string{"enter:expand", "c:session", "C:workspace", "r:rename", "x:kill"}, "  ") + tail
 	case outline.RowSession:
-		return strings.Join([]string{"enter:switch", "n:new", "r:rename", "x:kill", "m:move"}, "  ") + tail
+		return strings.Join([]string{"enter:switch", "c:session", "C:workspace", "r:rename", "x:kill", "m:move"}, "  ") + tail
 	case outline.RowExternalGroup:
-		return "enter:toggle  n:new" + tail
+		return "enter:toggle  C:workspace" + tail
 	case outline.RowExternalEntry:
-		if g, ok := externalGroupForRow(t.catalog, row); ok && g != nil && g.Source.Kind == source.SourceOvermind {
-			return "enter:connect  r:restart  x:stop  n:new" + tail
+		if g, ok := workspaceoutline.ExternalGroupForRow(t.catalog, row); ok && g != nil && g.Source.Kind == source.SourceOvermind {
+			return "enter:connect  r:restart  x:stop  C:workspace" + tail
 		}
-		return "enter:attach  n:new" + tail
+		return "enter:attach  C:workspace" + tail
 	}
-	return "n:new" + tail
+	return "C:workspace" + tail
 }

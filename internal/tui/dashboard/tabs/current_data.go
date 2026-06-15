@@ -313,17 +313,23 @@ func (t *CurrentTab) newWindow(sessionName, dir string) tea.Cmd {
 	}
 }
 
-// createSessionInWorkspace creates a tmux session and attaches it to a workspace.
-func (t *CurrentTab) createSessionInWorkspace(wsName, sessionName string) tea.Cmd {
+// createSessionInWorkspace creates a canonically-named managed session in the
+// workspace via the shared create path, so the new session is addressable
+// exactly like a CLI-created one. The old raw-label create wrote a tmux session
+// named after the bare label, which the picker and bar could not resolve back to
+// its workspace. The caller lands the cursor on the new session by its canonical
+// tmux name after exitMode.
+func (t *CurrentTab) createSessionInWorkspace(wsName, label string) tea.Cmd {
 	runner := t.runner
 	wsStore := t.wsStore
-	dir := t.sessionDir
 	reqID := t.reqID
-	t.pendingJumpTo = outline.SessionID(sessionName)
+	dir := createSessionDir(wsStore, wsName, t.sessionDir)
 	return func() tea.Msg {
-		_ = session.Create(runner, sessionName, dir)
-		if wsStore != nil {
-			_ = wsStore.AddSession(wsName, sessionName)
+		if _, err := createSessionMutation(runner, wsStore, wsName, label, dir); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("create session failed: %v", err),
+				IsError: true,
+			}
 		}
 		return currentMutationDoneMsg{reqID: reqID}
 	}

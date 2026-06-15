@@ -57,7 +57,39 @@ var (
 	CopySearchForward  = Binding{Action: "copy.search.forward", Key: "/", Help: "Search forward", Category: CatCopyMode, Context: CopyMode}
 	CopySearchBackward = Binding{Action: "copy.search.backward", Key: "?", Help: "Search backward", Category: CatCopyMode, Context: CopyMode}
 	CopyCancel         = Binding{Action: "copy.cancel", Key: "Escape", Help: "Cancel copy mode", Category: CatCopyMode, Context: CopyMode}
+
+	// Dashboard (component-local popup keys). Not emitted into tmux.conf — the
+	// dashboard TUI (internal/tui/dashboard) routes these via Binding.Matches,
+	// and Keys are stored as Bubble Tea strings so the runtime match and the docs
+	// share one definition. `c`/`C` follow the create convention (lowercase =
+	// create at the cursor's scope, uppercase = create a new workspace), matching
+	// prefix `c` (new tab) / `C` (new session).
+	DashSelect          = Binding{Action: "select", Key: "enter", Help: "Focus / switch / edit / expand (depends on row)", Category: CatDashboard, Context: DashboardCtx}
+	DashCreate          = Binding{Action: "create", Key: "c", Help: "Create at cursor scope (session in workspace, window in session)", Category: CatDashboard, Context: DashboardCtx}
+	DashCreateWorkspace = Binding{Action: "create.workspace", Key: "C", Help: "Create a new workspace", Category: CatDashboard, Context: DashboardCtx}
+	DashRename          = Binding{Action: "rename", Key: "r", Help: "Rename selected item", Category: CatDashboard, Context: DashboardCtx}
+	DashKill            = Binding{Action: "kill", Key: "x", Help: "Kill / close selected item (confirms)", Category: CatDashboard, Context: DashboardCtx}
+	DashMove            = Binding{Action: "move", Key: "m", Help: "Move session / window to another parent", Category: CatDashboard, Context: DashboardCtx}
+	DashSearch          = Binding{Action: "search", Key: "/", Help: "Filter the list", Category: CatDashboard, Context: DashboardCtx}
+	DashNavUp           = Binding{Action: "nav.up", Key: "up", Aliases: []string{"k"}, Help: "Move cursor up", Category: CatDashboard, Context: DashboardCtx}
+	DashNavDown         = Binding{Action: "nav.down", Key: "down", Aliases: []string{"j"}, Help: "Move cursor down", Category: CatDashboard, Context: DashboardCtx}
+	DashNavTop          = Binding{Action: "nav.top", Key: "g", Help: "Jump to top", Category: CatDashboard, Context: DashboardCtx}
+	DashNavBottom       = Binding{Action: "nav.bottom", Key: "G", Help: "Jump to bottom", Category: CatDashboard, Context: DashboardCtx}
+	DashSessionGoto     = Binding{Action: "session.goto.N", Key: "1-9", Help: "Quick-jump to session N (Current tab)", Category: CatDashboard, Context: DashboardCtx}
+	DashTabSwitch       = Binding{Action: "tab.switch.N", Key: "alt+1-9", Help: "Switch to dashboard tab N", Category: CatDashboard, Context: DashboardCtx}
+	DashTabCycle        = Binding{Action: "tab.cycle", Key: "tab", Aliases: []string{"shift+tab"}, Help: "Cycle to next / previous tab", Category: CatDashboard, Context: DashboardCtx}
+	DashQuit            = Binding{Action: "quit", Key: "esc", Aliases: []string{"ctrl+c"}, Help: "Close the dashboard", Category: CatDashboard, Context: DashboardCtx}
 )
+
+// DashboardBindings lists the dashboard popup's keys in doc/help render order.
+// These are routed at runtime by internal/tui/dashboard via Binding.Matches;
+// individual tabs may add surface-local keys (e.g. Current-tab h/l window-level
+// nav, Settings-tab `s` save) documented in their own help sections.
+var DashboardBindings = []Binding{
+	DashSelect, DashCreate, DashCreateWorkspace, DashRename, DashKill, DashMove, DashSearch,
+	DashNavUp, DashNavDown, DashNavTop, DashNavBottom,
+	DashSessionGoto, DashTabSwitch, DashTabCycle, DashQuit,
+}
 
 // PrefixBindings lists the prefix-table bindings in help/doc render order.
 var PrefixBindings = []Binding{

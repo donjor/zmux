@@ -31,7 +31,7 @@ needs = ["setup"]
 [[step]]
 id = "current-tab-new"
 name = "EYEBALL Current tab create path"
-expect = "from the sessionless dashboard, switch to Session & Workspace, press n, and confirm a temporary session is created and attached"
+expect = "from the sessionless dashboard, switch to Session & Workspace, press c, and confirm a temporary session is created and attached"
 needs = ["no-session-dashboard"]
 
 [[step]]

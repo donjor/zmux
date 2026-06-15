@@ -7,7 +7,7 @@ package tabs
 // | enter | no-op                    | focus session           | switch to session        | focus window/pane      |
 // | r     | rename workspace         | rename session          | rename session           | rename window          |
 // | x     | kill workspace (2-step)  | kill session (confirm)  | kill session (confirm)   | kill window/pane       |
-// | n     | new session in workspace | new window              | new window in target     | new window             |
+// | c     | new session in workspace | new window              | new window in target     | new window             |
 // | m     | no-op                    | no-op                   | no-op                    | move window to session |
 // | <, >  | no-op                    | no-op                   | no-op                    | reorder window         |
 //
@@ -20,6 +20,7 @@ package tabs
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
@@ -47,27 +48,28 @@ func (t *CurrentTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 // handleListKey routes single-key shortcuts in list mode. The same key
 // can mean different things depending on the row kind under the cursor.
 func (t *CurrentTab) handleListKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
+	s := msg.String()
+	switch {
+	case keys.DashNavUp.Matches(s):
 		t.tree.MoveUp()
 		return t, nil
-	case "down", "j":
+	case keys.DashNavDown.Matches(s):
 		t.tree.MoveDown()
 		return t, nil
-	case "g":
+	case keys.DashNavTop.Matches(s):
 		t.tree.JumpTop()
 		return t, nil
-	case "G":
+	case keys.DashNavBottom.Matches(s):
 		t.tree.JumpBottom()
 		return t, nil
-	case "right", "l":
+	case s == "right" || s == "l":
 		return t.enterWindowLevel()
-	case "left", "h":
+	case s == "left" || s == "h":
 		return t.exitWindowLevel()
 	}
 
 	if t.sessionName == "" {
-		if msg.String() == "n" {
+		if keys.DashCreate.Matches(s) {
 			return t, func() tea.Msg {
 				return dashboard.QuitIntent{Action: "new"}
 			}
@@ -77,18 +79,18 @@ func (t *CurrentTab) handleListKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 
 	// Search + quick-jump require an active session (the no-session view has no
 	// list to filter or number, and would show no search input).
-	switch msg.String() {
-	case "/":
+	switch {
+	case keys.DashSearch.Matches(s):
 		return t.enterSearchMode()
-	case "esc":
+	case s == "esc":
 		// Reaches the tab only when a filter is active (see CapturesEscape);
 		// the first Esc clears the filter, a second closes the dashboard.
 		if t.searchQuery != "" {
 			t.clearSearch()
 		}
 		return t, nil
-	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-		return t.handleSessionDigit(int(msg.String()[0] - '0'))
+	case len(s) == 1 && s[0] >= '1' && s[0] <= '9':
+		return t.handleSessionDigit(int(s[0] - '0'))
 	}
 
 	row := t.tree.Current()
@@ -96,20 +98,20 @@ func (t *CurrentTab) handleListKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t, nil
 	}
 
-	switch msg.String() {
-	case "enter":
+	switch {
+	case keys.DashSelect.Matches(s):
 		return t.actionEnter(row)
-	case "r":
+	case keys.DashRename.Matches(s):
 		return t.actionRename(row)
-	case "x":
+	case keys.DashKill.Matches(s):
 		return t.actionKill(row)
-	case "n":
+	case keys.DashCreate.Matches(s):
 		return t.actionNew(row)
-	case "m":
+	case keys.DashMove.Matches(s):
 		return t.actionMove(row)
-	case "<":
+	case s == "<":
 		return t.actionReorder(row, -1)
-	case ">":
+	case s == ">":
 		return t.actionReorder(row, +1)
 	}
 	return t, nil
