@@ -111,6 +111,7 @@ The flat `tui` root package was dissolved into focused leaf/surface packages; th
 |---------|------|
 | `tui/styles` | Shared lipgloss styles leaf (`Styles`, `NewStyles`) |
 | `tui/workspaceview` | Workspace-view data adapter leaf (consumed by picker **and** dashboard; deps: session+workspace only) |
+| `tui/workspaceoutline` | Shared workspace/session/external **row structure** built once and rendered by both the picker and the dashboard Workspaces tab; surface-specific labels, badges, and expansion arrive via `Policy` callbacks |
 | `tui/workspacelist` | Reusable workspace-list component used by the workspace switcher |
 | `tui/wspicker` | No-prefix `Alt+w` workspace switcher |
 | `tui/picker` | Primary workspace+session picker (model/update/view/actions + local keymap) |
@@ -196,6 +197,8 @@ The durable store is v3: each workspace session has a stable ID, a local label, 
 
 `internal/session` owns the per-session model and the `RootName()` helper that resolves clone names (`dev-b` for legacy sessions, `__clone_b` for managed sessions). `internal/recipe` owns declarative launch plans and bundled recipes.
 
+`internal/workspace/create.go` exposes `CreateManagedSession` — the single create path shared by `zmux new` and the dashboard, so both produce identically-stamped, addressable `zws_<workspace>__<label>` sessions (and clean up the live tmux session on any post-create failure) instead of the dashboard's old raw-label sessions that the picker and bar could not resolve.
+
 User-facing command targets use `workspace/session`. `internal/cli/session_target.go`
 resolves explicit `workspace/session` targets, current-workspace or cwd-local
 labels, unique labels across workspaces, and finally raw tmux names as a debug
@@ -238,6 +241,7 @@ See [qa.md](qa.md).
 internal/tui/                 — no flat package; focused leaves + surfaces
 ├── styles/                   — shared lipgloss styles leaf
 ├── workspaceview/            — workspace-view data adapter (picker + dashboard)
+├── workspaceoutline/         — shared workspace/session/external row structure (picker + dashboard); surface differences via Policy callbacks
 ├── workspacelist/            — reusable workspace list component
 ├── wspicker/                 — no-prefix workspace switcher
 ├── picker/                   — primary session/workspace picker
@@ -267,7 +271,7 @@ internal/tui/                 — no flat package; focused leaves + surfaces
         ├── bar.go            — Bar tab (preset + segment toggle)
         ├── settings.go       — Settings tab (config fields)
         ├── help.go           — Help tab (renders from internal/keys)
-        └── shared_*.go       — rename/confirm overlays shared across tabs
+        └── shared_*.go       — rename/confirm overlays + workspace/session mutation helpers shared across tabs
 ```
 
 Tabs all implement `dashboard.Tab` — `Activate`, `Deactivate`, `Update`, `View`. Cross-tab messages use `dashboard.TargetedMsg` / `AppIntentMsg`.

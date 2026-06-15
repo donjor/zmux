@@ -9,6 +9,19 @@ versioning is semver-ish until the first public release.
 
 ### Added
 
+- **Picker ↔ dashboard convergence on shared workspace/session logic**
+  `dashboard` `ui` `workspace` - the workspace+session picker and the dashboard
+  Workspaces tab no longer reimplement the same listing/creation logic and drift
+  apart. Three outcomes land together: (1) bare `zmux` outside tmux always opens
+  the picker, even on a fresh reboot with no live session — the sessionless
+  dashboard is now only the auto attach-fallback (close-last-session / vanished
+  target), not the explicit invocation — a regression introduced by the earlier
+  sessionless-fallback work;
+  (2) the dashboard can create a new session under a workspace, matching the
+  picker's validation, naming, and attach behavior; (3) both surfaces share one
+  row builder (`internal/tui/workspaceoutline`, surface differences via `Policy`
+  callbacks) and one create path (`workspace.CreateManagedSession`), so they
+  produce identical addressable `zws_<workspace>__<label>` sessions.
 - **Session tab search, quick-jump, and pinned scope** `dashboard` `ui` - the
   dashboard's Session & Workspace tab gains the search model from the Workspaces
   tab, scoped to the active workspace: `/` filters sessions by session name or

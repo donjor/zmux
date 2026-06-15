@@ -4,43 +4,13 @@
 > Each item is self-contained enough to seed implementation without local
 > scratch files or session history.
 
-## Now — Picker ↔ dashboard convergence
+## Now — Remote & nested zmux
 
-The workspace+session picker and the dashboard have drifted into two
-implementations of the same logic and now fight each other — a regression and a
-gap fell out of the recent sessionless-fallback work. Converge them onto shared
-logic so entry, creation, and management behave the same everywhere.
-
-- [ ] **Bare `zmux` lands on the picker, even with no live session**
-  - Running `zmux` explicitly should open the workspace+session picker whether or
-    not a session is live; on a fresh reboot (no live session) it currently drops
-    to the sessionless dashboard instead.
-  - Keep the sessionless dashboard as the *automatic* fallback — closing the last
-    session, or shell-startup auto-attach with nothing to attach — not for the
-    explicit invocation.
-  - Requires the picker to handle the empty state (pick or create a workspace,
-    create the first session) so it can own the explicit entry path.
-
-- [ ] **Create a new session under a workspace from the dashboard**
-  - The dashboard has no entry point to create a new session within an existing
-    workspace; the picker and CLI do.
-  - Add it and match the picker's validation, naming, and attach behavior.
-
-- [ ] **Consolidate the picker and dashboard onto shared workspace/session logic**
-  - `internal/tui/picker/` and `internal/tui/dashboard/` reimplement the same
-    workspace/session listing, creation, and switching, and the two drift apart;
-    the bare-`zmux` regression and the missing dashboard create are symptoms.
-  - Lift the shared model and actions into one place both surfaces render, and
-    make the two items above its first consumers rather than separate one-offs.
-  - This subsumes the earlier dashboard-vs-init-picker "bespoke logic" cleanup and
-    sets up the Next → Dashboard Workspaces full-CRUD item as a thin consumer.
-
-## Next
-
-### Remote & nested zmux
-
-Make zmux feel native across SSH and nested layers. Deferred behind the
-picker/dashboard convergence so remote entry builds on a unified local surface.
+Make zmux feel native across SSH and nested layers. The picker/dashboard
+convergence this was deferred behind has shipped — entry, creation, and
+management now run through one shared workspace+session surface
+(`internal/tui/workspaceoutline` + `workspace.CreateManagedSession`), so remote
+entry builds on a unified local foundation.
 
 - [ ] **`zmux ssh <host>` connects and auto-attaches a remote tmux session**
   - Remote work should feel like opening a local workspace, not like manually
@@ -58,6 +28,8 @@ picker/dashboard convergence so remote entry builds on a unified local surface.
   - Connecting into a host that also runs zmux needs predictable key handling
     and visual cues for outer vs inner layers.
   - Favor a small compatibility contract over broad terminal-emulator tricks.
+
+## Next
 
 ### Session persistence
 
