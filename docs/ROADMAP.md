@@ -127,6 +127,13 @@ entry builds on a unified local foundation.
 
 ### Run & watch reliability
 
+- [ ] **`-s` tab resolution leaks across sessions (bug)**
+  - With the same tab name in two sessions, `run`/`type`/`send -s <session>`
+    can resolve to the same-named tab in another session instead of the one the
+    `-s` target names — the label/pin lookup is not strictly scoped to `-s`.
+  - Tab resolution under an explicit `-s` must constrain the search to that
+    session before any cross-session label match.
+
 - [ ] **Sentinel-free completion via optional shell integration**
   - A shell hook could report exit status without adding a visible sentinel to
     command history.
