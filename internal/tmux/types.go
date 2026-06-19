@@ -12,6 +12,7 @@ type Session struct {
 	LastAttached time.Time
 	Dir          string
 	Group        string // session group name (empty if ungrouped)
+	Clone        bool   // zmux-created ephemeral group clone (@zmux_clone); safe to GC
 	Managed      bool
 	Workspace    string
 	SessionLabel string

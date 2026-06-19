@@ -286,28 +286,30 @@ func applyTabPickerResult(app *apppkg.App, sessionName string, res tabpicker.Tab
 	}
 	switch res.Action {
 	case "switch":
-		return session.Switch(app.Runner, target)
+		_, err := session.SwitchView(app.Runner, target)
+		return err
 	case "select":
-		// Switch to the owning session first if it isn't the current one,
-		// then select the window there.
-		if session.RootName(target) != sessionName {
-			if err := session.Switch(app.Runner, target); err != nil {
-				return err
-			}
+		// Switch to a view of the owning session (an independent clone if it is
+		// attached elsewhere), then select the window on whatever session we
+		// actually landed on. Selecting on the root would mutate the shared view
+		// and undo the independence — so use the returned session, not target.
+		actual, err := session.SwitchView(app.Runner, target)
+		if err != nil {
+			return err
 		}
-		if err := app.Runner.SelectWindow(target, res.Index); err != nil {
+		if err := app.Runner.SelectWindow(actual, res.Index); err != nil {
 			return err
 		}
 		touchPickerMRU(app, target, res.TabID)
 		return nil
 	case "select-pane":
-		// A rider tab: focus its host window, then the pane itself.
-		if session.RootName(target) != sessionName {
-			if err := session.Switch(app.Runner, target); err != nil {
-				return err
-			}
+		// A rider tab: focus its host window, then the pane itself. Same as
+		// select — operate on the session SwitchView landed on, not the root.
+		actual, err := session.SwitchView(app.Runner, target)
+		if err != nil {
+			return err
 		}
-		if err := app.Runner.SelectWindow(target, res.Index); err != nil {
+		if err := app.Runner.SelectWindow(actual, res.Index); err != nil {
 			return err
 		}
 		if err := app.Runner.SelectPane(res.Pane); err != nil {
@@ -430,7 +432,8 @@ func handleDashboardResult(app *apppkg.App, action, chosen string) error {
 		if !app.Runner.IsInsideTmux() {
 			return attachOwnedSession(app, chosen)
 		}
-		return session.Switch(app.Runner, chosen)
+		_, err := session.SwitchView(app.Runner, chosen)
+		return err
 
 	case "focus":
 		if chosen == "" || app.Runner.IsInsideTmux() {

@@ -24,7 +24,7 @@ func parseSessions(output string) ([]Session, error) {
 			continue
 		}
 
-		fields := strings.SplitN(line, "\t", 12)
+		fields := strings.SplitN(line, "\t", 13)
 		if len(fields) < 5 {
 			return nil, fmt.Errorf("expected at least 5 tab-delimited fields, got %d: %q", len(fields), line)
 		}
@@ -78,6 +78,9 @@ func parseSessions(output string) ([]Session, error) {
 		}
 		if len(fields) > 11 {
 			s.SessionID = fields[11]
+		}
+		if len(fields) > 12 {
+			s.Clone = fields[12] == "1" || fields[12] == "true"
 		}
 
 		sessions = append(sessions, s)

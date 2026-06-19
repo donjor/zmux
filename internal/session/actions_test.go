@@ -1,11 +1,53 @@
 package session
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/donjor/zmux/internal/tmux"
 )
+
+// failGroupedRunner overrides NewGroupedSession to fail while delegating every
+// other call to the embedded MockRunner — MockRunner.Err is a single field that
+// would poison ListSessions too, so a wrapper is the cleanest way to fail just
+// the clone-create step.
+type failGroupedRunner struct {
+	*tmux.MockRunner
+}
+
+func (f *failGroupedRunner) NewGroupedSession(target, name string) error {
+	return errors.New("grouped session create failed")
+}
+
+func methodCalls(m *tmux.MockRunner, method string) []tmux.MockCall {
+	var out []tmux.MockCall
+	for _, c := range m.Calls {
+		if c.Method == method {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func callIndex(m *tmux.MockRunner, method string, args ...string) int {
+	for i, c := range m.Calls {
+		if c.Method != method || len(c.Args) < len(args) {
+			continue
+		}
+		ok := true
+		for j, a := range args {
+			if c.Args[j] != a {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return i
+		}
+	}
+	return -1
+}
 
 func TestCreateCallsNewSession(t *testing.T) {
 	m := tmux.NewMockRunner()
@@ -201,5 +243,259 @@ func TestRename(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected RenameSession call with correct args")
+	}
+}
+
+func TestSwitchViewPlainWhenUnattached(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "other"
+	m.Sessions = []tmux.Session{{Name: "target", Attached: false}}
+
+	actual, err := SwitchView(m, "target")
+	if err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if actual != "target" {
+		t.Errorf("expected actual %q, got %q", "target", actual)
+	}
+	if len(methodCalls(m, "NewGroupedSession")) != 0 {
+		t.Error("should not clone when target is unattached")
+	}
+	if callIndex(m, "SwitchClient", "target") < 0 {
+		t.Error("expected plain SwitchClient(target)")
+	}
+}
+
+func TestSwitchViewClonesWhenAttached(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "other"
+	m.Sessions = []tmux.Session{{Name: "target", Attached: true}}
+
+	actual, err := SwitchView(m, "target")
+	if err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if actual != "target-b" {
+		t.Errorf("expected actual %q, got %q", "target-b", actual)
+	}
+
+	// Order is load-bearing: create clone, switch to it, THEN arm teardown.
+	iNew := callIndex(m, "NewGroupedSession", "target", "target-b")
+	iSwitch := callIndex(m, "SwitchClient", "target-b")
+	iArm := callIndex(m, "SetSessionOption", "target-b", "destroy-unattached", "on")
+	if iNew < 0 || iSwitch < 0 || iArm < 0 {
+		t.Fatalf("missing call: NewGroupedSession=%d SwitchClient=%d SetSessionOption=%d", iNew, iSwitch, iArm)
+	}
+	if iNew >= iSwitch || iSwitch >= iArm {
+		t.Errorf("expected order NewGroupedSession < SwitchClient < SetSessionOption, got %d < %d < %d", iNew, iSwitch, iArm)
+	}
+}
+
+func TestSwitchViewManagedCloneNaming(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "other"
+	m.Sessions = []tmux.Session{{Name: "zws_w__s", Attached: true}}
+
+	actual, err := SwitchView(m, "zws_w__s")
+	if err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if actual != "zws_w__s__clone_b" {
+		t.Errorf("expected managed clone name, got %q", actual)
+	}
+	if callIndex(m, "NewGroupedSession", "zws_w__s", "zws_w__s__clone_b") < 0 {
+		t.Error("expected managed __clone_b grouped session")
+	}
+}
+
+func TestSwitchViewNoOpSameRoot(t *testing.T) {
+	for _, prev := range []string{"target", "target-b"} {
+		m := tmux.NewMockRunner()
+		m.DisplayMessageResult = prev
+		m.Sessions = []tmux.Session{
+			{Name: "target", Attached: true},
+			{Name: "target-b", Group: "target", Clone: true, Attached: true},
+		}
+
+		actual, err := SwitchView(m, "target")
+		if err != nil {
+			t.Fatalf("SwitchView() error: %v", err)
+		}
+		if actual != prev {
+			t.Errorf("prev %q: expected no-op return %q, got %q", prev, prev, actual)
+		}
+		if len(methodCalls(m, "SwitchClient")) != 0 {
+			t.Errorf("prev %q: should not switch when already on the target root", prev)
+		}
+		if len(methodCalls(m, "NewGroupedSession")) != 0 {
+			t.Errorf("prev %q: should not clone on a no-op", prev)
+		}
+	}
+}
+
+func TestSwitchViewGCsLeftClone(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "foo-b" // leaving a grouped clone
+	m.Sessions = []tmux.Session{
+		{Name: "target", Attached: false},
+		{Name: "foo", Attached: false},
+		{Name: "foo-b", Group: "foo", Clone: true, Attached: false}, // zmux clone, clientless after the switch
+	}
+
+	if _, err := SwitchView(m, "target"); err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if callIndex(m, "KillSession", "foo-b") < 0 {
+		t.Error("expected the left clone foo-b to be garbage-collected")
+	}
+}
+
+func TestSwitchViewDoesNotKillManuallyGroupedSession(t *testing.T) {
+	// A user-created group member (tmux new-session -t foo -s foo-b) reports a
+	// non-empty session_group just like a zmux clone, but carries no @zmux_clone
+	// marker. It must never be garbage-collected.
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "foo-b"
+	m.Sessions = []tmux.Session{
+		{Name: "target", Attached: false},
+		{Name: "foo", Attached: false},
+		{Name: "foo-b", Group: "foo", Clone: false, Attached: false}, // grouped by hand, not zmux
+	}
+
+	if _, err := SwitchView(m, "target"); err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if callIndex(m, "KillSession", "foo-b") >= 0 {
+		t.Error("must not kill a session grouped by the user (no @zmux_clone marker)")
+	}
+}
+
+func TestSwitchViewDoesNotGCStillAttachedClone(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "foo-b"
+	m.Sessions = []tmux.Session{
+		{Name: "target", Attached: false},
+		{Name: "foo-b", Group: "foo", Clone: true, Attached: true}, // another client still on it
+	}
+
+	if _, err := SwitchView(m, "target"); err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if callIndex(m, "KillSession", "foo-b") >= 0 {
+		t.Error("must not kill a clone that still has an attached client")
+	}
+}
+
+func TestSwitchViewSwitchesToStandaloneCloneNamedTarget(t *testing.T) {
+	// Target is a standalone session named "foo-b" (no @zmux_clone marker).
+	// SwitchView must switch to it literally, not strip to "foo".
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "dev"
+	m.Sessions = []tmux.Session{
+		{Name: "dev", Attached: true},
+		{Name: "foo", Attached: false},
+		{Name: "foo-b", Group: "", Clone: false, Attached: false}, // standalone target
+	}
+
+	actual, err := SwitchView(m, "foo-b")
+	if err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if actual != "foo-b" {
+		t.Errorf("expected literal switch to %q, got %q", "foo-b", actual)
+	}
+	if callIndex(m, "SwitchClient", "foo-b") < 0 {
+		t.Error("must switch to the standalone foo-b, not its name-root foo")
+	}
+	if callIndex(m, "SwitchClient", "foo") >= 0 {
+		t.Error("must not redirect a standalone foo-b target to foo")
+	}
+}
+
+func TestSwitchViewSwitchesFromStandaloneCloneName(t *testing.T) {
+	// On a standalone session genuinely named "foo-b" (no @zmux_clone marker),
+	// switching to the distinct real session "foo" must actually switch — the
+	// no-op guard must not mistake the name for a clone-of-foo view.
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "foo-b"
+	m.Sessions = []tmux.Session{
+		{Name: "foo", Attached: false},
+		{Name: "foo-b", Group: "", Clone: false, Attached: false}, // standalone, not a clone
+	}
+
+	actual, err := SwitchView(m, "foo")
+	if err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if actual != "foo" {
+		t.Errorf("expected a real switch to %q, got no-op %q", "foo", actual)
+	}
+	if callIndex(m, "SwitchClient", "foo") < 0 {
+		t.Error("must switch to foo, not no-op on the standalone foo-b")
+	}
+	if callIndex(m, "KillSession", "foo-b") >= 0 {
+		t.Error("must not kill the standalone foo-b")
+	}
+}
+
+func TestSwitchViewGroupedSessionFailureFallsBack(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "other"
+	m.Sessions = []tmux.Session{{Name: "target", Attached: true}}
+	r := &failGroupedRunner{MockRunner: m}
+
+	actual, err := SwitchView(r, "target")
+	if err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if actual != "target" {
+		t.Errorf("expected fallback to root %q, got %q", "target", actual)
+	}
+	if callIndex(m, "SwitchClient", "target") < 0 {
+		t.Error("expected fallback SwitchClient(target) after clone-create failure")
+	}
+	if len(methodCalls(m, "SetSessionOption")) != 0 {
+		t.Error("should not arm teardown when no clone was created")
+	}
+}
+
+func TestSwitchViewDisplayMessageErrorProceeds(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageFunc = func(target, format string) (string, error) {
+		return "", errors.New("no current client")
+	}
+	m.Sessions = []tmux.Session{{Name: "target", Attached: false}}
+
+	actual, err := SwitchView(m, "target")
+	if err != nil {
+		t.Fatalf("SwitchView() should not fail on DisplayMessage error: %v", err)
+	}
+	if actual != "target" {
+		t.Errorf("expected %q, got %q", "target", actual)
+	}
+	if callIndex(m, "SwitchClient", "target") < 0 {
+		t.Error("expected SwitchClient(target) despite DisplayMessage error")
+	}
+}
+
+func TestAttachInsideTmuxClonesWhenAttached(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.InsideTmux = true
+	m.DisplayMessageResult = "other"
+	m.Sessions = []tmux.Session{{Name: "target", Attached: true}}
+
+	if err := Attach(m, "target"); err != nil {
+		t.Fatalf("Attach() error: %v", err)
+	}
+	if callIndex(m, "NewGroupedSession", "target", "target-b") < 0 {
+		t.Error("expected Attach inside tmux to clone an already-attached target")
+	}
+	if callIndex(m, "SwitchClient", "target-b") < 0 {
+		t.Error("expected switch to the clone")
+	}
+	for _, c := range m.Calls {
+		if c.Method == "AttachSession" {
+			t.Error("should not AttachSession when inside tmux")
+		}
 	}
 }

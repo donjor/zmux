@@ -337,7 +337,8 @@ func cycleWorkspaceSession(app *apppkg.App, direction int) error {
 	target := sessions[next]
 
 	_ = app.WorkspaceStore.SetLastActive(wsName, target)
-	return app.Runner.SwitchClient(target)
+	_, serr := session.SwitchView(app.Runner, target)
+	return serr
 }
 
 func switchToWorkspacePosition(app *apppkg.App, pos int) error {
@@ -360,7 +361,8 @@ func switchToWorkspacePosition(app *apppkg.App, pos int) error {
 
 	target := sessions[idx]
 	_ = app.WorkspaceStore.SetLastActive(wsName, target)
-	return app.Runner.SwitchClient(target)
+	_, serr := session.SwitchView(app.Runner, target)
+	return serr
 }
 
 func newWsNewSessionCmd(app *apppkg.App) *cobra.Command {
