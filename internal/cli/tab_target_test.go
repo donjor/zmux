@@ -169,6 +169,31 @@ func TestTabKillPaneOfKillsPaneOnly(t *testing.T) {
 	}
 }
 
+// tab kill addresses the bare window index shown in `zmux tabs` (the `N:`
+// column) when no name/label matches — the read-tabs → act convenience.
+func TestTabKillByDisplayIndex(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Windows["test-session"] = []tmux.Window{
+		{Index: 0, Name: "main", Active: true},
+		{Index: 1, Name: "tests"},
+	}
+
+	rootCmd.SetArgs([]string{"tab", "kill", "1"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab kill by index failed: %v", err)
+	}
+
+	killed := false
+	for _, c := range mock.Calls {
+		if c.Method == "KillWindow" && len(c.Args) == 2 && c.Args[0] == "test-session" && c.Args[1] == "1" {
+			killed = true
+		}
+	}
+	if !killed {
+		t.Fatal("expected KillWindow on window index 1")
+	}
+}
+
 // tab kill on a full tab kills its window by id, guarded against the last
 // window of the session.
 func TestTabKillFullTabKillsWindow(t *testing.T) {
