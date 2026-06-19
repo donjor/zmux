@@ -104,6 +104,18 @@ commands needing input/passwords/sudo/manual control; shared visibility in a nam
 tab; stopping/inspecting an existing long-running process; sidecars; terminal
 capability diagnosis.
 
+**Tab hygiene — spawn less, tear down after.** The guard pushes long-running work
+into named tabs; the unspoken other half is not leaving sprawl behind.
+
+- **Reuse, don't multiply.** Ad-hoc commands belong in your own shell or one shared
+  tab — not a fresh named tab per task. One peer tab; one worker session per worktree.
+- **Tear down when the task ends.** Kill task-scoped tabs (peer, worker, ad-hoc
+  `run`) once their work is integrated; don't park dead shells. `zmux tab kill <name>`
+  / `zmux session kill <session>` (the `zmux tabs` index number also kills).
+- **Don't wrap an app-detached daemon in a tab.** A process the app itself backgrounds
+  (its own `setsid`/session, surviving independent of any pane) needs no zmux tab — the
+  tab is pure overhead. Tabs are for processes *you* babysit.
+
 **Never:**
 
 - `&`, `nohup`, `disown`, or any ad-hoc background job — use `zmux run -d` so
