@@ -9,6 +9,16 @@ versioning is semver-ish until the first public release.
 
 ### Added
 
+- **Independent per-client views when switching sessions in a workspace**
+  `workspace` - switching between a workspace's sessions while already attached
+  (prefix+alt+N, session cycle, command palette, dashboard pick) now gives each client its own
+  viewport instead of collapsing every attached client onto one shared
+  window/pane. When the target session is already attached elsewhere, the switch
+  lands on a fresh session-group clone — the same independence you already get
+  opening a workspace in a new window; tab select/select-pane target that clone,
+  not the shared root. Clones zmux creates carry a `@zmux_clone` marker so the one
+  a client leaves is garbage-collected once clientless, while a session you
+  grouped by hand (`tmux new-session -t foo -s foo-b`) is never touched.
 - **`zmux where` (alias `whoami`) — one-shot current context** `agents`
   `workspace` - report the current context as a single answer: workspace,
   session (local label + raw `zws_…` tmux name), tab, pane id, and cwd. Composes
