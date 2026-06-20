@@ -47,7 +47,12 @@ func NewExecutor(runner tmux.Runner, fs config.FS, om overmind.Client, wsStore w
 func (e *Executor) Run(action Action) PostAction {
 	switch payload := action.Payload.(type) {
 	case SessionSwitchPayload:
-		if err := session.Switch(e.Runner, payload.Name); err != nil {
+		// Switching to an existing session: route through SwitchView so a target
+		// attached by another client gets an independent viewport (clone) rather
+		// than collapsing onto the shared view — same as the workspace/dashboard
+		// switch paths. No follow-up window/pane select here, so the landed
+		// session is discarded.
+		if _, err := session.SwitchView(e.Runner, payload.Name); err != nil {
 			return PostAction{Kind: PostError, Err: fmt.Errorf("switch session: %w", err)}
 		}
 		return PostAction{Kind: PostClose}

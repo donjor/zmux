@@ -34,7 +34,8 @@ func newTestExecutor(t *testing.T) (*Executor, *tmux.MockRunner, *fakeFS) {
 
 func TestExecutorSessionSwitch(t *testing.T) {
 	exe, mock, _ := newTestExecutor(t)
-	// Mock must pretend the target exists so Switch doesn't short-circuit.
+	// Target exists and is unattached, so SwitchView resolves to a plain switch
+	// (no clone) and the action closes.
 	mock.Sessions = []tmux.Session{{Name: "dev"}}
 	mock.InsideTmux = true
 
@@ -56,6 +57,35 @@ func TestExecutorSessionSwitchError(t *testing.T) {
 	}
 	if post.Err == nil {
 		t.Error("expected error to be propagated")
+	}
+}
+
+func TestExecutorSessionSwitchClonesAttached(t *testing.T) {
+	exe, mock, _ := newTestExecutor(t)
+	// Target attached by another client → SwitchView must clone for an
+	// independent viewport instead of collapsing onto the shared view.
+	mock.Sessions = []tmux.Session{{Name: "dev", Attached: true}}
+	mock.InsideTmux = true
+
+	post := exe.Run(Action{Payload: SessionSwitchPayload{Name: "dev"}})
+	if post.Kind != PostClose {
+		t.Fatalf("kind = %v, want PostClose", post.Kind)
+	}
+
+	var cloned, switchedToClone bool
+	for _, c := range mock.Calls {
+		if c.Method == "NewGroupedSession" && len(c.Args) == 2 && c.Args[0] == "dev" && c.Args[1] == "dev-b" {
+			cloned = true
+		}
+		if c.Method == "SwitchClient" && len(c.Args) == 1 && c.Args[0] == "dev-b" {
+			switchedToClone = true
+		}
+	}
+	if !cloned {
+		t.Errorf("expected NewGroupedSession(dev, dev-b), calls = %v", mock.Calls)
+	}
+	if !switchedToClone {
+		t.Errorf("expected SwitchClient(dev-b), calls = %v", mock.Calls)
 	}
 }
 
