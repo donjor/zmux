@@ -63,7 +63,9 @@ func newLogStartCmd(app *apppkg.App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rt, err := resolveTabTarget(app, session, args[0])
+			// log start mutates (PipePane + SetPaneOption) — scope to the target
+			// session so a bare name never pipes another session's pane (report 039).
+			rt, err := resolveTabTargetScoped(app, session, args[0], scopeSessionOnly)
 			if err != nil {
 				return err
 			}
@@ -111,7 +113,9 @@ func newLogStopCmd(app *apppkg.App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			rt, err := resolveTabTarget(app, session, args[0])
+			// log stop mutates (PipePane "" to detach) — session-scoped so a bare
+			// name never touches another session's pane (report 039).
+			rt, err := resolveTabTargetScoped(app, session, args[0], scopeSessionOnly)
 			if err != nil {
 				return err
 			}

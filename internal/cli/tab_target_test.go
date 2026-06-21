@@ -410,6 +410,64 @@ func TestResolveTabTargetWarnsWhenBareNameResolvesOutsideSession(t *testing.T) {
 	}
 }
 
+// report 039: a mutation must never resolve a tab in another session via the
+// server-wide convenience. The match is dropped → in-session raw fallback, no
+// "outside the current session" warning (refusing is correct, "pass -s" would
+// mislead).
+func TestResolveTabTargetForMutationRefusesCrossSession(t *testing.T) {
+	app, mock := newTestApp(t)
+	mock.Sessions = []tmux.Session{{Name: "source"}, {Name: "peer"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%9", "peer", "@9", 0, "ztab_peer01", "codex-peer"),
+	}
+
+	var (
+		rt  resolvedTab
+		err error
+	)
+	stderr := captureStderr(t, func() {
+		rt, err = resolveTabTargetForMutation(app, "source", "codex-peer", "codex-peer")
+	})
+	if err != nil {
+		t.Fatalf("resolveTabTargetForMutation failed: %v", err)
+	}
+	if rt.found() {
+		t.Fatalf("mutation resolved a cross-session tab (Tab=%v Win=%v) — must refuse", rt.Tab, rt.Win)
+	}
+	if rt.Target != "source:codex-peer" {
+		t.Fatalf("target = %q, want in-session raw fallback source:codex-peer", rt.Target)
+	}
+	if strings.Contains(stderr, "outside the current session") {
+		t.Fatalf("unexpected cross-session warning on the refusal path: %q", stderr)
+	}
+}
+
+// report 039: dropping the cross-session match must fall through to the
+// in-session findWindow pass, NOT straight to raw fallback — otherwise a local
+// legacy window of the same name is shadowed and a duplicate is created. This
+// is the edge that justifies the choke-point break over a post-filter.
+func TestResolveTabTargetScopedPrefersInSessionLegacyWindow(t *testing.T) {
+	app, mock := newTestApp(t)
+	mock.Sessions = []tmux.Session{{Name: "source"}, {Name: "peer"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%9", "peer", "@9", 0, "ztab_peer01", "build"),
+	}
+	mock.Windows["source"] = []tmux.Window{
+		{Index: 3, Name: "build"}, // unlabeled legacy window, same name, local
+	}
+
+	rt, err := resolveTabTargetScoped(app, "source", "build", scopeSessionOnly)
+	if err != nil {
+		t.Fatalf("resolveTabTargetScoped failed: %v", err)
+	}
+	if rt.Win == nil {
+		t.Fatalf("expected the in-session legacy window to resolve, got Tab=%v Target=%q", rt.Tab, rt.Target)
+	}
+	if rt.Target != "source:3" {
+		t.Fatalf("target = %q, want the local window source:3", rt.Target)
+	}
+}
+
 func tabMoveCrossWorkspaceApp(t *testing.T) (*apppkg.App, *tmux.MockRunner) {
 	t.Helper()
 	app, mock := newTestApp(t)

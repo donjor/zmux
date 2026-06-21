@@ -188,7 +188,9 @@ func newTabKillCmd(app *apppkg.App) *cobra.Command {
 			}
 			current = strings.TrimSpace(current)
 
-			rt, err := resolveTabTarget(app, current, tabName)
+			// kill mutates (destroys a tab) — never reach across sessions by a
+			// bare name (report 039). Cross-session kill must be explicit.
+			rt, err := resolveTabTargetScoped(app, current, tabName, scopeSessionOnly)
 			if err != nil {
 				return err
 			}

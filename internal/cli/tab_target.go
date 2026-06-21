@@ -37,22 +37,51 @@ type resolvedTab struct {
 // fallback, where tmux's own error surfaces and create-on-miss callers create.
 func (rt resolvedTab) found() bool { return rt.Tab != nil || rt.Win != nil }
 
+// resolveScope controls what a bare name is allowed to match when it has no
+// in-session hit but is unique server-wide (the tabs.Resolve convenience):
+//
+//   - scopeAllowElsewhere keeps the convenience for commands that only read
+//     (watch/log tail/tab show) or cross sessions on purpose (tab move) — a
+//     unique tab anywhere resolves, with a loud warning.
+//   - scopeSessionOnly refuses an out-of-session match so a command that
+//     mutates — injects keystrokes, writes state, kills, starts a pipe — can
+//     never act on another session's pane (report 039). The match is dropped
+//     and resolution falls through to the in-session window/raw fallback, so
+//     run creates in-scope and send/kill/log surface a clean in-session miss.
+type resolveScope int
+
+const (
+	scopeAllowElsewhere resolveScope = iota
+	scopeSessionOnly
+)
+
 // resolveTabTarget maps a tab name to a tmux target, read-only. Resolution
 // order (ratified): logical tab by exact id → exact label in session scope →
 // legacy window label/name → raw session:name fallback. Only ambiguity
 // errors; a missing tab falls through so callers that create-on-miss keep
 // working. A scan failure degrades silently to the legacy path.
 func resolveTabTarget(app *apppkg.App, session, name string) (resolvedTab, error) {
+	return resolveTabTargetScoped(app, session, name, scopeAllowElsewhere)
+}
+
+// resolveTabTargetScoped is resolveTabTarget with an explicit cross-session
+// policy. See resolveScope.
+func resolveTabTargetScoped(app *apppkg.App, session, name string, scope resolveScope) (resolvedTab, error) {
 	if all, err := tabs.ListLogicalTabs(app.Runner); err == nil {
 		t, rerr := tabs.Resolve(all, name, session)
 		switch {
 		case rerr == nil:
 			// A bare name with no in-scope match still resolves when it is
-			// unique server-wide (tabs.Resolve convenience). That silently
-			// crossed into the wrong session in report 007 (a peer tab spawned
-			// elsewhere). Keep the convenience but make it loud: name the session
-			// it landed in so a wrong-session hit is caught and can be pinned -s.
+			// unique server-wide (tabs.Resolve convenience). report 007 made the
+			// cross loud; report 039 makes it refusable: a mutation must never
+			// land on another session's pane.
 			if session != "" && !t.InScope(session) {
+				if scope == scopeSessionOnly {
+					// Drop the out-of-session match; fall through to the
+					// in-session findWindow/raw fallback. No warning — refusing
+					// is correct here, so "pass -s" would be misleading.
+					break
+				}
 				fmt.Fprintf(os.Stderr, "zmux: tab %q resolved to session %q, outside the current session %q — pass -s %s to target it explicitly\n", name, t.Session, session, t.Session)
 			}
 			return resolvedTab{
@@ -85,7 +114,7 @@ func resolveTabTarget(app *apppkg.App, session, name string) (resolvedTab, error
 //   - the state-write destination resolves once here, shared by the
 //     clear-stale and mark-running writes that follow.
 func resolveTabTargetForMutation(app *apppkg.App, session, name, claimLabel string) (resolvedTab, error) {
-	rt, err := resolveTabTarget(app, session, name)
+	rt, err := resolveTabTargetScoped(app, session, name, scopeSessionOnly)
 	if err != nil || rt.Win == nil {
 		return rt, err
 	}

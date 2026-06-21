@@ -22,6 +22,24 @@ func TestResolveExactID(t *testing.T) {
 	}
 }
 
+// report 039: session-group clones repeat one shared pane as a same-ID row per
+// clone session. ID resolution must prefer the in-scope clone so a session-only
+// caller doesn't falsely refuse a tab the user sees as local.
+func TestResolveExactIDPrefersInScopeClone(t *testing.T) {
+	clones := []LogicalTab{
+		// Same ID under the root, then the clone — root listed first.
+		{ID: "ztab_g", Label: "srv", PaneID: "%7", Session: "dev", OriginSession: "dev", Placement: PlacementFull},
+		{ID: "ztab_g", Label: "srv", PaneID: "%7", Session: "dev-b", OriginSession: "dev-b", Placement: PlacementFull},
+	}
+	got, err := Resolve(clones, "ztab_g", "dev-b")
+	if err != nil {
+		t.Fatalf("clone id resolve failed: %v", err)
+	}
+	if !got.InScope("dev-b") {
+		t.Fatalf("want the in-scope clone row (dev-b), got session %q", got.Session)
+	}
+}
+
 func TestResolveLabelInScope(t *testing.T) {
 	got, err := Resolve(fixture(), "buddy", "work")
 	if err != nil || got.ID != "ztab_a" {
