@@ -5,10 +5,28 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: `agents`, `workspace`, `dashboard`, `ui` | Compare: `v0.8.0...HEAD`
+> Release tag: pending | Topics: — | Compare: `v0.9.0...HEAD`
+
+## [0.9.0] - 2026-06-21
+> Release tag: `v0.9.0` | Topics: `agents`, `workspace`, `dashboard`, `ui` | Compare: `v0.8.0...v0.9.0`
 
 ### Added
 
+- **Tab reaper — auto-expire stale tabs by lifecycle policy** `agents` - a new
+  `zmux reap` classifies every tab (origin/scope/age/idle/live) and applies a
+  verdict: adopt unborn pre-existing tabs, flag stale ones, kill those an earlier
+  sweep already flagged. Agent-created task tabs are litter on a short clock
+  (~1h idle); human/pre-existing tabs get a long, visible ramp (flag at 4h, kill
+  at 24h). Kills are re-validated pane-exactly against a fresh scan, never drop a
+  session's last window, and skip panes with a live foreground process or
+  background job. Runs lazily (throttled) from `ls`/`tabs`/`run` and from baked
+  `client-attached`/`session-created` tmux hooks; `zmux reap --dry-run` previews
+  and nothing is killed without an earlier flag. Protect a tab with
+  `run --keep` or `run --scope daemon`; a fresh ad-hoc `run -n <name>` nudges you
+  to reuse a roster tab (e.g. `scratch`) instead of accumulating litter. The
+  zmux skill's session-start hook tags an agent's own shell `scope=agent-shell`
+  (itself never reaped), so tabs the agent spawns inherit `origin=agent` and the
+  short agent TTL automatically — no per-command flag or env var needed.
 - **Independent per-client views when switching sessions in a workspace**
   `workspace` - switching between a workspace's sessions while already attached
   (prefix+alt+N, session cycle, command palette, dashboard pick) now gives each client its own

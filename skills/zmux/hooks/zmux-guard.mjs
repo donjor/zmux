@@ -435,6 +435,14 @@ export function guard(command, opts = {}) {
   return res
 }
 
+// isBypassed reports an explicit waver token on the command. Needed by the
+// run_in_background check below, which fires on commands classify() found safe —
+// guard()'s own bypass branch only triggers on a non-allow verdict, so it never
+// consumes the token for an inherently-safe command.
+export function isBypassed(command) {
+  return BYPASS_ENV.test(command) || BYPASS_COMMENT.test(command)
+}
+
 // repoCwdFromPath reports whether cwd sits inside zmux's own source tree, where
 // raw tmux is a legitimate dev tool (matches the Go CLI's go.mod walk in spirit).
 export function repoCwdFromPath(cwd) {
@@ -474,6 +482,20 @@ export function render(res) {
     ].join('\n')
   }
 
+  if (res.kind === 'background_param') {
+    return [
+      `zmux-guard: ${res.reason}.`,
+      arrow.trimEnd(),
+      ``,
+      `\`run_in_background: true\` is the harness's own backgrounding — a second off-screen`,
+      `path the shell-level guard can't see. A multi-minute job there is invisible to the`,
+      `user and unmanaged; put it in a named zmux tab so it's shared and inspectable`,
+      `(\`zmux watch <name>\`). A quick (<60s) poll? Use the Monitor tool, or bypass below.`,
+      ``,
+      `Genuinely need it inline? Prefix \`ZMUX_ALLOW=1\` or append \`# zmux: allow\`.`,
+    ].join('\n')
+  }
+
   // runtime / background block
   return [
     `zmux-guard: ${res.reason}.`,
@@ -508,6 +530,26 @@ function main() {
     res = guard(command, { repoCwd: repoCwdFromPath(cwd) })
   } catch {
     process.exit(0)
+  }
+
+  // Harness-native backgrounding: the Bash tool's `run_in_background: true` is a
+  // tool PARAMETER, not shell `&`/`nohup`, so the string classifier above never
+  // sees it — a second "long-running off-screen" path the guard was blind to
+  // (report 013). This check is intentionally OUTSIDE the shared classifier:
+  // run_in_background has no meaning in the corpus or for codex/pi, so it stays a
+  // Claude-hook-only adapter concern. If the command would otherwise pass, treat
+  // the background flag itself as the runtime signal and route it to a zmux tab.
+  if (
+    res.decision === 'allow' &&
+    payload?.tool_input?.run_in_background === true &&
+    !isBypassed(command)
+  ) {
+    res = {
+      kind: 'background_param',
+      decision: 'block',
+      target: 'runtime',
+      reason: 'run_in_background hides a long-running job off-screen — run it in a named zmux tab',
+    }
   }
 
   if (res.decision === 'allow') process.exit(0)

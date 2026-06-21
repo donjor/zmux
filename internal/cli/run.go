@@ -24,6 +24,32 @@ import (
 
 const zmuxSentinelPrefix = ":::AGENT_DONE"
 
+// isRosterTabName reports whether name is a canonical roster tab — the shared
+// roster the zmux skill teaches (dev/scratch/agent-shells, plus peer/worker
+// patterns). Ad-hoc names outside it earn a one-line reuse nudge. Keep in sync
+// with the roster in skills/zmux/SKILL.md.
+func isRosterTabName(name string) bool {
+	switch name {
+	case "dev", "scratch", "claude", "codex":
+		return true
+	}
+	return strings.HasSuffix(name, "-peer") || strings.HasPrefix(name, "worker")
+}
+
+// callerLifecycle reads the lifecycle origin/scope of the pane the command was
+// invoked from ($TMUX_PANE), enabling origin inheritance: a `run` fired from
+// inside an agent-shell tab is itself agent-originated. Returns empties when not
+// in a pane or unstamped — ResolveOrigin then falls back to env/human.
+func callerLifecycle(app *apppkg.App) (origin, scope string) {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" {
+		return "", ""
+	}
+	origin, _ = app.Runner.ShowPaneOption(pane, tabs.OptOrigin)
+	scope, _ = app.Runner.ShowPaneOption(pane, tabs.OptScope)
+	return origin, scope
+}
+
 func newRunCmd(app *apppkg.App) *cobra.Command {
 	var runWindowName string
 	var runSessionFlag string
@@ -38,6 +64,10 @@ func newRunCmd(app *apppkg.App) *cobra.Command {
 	var runCWD string
 	var runRecipeSession string
 	var runTabMode string
+	var runTTL time.Duration
+	var runKeep bool
+	var runScope string
+	var runOrigin string
 
 	cmd := &cobra.Command{
 		Use:   "run <recipe|command>",
@@ -72,6 +102,7 @@ Examples:
   zmux run 'npm test' -n tests -s myproject   # target specific session`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			MaybeReap(app, time.Now()) // GC stale tabs before spawning a new one
 			if !runForceCommand && shouldDispatchRecipeRun(cmd, app, args, runWindowName, runSessionFlag, runFollow, runDetach, runYes, runDryRun) {
 				return runRecipeFromRun(app, cmd, args[0], args[1:], recipe.PlanOptions{
 					CWD:       runCWD,
@@ -180,6 +211,12 @@ Examples:
 			// than a silent duplicate.
 			if runWindowName != "" {
 				fmt.Fprintf(os.Stderr, "no tab %q in %s — creating\n", name, sessionName)
+				// Roster nudge (plan 038): a fresh ad-hoc named tab is the
+				// sprawl slip. Non-blocking, create-only; --keep / --scope daemon
+				// and peer/worker names opt out (they're deliberate roster tabs).
+				if !isRosterTabName(name) && !runKeep && runScope != tabs.ScopeDaemon {
+					fmt.Fprintf(os.Stderr, "tip: %q is an ad-hoc tab — reuse 'scratch' (one-offs) or 'dev' (runtime) to avoid sprawl (zmux skill: tab roster)\n", name)
+				}
 			}
 
 			dir, _ := os.Getwd()
@@ -209,6 +246,24 @@ Examples:
 				if _, err := tabs.Stamp(app.Runner, paneID, paneID, name, tablabel.SourcePane); err != nil {
 					return fmt.Errorf("stamp tab: %w", err)
 				}
+				// Lifecycle birth stamp (plan 038): records origin/scope/born so
+				// the reaper can reason about this tab. Set-once on born, so a
+				// reused tab keeps its original identity. Non-fatal — hygiene
+				// metadata must never break the actual run.
+				scope := runScope
+				if scope == "" {
+					scope = tabs.ScopeTask
+				}
+				callerOrigin, callerScope := callerLifecycle(app)
+				origin := tabs.ResolveOrigin(runOrigin, callerOrigin, callerScope, os.Getenv("ZMUX_ACTOR"))
+				_ = tabs.StampBirth(app.Runner, paneID, origin, scope, time.Now())
+				if runTTL > 0 {
+					_ = tabs.SetTTL(app.Runner, paneID, runTTL)
+				}
+				if runKeep {
+					_ = tabs.SetKeep(app.Runner, paneID, true)
+				}
+				_ = tabs.TouchInput(app.Runner, paneID, time.Now())
 			}
 
 			if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
@@ -241,6 +296,11 @@ Examples:
 	cmd.Flags().StringVar(&runCWD, "cwd", "", "recipe working directory override")
 	cmd.Flags().StringVar(&runRecipeSession, "recipe-session", "", "recipe session override")
 	cmd.Flags().StringVar(&runTabMode, "tab-mode", "", "recipe tab mode: run, ready, or empty")
+	cmd.Flags().DurationVar(&runTTL, "ttl", 0, "auto-reap this tab after it's idle this long (e.g. 30m, 2h)")
+	cmd.Flags().BoolVar(&runKeep, "keep", false, "never auto-reap this tab")
+	cmd.Flags().StringVar(&runScope, "scope", "", "lifecycle scope: task (default), daemon, shell — daemon is never auto-reaped")
+	cmd.Flags().StringVar(&runOrigin, "origin", "", "lifecycle origin override: agent|human (default inferred)")
+	_ = cmd.Flags().MarkHidden("origin")
 	return cmd
 }
 

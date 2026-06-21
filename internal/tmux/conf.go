@@ -275,6 +275,16 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		focusClearCmd := fmt.Sprintf("%s tab state clear --target #{pane_id} --if attention --source focus --quiet >/dev/null 2>&1 || true", zmuxBin)
 		fmt.Fprintf(&b, "set-hook -g session-window-changed[1] \"run-shell -b '%s'\"\n", focusClearCmd)
 		fmt.Fprintf(&b, "set-hook -g window-pane-changed \"run-shell -b '%s'\"\n", focusClearCmd)
+
+		// Baked-in tab reaper (plan 038). Lazy + throttled sweep on the
+		// low-frequency, non-recursive lifecycle events: a human sitting down
+		// (client-attached) and a new session being born (session-created, e.g. an
+		// agent's `session run`). The reaper kills windows, never creates sessions
+		// or attaches, so neither event re-fires from a sweep; the @zmux_last_reap
+		// throttle dedupes bursts. Backgrounded (-b), silent, best-effort.
+		reapCmd := fmt.Sprintf("%s reap --lazy --quiet >/dev/null 2>&1 || true", zmuxBin)
+		fmt.Fprintf(&b, "set-hook -g client-attached[1] \"run-shell -b '%s'\"\n", reapCmd)
+		fmt.Fprintf(&b, "set-hook -g session-created[3] \"run-shell -b '%s'\"\n", reapCmd)
 	}
 
 	// Two-line bar hooks — reconcile per-session status lines to the configured
@@ -282,8 +292,13 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	// bar never reflows). No -b flag: run synchronously so the status count is
 	// correct before redraw.
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "set-hook -g session-created \"run-shell '%s bar-adjust'\"\n", zmuxBin)
-		fmt.Fprintf(&b, "set-hook -g session-closed \"run-shell '%s bar-adjust'\"\n", zmuxBin)
+		// Explicit [0] index, NOT a bare name. An unindexed `set-hook -g
+		// session-created` REPLACES the whole hook array, wiping the indexed
+		// refresh[2] and reaper[3] hooks set above (verified: tmux clobbers the
+		// array on an unindexed write). Pinning bar-adjust to its [0] slot keeps
+		// all three live.
+		fmt.Fprintf(&b, "set-hook -g session-created[0] \"run-shell '%s bar-adjust'\"\n", zmuxBin)
+		fmt.Fprintf(&b, "set-hook -g session-closed[0] \"run-shell '%s bar-adjust'\"\n", zmuxBin)
 		fmt.Fprintf(&b, "set-hook -g client-session-changed[1] \"run-shell '%s bar-adjust'\"\n", zmuxBin)
 	}
 	b.WriteString("\n")

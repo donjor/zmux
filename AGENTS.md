@@ -64,5 +64,7 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
 - [README.md](README.md) - user-facing install and command reference.
 - [docs/architecture.md](docs/architecture.md) - package map and change guide.
 - [docs/qa.md](docs/qa.md) - QA runner behavior.
+- [docs/agent-grounding.md](docs/agent-grounding.md) - drive zzmux to ground/QA
+  your own changes (spawn protocol, `--now` time injection, dev-QA split).
 - [docs/pi-zmux-extension.md](docs/pi-zmux-extension.md) - Pi integration.
 - [skills/zmux/SKILL.md](skills/zmux/SKILL.md) - terminal orchestration skill.

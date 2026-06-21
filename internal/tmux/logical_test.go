@@ -68,3 +68,23 @@ func TestLogicalRowFormatFieldCount(t *testing.T) {
 		t.Errorf("logicalRowFormat has %d fields, parser expects %d", got, logicalRowFields)
 	}
 }
+
+func TestParseLogicalRowsLifecycleFields(t *testing.T) {
+	line := strings.Join([]string{
+		"%9", "work", "", "0",
+		"@3", "1", "scratch", "0", "1", "1780707143",
+		"1", "node", "/h", "t",
+		"ztab_x", "scratch", "pane", "", "", "",
+		"agent", "1780700000", "task", "3600", "1", "1780701000", "1780702000", "4242",
+	}, "\t")
+	rows := parseLogicalRows(line)
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	r := rows[0]
+	if r.Origin != "agent" || r.Born != "1780700000" || r.Scope != "task" ||
+		r.TTL != "3600" || r.Keep != "1" || r.StaleAt != "1780701000" ||
+		r.LastInputAt != "1780702000" || r.PanePID != 4242 {
+		t.Errorf("lifecycle fields mismatch: %+v", r)
+	}
+}

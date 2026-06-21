@@ -53,8 +53,8 @@ test('bypass keeps the natural kind but flips decision to allow', () => {
 
 // --- adapter: the hook process maps decision → exit code as documented ---
 
-function runHook(command, cwd = '/home/user/some/project') {
-  const payload = JSON.stringify({ tool_input: { command }, cwd })
+function runHook(command, cwd = '/home/user/some/project', toolInput = {}) {
+  const payload = JSON.stringify({ tool_input: { command, ...toolInput }, cwd })
   try {
     execFileSync('node', [hookPath], { input: payload, stdio: ['pipe', 'pipe', 'pipe'] })
     return 0
@@ -81,4 +81,22 @@ test('hook exits 0 on a safe command', () => {
 
 test('hook exits 0 inside the zmux repo (raw tmux exempt)', () => {
   assert.equal(runHook('tmux capture-pane -t main -p', '/home/user/donjor/zmux'), 0)
+})
+
+// --- adapter: Bash `run_in_background: true` is the harness-native long-running
+// path the string classifier can't see (report 013) ---
+
+test('hook exits 2 on a safe command launched with run_in_background', () => {
+  const cmd = 'timeout 6000 bun run scripts/eval.ts --cap 12'
+  assert.equal(runHook(cmd), 0) // command string alone is safe…
+  assert.equal(runHook(cmd, undefined, { run_in_background: true }), 2) // …the bg flag blocks it
+})
+
+test('run_in_background block honors an explicit bypass token', () => {
+  const cmd = 'timeout 6000 bun run scripts/eval.ts # zmux: allow'
+  assert.equal(runHook(cmd, undefined, { run_in_background: true }), 0)
+})
+
+test('run_in_background: false leaves a safe command alone', () => {
+  assert.equal(runHook('git status', undefined, { run_in_background: false }), 0)
 })

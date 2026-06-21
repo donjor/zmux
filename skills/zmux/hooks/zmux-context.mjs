@@ -56,6 +56,17 @@ try {
 
 if (!session) done(null)
 
+// Tag this pane as the agent's home shell (origin=agent, scope=agent-shell).
+// This is the root signal the reaper's origin inheritance needs: tabs the agent
+// spawns with `zmux run` then inherit origin=agent (short idle TTL), while this
+// shell itself is never auto-reaped. Idempotent, fire-and-forget, fail-open — a
+// priming hook must never wedge startup.
+try {
+  zmux(['tab', 'mark-agent'])
+} catch {
+  // best-effort: an older zmux without `tab mark-agent`, or no resolvable pane
+}
+
 let tabs = ''
 try {
   tabs = zmux(['tabs'])
@@ -80,7 +91,7 @@ if (tabs) {
 lines.push(
   "Read a tab: `zmux watch <tab>` (read-only). Interact: `zmux send <tab> <keys>` / `zmux type <tab> '<text>'`. " +
     "New work: `zmux run '<cmd>' -n <name>` (add -d for servers). Other sessions: `zmux ls -s`. " +
-    'A PreToolUse guard blocks raw tmux and background jobs, so reach for zmux first.',
+    'A PreToolUse guard blocks raw tmux and background jobs (shell `&`/`nohup` and Bash `run_in_background`), so reach for zmux first.',
 )
 
 done(lines.join('\n'))

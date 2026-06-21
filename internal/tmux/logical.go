@@ -38,9 +38,21 @@ type LogicalPaneRow struct {
 	State       string // @zmux_state
 	Anchor      string // @zmux_tab_anchor (advisory pane-of host)
 	Hidden      string // @zmux_hidden (origin session name while docked)
+
+	// Lifecycle (plan 038). Raw option values; parse via tabs.ParseUnix/ParseTTL.
+	// Merged-scope reads like the rest, but these are only ever written at pane
+	// scope, so the merged value == the pane value.
+	Origin      string // @zmux_origin (agent|human|preexisting)
+	Born        string // @zmux_born (unix seconds)
+	Scope       string // @zmux_scope
+	TTL         string // @zmux_ttl (seconds)
+	Keep        string // @zmux_keep ("1" = never reap)
+	StaleAt     string // @zmux_stale_at (unix seconds, set by an earlier sweep)
+	LastInputAt string // @zmux_last_input_at (unix seconds)
+	PanePID     int    // pane_pid — root of the pane's foreground process tree
 }
 
-const logicalRowFields = 20
+const logicalRowFields = 28
 
 // logicalRowFormat must stay in field-lockstep with parseLogicalRows and
 // LogicalPaneRow. TAB-separated: tmux passes TAB through format output
@@ -49,7 +61,8 @@ const logicalRowFields = 20
 const logicalRowFormat = "#{pane_id}\t#{session_name}\t#{session_group}\t#{session_attached}\t" +
 	"#{window_id}\t#{window_index}\t#{window_name}\t#{window_active}\t#{window_panes}\t#{window_activity}\t" +
 	"#{pane_active}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_title}\t" +
-	"#{@zmux_tab_id}\t#{@zmux_label}\t#{@zmux_label_source}\t#{@zmux_state}\t#{@zmux_tab_anchor}\t#{@zmux_hidden}"
+	"#{@zmux_tab_id}\t#{@zmux_label}\t#{@zmux_label_source}\t#{@zmux_state}\t#{@zmux_tab_anchor}\t#{@zmux_hidden}\t" +
+	"#{@zmux_origin}\t#{@zmux_born}\t#{@zmux_scope}\t#{@zmux_ttl}\t#{@zmux_keep}\t#{@zmux_stale_at}\t#{@zmux_last_input_at}\t#{pane_pid}"
 
 // ListLogicalPaneRows scans every pane on the server (list-panes -a) and
 // returns one LogicalPaneRow per pane, unset options as empty strings.
@@ -83,6 +96,7 @@ func parseLogicalRows(output string) []LogicalPaneRow {
 		attached, _ := strconv.Atoi(f[3])
 		windowIndex, _ := strconv.Atoi(f[5])
 		windowPanes, _ := strconv.Atoi(f[8])
+		panePID, _ := strconv.Atoi(f[27])
 		var activity time.Time
 		if sec, err := strconv.ParseInt(f[9], 10, 64); err == nil {
 			activity = time.Unix(sec, 0)
@@ -108,6 +122,14 @@ func parseLogicalRows(output string) []LogicalPaneRow {
 			State:           f[17],
 			Anchor:          f[18],
 			Hidden:          f[19],
+			Origin:          f[20],
+			Born:            f[21],
+			Scope:           f[22],
+			TTL:             f[23],
+			Keep:            f[24],
+			StaleAt:         f[25],
+			LastInputAt:     f[26],
+			PanePID:         panePID,
 		})
 	}
 	return rows

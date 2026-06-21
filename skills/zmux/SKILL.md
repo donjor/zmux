@@ -23,8 +23,9 @@ from under you and your next command lands on the wrong slot. Reach for the zmux
 `run -n` over `new-window`.
 
 A `PreToolUse` guard (`hooks/zmux-guard.mjs`, symlinked into `~/.claude/hooks/`)
-**blocks** raw tmux and ad-hoc background jobs (`&`, `nohup`, `npm run dev`) and
-prints the right verb back, so a slip self-corrects. The full mapping table, guard
+**blocks** raw tmux and ad-hoc background jobs — shell `&`/`nohup`, `npm run dev`,
+**and the Bash tool's own `run_in_background: true`** — and prints the right verb
+back, so a slip self-corrects. The full mapping table, guard
 exemptions, and tab-state glyph behavior → **`references/guard-and-tab-states.md`**.
 
 A tab also carries a lifecycle glyph in the bar (● needs-human / ◐ running / ✓ done /
@@ -95,31 +96,50 @@ sessions — list them with `zmux ls` first (`zmux where` is in-tmux only).
 
 ## When to use zmux vs. your shell
 
-Your **shell** for: quick reads/searches (`rg`, `cat`, `git diff`); bounded
-builds/tests/checks that finish this turn; scripts where the captured stdout is the
-artifact.
+The test is **reviewability, not duration**: would a human want to *see, grab, or
+re-run* this?
 
-**zmux** for: anything that keeps running (dev servers, watchers, queues, REPLs);
-commands needing input/passwords/sudo/manual control; shared visibility in a named
-tab; stopping/inspecting an existing long-running process; sidecars; terminal
-capability diagnosis.
+Your **shell** for: quick reads/searches (`rg`, `cat`, `git diff`); bounded
+builds/tests/checks whose captured stdout is the whole artifact — even a slow
+`go test` is fine inline.
+
+**zmux** for: anything that keeps running (dev servers, watchers, queues, REPLs); a
+command that mutates or runs the project in a way worth a glance; input/passwords/
+sudo/manual control; stopping/inspecting an existing long-running process; sidecars;
+terminal capability diagnosis.
+
+**Reuse a tiny roster — never a fresh tab per task.** Address by *purpose*; `run -n
+<name>` reuses an existing tab, so related work stays together:
+
+- `claude` / `codex` — the session's agent shell (long-lived, not a task tab).
+- `dev` — the project runtime: server, service, the main process you stop & restart.
+- `scratch` — reviewable one-offs: mutations, manual takeover, things to inspect/re-run.
+- `<x>-peer` — a review peer (peer skill); `worker-*` — orchestrate sessions.
+
+Inventing `eval-2` / `test-run` is the slip — that's `scratch` (or `dev`). Don't add
+`test` / `build` / `lint` tabs; bounded checks stay in your shell. Full roster +
+reviewability detail → **`references/guard-and-tab-states.md`**.
 
 **Tab hygiene — spawn less, tear down after.** The guard pushes long-running work
 into named tabs; the unspoken other half is not leaving sprawl behind.
 
-- **Reuse, don't multiply.** Ad-hoc commands belong in your own shell or one shared
-  tab — not a fresh named tab per task. One peer tab; one worker session per worktree.
 - **Tear down when the task ends.** Kill task-scoped tabs (peer, worker, ad-hoc
   `run`) once their work is integrated; don't park dead shells. `zmux tab kill <name>`
   / `zmux session kill <session>` (the `zmux tabs` index number also kills).
+- **The reaper backstops you, but don't lean on it.** Idle agent-task tabs auto-expire
+  (~1h); `zmux reap --dry-run` shows the verdicts. Protect a long-lived tab with
+  `run --keep` or `run --scope daemon` (never reaped); peers/workers are already exempt.
+  Auto-reaping is housekeeping for what you forgot, not a substitute for tearing down.
 - **Don't wrap an app-detached daemon in a tab.** A process the app itself backgrounds
   (its own `setsid`/session, surviving independent of any pane) needs no zmux tab — the
   tab is pure overhead. Tabs are for processes *you* babysit.
 
 **Never:**
 
-- `&`, `nohup`, `disown`, or any ad-hoc background job — use `zmux run -d` so
-  processes stay named, visible, and controllable.
+- `&`, `nohup`, `disown`, or the Bash tool's `run_in_background: true` — any
+  ad-hoc background job — use `zmux run -d` so processes stay named, visible, and
+  controllable. The harness param backgrounds work off-screen just like shell `&`;
+  the guard blocks it the same way.
 - unnamed tabs — always `-n`.
 - raw `tmux` for app-level actions (the guard blocks it).
 - your own `:::DONE:::` markers (`zmux run` handles sentinels) or `sleep N && watch`

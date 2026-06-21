@@ -24,6 +24,36 @@ const (
 	OptHidden = "@zmux_hidden"
 )
 
+// Lifecycle user options (pane-canonical, like OptTabID) — how a tab was born
+// and whether it's safe for the reaper to flag/kill. Plan 038.
+const (
+	OptOrigin      = "@zmux_origin"        // agent | human | preexisting
+	OptBorn        = "@zmux_born"          // unix seconds, set ONCE at birth
+	OptScope       = "@zmux_scope"         // agent-shell | task | daemon | peer | worker | shell
+	OptTTL         = "@zmux_ttl"           // seconds; optional per-tab override
+	OptKeep        = "@zmux_keep"          // "1" = never auto-reap
+	OptStaleAt     = "@zmux_stale_at"      // unix seconds; recorded by an EARLIER reap sweep
+	OptLastInputAt = "@zmux_last_input_at" // unix seconds; zmux-mediated input (run/send/type)
+)
+
+// Origin values — who created the tab. Default conservative (human/preexisting);
+// only an explicit signal marks a tab agent-created.
+const (
+	OriginAgent       = "agent"
+	OriginHuman       = "human"
+	OriginPreexisting = "preexisting"
+)
+
+// Scope values — what the tab is for. Drives reaper eligibility.
+const (
+	ScopeAgentShell = "agent-shell" // a long-lived agent CLI shell; never auto-killed
+	ScopeTask       = "task"        // an ad-hoc run; reapable when stale
+	ScopeDaemon     = "daemon"      // a long-running server; never auto-killed
+	ScopePeer       = "peer"        // a review peer; peer-skill teardown owns it
+	ScopeWorker     = "worker"      // an orchestrate worker session; orchestrate owns it
+	ScopeShell      = "shell"       // a plain interactive shell
+)
+
 // Placement is where a logical tab physically lives right now.
 type Placement string
 

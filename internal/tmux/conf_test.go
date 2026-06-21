@@ -45,6 +45,45 @@ func TestGenerateConfContainsGeneral(t *testing.T) {
 	}
 }
 
+func TestGenerateConfContainsReapHooks(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	// Baked-in reaper sweeps on attach + session birth (plan 038).
+	checks := []string{
+		`set-hook -g client-attached[1] "run-shell -b '/usr/local/bin/zmux reap --lazy --quiet >/dev/null 2>&1 || true'"`,
+		`set-hook -g session-created[3] "run-shell -b '/usr/local/bin/zmux reap --lazy --quiet >/dev/null 2>&1 || true'"`,
+	}
+	for _, want := range checks {
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing reap hook: %q", want)
+		}
+	}
+
+	// Regression: an UNINDEXED `set-hook -g session-created`/`session-closed`
+	// REPLACES the whole hook array at tmux runtime, silently wiping the indexed
+	// refresh[2] and reaper[3] siblings (a string-contains test alone misses
+	// this — the conf still "contains" [3], it just doesn't survive apply). The
+	// bar-adjust hooks must therefore be pinned to [0], never bare.
+	for _, bad := range []string{
+		`set-hook -g session-created "`,
+		`set-hook -g session-closed "`,
+	} {
+		if strings.Contains(conf, bad) {
+			t.Errorf("conf has UNINDEXED hook that clobbers its indexed siblings (incl. the reaper): %q", bad)
+		}
+	}
+	for _, want := range []string{
+		`set-hook -g session-created[0] "run-shell '/usr/local/bin/zmux bar-adjust'"`,
+		`set-hook -g session-closed[0] "run-shell '/usr/local/bin/zmux bar-adjust'"`,
+	} {
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing indexed bar-adjust hook: %q", want)
+		}
+	}
+}
+
 func TestGenerateConfContainsPrefix(t *testing.T) {
 	cfg := config.DefaultConfig()
 	palette := testPalette()

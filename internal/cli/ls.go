@@ -26,6 +26,7 @@ func newLsCmd(app *apppkg.App) *cobra.Command {
   zmux ls -s           List all sessions (flat, legacy mode)`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			MaybeReap(app, time.Now())
 			if lsSessionsFlag {
 				return lsSessionsFlat(app)
 			}

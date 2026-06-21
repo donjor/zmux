@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/config"
@@ -104,6 +105,9 @@ session is tagged into the workspace but never made the default attach target.`,
 				if _, err := tabs.Stamp(app.Runner, paneID, paneID, tabName, tablabel.SourcePane); err != nil {
 					return fmt.Errorf("stamp tab: %w", err)
 				}
+				// Worker sessions are agent-spawned and orchestrate-owned — the
+				// tab reaper must never auto-kill them (scope=worker). (plan 038)
+				_ = tabs.StampBirth(app.Runner, paneID, tabs.OriginAgent, tabs.ScopeWorker, time.Now())
 			}
 
 			// Detached run: nobody waits on a sentinel, but the running glyph

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/tablabel"
@@ -29,7 +30,29 @@ func newTabCmd(app *apppkg.App) *cobra.Command {
 	cmd.AddCommand(newTabShowCmd(app))
 	cmd.AddCommand(newTabPaneCmd(app))
 	cmd.AddCommand(newTabFullCmd(app))
+	cmd.AddCommand(newTabMarkAgentCmd(app))
 	return cmd
+}
+
+// newTabMarkAgentCmd tags the current pane as an agent's home shell
+// (origin=agent, scope=agent-shell). Driven by the zmux skill's session-start
+// hook so agent-spawned tabs inherit origin=agent (short TTL) without a per-run
+// env flag; the shell itself becomes a keep-scope. Hidden — it's wiring, not a
+// daily verb. Fails open when not in a pane.
+func newTabMarkAgentCmd(app *apppkg.App) *cobra.Command {
+	return &cobra.Command{
+		Use:    "mark-agent",
+		Short:  "Tag the current tab as an agent shell (origin=agent, scope=agent-shell)",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pane := os.Getenv("TMUX_PANE")
+			if pane == "" {
+				return nil // not in a pane — nothing to mark
+			}
+			return tabs.MarkAgentShell(app.Runner, pane, time.Now())
+		},
+	}
 }
 
 func newTabMoveCmd(app *apppkg.App) *cobra.Command {

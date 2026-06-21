@@ -9,6 +9,21 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
+func TestIsRosterTabName(t *testing.T) {
+	roster := []string{"dev", "scratch", "claude", "codex", "codex-peer", "claude-peer", "worker-auth", "worker"}
+	for _, n := range roster {
+		if !isRosterTabName(n) {
+			t.Errorf("%q should be a roster name", n)
+		}
+	}
+	adhoc := []string{"eval-2", "test-run", "test", "build", "lint", "auth-test", "peer", "myworkerish-tab"}
+	for _, n := range adhoc {
+		if isRosterTabName(n) {
+			t.Errorf("%q should NOT be a roster name", n)
+		}
+	}
+}
+
 func TestRunCreatesNewWindow(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}

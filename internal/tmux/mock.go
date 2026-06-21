@@ -1,6 +1,9 @@
 package tmux
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // MockCall records a method invocation on MockRunner.
 type MockCall struct {
@@ -50,6 +53,11 @@ type MockRunner struct {
 	// LogicalRows backs ListLogicalPaneRows.
 	LogicalRows []LogicalPaneRow
 
+	// LogicalRowsByCall, when set, returns successive entries on successive
+	// ListLogicalPaneRows calls (last repeats) — for plan-scan vs fresh-scan tests.
+	LogicalRowsByCall [][]LogicalPaneRow
+	logicalCalls      int
+
 	// NewWindowPaneID is the pane id NewWindow returns ("" by default).
 	NewWindowPaneID string
 
@@ -63,6 +71,12 @@ type MockRunner struct {
 	// keyed "target\x00key"; missing keys read as "" (unset).
 	WindowOptions map[string]string
 	PaneOptions   map[string]string
+
+	// GlobalOptions backs ShowGlobalOption, keyed by option name.
+	GlobalOptions map[string]string
+
+	// PaneChildren backs PaneHasLiveChildren, keyed by pane pid.
+	PaneChildren map[int]bool
 
 	// Optional error to return from any method.
 	Err error
@@ -267,9 +281,20 @@ func (m *MockRunner) ListAllPanes() ([]Pane, error) {
 	return panes, m.Err
 }
 
-// ListLogicalPaneRows returns the configured logical scan rows.
+// ListLogicalPaneRows returns the configured logical scan rows. When
+// LogicalRowsByCall is set, successive calls return successive entries (the last
+// repeats) — lets tests model state changing between a plan scan and a later
+// fresh re-scan; otherwise every call returns LogicalRows.
 func (m *MockRunner) ListLogicalPaneRows() ([]LogicalPaneRow, error) {
 	m.record("ListLogicalPaneRows")
+	if len(m.LogicalRowsByCall) > 0 {
+		i := m.logicalCalls
+		if i >= len(m.LogicalRowsByCall) {
+			i = len(m.LogicalRowsByCall) - 1
+		}
+		m.logicalCalls++
+		return m.LogicalRowsByCall[i], m.Err
+	}
 	return m.LogicalRows, m.Err
 }
 
@@ -439,6 +464,18 @@ func (m *MockRunner) ShowWindowOption(target, key string) (string, error) {
 func (m *MockRunner) ShowPaneOption(target, key string) (string, error) {
 	m.record("ShowPaneOption", target, key)
 	return m.PaneOptions[target+"\x00"+key], m.Err
+}
+
+// ShowGlobalOption returns the configured global option ("" when absent).
+func (m *MockRunner) ShowGlobalOption(key string) (string, error) {
+	m.record("ShowGlobalOption", key)
+	return m.GlobalOptions[key], m.Err
+}
+
+// PaneHasLiveChildren returns the configured value for panePID (false default).
+func (m *MockRunner) PaneHasLiveChildren(panePID int) bool {
+	m.record("PaneHasLiveChildren", strconv.Itoa(panePID))
+	return m.PaneChildren[panePID]
 }
 
 // RefreshStatus records the call.

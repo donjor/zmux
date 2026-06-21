@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/debug"
@@ -28,6 +29,7 @@ Examples:
   zmux t                 # alias`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			MaybeReap(app, time.Now())
 			sessionName := ""
 			if len(args) > 0 {
 				sessionName = args[0]

@@ -653,6 +653,28 @@ func (c *Client) ShowPaneOption(target, key string) (string, error) {
 	return c.run(args...)
 }
 
+// ShowGlobalOption reads a global option scope-exactly (show-options -gqv),
+// returning "" when unset. Unlike DisplayMessage format expansion it needs no
+// attached client, so it's safe from a run-shell hook (the reaper throttle).
+func (c *Client) ShowGlobalOption(key string) (string, error) {
+	return c.run("show-options", "-g", "-q", "-v", key)
+}
+
+// PaneHasLiveChildren reports whether panePID (a pane's foreground shell) has
+// any child process — a backgrounded job an idle prompt hides from
+// pane_current_command. Single `ps --ppid` round-trip; false on any failure so
+// the reaper never blocks a kill on a lookup error it can't interpret.
+func (c *Client) PaneHasLiveChildren(panePID int) bool {
+	if panePID <= 0 {
+		return false
+	}
+	out, err := exec.Command("ps", "--ppid", strconv.Itoa(panePID), "-o", "pid=", "--no-headers").Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != ""
+}
+
 // ListPaneOptionValues returns key's value for every pane on the server,
 // one entry per pane (empty string when unset).
 func (c *Client) ListPaneOptionValues(key string) ([]string, error) {

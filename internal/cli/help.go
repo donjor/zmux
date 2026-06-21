@@ -90,6 +90,7 @@ func printStyledHelp(app *apppkg.App) {
 				{"zmux tab pane <tab>", "Join a tab into the current tab as a pane"},
 				{"zmux tab full [tab]", "Promote focused/named pane-tab to full tab"},
 				{"zmux tab kill <tab>", "Kill a tab"},
+				{"zmux reap [--dry-run]", "Adopt/flag/kill stale tabs by lifecycle policy"},
 			},
 		},
 		{
@@ -98,6 +99,8 @@ func printStyledHelp(app *apppkg.App) {
 				{"zmux run '<cmd>' -n <tab>", "Run + wait for completion"},
 				{"zmux run '<cmd>' -n <tab> -d", "Run detached (servers)"},
 				{"zmux run '<cmd>' -n <tab> -f", "Run + follow output"},
+				{"zmux run '<cmd>' -n <tab> --keep", "Exempt the tab from auto-reaping"},
+				{"zmux run '<cmd>' -n <tab> --scope daemon", "Long-lived tab — never auto-reaped"},
 				{"zmux watch <tab>", "Capture tab output"},
 				{"zmux watch <tab> --until <pat>", "Wait for pattern match"},
 				{"zmux watch <tab> --idle <s>", "Wait until quiet for N seconds"},

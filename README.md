@@ -16,6 +16,7 @@ status bar presets, and a popup dashboard — in a single binary.
 - **Terminal commands** — run, watch, send, type for agent/scripting workflows
 - **Logical tabs** — tabs can run full-screen, ride as panes, or park hidden while staying addressable
 - **Attention states** — running/done/failed/needs-human glyphs in the bar
+- **Tab reaper** — auto-expires idle agent-task tabs by lifecycle policy; live work and `--keep`/daemon tabs are spared
 - **Multi-source discovery** — find sessions across tmux sockets and overmind
 - **Init wizard** — interactive TUI setup
 - **Shell completions** — bash, zsh, fish
@@ -130,6 +131,8 @@ zmux tab full [tab]                 Promote focused/named pane-of tab back to fu
 zmux tab hide <tab>                 Park a tab off the bar in the hidden dock
 zmux tab show <tab>                 Return a hidden tab to its origin session
 zmux tab kill <tab>                 Kill a tab
+zmux reap                           Adopt/flag/kill stale tabs by lifecycle policy
+zmux reap --dry-run                 Preview verdicts only — change nothing
 zmux session kill <session>         Kill a session
 zmux session run <s> -n <t> -- <cmd>  Create a detached local session label, run <cmd> as first tab
 zmux workspace list                 List workspaces (alias: zmux ws)
@@ -148,6 +151,8 @@ When a command needs a session outside the current workspace, pass
 zmux run '<cmd>' -n <tab>      Run command, wait for completion
 zmux run '<cmd>' -n <tab> -d   Run detached (for servers)
 zmux run '<cmd>' -n <tab> -f   Run + follow output
+zmux run '<cmd>' -n <tab> --keep         Exempt the tab from auto-reaping
+zmux run '<cmd>' -n <tab> --scope daemon Long-lived tab — never auto-reaped
 zmux watch <tab>               Capture tab output
 zmux watch <tab> --until <pat> Wait for pattern match
 zmux watch <tab> --idle 3      Wait until the visible screen is quiet for 3s

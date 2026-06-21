@@ -91,7 +91,7 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 | `session` | ~430 | Session model, CRUD, tmp-session helpers |
 | `recipe` | ~1650 | Recipe discovery, TOML parsing, pure planning, dry-run rendering, execution, plus fork/extend/create authoring |
 | `workspace` | ~1250 | Workspace state (TOML), v3 local-label session identity, session tracking, reconciliation |
-| `tabs` | ~950 | Logical-tab identity, scanning, placement, dock hide/show, MRU, and reconciliation |
+| `tabs` | ~1450 | Logical-tab identity, scanning, placement, dock hide/show, MRU, reconciliation, lifecycle stamps (`lifecycle.go`), and the reaper (`reap.go`) |
 | `tabstate` | ~280 | Pane-canonical tab lifecycle state (`running` / `done` / `failed` / `attention`) and bar glyph formatting |
 | `theme` | ~650 | Theme parsing, semantic palette, resolver, embed of bundled themes |
 | `bar` | ~2700 | Status bar generation, presets, two-line logical-tabs rendering, preview |
@@ -224,6 +224,23 @@ commands. Keep new tab-targeting behavior behind that choke point so
 `internal/tabstate` owns lifecycle state (`running`, `done`, `failed`,
 `attention`) and formats the bar glyphs. State is pane-canonical, so it follows
 the tab when the tab moves between full, pane, and dock placements.
+
+`internal/tabs/reap.go` is the tab reaper. `PlanReap` is pure: it classifies
+every scanned row (origin/scope/age/idle/live) into keep/flag/kill/adopt with no
+tmux writes. `ApplyReap` is the executor — it scans, plans, then treats kills as
+advisory: each is re-validated against a fresh second scan and pane-exact option
+reads before `KillWindowByID`, reserving every session group's last window and
+vetoing panes with live foreground or background work. Lifecycle stamps
+(`internal/tabs/lifecycle.go` — origin/scope/born/stale_at, set-once and
+pane-scoped) feed the classifier; `internal/cli/reap.go` exposes the `zmux reap`
+command and a throttled lazy sweep (`MaybeReap`) wired into `ls`/`tabs`/`run`
+and the `client-attached`/`session-created` hooks baked by `internal/tmux/conf.go`.
+Origin inheritance is seeded by `zmux tab mark-agent` (`tabs.MarkAgentShell`),
+which the zmux skill's session-start hook calls to tag an agent's own shell
+`scope=agent-shell` — tabs that shell spawns then inherit `origin=agent` and the
+short agent TTL, while the shell itself is never reaped. For driving and
+grounding the reaper's time-gated behaviour, see
+[agent-grounding.md](agent-grounding.md).
 
 ### QA walkthrough runner
 

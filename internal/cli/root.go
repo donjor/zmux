@@ -146,6 +146,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newTopLevelPaneListCmd(a, "panes"),
 		newTopLevelPaneListCmd(a, "list-panes"),
 		newRefreshCmd(a),
+		newReapCmd(a),
 		newRecipeCmd(a),
 		newRunCmd(a),
 		newScratchCmd(a),

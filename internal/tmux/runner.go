@@ -105,6 +105,15 @@ type Runner interface {
 	// "" when unset, never the merged-scope fallback that format reads do.
 	ShowWindowOption(target, key string) (string, error)
 	ShowPaneOption(target, key string) (string, error)
+	// ShowGlobalOption reads a global option (show-options -gqv): "" when unset.
+	// Client-independent, unlike DisplayMessage format expansion — safe to call
+	// from a run-shell hook with no attached client (the reaper throttle stamp).
+	ShowGlobalOption(key string) (string, error)
+	// PaneHasLiveChildren reports whether the pane's foreground shell (pane_pid)
+	// has any child process — a backgrounded job under an idle prompt that
+	// pane_current_command can't see. False on lookup failure (never block on a
+	// guess). The reaper vetoes a kill when true.
+	PaneHasLiveChildren(panePID int) bool
 	// ApplyOptions batches set-option calls into one tmux invocation
 	// (";"-chained) — state writes touch many options; one spawn, not nine.
 	ApplyOptions(writes []OptionWrite) error
