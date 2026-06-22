@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"strings"
 	"testing"
 
 	apppkg "github.com/donjor/zmux/internal/app"
@@ -138,26 +137,23 @@ func TestAttachOwnedSessionLoopFallsBackWhenNoWorkspaceTarget(t *testing.T) {
 	}
 }
 
-func TestAttachOwnedSessionLoopRefusesDetachOnDestroyOff(t *testing.T) {
+func TestAttachOwnedSessionLoopForcesDetachOnDestroyOn(t *testing.T) {
 	app, mock := newTestApp(t)
 	mock.InsideTmux = false
 	mock.Sessions = []tmux.Session{{Name: "dev"}}
-	mock.DisplayMessageFunc = func(target, format string) (string, error) {
-		if format == "#{detach-on-destroy}" {
-			return "off", nil
-		}
-		return "", nil
-	}
 
 	err := attachOwnedSessionLoop(app, "dev", session.Attach, func(*apppkg.App) error {
-		t.Fatal("fallback dashboard should not run when attach is refused before attach")
+		t.Fatal("fallback dashboard should not run when the session attaches")
 		return nil
 	})
-	if err == nil || !strings.Contains(err.Error(), "detach-on-destroy") {
-		t.Fatalf("expected detach-on-destroy refusal, got %v", err)
+	if err != nil {
+		t.Fatalf("attachOwnedSessionLoop: %v", err)
 	}
-	if fallbackMockHasCall(mock.Calls, "AttachSession", "dev") {
-		t.Fatalf("must refuse before attaching, calls = %v", mock.Calls)
+	if !fallbackMockHasCall(mock.Calls, "SetSessionOption", "dev", "detach-on-destroy", "on") {
+		t.Fatalf("must force detach-on-destroy=on per-session before attach, calls = %v", mock.Calls)
+	}
+	if !fallbackMockHasCall(mock.Calls, "AttachSession", "dev") {
+		t.Fatalf("should still attach after forcing the option, calls = %v", mock.Calls)
 	}
 }
 

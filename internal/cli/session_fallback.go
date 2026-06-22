@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"strings"
 
 	apppkg "github.com/donjor/zmux/internal/app"
@@ -52,9 +51,7 @@ func attachOwnedSessionLoop(app *apppkg.App, name string, attach ownedAttachFunc
 		}
 		seen[root] = true
 
-		if err := ensureDetachOnDestroyAllowsFallback(app.Runner, target); err != nil {
-			return err
-		}
+		forceDetachOnDestroyForFallback(app.Runner, target)
 
 		err := attach(app.Runner, target)
 		if app.Runner.HasSession(root) {
@@ -104,15 +101,10 @@ func nextAttachFallbackTarget(app *apppkg.App, workspaceName string, seen map[st
 	return target, true
 }
 
-func ensureDetachOnDestroyAllowsFallback(runner tmux.Runner, target string) error {
-	value, err := runner.DisplayMessage(target, "#{detach-on-destroy}")
-	if err != nil {
-		return nil
-	}
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "off", "0", "false":
-		return fmt.Errorf("session fallback requires tmux detach-on-destroy=on; remove `set -g detach-on-destroy off` from tmux config")
-	default:
-		return nil
-	}
+// forceDetachOnDestroyForFallback makes the client detach (returning control to
+// zmux) when its session is destroyed, so the owned-attach loop can pick the next
+// target or the dashboard. Set per-session, not -g, so a user's global
+// `detach-on-destroy off` keeps its meaning everywhere except zmux-owned attaches.
+func forceDetachOnDestroyForFallback(runner tmux.Runner, target string) {
+	_ = runner.SetSessionOption(target, "detach-on-destroy", "on")
 }
