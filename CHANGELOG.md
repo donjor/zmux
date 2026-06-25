@@ -5,7 +5,22 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: — | Compare: `v0.9.0...HEAD`
+> Release tag: pending | Topics: `agents` | Compare: `v0.9.0...HEAD`
+
+### Fixed
+
+- **Cross-session tab resolution no longer leaks for mutating commands**
+  `agents` - tab names are per-session unique, but the server-wide "unique
+  elsewhere" convenience in `tabs.Resolve` let a mutation resolve and act on a
+  same-named tab in another session (confirmed live: `run -n codex-peer -s A`
+  typed into a different session's `codex-peer`). Mutating verbs (`run`, `send`,
+  `type`, `tab` state/placement/kill, `log start/stop`) now resolve
+  `SessionOnly` — an out-of-session match is dropped to the in-session
+  window/raw fallback, so `run` creates in-scope and `send`/`kill`/`log` surface
+  a clean miss. Read-only/explicit-cross verbs (`watch`, `log tail`, `tab show`,
+  `tab move`) keep the cross-session reach with a warning. ID lookup prefers an
+  in-scope row so session-group clones (same-ID rows per clone session) still
+  resolve clone-local.
 
 ## [0.9.0] - 2026-06-21
 > Release tag: `v0.9.0` | Topics: `agents`, `workspace`, `dashboard`, `ui` | Compare: `v0.8.0...v0.9.0`
