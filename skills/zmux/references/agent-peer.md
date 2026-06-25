@@ -51,22 +51,32 @@ which task it is serving.
 
 ## Spawn
 
-**Pin the current session first.** With more than one session live, a same-named
-peer tab in another session satisfies a bare `zmux run -n <peer> -d` or
-`watch <peer>` — the peer then comes up, or is driven, in the wrong session on
-the wrong cwd (a real failure: a `claude-peer` review fired against the wrong
-repo). Resolve the session you are in and pass it explicitly on every call:
+**Tab names are per-session unique — reuse the roster name across sessions.**
+A `codex-peer` already live in another session is not your concern; never
+invent a globally-unique name to dodge a "collision." Spawns and writes are
+session-scoped (report 039 / 2e3e8fd): a bare `zmux run -n <peer> -d` creates
+in *your* session and cannot land on another session's tab, and `send`/`type`/
+`kill` refuse to cross — an out-of-session name surfaces a clean in-session
+miss instead of acting on a sibling's pane.
+
+**Pin the current session on reads.** The read path still resolves a unique
+name server-wide, so a bare `watch <peer>` (or `log tail` / `tab show`) with no
+local match reads a *sibling* session's peer (a real failure: a `claude-peer`
+review read against the wrong repo). Resolve where you are and pass `-s` so you
+read your peer, not someone else's:
 
 ```bash
 zmux pane current --json   # "Session" → the session you are in
 zmux ls -s                 # how many sessions exist
 ```
 
-Then pin that session on the spawn and every follow-up:
+Pin that session on the spawn and every follow-up — belt-and-suspenders for
+the writes, load-bearing for the reads:
 `zmux run '…' -n <peer> -d -s <session>`, `zmux watch <peer> -s <session>`,
 `zmux type <peer> -s <session> …`, `zmux tab state … <peer> -s <session>`. zmux
 prints `tab "<peer>" resolved to session "X", outside the current session "Y"`
-when a bare name crosses sessions — seeing that means you skipped the pin.
+on the read path when a bare name crosses — seeing that means you skipped the
+pin.
 
 Reuse first — but verify identity:
 
