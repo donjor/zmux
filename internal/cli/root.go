@@ -52,6 +52,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 	var tabPickerFlag bool
 	var workspacePickerFlag bool
 	var pickerFlag bool
+	var helpMenuFlag bool
 
 	rootCmd := &cobra.Command{
 		Use:           "zmux",
@@ -79,6 +80,10 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 
 			if pickerFlag {
 				return runSessionPicker(a)
+			}
+
+			if helpMenuFlag {
+				return runHelpMenu(a)
 			}
 
 			if err := checkTmuxVersion(a); err != nil {
@@ -109,6 +114,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 	rootCmd.PersistentFlags().BoolVar(&tabPickerFlag, "tab-picker", false, "render tab picker directly (used by Alt+`)")
 	rootCmd.PersistentFlags().BoolVar(&workspacePickerFlag, "workspace-picker", false, "render workspace switcher directly (used by Alt+w)")
 	rootCmd.PersistentFlags().BoolVar(&pickerFlag, "picker", false, "render the workspace+session picker directly (used by prefix+w/s popup)")
+	rootCmd.PersistentFlags().BoolVar(&helpMenuFlag, "help-menu", false, "render the interactive help viewer directly (used by prefix+?)")
 
 	// Override cobra's default -h/--help to show our styled help.
 	rootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {

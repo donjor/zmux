@@ -285,8 +285,8 @@ func TestGenerateConfContainsHelpPopup(t *testing.T) {
 	if !strings.Contains(conf, `bind ? display-popup`) {
 		t.Error("conf missing help popup binding (prefix+?)")
 	}
-	if !strings.Contains(conf, "zmux help") {
-		t.Error("conf missing zmux help in help popup")
+	if !strings.Contains(conf, "--help-menu") {
+		t.Error("conf missing --help-menu (interactive help viewer) in help popup")
 	}
 }
 

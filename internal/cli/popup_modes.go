@@ -15,6 +15,7 @@ import (
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/debug"
+	helppkg "github.com/donjor/zmux/internal/help"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/source"
 	tabspkg "github.com/donjor/zmux/internal/tabs"
@@ -22,6 +23,7 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/dashboard/tabs"
+	"github.com/donjor/zmux/internal/tui/helpview"
 	"github.com/donjor/zmux/internal/tui/palette"
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/tabpicker"
@@ -52,6 +54,21 @@ func launchDashboardPopup(app *apppkg.App) error {
 	zmuxBin := config.SelfBin(app.Profile)
 	// Pass as single shell command string — tmux display-popup -E expects this.
 	return app.Runner.DisplayPopup("-w80%", "-h80%", "-E", zmuxBin+" --dashboard")
+}
+
+// runHelpMenu renders the interactive help viewer (prefix+?): a scrollable,
+// fuzzy-filterable view over the shared help content, replacing the old
+// `zmux help` text dump that overflowed the popup with no scroll.
+func runHelpMenu(app *apppkg.App) error {
+	st, pal, _ := loadActiveStyles(app)
+	restoreDim := dimHostBehindPopup(app.Runner, pal)
+	defer restoreDim()
+
+	model := helpview.New(helppkg.Sections(), st)
+	if _, err := tea.NewProgram(model).Run(); err != nil {
+		return fmt.Errorf("help menu: %w", err)
+	}
+	return nil
 }
 
 // loadActiveStyles loads the configured theme and returns palette-aware styles.

@@ -226,10 +226,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	}
 	b.WriteString("\n")
 
-	// Help popup (prefix+?)
+	// Help popup (prefix+?) — interactive scrollable + fuzzy-filterable viewer.
 	b.WriteString("# Help\n")
 	if zmuxBin != "" {
-		popupBind(&b, false, keys.Help.Key, 60, 60, zmuxBin, "help")
+		popupBind(&b, false, keys.Help.Key, 70, 80, zmuxBin, "--help-menu")
 	}
 	b.WriteString("\n")
 
