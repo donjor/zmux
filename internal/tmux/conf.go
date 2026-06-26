@@ -287,10 +287,18 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		b.WriteString("set-hook -gu window-linked[1]\n")
 		b.WriteString("set-hook -gu window-unlinked[1]\n")
 		b.WriteString("set-hook -gu window-renamed[1]\n")
+		b.WriteString("set-hook -gu window-linked[2]\n")
 		refreshNamesCmd := fmt.Sprintf("%s tab refresh-names #{session_name} >/dev/null 2>&1 || true", zmuxBin)
 		fmt.Fprintf(&b, "set-hook -g window-linked[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
 		fmt.Fprintf(&b, "set-hook -g window-unlinked[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
 		fmt.Fprintf(&b, "set-hook -g window-renamed[1] \"run-shell -b '%s'\"\n", refreshNamesCmd)
+		// Stamp a window born interactively (prefix+c / new-window) as a managed
+		// tab so index/name addressing and `tab pane` joins accept it — the
+		// symmetric completion of session.Create's first-window stamp.
+		// #{hook_window} is the precise newly-linked window (not the session's
+		// active window, which differs under new-window -d / link-window).
+		adoptCmd := fmt.Sprintf("%s tab adopt #{hook_window} >/dev/null 2>&1 || true", zmuxBin)
+		fmt.Fprintf(&b, "set-hook -g window-linked[2] \"run-shell -b '%s'\"\n", adoptCmd)
 
 		// Focus clears `attention` (ratified clear table; done/failed stay
 		// until input). session-window-changed covers switching tabs;

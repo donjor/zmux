@@ -31,7 +31,68 @@ func newTabCmd(app *apppkg.App) *cobra.Command {
 	cmd.AddCommand(newTabPaneCmd(app))
 	cmd.AddCommand(newTabFullCmd(app))
 	cmd.AddCommand(newTabMarkAgentCmd(app))
+	cmd.AddCommand(newTabAdoptCmd(app))
 	return cmd
+}
+
+// newTabAdoptCmd stamps a single newly-linked window as a managed logical tab.
+// Driven by the window-linked tmux hook so a window born interactively
+// (prefix+c / new-window) becomes addressable — index/name resolvers and
+// `tab pane` joins skip panes with no @zmux_tab_id, so without this an
+// interactive window can't be joined ("no tab at index N"). Hidden — it's hook
+// wiring, the symmetric completion of the first-window stamp in session.Create.
+func newTabAdoptCmd(app *apppkg.App) *cobra.Command {
+	return &cobra.Command{
+		Use:    "adopt <window>",
+		Short:  "Stamp a newly-created single-pane window as a managed tab",
+		Hidden: true,
+		Args:   cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return adoptWindow(app, strings.TrimSpace(args[0]))
+		},
+	}
+}
+
+// adoptWindow claims ONE window's pane as a logical tab. Scoped to a single
+// window on purpose: a session-wide scan would let any new-window event
+// retroactively adopt older raw windows the user never asked to manage, which
+// would breach the 027 floor ("raw panes never auto-adopted"). Stamping only
+// the just-created window is a pure stamp-at-create, precedented by the
+// first-window stamp in session.Create.
+//
+// Best-effort throughout: it runs from a background hook, so a vanished window,
+// dead pane, or any tmux hiccup returns nil rather than surfacing noise — the
+// next window event re-attempts. Guards mirror Reconcile's unambiguous-claim
+// rule: non-reserved session, exactly one pane, pane not already managed. The
+// session is read off the pane (not passed in) so a clone/dock window is
+// recognised without trusting a hook-format arg to expand.
+func adoptWindow(app *apppkg.App, window string) error {
+	if window == "" {
+		return nil
+	}
+	panes, err := app.Runner.ListWindowPanes(window)
+	if err != nil || len(panes) != 1 {
+		return nil // gone mid-hook, or a raw split — only single-pane windows claim
+	}
+	if tabs.IsReservedSession(panes[0].Session) {
+		return nil // dock/__zmux_ sessions are parking, never presented
+	}
+	paneID := panes[0].ID
+	if paneID == "" {
+		return nil
+	}
+	if id, err := app.Runner.ShowPaneOption(paneID, tabs.OptTabID); err != nil || id != "" {
+		return nil // unreadable, or already a managed tab — idempotent no-op
+	}
+	// A legacy window-scoped @zmux_label migrates onto the pane (canonical
+	// identity); MigrateWindowLabel no-ops on an empty label, so a fresh
+	// window falls through to a display-neutral id-only stamp (empty label ⇒
+	// the bar keeps using the live window name).
+	if id, err := tabs.MigrateWindowLabel(app.Runner, window, paneID); err != nil || id != "" {
+		return nil
+	}
+	_, _ = tabs.Stamp(app.Runner, paneID, paneID, "", "")
+	return nil
 }
 
 // newTabMarkAgentCmd tags the current pane as an agent's home shell

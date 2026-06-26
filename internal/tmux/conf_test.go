@@ -447,9 +447,13 @@ func TestGenerateConfContainsDuplicateNameRefreshHooks(t *testing.T) {
 		`set-hook -gu window-linked[1]`,
 		`set-hook -gu window-unlinked[1]`,
 		`set-hook -gu window-renamed[1]`,
+		`set-hook -gu window-linked[2]`,
 		`set-hook -g window-linked[1] "run-shell -b '/usr/local/bin/zmux tab refresh-names #{session_name} >/dev/null 2>&1 || true'"`,
 		`set-hook -g window-unlinked[1] "run-shell -b '/usr/local/bin/zmux tab refresh-names #{session_name} >/dev/null 2>&1 || true'"`,
 		`set-hook -g window-renamed[1] "run-shell -b '/usr/local/bin/zmux tab refresh-names #{session_name} >/dev/null 2>&1 || true'"`,
+		// Interactive-window adoption stamps the just-linked window so index/name
+		// joins accept a prefix+c window; #{hook_window} scopes it to that one.
+		`set-hook -g window-linked[2] "run-shell -b '/usr/local/bin/zmux tab adopt #{hook_window} >/dev/null 2>&1 || true'"`,
 	} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("conf missing duplicate-name hook: %q", want)
