@@ -166,6 +166,10 @@ func (p *BarProvider) Actions() ([]Action, error) {
 // DashboardProvider generates actions to open dashboard tabs.
 type DashboardProvider struct{}
 
+// Covers declares the open-surface action this provider satisfies (the prefix+
+// Space dashboard).
+func (p *DashboardProvider) Covers() []string { return []string{"dashboard"} }
+
 func (p *DashboardProvider) Actions() ([]Action, error) {
 	return []Action{
 		{
@@ -207,6 +211,10 @@ func (p *DashboardProvider) Actions() ([]Action, error) {
 
 // HelpProvider generates a single "Show keybindings" action.
 type HelpProvider struct{}
+
+// Covers declares the open-surface action this provider satisfies (the prefix+?
+// help).
+func (p *HelpProvider) Covers() []string { return []string{"help"} }
 
 func (p *HelpProvider) Actions() ([]Action, error) {
 	return []Action{

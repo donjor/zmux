@@ -9,6 +9,14 @@ type ActionProvider interface {
 	Actions() ([]Action, error)
 }
 
+// CoverageDeclarer is implemented by providers that surface dynamic families
+// (sessions, logical tabs) or open-surface entries (dashboard, help). The
+// coverage gate reads Covers() to confirm those action specs are reachable
+// without requiring live rows (a session/tab/theme) to exist in a bare test env.
+type CoverageDeclarer interface {
+	Covers() []string
+}
+
 // Registry aggregates actions from multiple providers.
 type Registry struct {
 	providers []ActionProvider
