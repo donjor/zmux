@@ -160,3 +160,75 @@ func TestExecutorUnknownPayloadClosesQuietly(t *testing.T) {
 		t.Errorf("unknown payload: kind = %v, want PostClose", post.Kind)
 	}
 }
+
+// lastCall returns the most recent recorded call with the given method name.
+func lastCall(mock *tmux.MockRunner, method string) (tmux.MockCall, bool) {
+	for i := len(mock.Calls) - 1; i >= 0; i-- {
+		if mock.Calls[i].Method == method {
+			return mock.Calls[i], true
+		}
+	}
+	return tmux.MockCall{}, false
+}
+
+func TestExecutorPaneAndTabOpsDispatch(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload any
+		method  string
+		arg     string // "" = method takes no arg
+	}{
+		{"swap left", PaneActionPayload{Op: PaneSwapLeft}, "SwapPane", "left"},
+		{"swap right", PaneActionPayload{Op: PaneSwapRight}, "SwapPane", "right"},
+		{"swap up", PaneActionPayload{Op: PaneSwapUp}, "SwapPane", "up"},
+		{"swap down", PaneActionPayload{Op: PaneSwapDown}, "SwapPane", "down"},
+		{"equalize", PaneActionPayload{Op: PaneEqualize}, "EqualizeLayout", ""},
+		{"orient", PaneActionPayload{Op: PaneOrient}, "ToggleOrientation", ""},
+		{"focus left", PaneActionPayload{Op: PaneFocusLeft}, "FocusPane", "left"},
+		{"focus right", PaneActionPayload{Op: PaneFocusRight}, "FocusPane", "right"},
+		{"focus up", PaneActionPayload{Op: PaneFocusUp}, "FocusPane", "up"},
+		{"focus down", PaneActionPayload{Op: PaneFocusDown}, "FocusPane", "down"},
+		{"tab next", TabActionPayload{Op: TabNext}, "NextWindow", ""},
+		{"tab prev", TabActionPayload{Op: TabPrev}, "PreviousWindow", ""},
+		{"reorder left", TabActionPayload{Op: TabReorderLeft}, "ReorderWindow", "-1"},
+		{"reorder right", TabActionPayload{Op: TabReorderRight}, "ReorderWindow", "+1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			exe, mock, _ := newTestExecutor(t)
+			post := exe.Run(Action{Payload: tc.payload})
+			if post.Kind != PostClose {
+				t.Fatalf("kind = %v, want PostClose", post.Kind)
+			}
+			call, ok := lastCall(mock, tc.method)
+			if !ok {
+				t.Fatalf("expected %s call, got %v", tc.method, mock.Calls)
+			}
+			if tc.arg != "" {
+				if len(call.Args) != 1 || call.Args[0] != tc.arg {
+					t.Errorf("%s args = %v, want [%s]", tc.method, call.Args, tc.arg)
+				}
+			} else if len(call.Args) != 0 {
+				t.Errorf("%s args = %v, want none", tc.method, call.Args)
+			}
+		})
+	}
+}
+
+func TestExecutorPaneTabOpErrorPropagates(t *testing.T) {
+	for _, payload := range []any{
+		PaneActionPayload{Op: PaneSwapLeft},
+		PaneActionPayload{Op: PaneOrient},
+		TabActionPayload{Op: TabReorderRight},
+	} {
+		exe, mock, _ := newTestExecutor(t)
+		mock.Err = &testErr{"tmux boom"}
+		post := exe.Run(Action{Payload: payload})
+		if post.Kind != PostError {
+			t.Errorf("%#v: kind = %v, want PostError", payload, post.Kind)
+		}
+		if post.Err == nil {
+			t.Errorf("%#v: expected error propagated", payload)
+		}
+	}
+}

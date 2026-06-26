@@ -80,6 +80,17 @@ type Runner interface {
 	KillPane(target string) error
 	SelectPane(target string) error
 	ResizePane(target, axis, size string) error
+	// Pane/tab layout ops on the active pane/window — the palette executor and
+	// the prefix keybinds share these so the two surfaces stay in lockstep.
+	// SwapPane/FocusPane take a direction; ReorderWindow takes -1/+1; orient
+	// shares OrientHorizontalMatch with the prefix+s bind.
+	SwapPane(dir SplitDirection) error
+	FocusPane(dir SplitDirection) error
+	EqualizeLayout() error
+	ToggleOrientation() error
+	NextWindow() error
+	PreviousWindow() error
+	ReorderWindow(delta int) error
 
 	// I/O
 	SendKeys(target string, keys ...string) error

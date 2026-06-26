@@ -358,6 +358,48 @@ func (m *MockRunner) ResizePane(target, axis, size string) error {
 	return m.Err
 }
 
+// SwapPane records the directional pane swap.
+func (m *MockRunner) SwapPane(dir SplitDirection) error {
+	m.record("SwapPane", string(dir))
+	return m.Err
+}
+
+// FocusPane records the directional focus move.
+func (m *MockRunner) FocusPane(dir SplitDirection) error {
+	m.record("FocusPane", string(dir))
+	return m.Err
+}
+
+// EqualizeLayout records the even-spread call.
+func (m *MockRunner) EqualizeLayout() error {
+	m.record("EqualizeLayout")
+	return m.Err
+}
+
+// ToggleOrientation records the orient toggle.
+func (m *MockRunner) ToggleOrientation() error {
+	m.record("ToggleOrientation")
+	return m.Err
+}
+
+// NextWindow records the next-tab move.
+func (m *MockRunner) NextWindow() error {
+	m.record("NextWindow")
+	return m.Err
+}
+
+// PreviousWindow records the previous-tab move.
+func (m *MockRunner) PreviousWindow() error {
+	m.record("PreviousWindow")
+	return m.Err
+}
+
+// ReorderWindow records the relative tab reorder (-1/+1).
+func (m *MockRunner) ReorderWindow(delta int) error {
+	m.record("ReorderWindow", fmt.Sprintf("%+d", delta))
+	return m.Err
+}
+
 // SendKeys records the call.
 func (m *MockRunner) SendKeys(target string, keys ...string) error {
 	m.record("SendKeys", append([]string{target}, keys...)...)

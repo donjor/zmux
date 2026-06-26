@@ -103,6 +103,18 @@ func (e *Executor) Run(action Action) PostAction {
 		}
 		return PostAction{Kind: PostClose}
 
+	case PaneActionPayload:
+		if err := e.runPaneOp(payload.Op); err != nil {
+			return PostAction{Kind: PostError, Err: err}
+		}
+		return PostAction{Kind: PostClose}
+
+	case TabActionPayload:
+		if err := e.runTabOp(payload.Op); err != nil {
+			return PostAction{Kind: PostError, Err: err}
+		}
+		return PostAction{Kind: PostClose}
+
 	case DashboardTabPayload:
 		return PostAction{Kind: PostOpenDashboard, Tab: payload.Tab}
 
@@ -127,4 +139,48 @@ func (e *Executor) Run(action Action) PostAction {
 	default:
 		return PostAction{Kind: PostClose}
 	}
+}
+
+// runPaneOp dispatches a pane-layout op to the typed tmux.Runner method that
+// runs it on the active pane/window.
+func (e *Executor) runPaneOp(op PaneOp) error {
+	switch op {
+	case PaneSwapLeft:
+		return e.Runner.SwapPane(tmux.SplitLeft)
+	case PaneSwapRight:
+		return e.Runner.SwapPane(tmux.SplitRight)
+	case PaneSwapUp:
+		return e.Runner.SwapPane(tmux.SplitUp)
+	case PaneSwapDown:
+		return e.Runner.SwapPane(tmux.SplitDown)
+	case PaneEqualize:
+		return e.Runner.EqualizeLayout()
+	case PaneOrient:
+		return e.Runner.ToggleOrientation()
+	case PaneFocusLeft:
+		return e.Runner.FocusPane(tmux.SplitLeft)
+	case PaneFocusRight:
+		return e.Runner.FocusPane(tmux.SplitRight)
+	case PaneFocusUp:
+		return e.Runner.FocusPane(tmux.SplitUp)
+	case PaneFocusDown:
+		return e.Runner.FocusPane(tmux.SplitDown)
+	}
+	return fmt.Errorf("unknown pane op %d", op)
+}
+
+// runTabOp dispatches a tab op to the typed tmux.Runner method that runs it
+// relative to the active tab.
+func (e *Executor) runTabOp(op TabOp) error {
+	switch op {
+	case TabNext:
+		return e.Runner.NextWindow()
+	case TabPrev:
+		return e.Runner.PreviousWindow()
+	case TabReorderLeft:
+		return e.Runner.ReorderWindow(-1)
+	case TabReorderRight:
+		return e.Runner.ReorderWindow(+1)
+	}
+	return fmt.Errorf("unknown tab op %d", op)
 }
