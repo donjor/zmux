@@ -66,6 +66,28 @@ func Resolve(tabs []LogicalTab, name, scope string) (*LogicalTab, error) {
 	return nil, &AmbiguousError{Name: name, Matches: labeled}
 }
 
+// TabAtIndex returns the full tab at 1-based window index n in the session, or
+// nil. It mirrors the numbered cells of the bar's logical tab row: only full
+// tabs carry a visible number (pane-of tabs ride a host cell, docked tabs are
+// unnumbered), so only a full tab sitting at that window index resolves.
+//
+// Pure and opt-in: placement verbs that want index addressing call this AFTER a
+// normal id/label miss (so a tab literally labeled "2" still wins index 2). The
+// shared name resolver never indexes — that would silently change send / watch
+// / kill / run, which keep tmux window-index/raw semantics (codex R1#2).
+func TabAtIndex(tabs []LogicalTab, session string, n int) *LogicalTab {
+	if n < 1 || session == "" {
+		return nil
+	}
+	for i := range tabs {
+		t := &tabs[i]
+		if t.Session == session && t.Placement == PlacementFull && t.WindowIndex == n {
+			return t
+		}
+	}
+	return nil
+}
+
 // byIDPreferScope finds the tab whose ID == id, preferring an in-scope row.
 // Session-group clones repeat a shared pane once per clone session (FromRows
 // does not collapse them), so the same ID can appear under several sessions.

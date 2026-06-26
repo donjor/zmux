@@ -33,7 +33,12 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	b.WriteString("set -g mouse on\n")
 	b.WriteString("set -g history-limit 50000\n")
 	b.WriteString("set -g escape-time 50\n")
-	b.WriteString("set -g repeat-time 300\n")
+	// 500ms (tmux's own default) over a tighter 300: the prefix+Arrow resize
+	// binds are repeatable (-r), but a 300ms window closes before a human can
+	// press the arrow again, so resize felt one-shot ("the prefix gets
+	// consumed"). 500ms lets consecutive resize/reorder/session-nav presses
+	// chain without re-pressing the prefix.
+	b.WriteString("set -g repeat-time 500\n")
 	b.WriteString("set -g focus-events on\n")
 	b.WriteString("set -g base-index 1\n")
 	b.WriteString("setw -g pane-base-index 1\n")
@@ -108,8 +113,12 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	fmt.Fprintf(&b, "bind %s swap-window -t +1 \\; select-window -t +1\n", keys.TabReorderRight.Key)
 	fmt.Fprintf(&b, "bind %s confirm-before -p \"close tab %s? (y/n)\" kill-window\n", keys.TabKill.Key, tablabel.PlainFormat())
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind %s command-prompt -p \"join tab here:\" \"run-shell '%s tab pane \\\"%%%%\\\"'\"\n", keys.TabJoinPane.Key, zmuxBin)
-		fmt.Fprintf(&b, "bind %s run-shell \"%s tab full --after\"\n", keys.TabFull.Key, zmuxBin)
+		// --notify routes the outcome to a transient status-line message and
+		// exits 0, so a failed/loud join or promote never triggers tmux's
+		// view-mode takeover ("... returned 1" / a sticky stdout dump) that the
+		// user must keypress away.
+		fmt.Fprintf(&b, "bind %s command-prompt -p \"join tab here:\" \"run-shell '%s tab pane --notify \\\"%%%%\\\"'\"\n", keys.TabJoinPane.Key, zmuxBin)
+		fmt.Fprintf(&b, "bind %s run-shell \"%s tab full --after --notify\"\n", keys.TabFull.Key, zmuxBin)
 	}
 	b.WriteString("\n")
 
@@ -147,6 +156,21 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	fmt.Fprintf(&b, "bind -n %s select-pane -D\n", keys.PaneFocusD.Key)
 	b.WriteString("\n")
 
+	// Pane layout (prefix). Swap the active pane with the neighbor in a
+	// direction (-r repeatable, so a pane can be walked across the layout — focus
+	// follows the moved pane), equalize splits, and toggle split orientation.
+	// The orient toggle flips even-horizontal <-> even-vertical by inspecting
+	// window_layout (a left-right split nests as `{...}`); nested/multi-pane
+	// layouts flatten to an even spread — the documented v1 ceiling.
+	writeSection(&b, "Pane layout")
+	fmt.Fprintf(&b, "bind -r %s swap-pane -t '{left-of}'\n", keys.PaneSwapLeft.Key)
+	fmt.Fprintf(&b, "bind -r %s swap-pane -t '{right-of}'\n", keys.PaneSwapRight.Key)
+	fmt.Fprintf(&b, "bind -r %s swap-pane -t '{up-of}'\n", keys.PaneSwapUp.Key)
+	fmt.Fprintf(&b, "bind -r %s swap-pane -t '{down-of}'\n", keys.PaneSwapDown.Key)
+	fmt.Fprintf(&b, "bind %s select-layout -E\n", keys.PaneEqualize.Key)
+	fmt.Fprintf(&b, "bind %s if -F \"#{m:*{*,#{window_layout}}\" \"select-layout even-vertical\" \"select-layout even-horizontal\"\n", keys.SplitOrient.Key)
+	b.WriteString("\n")
+
 	// Sessions
 	writeSection(&b, "Sessions")
 	fmt.Fprintf(&b, "bind %s command-prompt -p \"rename session:\" \"rename-session '%%%%'\"\n", keys.RenameSession.Key)
@@ -159,10 +183,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	// Session navigation (workspace-scoped)
 	writeSection(&b, "Session navigation")
 	if zmuxBin != "" {
-		// prefix+w / prefix+s: workspace+session picker. Both keys open
-		// the same picker — aliases that match user muscle memory
-		// (w = workspace, s = session). The picker is hierarchical so
-		// either entry point works.
+		// prefix+w: hierarchical workspace+session picker. (prefix+s was a
+		// second alias here; it's been reclaimed for the pane split-orientation
+		// toggle above — pane-mode keys take priority over a redundant picker
+		// alias. Any remaining SessionPicker.Aliases still bind.)
 		for _, k := range append([]string{keys.SessionPicker.Key}, keys.SessionPicker.Aliases...) {
 			popupBind(&b, false, k, 60, 50, zmuxBin, "--picker")
 		}
@@ -177,7 +201,9 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace prev\"\n", keys.SessionPrev.Key, zmuxBin)
 		fmt.Fprintf(&b, "bind %s run-shell \"%s workspace next\"\n", keys.SessionNext.Key, zmuxBin)
 	} else {
-		b.WriteString("bind s choose-tree -s\n")
+		// No zmux binary: fall back to tmux's native session tree on prefix+w
+		// (prefix+s is now the pane orient toggle, matching the binary path).
+		b.WriteString("bind w choose-tree -s\n")
 	}
 	b.WriteString("\n")
 

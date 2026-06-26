@@ -126,7 +126,7 @@ zmux where --json                   Same, as JSON (for tooling)
 zmux tab move <tab> <dest>          Move tab to another session
 zmux tab label [label]              Set/clear stable label for current tab
 zmux tab state <state> [tab]        Set lifecycle glyph: attention/running/done/failed/clear
-zmux tab pane <tab> [--into host]   Join a tab as a pane beside another tab
+zmux tab pane <tab|N> [--into host] Join a tab (by name or bar index N) as a pane beside another
 zmux tab full [tab]                 Promote focused/named pane-of tab back to full
 zmux tab hide <tab>                 Park a tab off the bar in the hidden dock
 zmux tab show <tab>                 Return a hidden tab to its origin session
@@ -239,7 +239,10 @@ Prefix: `Ctrl+Space` (configurable)
 | prefix + P | Paste buffer |
 | prefix + ← / → / ↑ / ↓ | Focus pane in direction (tmux default) |
 | prefix + Ctrl+← / → / ↑ / ↓ | Resize pane by one cell (tmux default) |
-| prefix + Alt+← / → / ↑ / ↓ | Resize pane by five cells (tmux default) |
+| prefix + Alt+← / → / ↑ / ↓ | Resize pane by five cells (repeatable) |
+| prefix + Shift+← / → / ↑ / ↓ | Swap pane with the one in that direction (repeatable) |
+| prefix + = | Equalize / spread splits evenly |
+| prefix + s | Toggle split orientation (horizontal ↔ vertical) |
 | prefix + q | Show pane numbers/ids (tmux default) |
 | prefix + z | Toggle pane zoom (tmux default) |
 | prefix + o / ; | Next / previous pane (tmux default) |
@@ -253,12 +256,15 @@ Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
 borders resizes them. Failed or signalled foreground commands stay visible as
 dead panes, so Ctrl+C spam cannot silently delete the tab; clean exits close
 normally. Use `prefix+x` / `zmux tab kill` when you mean to close a stopped tab.
-Split windows render
-pane-border headers with active pane id, title, command, size, and the
-`A-S arrows` focus hint; inactive panes stay
-subtle with index/title only. Split indicators and active-border color make the
-focused pane visible around the divider/bottom edge while pane backgrounds stay
-transparent/default. Single-pane windows keep the border header blank.
+Split windows render pane-border headers in one unified shape —
+`<index> <name> <detail>`: the pane index, the tab's label (or its command when
+the pane isn't zmux-managed), and the pane title. Active and inactive panes use
+the same fields (so the line doesn't reflow on focus change); the active pane is
+distinguished by a `●` marker plus split indicators and active-border color
+around the divider/bottom edge, while pane backgrounds stay transparent/default.
+Single-pane windows keep the border header blank, surfacing the pane title in
+the status bar instead. While the prefix is held over a split, the bar's hint
+line gains pane-layout keys (orient/move/even).
 Auto-named tabs normally use tmux's command name (`pi`, `bash`, etc.). When
 multiple tabs in the same session share that name, zmux marks them as
 `name[cwd]` in the bar (for example `pi[zmux]`) with the cwd suffix dimmed.

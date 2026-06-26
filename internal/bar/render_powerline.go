@@ -46,7 +46,7 @@ func renderLeftPowerline(p *theme.Palette, ctx BarContext) string {
 
 func renderRightPowerline(p *theme.Palette, ctx BarContext) string {
 	if ctx.Prefix {
-		return prefixHints(p)
+		return prefixHints(p, ctx)
 	}
 	var b strings.Builder
 
@@ -141,7 +141,7 @@ func renderLeftRpowerline(p *theme.Palette, ctx BarContext) string {
 
 func renderRightRpowerline(p *theme.Palette, ctx BarContext) string {
 	if ctx.Prefix {
-		return prefixHints(p)
+		return prefixHints(p, ctx)
 	}
 
 	// Build the segments we want to render. Each segment has its own bg.

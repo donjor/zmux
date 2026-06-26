@@ -19,7 +19,7 @@ func TestGenerateConfContainsGeneral(t *testing.T) {
 		`set -g mouse on`,
 		`set -g history-limit 50000`,
 		`set -g escape-time 50`,
-		`set -g repeat-time 300`,
+		`set -g repeat-time 500`,
 		`set -g base-index 1`,
 		`setw -g pane-base-index 1`,
 		`set -g renumber-windows on`,
@@ -175,8 +175,8 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 		"bind n next-window",
 		`bind . command-prompt -p "label tab (blank clears):"`,
 		`set-option -w -t #{window_id} @zmux_label`,
-		`bind J command-prompt -p "join tab here:" "run-shell '/usr/local/bin/zmux tab pane \"%%\"'"`,
-		`bind F run-shell "/usr/local/bin/zmux tab full --after"`,
+		`bind J command-prompt -p "join tab here:" "run-shell '/usr/local/bin/zmux tab pane --notify \"%%\"'"`,
+		`bind F run-shell "/usr/local/bin/zmux tab full --after --notify"`,
 		`bind x confirm-before`,
 		`#{?@zmux_label,#{?#{==:#{@zmux_label},#W},#W,#{@zmux_label} [#W]},#W#{?@zmux_duplicate_name,[#{b:pane_current_path}],}}`,
 	}
@@ -217,6 +217,33 @@ func TestGenerateConfContainsNoPrefixPaneFocusBindings(t *testing.T) {
 		if strings.Contains(conf, "bind -n "+old+" select-pane") {
 			t.Errorf("conf should not use plain Alt pane focus binding %q", old)
 		}
+	}
+}
+
+func TestGenerateConfContainsPaneLayoutBindings(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	checks := []string{
+		// Directional swaps are repeatable (-r) so a pane can be walked.
+		"bind -r S-Left swap-pane -t '{left-of}'",
+		"bind -r S-Right swap-pane -t '{right-of}'",
+		"bind -r S-Up swap-pane -t '{up-of}'",
+		"bind -r S-Down swap-pane -t '{down-of}'",
+		"bind = select-layout -E",
+		// Orientation toggle: format-conditional on window_layout (no shell spawn).
+		`bind s if -F "#{m:*{*,#{window_layout}}" "select-layout even-vertical" "select-layout even-horizontal"`,
+	}
+	for _, want := range checks {
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing pane layout binding: %q", want)
+		}
+	}
+
+	// prefix+s is the orient toggle now, no longer a session-picker alias.
+	if strings.Contains(conf, "bind s display-popup") {
+		t.Error("prefix+s should be the orient toggle, not the session picker")
 	}
 }
 

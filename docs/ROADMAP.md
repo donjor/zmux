@@ -4,55 +4,13 @@
 > Each item is self-contained enough to seed implementation without local
 > scratch files or session history.
 
-## Now — Pane-mode UX & surface parity
+## Now — Surface parity
 
-Pane-mode (joined tabs) is the live dogfooding front: running several agent
-panes in one window surfaced a cluster of readability, layout-control, and
-discoverability gaps. Alongside it, two long-lived surfaces — the command
-palette and the help menu — have drifted behind the feature set and need to be
-pinned canonical so new verbs can't silently go missing.
-
-### Pane-mode UX
-
-- [ ] **Readable pane-border header: `<N> <tab-name> <detail>`**
-  - The focused pane shows a raw `%ID` while the others show bare ordinals that
-    renumber on focus change — unreadable at a glance, and the pixel/cell sizes
-    add noise.
-  - Render `<N> <tab-name> <detail>` with the index and label styled apart
-    (colour/bold, maybe a colon). Surface the rich per-pane detail (the pane
-    title, e.g. an agent's task line) even when a tab is *not* split — feed it to
-    the top bar in single-pane mode too. Drop the cell/pixel sizes.
-
-- [ ] **Discoverable layout-edit keys for panes**
-  - Moving, swapping, reorienting, and equalizing panes has no obvious binding.
-  - Add `prefix+Shift+Arrow` to move/swap a pane, `prefix+s` to toggle split
-    orientation (horizontal↔vertical, Hyprland-style), and an
-    equalize/normalize action (tmux `select-layout even-*`). `prefix+s` is
-    currently only a secondary alias of the workspace+session picker
-    (`session.picker`, primary `prefix+w`) and reported unused — reclaim it.
-  - Mouse: drag a pane *header* to swap position (drag-on-split already
-    resizes); right/double-click a header (and the window) for extra pane
-    actions.
-
-- [ ] **Repeatable pane resize**
-  - `prefix+Alt+Arrow` resizes one step then consumes the prefix, so resizing is
-    a repeated key-mash.
-  - Bind the resize keys with tmux's `-r` repeat flag so the arrows keep
-    resizing while the prefix is held.
-
-- [ ] **Split-aware helper bar**
-  - The prefix helper hints in the top bar don't change when a tab is split.
-  - When panes exist, grow the hints with split-specific actions: F (promote to
-    full), move, switch orientation, resize, equalize.
-
-- [ ] **Join by index, one-keystroke split, no dead promote-to-full view**
-  - Joining a tab as a pane addresses the source by name only — accept a tab
-    **index** too.
-  - After `prefix+F` (promote to full) the window parks on a `full: sim → tmp-1
-    (@60)` confirmation that needs a keypress to clear — drop the interstitial,
-    land straight back on the view.
-  - Explore a single `prefix+<key>` that creates a new tab *and* drops it in as a
-    pane, instead of create-then-join.
+Two long-lived surfaces — the command palette and the help menu — have drifted
+behind the feature set and need to be pinned canonical so new verbs can't
+silently go missing. (Pane-mode UX — readable pane-border headers, layout-control
+keys, repeatable resize, split-aware hints, and index join with no
+keypress-to-dismiss view — shipped; see the changelog.)
 
 ### Command palette parity
 

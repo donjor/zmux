@@ -505,6 +505,14 @@ func (c *Client) DisplayMessage(target, format string) (string, error) {
 	return c.run("display-message", "-t", target, "-p", format)
 }
 
+// ShowMessage flashes text on the current client's status line. -l prints the
+// text literally: the messages carry user-controlled tab labels and window
+// names, and without -l a label like "#(cmd)" would run a shell command and
+// "#{...}" would expand as a tmux format.
+func (c *Client) ShowMessage(text string) error {
+	return c.runSilent("display-message", "-l", text)
+}
+
 // CapturePaneOptions configures a capture-pane invocation.
 type CapturePaneOptions struct {
 	Lines int  // history lines to include (captures from -Lines to the bottom)

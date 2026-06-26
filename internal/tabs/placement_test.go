@@ -7,6 +7,25 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
+func TestDisplayNameFallback(t *testing.T) {
+	cases := []struct {
+		name string
+		tab  LogicalTab
+		want string
+	}{
+		{"label wins", LogicalTab{Label: "work", WindowName: "vim", ID: "ztab_a"}, "work"},
+		{"window name when unlabeled", LogicalTab{WindowName: "bash", ID: "ztab_b"}, "bash"},
+		{"id only as last resort", LogicalTab{ID: "ztab_c"}, "ztab_c"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := DisplayName(&c.tab); got != c.want {
+				t.Errorf("DisplayName = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
 // S6 predicate truth table: group name alone never blocks (it persists after
 // clone death); size>1 without attachments never blocks (gates on attached
 // only, by design); both together do.

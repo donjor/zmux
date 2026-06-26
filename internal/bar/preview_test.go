@@ -1,6 +1,7 @@
 package bar
 
 import (
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -49,10 +50,56 @@ func TestRenderPreviewContainsSampleData(t *testing.T) {
 
 func TestDefaultPrefixHintsIncludeRename(t *testing.T) {
 	p := testPalette()
-	hints := prefixHints(p)
+	hints := prefixHints(p, BarContext{})
 	for _, want := range []string{"dash", "etach", "tab", "session", "rename", "close", "help"} {
 		if !strings.Contains(hints, want) {
 			t.Errorf("prefix hints should include %q, got %q", want, hints)
+		}
+	}
+	// A single (or unknown-count) pane shows none of the pane-layout cluster.
+	for _, gone := range []string{"orient", "move", "even"} {
+		if strings.Contains(hints, gone) {
+			t.Errorf("non-split prefix hints should not include %q, got %q", gone, hints)
+		}
+	}
+}
+
+// Phase 1b: the single-pane "detail" filters pane_title noise (empty, the
+// hostname default, the running command) and truncates a chatty title.
+func TestPaneTitleDetailFiltersNoise(t *testing.T) {
+	host, _ := os.Hostname()
+	cases := []struct {
+		name string
+		ctx  BarContext
+		want string
+	}{
+		{"empty", BarContext{PaneTitle: ""}, ""},
+		{"whitespace", BarContext{PaneTitle: "  "}, ""},
+		{"equals command", BarContext{PaneTitle: "vim", PaneCmd: "vim"}, ""},
+		{"hostname default", BarContext{PaneTitle: host}, ""},
+		{"hostname prefix", BarContext{PaneTitle: host + ":~/x"}, ""},
+		{"real title", BarContext{PaneTitle: "fixing the bar"}, "fixing the bar"},
+	}
+	for _, c := range cases {
+		if got := paneTitleDetail(c.ctx); got != c.want {
+			t.Errorf("%s: paneTitleDetail = %q, want %q", c.name, got, c.want)
+		}
+	}
+
+	long := strings.Repeat("x", 50)
+	got := paneTitleDetail(BarContext{PaneTitle: long})
+	if r := []rune(got); len(r) != 32 || r[31] != '…' {
+		t.Errorf("long title should truncate to 32 runes ending in …, got %q (len %d)", got, len([]rune(got)))
+	}
+}
+
+// Phase 1d: a split window appends the pane-layout hint cluster so the keys
+// are discoverable exactly when they apply.
+func TestPrefixHintsSplitAddsLayoutCluster(t *testing.T) {
+	hints := prefixHints(testPalette(), BarContext{WindowPanes: 2})
+	for _, want := range []string{"orient", "move", "even"} {
+		if !strings.Contains(hints, want) {
+			t.Errorf("split prefix hints should include %q, got %q", want, hints)
 		}
 	}
 }
@@ -61,7 +108,7 @@ func TestDefaultPrefixHintsIncludeRename(t *testing.T) {
 // keys registry. Regression for the historical bug where the hint said
 // ".rename" but "." was bound to label-tab — the real rename key is ",".
 func TestPrefixHintsMatchRegistry(t *testing.T) {
-	hints := stripTmuxStyles(prefixHints(testPalette()))
+	hints := stripTmuxStyles(prefixHints(testPalette(), BarContext{}))
 	cases := []struct{ key, label string }{
 		{keys.RenameSession.Key, "rename"},
 		{keys.LabelTab.Key, "label"},

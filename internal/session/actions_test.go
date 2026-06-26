@@ -2,9 +2,11 @@ package session
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -75,6 +77,32 @@ func TestCreateCallsNewSession(t *testing.T) {
 	}
 	if m.Calls[1].Args[1] != "/home/user/myproject" {
 		t.Errorf("expected dir '/home/user/myproject', got %q", m.Calls[1].Args[1])
+	}
+}
+
+func TestCreateStampsFirstWindow(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageFunc = func(target, format string) (string, error) {
+		return "%7\n", nil // first window's pane id (trailing newline like real tmux)
+	}
+
+	if err := Create(m, "proj", "/tmp"); err != nil {
+		t.Fatalf("Create() error: %v", err)
+	}
+
+	// The first window's pane must be claimed with a tab id so it's a managed
+	// logical tab — otherwise `tab pane` joining into it fails. Stamp writes the
+	// id via ApplyOptions(scope=pane, target=%7, key=@zmux_tab_id, value=ztab_…).
+	var stamped bool
+	for _, c := range m.Calls {
+		if c.Method == "ApplyOptions" && len(c.Args) >= 4 &&
+			c.Args[1] == "%7" && c.Args[2] == tabs.OptTabID &&
+			strings.HasPrefix(c.Args[3], "ztab_") {
+			stamped = true
+		}
+	}
+	if !stamped {
+		t.Fatalf("first window pane not stamped with %s; calls: %v", tabs.OptTabID, m.Calls)
 	}
 }
 

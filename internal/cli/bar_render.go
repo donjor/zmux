@@ -19,6 +19,8 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 	var barRenderGroup string
 	var barRenderGroupSize string
 	var barRenderTopBar string
+	var barRenderPanes string
+	var barRenderPaneTitle string
 
 	cmd := &cobra.Command{
 		Use:    "bar-render <left|right>",
@@ -111,6 +113,13 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			ctx := bar.GatherContext(bar.ExecProber{}, displaySession, paneDir, paneCmd, prefixStr, groupID, workspace)
 			ctx.WorkspacePos = wsPos
 			ctx.WorkspaceCount = wsCount
+			// Pane-mode context (plan 040): split detection drives the
+			// split-aware prefix hints (1d); the title is the single-pane
+			// "detail" the border header would otherwise show (1b).
+			ctx.PaneTitle = barRenderPaneTitle
+			if n, err := strconv.Atoi(barRenderPanes); err == nil {
+				ctx.WindowPanes = n
+			}
 			ctx.ShowWorkspace = cfg.Bar.Segments.Workspace
 			ctx.ShowGit = cfg.Bar.Segments.Git
 			ctx.ShowLang = cfg.Bar.Segments.Lang
@@ -196,6 +205,8 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 		c.Flags().StringVar(&barRenderGroup, "group", "", "session group id (passed from tmux #{session_group})")
 		c.Flags().StringVar(&barRenderGroupSize, "group-size", "", "session group size (passed from tmux #{session_group_size})")
 		c.Flags().StringVar(&barRenderTopBar, "top-bar", "", "top bar variant: tabs, dots, minimal (passed from generate.go)")
+		c.Flags().StringVar(&barRenderPanes, "panes", "", "window pane count (passed from tmux #{window_panes})")
+		c.Flags().StringVar(&barRenderPaneTitle, "pane-title", "", "active pane title (passed from tmux #{pane_title})")
 	}
 	registerFlags(cmd)
 

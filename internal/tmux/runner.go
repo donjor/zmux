@@ -84,6 +84,11 @@ type Runner interface {
 	// I/O
 	SendKeys(target string, keys ...string) error
 	DisplayMessage(target, format string) (string, error)
+	// ShowMessage flashes a transient message on the current client's status
+	// line (display-message with no -p). Unlike DisplayMessage it shows text
+	// rather than reading a format value — used by keybind run-shell wrappers to
+	// report an outcome without tmux's view-mode takeover.
+	ShowMessage(text string) error
 	CapturePane(target string, lines int) (string, error)
 	CapturePaneOpts(target string, opts CapturePaneOptions) (string, error)
 	// PipePane streams a pane's output to a shell command continuously via tmux

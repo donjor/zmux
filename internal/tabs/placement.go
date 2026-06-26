@@ -121,10 +121,16 @@ func Show(r tmux.Runner, t *LogicalTab) (string, error) {
 	return origin, err
 }
 
-// DisplayName is a tab's addressable display name: label, else its id.
+// DisplayName is a tab's addressable display name: label, else the live window
+// name, else its id. Unlabeled-but-managed tabs are normal now (a session's
+// first window is stamped without a label), so the window name is a far friendlier
+// fallback than a raw ztab_ id in status messages.
 func DisplayName(t *LogicalTab) string {
 	if t.Label != "" {
 		return t.Label
+	}
+	if t.WindowName != "" {
+		return t.WindowName
 	}
 	return t.ID
 }

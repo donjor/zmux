@@ -40,7 +40,7 @@ func renderLeftDefault(p *theme.Palette, ctx BarContext) string {
 
 func renderRightDefault(p *theme.Palette, ctx BarContext) string {
 	if ctx.Prefix {
-		return prefixHints(p)
+		return prefixHints(p, ctx)
 	}
 	var b strings.Builder
 	sf := p.Surface.Hex()

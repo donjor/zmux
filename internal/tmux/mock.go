@@ -373,6 +373,12 @@ func (m *MockRunner) DisplayMessage(target, format string) (string, error) {
 	return m.DisplayMessageResult, m.Err
 }
 
+// ShowMessage records the flashed status-line message.
+func (m *MockRunner) ShowMessage(text string) error {
+	m.record("ShowMessage", text)
+	return m.Err
+}
+
 // CapturePane records the call and returns the configured content, honoring
 // the same "at most `lines` logical lines" contract as the real client so
 // bounded-capture behavior is testable through the mock.

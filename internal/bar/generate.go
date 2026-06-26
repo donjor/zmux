@@ -27,7 +27,15 @@ const barRenderArgs = "--session '#S'" +
 	" --group '#{session_group}'" +
 	" --group-size '#{session_group_size}'" +
 	" --pane-cmd '#{pane_current_command}'" +
-	" --dir '#{pane_current_path}'"
+	" --dir '#{pane_current_path}'" +
+	" --panes '#{window_panes}'" +
+	// pane_title is attacker-controllable (any program sets it via an OSC title
+	// escape), and it lands inside the single-quoted #() shell arg. Strip single
+	// quotes via tmux's #{s///} BEFORE embedding: inside single quotes `'` is the
+	// only shell-special char, so removing it makes the arg injection-proof
+	// regardless of other content (codex diff review — this is a trust boundary,
+	// not the cosmetic edge --dir has). The render side filters hostname/cmd noise.
+	" --pane-title '#{s/'//:pane_title}'"
 
 // TopBarFormatCmd returns the tmux #() command string for the top bar
 // status-format entry. Used by generate and by bar-render to
@@ -303,20 +311,33 @@ func sharedOptions(p *theme.Palette) []TmuxOption {
 }
 
 func paneBorderFormat(p *theme.Palette) string {
-	// Keep this as a single tmux format line: tmux pane chrome is limited to
-	// pane-border-status + pane-border-format, so the active pane gets the
-	// richest local context while inactive panes stay calm.
-	return fmt.Sprintf(
-		"#{?#{>:#{window_panes},1},"+
-			"#{?pane_active,"+
-			"#[fg=%s]#[bold] ● #{pane_id} #[fg=%s]#{pane_title} "+
-			"#[nobold]#[fg=%s]#{pane_current_command} #[fg=%s]#{pane_width}x#{pane_height} "+
-			"#[fg=%s]A-S arrows,"+
-			"#[fg=%s] ○ #{pane_index} #[fg=%s]#{pane_title}},"+
-			"}",
-		p.Accent.Hex(), p.FG.Hex(), p.Muted.Hex(), p.Dim.Hex(), p.Info.Hex(),
-		p.Dim.Hex(), p.Muted.Hex(),
+	// Only a split window gets per-pane headers; a lone pane shows none.
+	// Active and inactive panes render the SAME shape — "<N> <name> <detail>" —
+	// so the line doesn't reflow on focus change. The old format swapped in
+	// pane_id + WxH only for the active pane, which read as the panes
+	// renumbering every time focus moved.
+	//   N      = pane_index — stable per slot, not the raw %id.
+	//   name   = the tab's @zmux_label, but ONLY when the pane is zmux-managed
+	//            (@zmux_tab_id is pane-exact). An unmanaged raw split shows its
+	//            command instead, so a window-level label can't leak onto it.
+	//   detail = pane_title (e.g. an agent's task line).
+	//
+	// ponytail: a managed-but-unlabeled pane in a joined window can still
+	// merge-read the host window's @zmux_label — tmux formats can't do a
+	// pane-exact option read. Rare and cosmetic; add a pane-exact label option
+	// if it ever bites.
+	name := "#{?#{@zmux_tab_id}," +
+		"#{?#{@zmux_label},#{@zmux_label},#{pane_current_command}}," +
+		"#{pane_current_command}}"
+	active := fmt.Sprintf(
+		"#[fg=%s]#[bold] ● #{pane_index} #[fg=%s]%s #[nobold]#[fg=%s]#{pane_title} ",
+		p.Accent.Hex(), p.FG.Hex(), name, p.Muted.Hex(),
 	)
+	inactive := fmt.Sprintf(
+		"#[fg=%s] ○ #{pane_index} #[fg=%s]%s #[fg=%s]#{pane_title} ",
+		p.Dim.Hex(), p.Muted.Hex(), name, p.Dim.Hex(),
+	)
+	return fmt.Sprintf("#{?#{>:#{window_panes},1},#{?pane_active,%s,%s},}", active, inactive)
 }
 
 // defaultOptions: Session pill (ACCENT bg, INFO on prefix), prefix hints, clock.
@@ -331,8 +352,11 @@ func defaultOptions(p *theme.Palette) []TmuxOption {
 	// Format: key in accent, description in dim.
 	hi := p.Info.Hex()
 	dm := p.Dim.Hex()
+	// Static fallback hint (Phase 1.5 makes the split-pane variant context-aware).
+	// `s` now toggles split orientation, so the session picker hint points at its
+	// canonical key `w` instead.
 	prefixHint := fmt.Sprintf(
-		"#[fg=%s]spc#[fg=%s]dash #[fg=%s]d#[fg=%s]etach #[fg=%s]c#[fg=%s]tab #[fg=%s]s#[fg=%s]witch #[fg=%s]v#[fg=%s]im #[fg=%s]?#[fg=%s]help ",
+		"#[fg=%s]spc#[fg=%s]dash #[fg=%s]d#[fg=%s]etach #[fg=%s]c#[fg=%s]tab #[fg=%s]w#[fg=%s]switch #[fg=%s]v#[fg=%s]im #[fg=%s]?#[fg=%s]help ",
 		hi, dm, hi, dm, hi, dm, hi, dm, hi, dm, hi, dm,
 	)
 

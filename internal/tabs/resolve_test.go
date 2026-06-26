@@ -77,3 +77,45 @@ func TestResolveNotFound(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+// indexFixture: a "work" session with full tabs at window index 1 and 3, a
+// pane-of rider in window 3, and a docked tab — plus an unrelated session's
+// full tab also at index 1, to prove scoping.
+func indexFixture() []LogicalTab {
+	return []LogicalTab{
+		{ID: "ztab_1", Label: "edit", PaneID: "%1", Session: "work", OriginSession: "work", Placement: PlacementFull, WindowIndex: 1},
+		{ID: "ztab_3", Label: "serve", PaneID: "%3", Session: "work", OriginSession: "work", Placement: PlacementFull, WindowIndex: 3},
+		{ID: "ztab_r", Label: "rider", PaneID: "%4", Session: "work", OriginSession: "work", Placement: PlacementPaneOf, WindowIndex: 3},
+		{ID: "ztab_d", Label: "logs", PaneID: "%5", Session: DockSession, OriginSession: "work", Placement: PlacementDock, WindowIndex: 1},
+		{ID: "ztab_o", Label: "other", PaneID: "%9", Session: "other", OriginSession: "other", Placement: PlacementFull, WindowIndex: 1},
+	}
+}
+
+func TestTabAtIndex(t *testing.T) {
+	fix := indexFixture()
+	cases := []struct {
+		name    string
+		session string
+		n       int
+		want    string // PaneID, or "" for nil
+	}{
+		{"full at 1", "work", 1, "%1"},
+		{"full at 3 is the owner not the rider", "work", 3, "%3"},
+		{"renumber gap is empty", "work", 2, ""},
+		{"zero is invalid", "work", 0, ""},
+		{"negative is invalid", "work", -1, ""},
+		{"out of range", "work", 9, ""},
+		{"empty session", "", 1, ""},
+		{"dock tab at win 1 not index-addressable", "work", 1, "%1"},
+	}
+	for _, c := range cases {
+		got := TabAtIndex(fix, c.session, c.n)
+		var pane string
+		if got != nil {
+			pane = got.PaneID
+		}
+		if pane != c.want {
+			t.Errorf("%s: TabAtIndex(%q,%d) = %q, want %q", c.name, c.session, c.n, pane, c.want)
+		}
+	}
+}

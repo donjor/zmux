@@ -28,10 +28,20 @@ var (
 	// Sessions (prefix).
 	RenameSession = Binding{Action: "rename", Key: ",", Help: "Rename session", Category: CatSessions, Context: Prefix}
 	NewSession    = Binding{Action: "session.new", Key: "C", Help: "New session in current workspace", Category: CatSessions, Context: Prefix}
-	SessionPicker = Binding{Action: "session.picker", Key: "w", Aliases: []string{"s"}, Help: "Workspace + session picker", Category: CatSessions, Context: Prefix}
+	SessionPicker = Binding{Action: "session.picker", Key: "w", Help: "Workspace + session picker", Category: CatSessions, Context: Prefix}
 	SessionGoto   = Binding{Action: "session.goto.N", Key: "M-1..9", Help: "Switch to session N in current workspace", Category: CatSessions, Context: Prefix}
 	SessionPrev   = Binding{Action: "session.prev", Key: "[", Help: "Previous session in workspace", Category: CatSessions, Context: Prefix}
 	SessionNext   = Binding{Action: "session.next", Key: "]", Help: "Next session in workspace", Category: CatSessions, Context: Prefix}
+
+	// Pane layout (prefix). Move/swap a pane directionally, equalize splits, and
+	// toggle split orientation. prefix+s is reclaimed from the session.picker
+	// alias (the picker stays on prefix+w).
+	PaneSwapLeft  = Binding{Action: "pane.swap.left", Key: "S-Left", Help: "Swap pane with the one to its left", Category: CatPanes, Context: Prefix}
+	PaneSwapRight = Binding{Action: "pane.swap.right", Key: "S-Right", Help: "Swap pane with the one to its right", Category: CatPanes, Context: Prefix}
+	PaneSwapUp    = Binding{Action: "pane.swap.up", Key: "S-Up", Help: "Swap pane with the one above", Category: CatPanes, Context: Prefix}
+	PaneSwapDown  = Binding{Action: "pane.swap.down", Key: "S-Down", Help: "Swap pane with the one below", Category: CatPanes, Context: Prefix}
+	PaneEqualize  = Binding{Action: "pane.equalize", Key: "=", Help: "Equalize / spread splits evenly", Category: CatPanes, Context: Prefix}
+	SplitOrient   = Binding{Action: "pane.orient", Key: "s", Help: "Toggle split orientation (horizontal <-> vertical)", Category: CatPanes, Context: Prefix}
 
 	// Panes & general (prefix).
 	PaneRespawn = Binding{Action: "pane.respawn", Key: "R", Help: "Respawn stopped/dead pane", Category: CatPanes, Context: Prefix}
@@ -96,6 +106,7 @@ var PrefixBindings = []Binding{
 	Dashboard, Palette, ScratchShell, Help,
 	NewTab, TabNext, TabPrev, TabReorderLeft, TabReorderRight, TabKill, LabelTab, TabJoinPane, TabFull,
 	SessionPicker, SessionGoto, SessionPrev, SessionNext, RenameSession, NewSession,
+	PaneSwapLeft, PaneSwapRight, PaneSwapUp, PaneSwapDown, PaneEqualize, SplitOrient,
 	PaneRespawn, CopyModeKey, Paste, Reload,
 }
 

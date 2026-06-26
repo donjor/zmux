@@ -2,9 +2,11 @@ package session
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/donjor/zmux/internal/debug"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -13,7 +15,24 @@ func Create(runner tmux.Runner, name, dir string) error {
 	if runner.HasSession(name) {
 		return fmt.Errorf("session %q already exists", name)
 	}
-	return runner.NewSession(name, dir)
+	if err := runner.NewSession(name, dir); err != nil {
+		return err
+	}
+	// Stamp the session's first window as a managed logical tab, matching the
+	// worker session-run path (cli/session.go). Without a pane-scoped
+	// @zmux_tab_id the original window isn't a tab, so placement verbs that need
+	// a managed host — notably `tab pane` joining *into* it — reject it with
+	// "current window is not a zmux tab". Empty label: the bar keeps falling
+	// back to the live window name, identical to today's display. Best-effort —
+	// a stamp hiccup must never fail session creation.
+	if paneID, err := runner.DisplayMessage(name+":", "#{pane_id}"); err != nil {
+		debug.Log("session create: resolve first pane failed", "err", err)
+	} else if paneID = strings.TrimSpace(paneID); paneID != "" {
+		if _, err := tabs.Stamp(runner, paneID, paneID, "", ""); err != nil {
+			debug.Log("session create: stamp first window failed", "err", err)
+		}
+	}
+	return nil
 }
 
 // Attach connects to the named session. If already inside tmux, delegates to

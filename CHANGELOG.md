@@ -5,10 +5,39 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: `agents` | Compare: `v0.9.0...HEAD`
+> Release tag: pending | Topics: `agents`, `panes`, `tabs` | Compare: `v0.9.0...HEAD`
+
+### Added
+
+- **Readable pane-border headers + single-pane detail** `panes` - joined panes
+  render `<index> <name> <detail>` with an active `●` / inactive `○` marker,
+  dropping the raw `%id` and `WxH` size noise; a lone pane surfaces its title in
+  the top bar, and the prefix helper hints grow a pane-layout cluster when a tab
+  is split.
+- **Pane layout-control keys** `panes` - `prefix+Shift+Arrow` swaps a pane with
+  its directional neighbour, `prefix+=` equalizes the split, and `prefix+s`
+  toggles split orientation (horizontal↔vertical), reclaimed from the
+  session-picker alias (`prefix+w` still opens the picker). `prefix+Alt+Arrow`
+  resize now repeats while the prefix is held (`repeat-time` 500).
+- **Join a tab by index** `tabs` - `zmux tab pane <N>` joins the tab at bar
+  index N as a pane (opt-in, placement-only); a tab literally labelled with that
+  number still wins.
 
 ### Fixed
 
+- **Keybind join/promote no longer takes over the screen** `tabs` - `prefix+J`
+  (join) and `prefix+F` (promote) run via tmux `run-shell`, which hijacks the
+  screen with a keypress-to-dismiss view on any stdout or non-zero exit — so a
+  failed join showed `'… tab pane "2"' returned 1` and even a successful one
+  dumped its line. A new `--notify` flag flashes the outcome on the status line
+  via `display-message -l` (literal, so a `#(...)` tab label can't execute) and
+  exits 0; the direct CLI keeps stdout and real exit codes.
+- **Interactive sessions' first window is now a joinable tab** `tabs` -
+  interactive session creation (`new`, picker, popup, palette) never stamped the
+  first window's pane with `@zmux_tab_id`, so joining another tab *into* it
+  (`tab pane`, `prefix+J`) failed with "current window is not a zmux tab".
+  `session.Create` now stamps it at creation, matching the worker `session run`
+  path.
 - **Cross-session tab resolution no longer leaks for mutating commands**
   `agents` - tab names are per-session unique, but the server-wide "unique
   elsewhere" convenience in `tabs.Resolve` let a mutation resolve and act on a

@@ -81,7 +81,12 @@ func shortenDir(dir string) string {
 // Keys are sourced from the keys registry so changing a bind in one place
 // updates the hint surface too — the previous hardcoded "." for rename
 // pointed at label-tab (the real rename key is ",").
-func prefixHints(p *theme.Palette) string {
+//
+// When the current window is split (ctx.WindowPanes > 1), a compact pane-layout
+// cluster is appended (Phase 1d) so the layout keys are discoverable exactly
+// when they're useful. The arrow-based swap chord has no clean short spelling,
+// so it rides a literal "⇧↔" rather than the registry key string.
+func prefixHints(p *theme.Palette, ctx BarContext) string {
 	hi := p.Info.Hex()
 	dm := p.Dim.Hex()
 	pairs := []struct{ key, label string }{
@@ -94,11 +99,48 @@ func prefixHints(p *theme.Palette) string {
 		{keys.TabKill.Key, "close"},
 		{keys.Help.Key, "help"},
 	}
+	if ctx.Split() {
+		pairs = append(pairs,
+			struct{ key, label string }{keys.SplitOrient.Key, "orient"},
+			struct{ key, label string }{"⇧↔", "move"},
+			struct{ key, label string }{keys.PaneEqualize.Key, "even"},
+		)
+	}
 	var b strings.Builder
 	for _, p := range pairs {
 		fmt.Fprintf(&b, "#[fg=%s]%s#[fg=%s]%s ", hi, p.key, dm, p.label)
 	}
 	return b.String()
+}
+
+// paneTitleDetail returns the active pane's title to surface as single-pane
+// "detail" (Phase 1b), or "" when the title is just noise. A split window
+// already shows each title in its border header, so the caller only uses this
+// for a lone pane.
+//
+// ponytail: the noise filter is a cheap hostname/command compare — apps set
+// pane_title to the host by default (see internal/cli/where.go). A real title
+// that happens to equal the host is hidden; acceptable, the border still shows
+// it when split. Upgrade to an explicit "title was set" signal only if it bites.
+func paneTitleDetail(ctx BarContext) string {
+	t := strings.TrimSpace(ctx.PaneTitle)
+	if t == "" || t == ctx.PaneCmd {
+		return ""
+	}
+	if h, err := os.Hostname(); err == nil && (t == h || strings.HasPrefix(t, h+":")) {
+		return ""
+	}
+	return truncTitle(t, 32)
+}
+
+// truncTitle clips an over-long title to max runes with an ellipsis, so a
+// chatty pane title can't blow the status-right width budget.
+func truncTitle(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 // shortPrefixKey collapses verbose key names that don't fit the compact hint

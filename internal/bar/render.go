@@ -31,6 +31,8 @@ type BarContext struct {
 	ViewportID     string // "a" (root), "b", "c" etc. — empty when not grouped
 	PaneDir        string
 	PaneCmd        string
+	PaneTitle      string // active pane's #{pane_title} — agent task line, or noise (hostname)
+	WindowPanes    int    // #{window_panes}: pane count of the current window (0 if unknown)
 	Prefix         bool
 	GitBranch      string
 	GitDirty       bool
@@ -71,6 +73,13 @@ type BarContext struct {
 	ShowDirectory bool
 	ShowProcess   bool
 	ShowGroup     bool
+}
+
+// Split reports whether the current window holds more than one pane, i.e. the
+// status bar is rendering for a split tab. WindowPanes is 0 when the count
+// wasn't passed (e.g. dashboard preview), which reads as not-split.
+func (ctx BarContext) Split() bool {
+	return ctx.WindowPanes > 1
 }
 
 // WorkspaceLabel returns the workspace name. No position indicator —
@@ -253,8 +262,31 @@ func RenderTopOverlay(p *theme.Palette, ctx BarContext, profileName string) stri
 }
 
 // RenderRight generates the right side of the status bar.
+//
+// Phase 1b: a single-pane "detail" (the active pane's title) leads the right
+// cluster, preset-agnostic — a split window already shows each title in its
+// pane border header, so this only fires for a lone, non-prefix pane with a
+// non-noise title. Living in the dispatcher keeps it DRY across every preset
+// instead of editing each renderRight*.
 func RenderRight(p *theme.Palette, ctx BarContext, preset Preset) string {
 	applySegmentVisibility(&ctx)
+	return singlePaneDetail(p, ctx) + renderRightPreset(p, ctx, preset)
+}
+
+// singlePaneDetail returns the leading dim title segment for a lone pane, or ""
+// when split, prefix-held, or the title is noise.
+func singlePaneDetail(p *theme.Palette, ctx BarContext) string {
+	if ctx.Prefix || ctx.Split() {
+		return ""
+	}
+	d := paneTitleDetail(ctx)
+	if d == "" {
+		return ""
+	}
+	return fmt.Sprintf("#[fg=%s]%s #[default]", p.Dim.Hex(), d)
+}
+
+func renderRightPreset(p *theme.Palette, ctx BarContext, preset Preset) string {
 	switch preset {
 	case Minimal:
 		return renderRightMinimal(p, ctx)
