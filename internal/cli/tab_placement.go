@@ -35,13 +35,9 @@ breaks out into the dock on its own.`,
 			if err != nil {
 				return err
 			}
-			if err := blockOnAttachedClones(app, t.Session); err != nil {
+			if err := tabs.HideTab(app.Runner, t); err != nil {
 				return err
 			}
-			if err := tabs.Hide(app.Runner, t); err != nil {
-				return err
-			}
-			placementEpilogue(app)
 			name := tabs.DisplayName(t)
 			fmt.Fprintf(cmd.OutOrStdout(), "hidden: %s (show with: zmux tab show %s)\n", name, name)
 			return nil
@@ -70,16 +66,10 @@ It never auto-joins into another tab — use zmux tab pane for that.`,
 			if err != nil {
 				return err
 			}
-			if t.Placement == tabs.PlacementDock {
-				if err := blockOnAttachedClones(app, t.OriginSession); err != nil {
-					return err
-				}
-			}
-			origin, err := tabs.Show(app.Runner, t)
+			origin, err := tabs.ShowTab(app.Runner, t)
 			if err != nil {
 				return err
 			}
-			placementEpilogue(app)
 			fmt.Fprintf(cmd.OutOrStdout(), "shown: %s → %s\n", tabs.DisplayName(t), origin)
 			return nil
 		},
@@ -125,22 +115,13 @@ relative to the host pane (default: --right).`,
 				if err != nil {
 					return "", err
 				}
-				if err := blockOnAttachedClones(app, t.Session); err != nil {
-					return "", err
-				}
-				if host.Session != t.Session {
-					if err := blockOnAttachedClones(app, host.Session); err != nil {
-						return "", err
-					}
-				}
-				warnings, err = tabs.Join(app.Runner, t, host, tabs.JoinOptions{
+				warnings, err = tabs.JoinTab(app.Runner, t, host, tabs.JoinOptions{
 					Direction: dir,
 					Size:      sizeFlag,
 				})
 				if err != nil {
 					return "", err
 				}
-				placementEpilogue(app)
 				return fmt.Sprintf("pane: %s → beside %s (%s)",
 					tabs.DisplayName(t), tabs.DisplayName(host), host.Session), nil
 			}()
@@ -180,7 +161,7 @@ inserts it directly after its old host window instead.`,
 				}
 				var t *tabs.LogicalTab
 				if len(args) == 0 {
-					t, err = resolveCurrentPlacementTab(app)
+					t, err = tabs.CurrentTab(app.Runner)
 					if err != nil {
 						return "", err
 					}
@@ -190,15 +171,11 @@ inserts it directly after its old host window instead.`,
 						return "", err
 					}
 				}
-				if err := blockOnAttachedClones(app, t.Session); err != nil {
-					return "", err
-				}
-				windowID, w, err := tabs.Promote(app.Runner, t, afterFlag)
+				windowID, w, err := tabs.PromoteTab(app.Runner, t, afterFlag)
 				if err != nil {
 					return "", err
 				}
 				warnings = w
-				placementEpilogue(app)
 				return fmt.Sprintf("full: %s → %s (%s)",
 					tabs.DisplayName(t), t.Session, windowID), nil
 			}()
@@ -248,30 +225,6 @@ func notifyOutcome(app *apppkg.App, cmd *cobra.Command, notify bool, success str
 	return nil
 }
 
-func resolveCurrentPlacementTab(app *apppkg.App) (*tabs.LogicalTab, error) {
-	if !app.Runner.IsInsideTmux() {
-		return nil, fmt.Errorf("not inside tmux — pass a tab name")
-	}
-	if _, err := tabs.Reconcile(app.Runner); err != nil {
-		debug.Log("placement: reconcile failed", "err", err)
-	}
-	out, err := app.Runner.DisplayMessage("", "#{pane_id}")
-	if err != nil {
-		return nil, fmt.Errorf("resolve current pane: %w", err)
-	}
-	paneID := strings.TrimSpace(out)
-	all, err := tabs.ListLogicalTabs(app.Runner)
-	if err != nil {
-		return nil, fmt.Errorf("scan tabs: %w", err)
-	}
-	for i := range all {
-		if all[i].PaneID == paneID {
-			return &all[i], nil
-		}
-	}
-	return nil, fmt.Errorf("current pane is not a zmux tab — pass a tab name")
-}
-
 // paneDirection folds the four direction flags into one split direction —
 // at most one may be set; none means right (peer-beside-work default).
 func paneDirection(right, left, up, down bool) (tmux.SplitDirection, error) {
@@ -308,25 +261,11 @@ func resolvePaneHost(app *apppkg.App, session, into string) (*tabs.LogicalTab, e
 		// the destination (which already defaults to the cursor tab).
 		return resolvePlacementTab(app, session, into, false)
 	}
-	if !app.Runner.IsInsideTmux() {
-		return nil, fmt.Errorf("not inside tmux — use --into to name the host tab")
-	}
-	out, err := app.Runner.DisplayMessage("", "#{window_id}")
+	host, err := tabs.CurrentHost(app.Runner)
 	if err != nil {
-		return nil, fmt.Errorf("resolve current window: %w", err)
+		return nil, fmt.Errorf("%w (use --into to name the host)", err)
 	}
-	windowID := strings.TrimSpace(out)
-	all, err := tabs.ListLogicalTabs(app.Runner)
-	if err != nil {
-		return nil, fmt.Errorf("scan tabs: %w", err)
-	}
-	for i := range all {
-		h := &all[i]
-		if h.WindowID == windowID && h.Placement == tabs.PlacementFull {
-			return h, nil
-		}
-	}
-	return nil, fmt.Errorf("current window is not a zmux tab — use --into to name the host")
+	return host, nil
 }
 
 // placementSession resolves the session scope for placement verbs: explicit
@@ -423,28 +362,3 @@ func resolvePlacementTab(app *apppkg.App, session, name string, allowIndex bool)
 	return nil, fmt.Errorf("tab %q is not a zmux tab in %s", name, session)
 }
 
-// blockOnAttachedClones enforces the S6 clone predicate before any placement
-// move: grouped sessions share one window set, so moving a tab would reshape
-// another attached viewport underneath its user.
-func blockOnAttachedClones(app *apppkg.App, session string) error {
-	blocked, err := tabs.CloneBlocked(app.Runner, session)
-	if err != nil {
-		return err
-	}
-	if blocked {
-		return fmt.Errorf("session %q has attached grouped viewports — detach the other clients (or close their viewports) before moving tabs", session)
-	}
-	return nil
-}
-
-// placementEpilogue heals state after a placement move and repaints the bar.
-// Best-effort: the move already happened; a failed repair just waits for the
-// next reconcile.
-func placementEpilogue(app *apppkg.App) {
-	if _, err := tabs.Reconcile(app.Runner); err != nil {
-		debug.Log("placement: post-move reconcile failed", "err", err)
-	}
-	if err := app.Runner.RefreshStatus(); err != nil {
-		debug.Log("placement: status refresh failed", "err", err)
-	}
-}

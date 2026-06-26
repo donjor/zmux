@@ -48,6 +48,10 @@ type SessionsProvider struct {
 	Runner tmux.Runner
 }
 
+// Covers declares the dynamic action spec this provider surfaces (the New
+// session row), so the coverage gate is satisfied by declaration.
+func (p *SessionsProvider) Covers() []string { return []string{"session.new"} }
+
 func (p *SessionsProvider) Actions() ([]Action, error) {
 	sessions, err := session.ListSessions(p.Runner)
 	if err != nil {
@@ -305,6 +309,7 @@ func (p *OvermindProvider) Actions() ([]Action, error) {
 func NewDefaultRegistry(runner tmux.Runner, resolver *theme.Resolver, _ config.FS) *Registry {
 	return NewRegistry(
 		&KeyboundProvider{},
+		&LogicalTabProvider{Runner: runner},
 		&SessionsProvider{Runner: runner},
 		&ThemesProvider{Resolver: resolver},
 		&BarProvider{},

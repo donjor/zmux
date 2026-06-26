@@ -363,16 +363,10 @@ func showPickedTab(app *apppkg.App, sessionName, tabID string) error {
 	if t == nil {
 		return fmt.Errorf("hidden tab no longer exists")
 	}
-	if t.Placement == tabspkg.PlacementDock {
-		if err := blockOnAttachedClones(app, t.OriginSession); err != nil {
-			return err
-		}
-	}
-	origin, err := tabspkg.Show(app.Runner, t)
+	origin, err := tabspkg.ShowTab(app.Runner, t)
 	if err != nil {
 		return err
 	}
-	placementEpilogue(app)
 	if session.RootName(origin) != sessionName {
 		if err := session.Switch(app.Runner, origin); err != nil {
 			return err

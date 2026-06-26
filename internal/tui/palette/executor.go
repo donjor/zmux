@@ -6,6 +6,7 @@ import (
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/overmind"
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/workspace"
 )
@@ -115,6 +116,33 @@ func (e *Executor) Run(action Action) PostAction {
 		}
 		return PostAction{Kind: PostClose}
 
+	case TabHidePayload:
+		return e.runTabPlacement(payload.TabID, func(t *tabs.LogicalTab) error {
+			return tabs.HideTab(e.Runner, t)
+		})
+
+	case TabShowPayload:
+		return e.runTabPlacement(payload.TabID, func(t *tabs.LogicalTab) error {
+			_, err := tabs.ShowTab(e.Runner, t)
+			return err
+		})
+
+	case TabPromotePayload:
+		return e.runTabPlacement(payload.TabID, func(t *tabs.LogicalTab) error {
+			_, _, err := tabs.PromoteTab(e.Runner, t, false)
+			return err
+		})
+
+	case TabJoinPayload:
+		return e.runTabPlacement(payload.TabID, func(t *tabs.LogicalTab) error {
+			host, err := tabs.CurrentHost(e.Runner)
+			if err != nil {
+				return err
+			}
+			_, err = tabs.JoinTab(e.Runner, t, host, tabs.JoinOptions{Direction: tmux.SplitRight})
+			return err
+		})
+
 	case DashboardTabPayload:
 		return PostAction{Kind: PostOpenDashboard, Tab: payload.Tab}
 
@@ -167,6 +195,25 @@ func (e *Executor) runPaneOp(op PaneOp) error {
 		return e.Runner.FocusPane(tmux.SplitDown)
 	}
 	return fmt.Errorf("unknown pane op %d", op)
+}
+
+// runTabPlacement re-resolves a logical tab by its stable id at run time, then
+// runs op against it through the shared placement service. Re-resolving (rather
+// than trusting the payload's snapshot) handles a tab that moved or closed since
+// the palette opened.
+func (e *Executor) runTabPlacement(tabID string, op func(*tabs.LogicalTab) error) PostAction {
+	all, err := tabs.ListLogicalTabs(e.Runner)
+	if err != nil {
+		return PostAction{Kind: PostError, Err: fmt.Errorf("scan tabs: %w", err)}
+	}
+	t := tabs.ByID(all, tabID)
+	if t == nil {
+		return PostAction{Kind: PostError, Err: fmt.Errorf("tab no longer exists")}
+	}
+	if err := op(t); err != nil {
+		return PostAction{Kind: PostError, Err: err}
+	}
+	return PostAction{Kind: PostClose}
 }
 
 // runTabOp dispatches a tab op to the typed tmux.Runner method that runs it
