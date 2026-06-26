@@ -99,7 +99,7 @@ func (t *HelpTab) helpLines() []string {
 		return strings.Join(out, "\n")
 	}
 
-	return []string{
+	lines := []string{
 		section("Dashboard"),
 		binding("Alt+1-9", "Switch to tab by number"),
 		binding("Tab / Shift+Tab", "Cycle through tabs"),
@@ -145,15 +145,16 @@ func (t *HelpTab) helpLines() []string {
 		binding("s", "Save config changes"),
 		binding("Esc", "Cancel editing"),
 		"",
-		section("tmux Prefix Keys (Ctrl+Space)"),
-		registryLines(keys.PrefixBindings),
-		"",
-		section("Inherited tmux Defaults (Ctrl+Space)"),
-		registryLines(keys.InheritedBindings),
-		"",
-		section("No-Prefix Keys"),
-		registryLines(keys.NoPrefixBindings),
-		"",
+	}
+
+	// Keybinding reference — sourced from the shared section set (internal/keys)
+	// so the dashboard and `zmux help` show the same registry groups and a new
+	// binding surfaces in both without editing render code.
+	for _, s := range keys.DashboardHelpSections() {
+		lines = append(lines, section(s.Title), registryLines(s.Bindings), "")
+	}
+
+	lines = append(lines,
 		section("Tab Picker (Alt+`)"),
 		binding("Enter", "Go to tab (riders focus their pane; hidden tabs return)"),
 		binding("Ctrl+N", "Create new tab"),
@@ -167,9 +168,6 @@ func (t *HelpTab) helpLines() []string {
 		binding("Enter", "Execute selected action"),
 		binding("Esc", "Close palette"),
 		binding("j / k", "Navigate action list"),
-		"",
-		section("Copy Mode (vi keys)"),
-		registryLines(keys.CopyModeBindings),
 		"",
 		section("Logical Tabs & Placement (CLI)"),
 		"  " + dim.Render("zmux-managed tabs keep a stable id, label, and state"),
@@ -196,5 +194,7 @@ func (t *HelpTab) helpLines() []string {
 		section("Tmp Sessions"),
 		"  " + dim.Render("Sessions named tmp-N are temporary and auto-cleaned"),
 		"  " + dim.Render("when unattached (if auto_cleanup_tmp is enabled)."),
-	}
+	)
+
+	return lines
 }

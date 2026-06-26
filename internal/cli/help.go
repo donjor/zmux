@@ -166,19 +166,17 @@ func printStyledHelp(app *apppkg.App) {
 		b.WriteString("\n")
 	}
 
-	// Keybindings section — rendered from the internal/keys registry so the
-	// help output, generated docs, and tmux conf never drift.
+	// Keybindings section — rendered from the internal/keys registry (via the
+	// shared section set) so the help output, generated docs, and tmux conf
+	// never drift on which keybinding groups appear.
 	b.WriteString(groupStyle.Render("Keybindings (prefix: Ctrl+Space)") + "\n")
-	renderBindings := func(bindings []keys.Binding) {
-		for _, kb := range bindings {
+	for _, s := range keys.TmuxHelpSections() {
+		for _, kb := range s.Bindings {
 			cmd := cmdStyle.Render("  " + kb.DisplayKey())
 			desc := descStyle.Render(kb.Help)
 			b.WriteString(cmd + " " + desc + "\n")
 		}
 	}
-	renderBindings(keys.PrefixBindings)
-	renderBindings(keys.NoPrefixBindings)
-	renderBindings(keys.InheritedBindings)
 	b.WriteString("\n")
 
 	b.WriteString(styles.Muted.Render("Config: ~/.zmux.toml  |  Docs: https://github.com/donjor/zmux") + "\n")
