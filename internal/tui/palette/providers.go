@@ -67,30 +67,34 @@ func (p *SessionsProvider) Actions() ([]Action, error) {
 		Payload:  SessionCreatePayload{},
 	})
 
-	// "Switch to <name>" for each session.
+	// "Switch to <label>" for each session. The title shows the workspace-local
+	// label (QualifiedDisplayName) so generated zws_… names never leak; the
+	// payload and id keep the raw tmux name as the switch target.
 	for _, s := range sessions {
 		subtitle := ""
 		if s.Attached {
 			subtitle = "attached"
 		}
+		label := session.QualifiedDisplayName(s)
 		actions = append(actions, Action{
 			ID:       fmt.Sprintf("session:switch:%s", s.Name),
 			Group:    "Sessions",
-			Title:    fmt.Sprintf("Switch to %s", s.Name),
+			Title:    fmt.Sprintf("Switch to %s", label),
 			Subtitle: subtitle,
-			Keywords: []string{"session", "attach", s.Name},
+			Keywords: []string{"session", "attach", label, s.Name},
 			Kind:     ActionExec,
 			Payload:  SessionSwitchPayload{Name: s.Name},
 		})
 	}
 
-	// "Kill <name>" for each session.
+	// "Kill <label>" for each session — display label, raw name as target.
 	for _, s := range sessions {
+		label := session.QualifiedDisplayName(s)
 		actions = append(actions, Action{
 			ID:       fmt.Sprintf("session:kill:%s", s.Name),
 			Group:    "Sessions",
-			Title:    fmt.Sprintf("Kill %s", s.Name),
-			Keywords: []string{"session", "delete", "remove", s.Name},
+			Title:    fmt.Sprintf("Kill %s", label),
+			Keywords: []string{"session", "delete", "remove", label, s.Name},
 			Kind:     ActionExec,
 			Payload:  SessionKillPayload{Name: s.Name},
 		})

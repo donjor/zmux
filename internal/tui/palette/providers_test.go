@@ -11,6 +11,49 @@ import (
 
 // ── SessionsProvider ──
 
+// TestSessionsProviderTitlesUseLabelNotRawName guards the display fix: titles
+// show the workspace-local label, never the generated zws_… tmux name, while the
+// switch/kill payloads keep the raw name as the target.
+func TestSessionsProviderTitlesUseLabelNotRawName(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	mock.Sessions = []tmux.Session{
+		{Name: "zws_proj__main", Managed: true, Workspace: "proj", SessionLabel: "main"},
+	}
+
+	got, err := (&SessionsProvider{Runner: mock}).Actions()
+	if err != nil {
+		t.Fatalf("Actions() error: %v", err)
+	}
+
+	var sawSwitch, sawKill bool
+	for _, a := range got {
+		switch p := a.Payload.(type) {
+		case SessionSwitchPayload:
+			sawSwitch = true
+			if strings.Contains(a.Title, "zws_") {
+				t.Errorf("switch title leaks raw name: %q", a.Title)
+			}
+			if a.Title != "Switch to proj/main" {
+				t.Errorf("switch title = %q, want %q", a.Title, "Switch to proj/main")
+			}
+			if p.Name != "zws_proj__main" {
+				t.Errorf("switch payload target = %q, want raw name", p.Name)
+			}
+		case SessionKillPayload:
+			sawKill = true
+			if strings.Contains(a.Title, "zws_") {
+				t.Errorf("kill title leaks raw name: %q", a.Title)
+			}
+			if p.Name != "zws_proj__main" {
+				t.Errorf("kill payload target = %q, want raw name", p.Name)
+			}
+		}
+	}
+	if !sawSwitch || !sawKill {
+		t.Fatalf("expected switch+kill actions; switch=%v kill=%v", sawSwitch, sawKill)
+	}
+}
+
 func TestSessionsProviderEmits1NewPlusNSwitchPlusNKill(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	now := time.Now()
