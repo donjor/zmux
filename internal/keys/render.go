@@ -68,6 +68,24 @@ func (b Binding) DisplayKey() string {
 	}
 }
 
+// FindKeybound returns the prefix- or no-prefix-table binding for an action
+// name, and whether it was found. Dashboard and copy-mode tables are not
+// searched: their action names ("kill", "rename", "select") overlap prefix ones,
+// and only the tmux-generated prefix/no-prefix bindings are palette-derivable.
+func FindKeybound(action string) (Binding, bool) {
+	for _, b := range PrefixBindings {
+		if b.Action == action {
+			return b, true
+		}
+	}
+	for _, b := range NoPrefixBindings {
+		if b.Action == action {
+			return b, true
+		}
+	}
+	return Binding{}, false
+}
+
 // ByCategory groups bindings by their Category, preserving the input order
 // within each category and returning categories in first-seen order.
 func ByCategory(bindings []Binding) ([]Category, map[Category][]Binding) {

@@ -168,7 +168,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	fmt.Fprintf(&b, "bind -r %s swap-pane -t '{up-of}'\n", keys.PaneSwapUp.Key)
 	fmt.Fprintf(&b, "bind -r %s swap-pane -t '{down-of}'\n", keys.PaneSwapDown.Key)
 	fmt.Fprintf(&b, "bind %s select-layout -E\n", keys.PaneEqualize.Key)
-	fmt.Fprintf(&b, "bind %s if -F \"#{m:*{*,#{window_layout}}\" \"select-layout even-vertical\" \"select-layout even-horizontal\"\n", keys.SplitOrient.Key)
+	fmt.Fprintf(&b, "bind %s if -F \"%s\" \"select-layout %s\" \"select-layout %s\"\n", keys.SplitOrient.Key, OrientHorizontalMatch, LayoutEvenVertical, LayoutEvenHorizontal)
 	b.WriteString("\n")
 
 	// Sessions

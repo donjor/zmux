@@ -300,6 +300,7 @@ func (p *OvermindProvider) Actions() ([]Action, error) {
 // NewDefaultRegistry creates a registry with all standard providers.
 func NewDefaultRegistry(runner tmux.Runner, resolver *theme.Resolver, _ config.FS) *Registry {
 	return NewRegistry(
+		&KeyboundProvider{},
 		&SessionsProvider{Runner: runner},
 		&ThemesProvider{Resolver: resolver},
 		&BarProvider{},
