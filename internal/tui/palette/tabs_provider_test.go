@@ -25,12 +25,12 @@ func TestTabActionsForEligibilityByPlacement(t *testing.T) {
 	got := payloadIDs(tabActionsFor(all, "ztab_cur"))
 
 	want := []string{
-		"tab:hide:ztab_full",  // full → hide
-		"tab:pane:ztab_full",  // full (not current) → join into current
-		"tab:hide:ztab_cur",   // current full → hide (allowed)
-		"tab:full:ztab_pane",  // pane-of → promote
-		"tab:hide:ztab_pane",  // pane-of → hide (breaks out to dock)
-		"tab:show:ztab_dock",  // dock → show
+		"tab:hide:ztab_full", // full → hide
+		"tab:pane:ztab_full", // full (not current) → join into current
+		"tab:hide:ztab_cur",  // current full → hide (allowed)
+		"tab:full:ztab_pane", // pane-of → promote
+		"tab:hide:ztab_pane", // pane-of → hide (breaks out to dock)
+		"tab:show:ztab_dock", // dock → show
 	}
 	for _, id := range want {
 		if _, ok := got[id]; !ok {

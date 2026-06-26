@@ -361,4 +361,3 @@ func resolvePlacementTab(app *apppkg.App, session, name string, allowIndex bool)
 	}
 	return nil, fmt.Errorf("tab %q is not a zmux tab in %s", name, session)
 }
-
