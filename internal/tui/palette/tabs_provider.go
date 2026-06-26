@@ -30,13 +30,6 @@ type LogicalTabProvider struct {
 	Runner tmux.Runner
 }
 
-// Covers declares which dynamic action specs this family surfaces. The coverage
-// gate uses it so a dynamic spec is satisfied by the family's declaration, never
-// by requiring live tab rows in an empty test environment.
-func (p *LogicalTabProvider) Covers() []string {
-	return []string{"tab.hide", "tab.show", "tab.full", "tab.pane"}
-}
-
 func (p *LogicalTabProvider) Actions() ([]Action, error) {
 	all, err := tabs.ListLogicalTabs(p.Runner)
 	if err != nil {
@@ -68,16 +61,19 @@ func tabActionsFor(all []tabs.LogicalTab, currentID string) []Action {
 				Subtitle: "hidden",
 				Keywords: []string{"tab", "show", "unhide", "dock", name},
 				Kind:     ActionExec,
+				Covers:   "tab.show",
 				Payload:  TabShowPayload{TabID: t.ID},
 			})
 		case tabs.PlacementPaneOf:
-			out = append(out,
+			out = append(
+				out,
 				Action{
 					ID:       "tab:full:" + t.ID,
 					Group:    "Tabs",
 					Title:    "Promote " + name + " to a full tab",
 					Keywords: []string{"tab", "full", "promote", "break", name},
 					Kind:     ActionExec,
+					Covers:   "tab.full",
 					Payload:  TabPromotePayload{TabID: t.ID},
 				},
 				tabHideAction(t, name),
@@ -91,6 +87,7 @@ func tabActionsFor(all []tabs.LogicalTab, currentID string) []Action {
 					Title:    "Join " + name + " into the current tab",
 					Keywords: []string{"tab", "pane", "join", "split", name},
 					Kind:     ActionExec,
+					Covers:   "tab.pane",
 					Payload:  TabJoinPayload{TabID: t.ID},
 				})
 			}
@@ -106,6 +103,7 @@ func tabHideAction(t *tabs.LogicalTab, name string) Action {
 		Title:    "Hide " + name,
 		Keywords: []string{"tab", "hide", "park", "dock", name},
 		Kind:     ActionExec,
+		Covers:   "tab.hide",
 		Payload:  TabHidePayload{TabID: t.ID},
 	}
 }

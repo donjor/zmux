@@ -48,10 +48,6 @@ type SessionsProvider struct {
 	Runner tmux.Runner
 }
 
-// Covers declares the dynamic action spec this provider surfaces (the New
-// session row), so the coverage gate is satisfied by declaration.
-func (p *SessionsProvider) Covers() []string { return []string{"session.new"} }
-
 func (p *SessionsProvider) Actions() ([]Action, error) {
 	sessions, err := session.ListSessions(p.Runner)
 	if err != nil {
@@ -68,6 +64,7 @@ func (p *SessionsProvider) Actions() ([]Action, error) {
 		Hint:     "n",
 		Keywords: []string{"create", "tmp"},
 		Kind:     ActionExec,
+		Covers:   "session.new",
 		Payload:  SessionCreatePayload{},
 	})
 
@@ -166,10 +163,6 @@ func (p *BarProvider) Actions() ([]Action, error) {
 // DashboardProvider generates actions to open dashboard tabs.
 type DashboardProvider struct{}
 
-// Covers declares the open-surface action this provider satisfies (the prefix+
-// Space dashboard).
-func (p *DashboardProvider) Covers() []string { return []string{"dashboard"} }
-
 func (p *DashboardProvider) Actions() ([]Action, error) {
 	return []Action{
 		{
@@ -178,6 +171,7 @@ func (p *DashboardProvider) Actions() ([]Action, error) {
 			Title:    "Open This Session tab",
 			Keywords: []string{"tab", "current", "session", "windows"},
 			Kind:     ActionOpenDashboard,
+			Covers:   "dashboard",
 			Payload:  DashboardTabPayload{Tab: "current"},
 		},
 		{
@@ -212,10 +206,6 @@ func (p *DashboardProvider) Actions() ([]Action, error) {
 // HelpProvider generates a single "Show keybindings" action.
 type HelpProvider struct{}
 
-// Covers declares the open-surface action this provider satisfies (the prefix+?
-// help).
-func (p *HelpProvider) Covers() []string { return []string{"help"} }
-
 func (p *HelpProvider) Actions() ([]Action, error) {
 	return []Action{
 		{
@@ -224,6 +214,7 @@ func (p *HelpProvider) Actions() ([]Action, error) {
 			Title:    "Show keybindings",
 			Keywords: []string{"help", "keys", "bindings", "shortcuts"},
 			Kind:     ActionOpenDashboard,
+			Covers:   "help",
 			Payload:  DashboardTabPayload{Tab: "help"},
 		},
 	}, nil

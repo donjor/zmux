@@ -23,6 +23,14 @@ type Action struct {
 	Keywords []string   // additional terms for fuzzy matching
 	Kind     ActionKind // exec vs open-dashboard
 	Payload  any        // action-specific data
+
+	// Covers names the canonical actions.Spec ID this row is the palette
+	// surface of (e.g. "tab.hide", "dashboard"). Empty for rows that aren't a
+	// registry action's canonical surface (per-session switch/kill, themes,
+	// bar presets). The coverage gate derives dynamic/open-surface coverage
+	// from these tags on real emitted rows, so declaring coverage requires
+	// actually producing the row — a hand-kept list can't rubber-stamp it.
+	Covers string
 }
 
 // searchText returns the combined text used for fuzzy matching.

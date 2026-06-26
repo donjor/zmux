@@ -5,6 +5,7 @@ import (
 
 	"github.com/donjor/zmux/internal/actions"
 	"github.com/donjor/zmux/internal/keys"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -12,20 +13,40 @@ import (
 // mirroring keys.TestKeybindingsDocInSync. Every prefix/no-prefix keybinding must
 // be classified in internal/actions, and each policy class must be honored by the
 // palette: executable → a static row + a live executor case; dynamic/open-surface
-// → a provider family declares it (Covers); excluded → a documented reason. A new
-// keybind with no classification, or a classified one with no surface, fails here.
+// → a real provider row tags it (Action.Covers); excluded → a documented reason. A
+// new keybind with no classification, or a classified one with no surface, fails here.
 func TestPaletteCoversEveryInScopeBinding(t *testing.T) {
 	mock := tmux.NewMockRunner()
-	reg := NewDefaultRegistry(mock, nil, newFakeFS("/home/u"))
 
-	// Coverage declared by providers (dynamic families + open surfaces).
+	// Dynamic/open-surface coverage is derived from the canonical actions the
+	// providers' real emitted rows tag themselves with (Action.Covers), never a
+	// hand-kept list — so declaring coverage for a spec requires actually
+	// producing its row. The logical-tab rows come from the pure builder fed a
+	// fixture spanning every placement (live Actions() yields nothing in a bare
+	// test env); the remaining providers emit their canonical rows statically.
 	covered := map[string]bool{}
-	for _, p := range reg.providers {
-		if dc, ok := p.(CoverageDeclarer); ok {
-			for _, id := range dc.Covers() {
-				covered[id] = true
+	addRows := func(as []Action) {
+		for _, a := range as {
+			if a.Covers != "" {
+				covered[a.Covers] = true
 			}
 		}
+	}
+	addRows(tabActionsFor([]tabs.LogicalTab{
+		{ID: "ztab_full", Placement: tabs.PlacementFull},
+		{ID: "ztab_pane", Placement: tabs.PlacementPaneOf},
+		{ID: "ztab_dock", Placement: tabs.PlacementDock},
+	}, "ztab_host"))
+	for _, p := range []ActionProvider{
+		&SessionsProvider{Runner: mock},
+		&DashboardProvider{},
+		&HelpProvider{},
+	} {
+		as, err := p.Actions()
+		if err != nil {
+			t.Fatalf("provider %T.Actions() errored: %v", p, err)
+		}
+		addRows(as)
 	}
 
 	// Static rows the keybound provider can render.
@@ -50,7 +71,7 @@ func TestPaletteCoversEveryInScopeBinding(t *testing.T) {
 			assertExecutorHandles(t, spec.ID)
 		case actions.Dynamic, actions.OpenSurface:
 			if !covered[spec.ID] {
-				t.Errorf("%s spec %q is not declared by any provider family (Covers())", spec.Palette, spec.ID)
+				t.Errorf("%s spec %q is surfaced by no provider row (tag a row's Action.Covers with %q)", spec.Palette, spec.ID, spec.ID)
 			}
 		case actions.Excluded:
 			if spec.Reason == "" {
@@ -66,7 +87,7 @@ func TestPaletteCoversEveryInScopeBinding(t *testing.T) {
 	// declared by a family, or they would silently never surface.
 	for _, s := range actions.Specs() {
 		if s.Palette == actions.Dynamic && !covered[s.ID] {
-			t.Errorf("dynamic spec %q not declared by any provider family", s.ID)
+			t.Errorf("dynamic spec %q is surfaced by no provider row (tag a row's Action.Covers)", s.ID)
 		}
 	}
 }
