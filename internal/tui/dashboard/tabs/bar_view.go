@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/donjor/zmux/internal/bar"
+	"github.com/donjor/zmux/internal/tui/scroll"
 )
 
 // previewSessions are mock session names for the two-line preview.
@@ -146,7 +147,7 @@ func (t *BarTab) View() string {
 
 	t.vp.SetContent(b.String())
 	ensureCursorVisible(&t.vp, cursorLine)
-	return renderScrollable(t.vp, t.styles)
+	return scroll.Scrollable(t.vp, t.styles)
 }
 
 func (t *BarTab) renderPresetPreview(preset bar.Preset) string {

@@ -15,6 +15,7 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/scroll"
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/donjor/zmux/internal/workspace"
@@ -441,7 +442,7 @@ func (t *CurrentTab) View() string {
 	// Set content on viewport and scroll to keep cursor visible.
 	t.vp.SetContent(b.String())
 	ensureCursorVisible(&t.vp, cursorLine)
-	return chrome + renderScrollable(t.vp, t.styles)
+	return chrome + scroll.Scrollable(t.vp, t.styles)
 }
 
 // renderChrome builds the fixed block pinned above the scrollable rows: a

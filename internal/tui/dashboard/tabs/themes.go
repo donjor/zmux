@@ -10,6 +10,7 @@ import (
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/scroll"
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/views"
 )
@@ -299,7 +300,7 @@ func (t *ThemesTab) View() string {
 	content, cursorLine := t.renderColorsContent()
 	t.vp.SetContent(content)
 	ensureCursorVisible(&t.vp, cursorLine)
-	return renderScrollable(t.vp, t.styles)
+	return scroll.Scrollable(t.vp, t.styles)
 }
 
 // Preview helpers (revertPreview + emitRevert) live in themes_data.go

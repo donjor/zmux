@@ -14,6 +14,7 @@ import (
 	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/help"
+	"github.com/donjor/zmux/internal/tui/scroll"
 	"github.com/donjor/zmux/internal/tui/styles"
 )
 
@@ -50,7 +51,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		// Body height = total minus title (2), filter (2), footer (2).
-		m.vp.SetWidth(msg.Width)
+		// -2 width reserves the trailing scrollbar column (" ▐").
+		m.vp.SetWidth(max(1, msg.Width-2))
 		m.vp.SetHeight(max(1, msg.Height-6))
 		m.filter.SetWidth(max(1, msg.Width-6)) // room for the "  > " prompt
 		m.ready = true
@@ -115,7 +117,7 @@ func (m *Model) view() string {
 	title := m.styles.Accent.Bold(true).Render("zmux")
 	b.WriteString("\n  " + title + m.styles.Dim.Render(" help") + "\n\n")
 	b.WriteString(m.styles.Accent.Render("  > ") + m.filter.View() + "\n\n")
-	b.WriteString(m.vp.View() + "\n")
+	b.WriteString(scroll.Scrollable(m.vp, m.styles) + "\n")
 	b.WriteString("  " + m.styles.Dim.Render("type:filter  ↑/↓:scroll  esc:close"))
 	return b.String()
 }

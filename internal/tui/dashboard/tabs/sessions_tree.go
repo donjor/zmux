@@ -8,6 +8,7 @@ import (
 
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tui/outline"
+	"github.com/donjor/zmux/internal/tui/scroll"
 	"github.com/donjor/zmux/internal/tui/workspaceoutline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 )
@@ -230,7 +231,7 @@ func (t *SessionsTab) View() string {
 
 	t.vp.SetContent(b.String())
 	ensureCursorVisible(&t.vp, cursorLine)
-	return renderScrollable(t.vp, t.styles)
+	return scroll.Scrollable(t.vp, t.styles)
 }
 
 func sessionLabelForName(name string, workspaces []workspaceview.WorkspaceViewModel) string {

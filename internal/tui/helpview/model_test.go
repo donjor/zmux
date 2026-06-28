@@ -1,9 +1,13 @@
 package helpview
 
 import (
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/donjor/zmux/internal/help"
+	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 func fixture() []help.Section {
@@ -66,6 +70,23 @@ func TestFilterPreservesOrder(t *testing.T) {
 	}
 	if len(got[0].Entries) != 2 {
 		t.Errorf("query 'zmux': got %d entries, want both session commands", len(got[0].Entries))
+	}
+}
+
+// TestViewFillsHeightWithScrollbar pins two invariants at once: view() renders
+// exactly the window height (no overflow that would scroll chrome off), and the
+// full registry content draws the shared scrollbar thumb (the bar we now reuse
+// from internal/tui/scroll rather than rendering a raw viewport).
+func TestViewFillsHeightWithScrollbar(t *testing.T) {
+	m := New(help.Sections(), styles.Styles{})
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	out := tm.(*Model).view()
+
+	if got := len(strings.Split(out, "\n")); got != 30 {
+		t.Fatalf("view rendered %d lines, want exactly 30 (height invariant)", got)
+	}
+	if !strings.Contains(out, "▐") {
+		t.Errorf("full help content should show a scrollbar thumb, found none")
 	}
 }
 

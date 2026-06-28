@@ -9,6 +9,7 @@ import (
 
 	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/scroll"
 	"github.com/donjor/zmux/internal/tui/styles"
 )
 
@@ -57,7 +58,7 @@ func (t *HelpTab) View() string {
 	lines := t.helpLines()
 	content := "\n" + strings.Join(lines, "\n")
 	t.vp.SetContent(content)
-	return renderScrollable(t.vp, t.styles)
+	return scroll.Scrollable(t.vp, t.styles)
 }
 
 func (t *HelpTab) Resize(width, height int) {
@@ -154,7 +155,8 @@ func (t *HelpTab) helpLines() []string {
 		lines = append(lines, section(s.Title), registryLines(s.Bindings), "")
 	}
 
-	lines = append(lines,
+	lines = append(
+		lines,
 		section("Tab Picker (Alt+`)"),
 		binding("Enter", "Go to tab (riders focus their pane; hidden tabs return)"),
 		binding("Ctrl+N", "Create new tab"),
