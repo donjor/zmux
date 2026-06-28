@@ -181,6 +181,50 @@ func TestTabPaneJoinsIntoHost(t *testing.T) {
 	}
 }
 
+// Bare tab pane uses the focused pane's logical tab as the host. When the
+// cursor is on a rider pane, the join anchors beside that rider instead of the
+// shared window's full owner.
+func TestTabPaneBareHostUsesFocusedRider(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	host := logicalRow("%2", "test-session", "@2", 1, "ztab_wrk001", "work")
+	host.WindowPanes = 2
+	rider := logicalRow("%4", "test-session", "@2", 1, "ztab_ride01", "rider")
+	rider.WindowPanes = 2
+	rider.Anchor = "ztab_wrk001"
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		host,
+		rider,
+		logicalRow("%3", "test-session", "@5", 2, "ztab_bud001", "buddy"),
+	}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{session_name}": "test-session",
+		"#{pane_id}":      "%4\n",
+		"session_group":   "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t2\t%4\n",
+		"#{window_panes}": "3\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "pane", "buddy"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab pane failed: %v", err)
+	}
+
+	var joinedBesideRider, anchoredToRider bool
+	for _, c := range mock.Calls {
+		if c.Method == "JoinPane" && c.Args[0] == "%3" && c.Args[1] == "%4" {
+			joinedBesideRider = true
+		}
+		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" &&
+			c.Args[2] == tabs.OptAnchor && c.Args[3] == "ztab_ride01" {
+			anchoredToRider = true
+		}
+	}
+	if !joinedBesideRider || !anchoredToRider {
+		t.Errorf("expected join beside focused rider: joined=%v anchored=%v", joinedBesideRider, anchoredToRider)
+	}
+}
+
 // --notify on a successful join flashes the outcome via display-message
 // instead of stdout (which run-shell would dump as a sticky takeover).
 func TestTabPaneNotifyFlashesSuccess(t *testing.T) {

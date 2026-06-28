@@ -101,27 +101,42 @@ func CurrentTab(r tmux.Runner) (*LogicalTab, error) {
 	return nil, fmt.Errorf("current pane is not a zmux tab — pass a tab name")
 }
 
-// CurrentHost resolves the caller's active window to the full logical tab that
-// owns it — the default join destination. Callers reconcile beforehand when they
-// need a fresh scan (CurrentTab does; a bare CurrentHost trusts the live list).
+// CurrentHost resolves the caller's active pane to the logical tab under the
+// cursor — the default join destination.
 func CurrentHost(r tmux.Runner) (*LogicalTab, error) {
 	if !r.IsInsideTmux() {
 		return nil, fmt.Errorf("not inside tmux — name the host tab")
-	}
-	windowID, err := currentValue(r, "#{window_id}")
-	if err != nil {
-		return nil, fmt.Errorf("resolve current window: %w", err)
 	}
 	all, err := ListLogicalTabs(r)
 	if err != nil {
 		return nil, fmt.Errorf("scan tabs: %w", err)
 	}
+	return CurrentHostFrom(all, r)
+}
+
+// CurrentHostFrom resolves the join host from an already-scanned tab list.
+//
+// Invariant: a logical tab is pane-canonical. Placement only says where that
+// pane currently lives: full window, pane-of another tab, or dock. Therefore the
+// "current tab" is the focused pane's logical tab, and the default join host is
+// that same tab. When the focused pane is a full owner this preserves the old
+// anchor; when it is a joined pane, a bare join lands beside the pane under the
+// cursor. This helper deliberately reuses all instead of rescanning, so palette
+// rows and their current-host exclusion come from one coherent snapshot.
+func CurrentHostFrom(all []LogicalTab, r tmux.Runner) (*LogicalTab, error) {
+	if !r.IsInsideTmux() {
+		return nil, fmt.Errorf("not inside tmux — name the host tab")
+	}
+	paneID, err := currentValue(r, "#{pane_id}")
+	if err != nil {
+		return nil, fmt.Errorf("resolve current pane: %w", err)
+	}
 	for i := range all {
-		if all[i].WindowID == windowID && all[i].Placement == PlacementFull {
+		if all[i].PaneID == paneID {
 			return &all[i], nil
 		}
 	}
-	return nil, fmt.Errorf("current window is not a zmux tab")
+	return nil, fmt.Errorf("current pane is not a zmux tab")
 }
 
 // currentValue reads a tmux format against the caller's current client.

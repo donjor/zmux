@@ -134,8 +134,8 @@ func (e *Executor) Run(action Action) PostAction {
 		})
 
 	case TabJoinPayload:
-		return e.runTabPlacement(payload.TabID, func(t *tabs.LogicalTab) error {
-			host, err := tabs.CurrentHost(e.Runner)
+		return e.runTabPlacementFromScan(payload.TabID, func(t *tabs.LogicalTab, all []tabs.LogicalTab) error {
+			host, err := tabs.CurrentHostFrom(all, e.Runner)
 			if err != nil {
 				return err
 			}
@@ -202,6 +202,12 @@ func (e *Executor) runPaneOp(op PaneOp) error {
 // than trusting the payload's snapshot) handles a tab that moved or closed since
 // the palette opened.
 func (e *Executor) runTabPlacement(tabID string, op func(*tabs.LogicalTab) error) PostAction {
+	return e.runTabPlacementFromScan(tabID, func(t *tabs.LogicalTab, _ []tabs.LogicalTab) error {
+		return op(t)
+	})
+}
+
+func (e *Executor) runTabPlacementFromScan(tabID string, op func(*tabs.LogicalTab, []tabs.LogicalTab) error) PostAction {
 	all, err := tabs.ListLogicalTabs(e.Runner)
 	if err != nil {
 		return PostAction{Kind: PostError, Err: fmt.Errorf("scan tabs: %w", err)}
@@ -210,7 +216,7 @@ func (e *Executor) runTabPlacement(tabID string, op func(*tabs.LogicalTab) error
 	if t == nil {
 		return PostAction{Kind: PostError, Err: fmt.Errorf("tab no longer exists")}
 	}
-	if err := op(t); err != nil {
+	if err := op(t, all); err != nil {
 		return PostAction{Kind: PostError, Err: err}
 	}
 	return PostAction{Kind: PostClose}

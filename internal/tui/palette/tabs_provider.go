@@ -39,7 +39,7 @@ func (p *LogicalTabProvider) Actions() ([]Action, error) {
 	// into current" row. Best-effort: outside tmux there is simply no host, so
 	// join rows are omitted rather than erroring.
 	currentID := ""
-	if host, herr := tabs.CurrentHost(p.Runner); herr == nil {
+	if host, herr := tabs.CurrentHostFrom(all, p.Runner); herr == nil {
 		currentID = host.ID
 	}
 	return tabActionsFor(all, currentID), nil

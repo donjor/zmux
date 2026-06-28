@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/donjor/zmux/internal/tabs"
+	"github.com/donjor/zmux/internal/tmux"
 )
 
 func payloadIDs(as []Action) map[string]string {
@@ -58,6 +59,91 @@ func TestTabActionsForNoCurrentHostOmitsJoin(t *testing.T) {
 	}
 	if _, ok := got["tab:hide:ztab_full"]; !ok {
 		t.Errorf("hide row should still appear without a host")
+	}
+}
+
+func paletteRow(pane, session, window, tabID, label string, mod ...func(*tmux.LogicalPaneRow)) tmux.LogicalPaneRow {
+	r := tmux.LogicalPaneRow{
+		PaneID:      pane,
+		Session:     session,
+		WindowID:    window,
+		TabID:       tabID,
+		Label:       label,
+		WindowPanes: 1,
+	}
+	for _, fn := range mod {
+		fn(&r)
+	}
+	return r
+}
+
+func paletteDisplayPane(paneID string) func(string, string) (string, error) {
+	return func(_, format string) (string, error) {
+		if format == "#{pane_id}" {
+			return paneID + "\n", nil
+		}
+		return "", nil
+	}
+}
+
+func paletteCallCount(mock *tmux.MockRunner, method string) int {
+	var n int
+	for _, c := range mock.Calls {
+		if c.Method == method {
+			n++
+		}
+	}
+	return n
+}
+
+func TestLogicalTabProviderUsesSameScanForCurrentHost(t *testing.T) {
+	first := []tmux.LogicalPaneRow{
+		paletteRow("%1", "work", "@1", "ztab_current", "current"),
+		paletteRow("%2", "work", "@2", "ztab_other", "other"),
+	}
+	second := []tmux.LogicalPaneRow{
+		paletteRow("%1", "work", "@1", "ztab_wrong", "wrong"),
+		paletteRow("%2", "work", "@2", "ztab_other", "other"),
+	}
+	mock := tmux.NewMockRunner()
+	mock.InsideTmux = true
+	mock.LogicalRowsByCall = [][]tmux.LogicalPaneRow{first, second}
+	mock.DisplayMessageFunc = paletteDisplayPane("%1")
+
+	actions, err := (&LogicalTabProvider{Runner: mock}).Actions()
+	if err != nil {
+		t.Fatalf("Actions failed: %v", err)
+	}
+	got := payloadIDs(actions)
+	if _, ok := got["tab:pane:ztab_current"]; ok {
+		t.Fatalf("provider emitted a join-into-self row from a skewed host scan: %v", got)
+	}
+	if calls := paletteCallCount(mock, "ListLogicalPaneRows"); calls != 1 {
+		t.Fatalf("provider scanned %d times, want one coherent scan", calls)
+	}
+}
+
+func TestLogicalTabProviderFocusedRiderCanJoinWindowOwnerIntoRider(t *testing.T) {
+	host := paletteRow("%1", "work", "@1", "ztab_host", "host", func(r *tmux.LogicalPaneRow) {
+		r.WindowPanes = 2
+	})
+	rider := paletteRow("%2", "work", "@1", "ztab_rider", "rider", func(r *tmux.LogicalPaneRow) {
+		r.WindowPanes = 2
+		r.Anchor = "ztab_host"
+	})
+	other := paletteRow("%3", "work", "@2", "ztab_other", "other")
+	mock := tmux.NewMockRunner()
+	mock.InsideTmux = true
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, rider, other}
+	mock.DisplayMessageFunc = paletteDisplayPane("%2")
+
+	actions, err := (&LogicalTabProvider{Runner: mock}).Actions()
+	if err != nil {
+		t.Fatalf("Actions failed: %v", err)
+	}
+	got := payloadIDs(actions)
+	if _, ok := got["tab:pane:ztab_host"]; !ok {
+		t.Fatalf("focused rider should allow joining the window owner into it; got %v", got)
 	}
 }
 

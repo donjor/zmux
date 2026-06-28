@@ -1,6 +1,7 @@
 package palette
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/donjor/zmux/internal/config"
@@ -169,6 +170,48 @@ func lastCall(mock *tmux.MockRunner, method string) (tmux.MockCall, bool) {
 		}
 	}
 	return tmux.MockCall{}, false
+}
+
+func TestExecutorTabJoinUsesExecutionScanForHost(t *testing.T) {
+	exe, mock, _ := newTestExecutor(t)
+	first := []tmux.LogicalPaneRow{
+		paletteRow("%1", "work", "@1", "ztab_current", "current"),
+		paletteRow("%2", "work", "@2", "ztab_target", "target"),
+	}
+	second := []tmux.LogicalPaneRow{
+		paletteRow("%9", "work", "@1", "ztab_wrong", "wrong"),
+		paletteRow("%2", "work", "@2", "ztab_target", "target"),
+	}
+	mock.InsideTmux = true
+	mock.LogicalRowsByCall = [][]tmux.LogicalPaneRow{first, second}
+	mock.DisplayMessageFunc = func(_, format string) (string, error) {
+		switch {
+		case format == "#{pane_id}":
+			return "%1\n", nil
+		case format == "#{window_id}":
+			return "@1\n", nil
+		case strings.Contains(format, "session_group"):
+			return "\t1\t1\n", nil
+		case format == "#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}":
+			return "L\t0\t1\t%1\n", nil
+		case format == "#{window_panes}":
+			return "2\n", nil
+		default:
+			return "", nil
+		}
+	}
+
+	post := exe.Run(Action{Payload: TabJoinPayload{TabID: "ztab_target"}})
+	if post.Kind != PostClose {
+		t.Fatalf("kind = %v, err = %v; want PostClose", post.Kind, post.Err)
+	}
+	call, ok := lastCall(mock, "JoinPane")
+	if !ok {
+		t.Fatalf("expected JoinPane call, got %v", mock.Calls)
+	}
+	if call.Args[0] != "%2" || call.Args[1] != "%1" {
+		t.Fatalf("JoinPane args = %v, want source %%2 target current-pane host %%1", call.Args)
+	}
 }
 
 func TestExecutorPaneAndTabOpsDispatch(t *testing.T) {
