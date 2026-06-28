@@ -22,10 +22,10 @@ from under you and your next command lands on the wrong slot. Reach for the zmux
 `tabs`/`ls` over `list-windows`/`list-sessions`, `pane open` over `split-window`,
 `run -n` over `new-window`.
 
-A `PreToolUse` guard (`hooks/zmux-guard.mjs`, symlinked into `~/.claude/hooks/`)
-**blocks** raw tmux and ad-hoc background jobs — shell `&`/`nohup`, `npm run dev`,
-**and the Bash tool's own `run_in_background: true`** — and prints the right verb
-back, so a slip self-corrects. The full mapping table, guard
+A harness hook guard (`hooks/zmux-guard.mjs`; Claude wires it as `PreToolUse`, Pi via
+`pi-donjor-harness`'s `tool_call` hook) **blocks** raw tmux and ad-hoc background jobs
+— shell `&`/`nohup`, `npm run dev`, and Claude's Bash `run_in_background: true` — and
+prints the right verb back, so a slip self-corrects. The full mapping table, guard
 exemptions, and tab-state glyph behavior → **`references/guard-and-tab-states.md`**.
 
 A tab also carries a lifecycle glyph in the bar (● needs-human / ◐ running / ✓ done /
