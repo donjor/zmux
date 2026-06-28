@@ -90,6 +90,27 @@ func TestViewFillsHeightWithScrollbar(t *testing.T) {
 	}
 }
 
+// TestScopeFilterNarrows: the scope toggle shows all sections by default, then
+// only keybinding or only command sections.
+func TestScopeFilterNarrows(t *testing.T) {
+	m := New(help.Sections(), styles.Styles{})
+	if got := len(m.visibleSections()); got != len(m.sections) {
+		t.Fatalf("default scope showed %d sections, want all %d", got, len(m.sections))
+	}
+	m.scope = scopeKeys
+	for _, s := range m.visibleSections() {
+		if s.Scope != help.ScopeKeybinding {
+			t.Errorf("keys scope showed non-keybinding section %q", s.Title)
+		}
+	}
+	m.scope = scopeCommands
+	for _, s := range m.visibleSections() {
+		if s.Scope != help.ScopeCommand {
+			t.Errorf("commands scope showed non-command section %q", s.Title)
+		}
+	}
+}
+
 func titles(sections []help.Section) []string {
 	var out []string
 	for _, s := range sections {

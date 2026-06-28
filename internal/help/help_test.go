@@ -20,12 +20,34 @@ func sectionTitles(sections []help.Section) map[string]bool {
 func TestSectionsSpanCommandsAndKeybindings(t *testing.T) {
 	titles := sectionTitles(help.Sections())
 	for _, want := range []string{
-		"Session Management",            // command reference
-		"tmux Prefix Keys (Ctrl+Space)", // keybinding reference (from keys)
+		"Session Management",  // command reference
+		"Panes",               // keybinding reference, grouped by category
+		"Inherited from tmux", // inherited keybinding reference
 	} {
 		if !titles[want] {
 			t.Errorf("Sections() missing section %q", want)
 		}
+	}
+}
+
+// TestScopeTagging: command and keybinding sections carry distinct scopes that
+// partition the full set, so the viewer's commands/keys/all toggle is exact.
+func TestScopeTagging(t *testing.T) {
+	all := help.Sections()
+	cmds := help.FilterScope(all, help.ScopeCommand)
+	keySecs := help.FilterScope(all, help.ScopeKeybinding)
+
+	if len(cmds)+len(keySecs) != len(all) {
+		t.Fatalf("scopes don't partition: %d + %d != %d", len(cmds), len(keySecs), len(all))
+	}
+	if !sectionTitles(cmds)["Session Management"] {
+		t.Errorf("command scope missing Session Management")
+	}
+	if sectionTitles(cmds)["Panes"] {
+		t.Errorf("command scope leaked a keybinding section (Panes)")
+	}
+	if !sectionTitles(keySecs)["Panes"] || !sectionTitles(keySecs)["Inherited from tmux"] {
+		t.Errorf("keybinding scope missing category/inherited sections")
 	}
 }
 

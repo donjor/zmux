@@ -11,11 +11,22 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/help"
 	"github.com/donjor/zmux/internal/tui/scroll"
 	"github.com/donjor/zmux/internal/tui/styles"
+)
+
+// scopeMode selects which sections the viewer shows: all, commands only, or
+// keybindings only. Cycled with Tab.
+type scopeMode int
+
+const (
+	scopeAll scopeMode = iota
+	scopeCommands
+	scopeKeys
 )
 
 // Model is the bubbletea model for the help viewer.
@@ -24,6 +35,7 @@ type Model struct {
 	filter   textinput.Model
 	vp       viewport.Model
 	styles   styles.Styles
+	scope    scopeMode
 	width    int
 	height   int
 	ready    bool
@@ -84,6 +96,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, key.NewBinding(key.WithKeys("pgdown", "ctrl+d"))):
 		m.vp.ScrollDown(m.vp.Height() / 2)
 		return m, nil
+
+	// Cycle the scope filter: all -> commands -> keys -> all.
+	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
+		m.scope = (m.scope + 1) % 3
+		m.refresh()
+		return m, nil
+	case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab"))):
+		m.scope = (m.scope + 2) % 3
+		m.refresh()
+		return m, nil
 	}
 
 	// Everything else edits the filter.
@@ -93,12 +115,25 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// visibleSections applies the scope filter (the commands/keys/all toggle) before
+// the fuzzy text filter narrows within it.
+func (m *Model) visibleSections() []help.Section {
+	switch m.scope {
+	case scopeCommands:
+		return help.FilterScope(m.sections, help.ScopeCommand)
+	case scopeKeys:
+		return help.FilterScope(m.sections, help.ScopeKeybinding)
+	default:
+		return m.sections
+	}
+}
+
 // refresh re-renders the filtered content into the viewport and resets scroll.
 func (m *Model) refresh() {
 	if !m.ready {
 		return
 	}
-	m.vp.SetContent(m.renderSections(FilterSections(m.sections, m.filter.Value())))
+	m.vp.SetContent(m.renderSections(FilterSections(m.visibleSections(), m.filter.Value())))
 	m.vp.GotoTop()
 }
 
@@ -115,29 +150,70 @@ func (m *Model) view() string {
 	}
 	var b strings.Builder
 	title := m.styles.Accent.Bold(true).Render("zmux")
-	b.WriteString("\n  " + title + m.styles.Dim.Render(" help") + "\n\n")
+	scopeName := [...]string{"all", "commands", "keys"}[m.scope]
+	b.WriteString("\n  " + title + m.styles.Dim.Render(" help") +
+		m.styles.Dim.Render("   ·  showing ") + m.styles.Normal.Render(scopeName) + "\n\n")
 	b.WriteString(m.styles.Accent.Render("  > ") + m.filter.View() + "\n\n")
 	b.WriteString(scroll.Scrollable(m.vp, m.styles) + "\n")
-	b.WriteString("  " + m.styles.Dim.Render("type:filter  ↑/↓:scroll  esc:close"))
+	b.WriteString("  " + m.styles.Dim.Render("type:filter  ⇄ tab:scope  ↑/↓:scroll  esc:close"))
 	return b.String()
 }
 
-// renderSections renders filtered sections into the scrollable body. An empty
-// result (a query that matches nothing) shows a hint instead of a blank pane.
+// renderSections renders filtered sections into the scrollable body, grouped
+// under scope bands (Commands / Keybindings) with each section's descriptions
+// aligned into a column. An empty result shows a hint instead of a blank pane.
 func (m *Model) renderSections(sections []help.Section) string {
 	if len(sections) == 0 {
 		return "  " + m.styles.Dim.Render("No matching help.")
 	}
 	var b strings.Builder
-	for si, s := range sections {
-		if si > 0 {
+	shown := map[help.Scope]bool{}
+	for i, s := range sections {
+		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString("  " + m.styles.Accent.Bold(true).Render(s.Title) + "\n")
-		for _, e := range s.Entries {
-			b.WriteString("    " + m.styles.Normal.Render(e.Label) +
-				m.styles.Dim.Render("  "+e.Desc) + "\n")
+		if !shown[s.Scope] {
+			b.WriteString("  " + m.bandHeader(s.Scope) + "\n\n")
+			shown[s.Scope] = true
 		}
+		b.WriteString("  " + m.styles.Accent.Bold(true).Render(s.Title) + "\n")
+		b.WriteString(m.renderEntries(s.Entries))
+	}
+	return b.String()
+}
+
+// bandHeader is the scope divider above a run of same-scope sections.
+func (m *Model) bandHeader(scope help.Scope) string {
+	head := m.styles.Dim.Bold(true).Render("── " + help.BandLabel(scope) + " ──")
+	if scope == help.ScopeKeybinding {
+		// ponytail: prefix is hardcoded Ctrl+Space, matching the generated conf
+		// default the help has always assumed.
+		head += m.styles.Dim.Render("  prefix = Ctrl+Space")
+	}
+	return head
+}
+
+// renderEntries aligns each entry's description into a column. The label column
+// is capped so one long label can't push every description off-screen.
+func (m *Model) renderEntries(entries []help.Entry) string {
+	const labelCap = 30
+	col := 0
+	for _, e := range entries {
+		if w := lipgloss.Width(e.Label); w > col {
+			col = w
+		}
+	}
+	if col > labelCap {
+		col = labelCap
+	}
+	var b strings.Builder
+	for _, e := range entries {
+		pad := col - lipgloss.Width(e.Label)
+		if pad < 1 {
+			pad = 1
+		}
+		b.WriteString("    " + m.styles.Normal.Render(e.Label) +
+			strings.Repeat(" ", pad+1) + m.styles.Dim.Render(e.Desc) + "\n")
 	}
 	return b.String()
 }
@@ -181,7 +257,7 @@ func FilterSections(sections []help.Section, query string) []help.Section {
 				kept = append(kept, e)
 			}
 		}
-		out = append(out, help.Section{Title: s.Title, Entries: kept})
+		out = append(out, help.Section{Title: s.Title, Scope: s.Scope, Entries: kept})
 	}
 	return out
 }

@@ -13,9 +13,20 @@ type Entry struct {
 	Desc  string
 }
 
+// Scope tags whether a section is a CLI command group or a keybinding group, so
+// the help viewer can filter to commands, keys, or all. ScopeCommand is the zero
+// value, so command sections need not set it.
+type Scope int
+
+const (
+	ScopeCommand Scope = iota
+	ScopeKeybinding
+)
+
 // Section groups related entries under a title.
 type Section struct {
 	Title   string
+	Scope   Scope
 	Entries []Entry
 }
 
@@ -24,15 +35,60 @@ type Section struct {
 // registry (the same source the tmux conf and generated docs use), so a new
 // binding surfaces here automatically.
 func Sections() []Section {
-	out := commandSections()
-	for _, ks := range keys.TmuxHelpSections() {
-		entries := make([]Entry, 0, len(ks.Bindings))
-		for _, b := range ks.Bindings {
-			entries = append(entries, Entry{Label: b.DisplayKey(), Desc: b.Help})
+	return append(commandSections(), keybindingSections()...)
+}
+
+// FilterScope returns only the sections in the given scope — the helper behind
+// the viewer's commands / keys / all toggle.
+func FilterScope(sections []Section, scope Scope) []Section {
+	out := make([]Section, 0, len(sections))
+	for _, s := range sections {
+		if s.Scope == scope {
+			out = append(out, s)
 		}
-		out = append(out, Section{Title: ks.Title, Entries: entries})
 	}
 	return out
+}
+
+// BandLabel is the scope-band header shown above a run of same-scope sections.
+func BandLabel(scope Scope) string {
+	if scope == ScopeKeybinding {
+		return "KEYBINDINGS"
+	}
+	return "COMMANDS"
+}
+
+// keybindingSections renders the keybinding reference. Prefix keys are grouped
+// by their category — the same small-titled-section rhythm as the command
+// reference, rather than one compressed lump — followed by the instant and
+// inherited tables. Derived from the keys registry, so a new binding surfaces
+// here automatically.
+func keybindingSections() []Section {
+	var order []keys.Category
+	byCat := map[keys.Category][]keys.Binding{}
+	for _, b := range keys.PrefixBindings {
+		if _, ok := byCat[b.Category]; !ok {
+			order = append(order, b.Category)
+		}
+		byCat[b.Category] = append(byCat[b.Category], b)
+	}
+
+	out := make([]Section, 0, len(order)+2)
+	for _, cat := range order {
+		out = append(out, keySection(string(cat), byCat[cat]))
+	}
+	// The "no prefix" and "from tmux" distinctions are worth their own sections.
+	out = append(out, keySection("No prefix (instant)", keys.NoPrefixBindings))
+	out = append(out, keySection("Inherited from tmux", keys.InheritedBindings))
+	return out
+}
+
+func keySection(title string, bindings []keys.Binding) Section {
+	entries := make([]Entry, 0, len(bindings))
+	for _, b := range bindings {
+		entries = append(entries, Entry{Label: b.DisplayKey(), Desc: b.Help})
+	}
+	return Section{Title: title, Scope: ScopeKeybinding, Entries: entries}
 }
 
 // commandSections is the curated CLI command reference. Keep entries terse; the

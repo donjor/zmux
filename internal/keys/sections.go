@@ -11,24 +11,14 @@ type KeySection struct {
 	Bindings []Binding
 }
 
-// TmuxHelpSections is the keybinding-section set for `zmux help`: the tmux prefix
-// table, the instant no-prefix table, and the inherited tmux defaults. Copy-mode
-// keys are intentionally omitted — the CLI help stays tmux-control-focused.
-func TmuxHelpSections() []KeySection {
-	return []KeySection{
-		{Title: "tmux Prefix Keys (Ctrl+Space)", Bindings: PrefixBindings},
-		{Title: "No-Prefix Keys", Bindings: NoPrefixBindings},
-		{Title: "Inherited tmux Defaults (Ctrl+Space)", Bindings: InheritedBindings},
-	}
-}
-
 // DashboardHelpSections is the keybinding-section set for the dashboard Help tab.
-// Same registry source as the CLI help, plus copy-mode. Titles match the rendered
-// reference so consuming this leaves the dashboard output stable.
+// The prefix table is zmux's own bindings (not tmux's), so it is titled plainly
+// with the prefix noted once; only the genuinely inherited tmux defaults carry
+// the "from tmux" label.
 func DashboardHelpSections() []KeySection {
 	return []KeySection{
-		{Title: "tmux Prefix Keys (Ctrl+Space)", Bindings: PrefixBindings},
-		{Title: "Inherited tmux Defaults (Ctrl+Space)", Bindings: InheritedBindings},
+		{Title: "Prefix Keys (Ctrl+Space)", Bindings: PrefixBindings},
+		{Title: "Inherited from tmux", Bindings: InheritedBindings},
 		{Title: "No-Prefix Keys", Bindings: NoPrefixBindings},
 		{Title: "Copy Mode (vi keys)", Bindings: CopyModeBindings},
 	}

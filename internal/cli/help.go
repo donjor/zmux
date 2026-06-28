@@ -43,7 +43,18 @@ func printStyledHelp(app *apppkg.App) {
 
 	b.WriteString(titleStyle.Render("zmux") + " " + styles.Muted.Render("— an opinionated tmux management wrapper") + "\n\n")
 
+	bandStyle := styles.Accent.Bold(true)
+	var lastBand *help.Scope
 	for _, section := range help.Sections() {
+		if lastBand == nil || *lastBand != section.Scope {
+			sc := section.Scope
+			band := bandStyle.Render(help.BandLabel(sc))
+			if sc == help.ScopeKeybinding {
+				band += styles.Muted.Render("   prefix = Ctrl+Space")
+			}
+			b.WriteString(band + "\n\n")
+			lastBand = &sc
+		}
 		b.WriteString(groupStyle.Render(section.Title) + "\n")
 		for _, e := range section.Entries {
 			cmd := cmdStyle.Render("  " + e.Label)
