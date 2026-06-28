@@ -1,0 +1,73 @@
+# git-cliff configuration for zmux.
+#
+# The CHANGELOG is hand-curated (Keep a Changelog: topic tags, bold lead-ins,
+# prose). git-cliff is a DRAFTING aid, not the file's owner — it turns
+# conventional commits into a starting draft you then curate. It never rewrites
+# the curated history below.
+#
+# Release workflow:
+#   1. git cliff --unreleased --tag vX.Y.Z > .dump/git-cliff-draft.md
+#   2. fold the draft into CHANGELOG.md by hand: add `topic` tags + prose,
+#      date the heading, refresh the Compare link, open a fresh [Unreleased].
+#   3. commit, then: git tag -a vX.Y.Z -m "zmux vX.Y.Z" && git push origin master --follow-tags
+# Never run `git cliff -o CHANGELOG.md` — a full regen flattens the curated history.
+
+[changelog]
+header = """
+# Changelog
+
+Notable changes, newest first. Forward work lives in
+[docs/ROADMAP.md](docs/ROADMAP.md). Format: [Keep a Changelog](https://keepachangelog.com);
+versioning is semver-ish until the first public release.
+"""
+body = """
+{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% if previous.version -%}
+> Release tag: `{{ version }}` | Compare: `{{ previous.version }}...{{ version }}`
+{% endif -%}
+{% else -%}
+## [Unreleased]
+> Release tag: pending | Compare: `{{ previous.version }}...HEAD`
+{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first | upper_first }}\
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_preprocessors = [
+  # strip a trailing "(report NNN)" / "(plan NNN)" provenance tail — dead links in tracked history
+  { pattern = '\s*\((report|plan) [0-9]+[^)]*\)', replace = "" },
+]
+commit_parsers = [
+  { message = "^feat",     group = "Added" },
+  { message = "^fix",      group = "Fixed" },
+  { message = "^perf",     group = "Changed" },
+  { message = "^refactor", group = "Changed" },
+  { message = "^revert",   group = "Fixed" },
+  { message = "^docs",     skip = true },
+  { message = "^test",     skip = true },
+  { message = "^style",    skip = true },
+  { message = "^chore",    skip = true },
+  { message = "^ci",       skip = true },
+  { message = "^build",    skip = true },
+  { message = ".*",        group = "Changed" },
+]
+protect_breaking_commits = false
+filter_commits = false
+tag_pattern = "v[0-9]*"
+topo_order = false
+sort_commits = "oldest"
+
+[remote.github]
+owner = "donjor"
+repo = "zmux"

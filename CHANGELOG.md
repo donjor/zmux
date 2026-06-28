@@ -5,7 +5,10 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: `agents`, `palette`, `help`, `panes`, `tabs` | Compare: `v0.9.0...HEAD`
+> Release tag: pending | Compare: `v0.10.0...HEAD`
+
+## [0.10.0] - 2026-06-28
+> Release tag: `v0.10.0` | Topics: `agents`, `palette`, `help`, `panes`, `tabs`, `session` | Compare: `v0.9.0...v0.10.0`
 
 ### Added
 
@@ -64,7 +67,16 @@ versioning is semver-ish until the first public release.
   a clean miss. Read-only/explicit-cross verbs (`watch`, `log tail`, `tab show`,
   `tab move`) keep the cross-session reach with a warning. ID lookup prefers an
   in-scope row so session-group clones (same-ID rows per clone session) still
-  resolve clone-local.
+  resolve clone-local. The create path drops an all-out-of-session *ambiguity*
+  too: a roster name live in 2+ sibling sessions previously surfaced a fatal
+  `ambiguous — use an id` and refused the local spawn; `run -n <name>` now
+  creates in the current session, while a genuine in-session collision still
+  errors.
+- **Owned-attach fallback detaches on destroy without a global override**
+  `session` - the sessionless/owned-attach reattach path needs its client to
+  detach when the session is destroyed, but a global `detach-on-destroy off`
+  preference made tmux refuse the attach outright. It is now set per-session, so
+  the fallback works without touching the user's global setting.
 
 ## [0.9.0] - 2026-06-21
 > Release tag: `v0.9.0` | Topics: `agents`, `workspace`, `dashboard`, `ui` | Compare: `v0.8.0...v0.9.0`
