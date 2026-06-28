@@ -220,7 +220,7 @@ Prefix: `Ctrl+Space` (configurable)
 | prefix + p | Command palette |
 | prefix + ! | Scratch shell popup ($SHELL, cwd from active pane) |
 | prefix + d | Detach |
-| prefix + ? | Help popup |
+| prefix + ? | Help viewer (scroll, fuzzy filter, commands/keys scope) |
 | prefix + c | New tab |
 | prefix + n / N | Next / previous tab |
 | prefix + < / > | Move tab left / right |

@@ -5,9 +5,24 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Topics: `agents`, `panes`, `tabs` | Compare: `v0.9.0...HEAD`
+> Release tag: pending | Topics: `agents`, `palette`, `help`, `panes`, `tabs` | Compare: `v0.9.0...HEAD`
 
 ### Added
+
+- **Interactive `prefix+?` help viewer** `help` - the help popup is now a
+  scrollable, fuzzy-filterable viewer (`internal/tui/helpview`) rendering from a
+  shared `internal/help` source, so it can't drift from `zmux help`. `Tab` cycles
+  a commands/keys/all scope filter; prefix keys are grouped by category with
+  aligned columns and titled as zmux's own — only genuinely inherited tmux
+  defaults keep the "from tmux" label. A shared scrollbar renderer
+  (`internal/tui/scroll`) is reused by the dashboard tabs and the viewer.
+- **Command palette reaches every keybound action** `palette` - the palette is
+  backed by an action registry (`internal/actions` + palette providers) with
+  keybound, session, and logical-tab providers and a typed tmux executor, so
+  anything a prefix key does is runnable from `prefix+p`. Logical-tab rows
+  (hide/show/promote/join) run through the shared placement service; session rows
+  show the workspace label, not the raw `zws_` name. A coverage gate pins the
+  palette to the keybinding registry so a new binding can't go palette-less.
 
 - **Readable pane-border headers + single-pane detail** `panes` - joined panes
   render `<index> <name> <detail>` with an active `●` / inactive `○` marker,

@@ -103,6 +103,8 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 | `snapshot` | ~525 | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver` |
 | `capturelog` | ~155 | Bounded sink behind `zmux log` (tail-style logging). A `tmux pipe-pane` feeds the hidden `zmux log-sink`; the sink keeps only the trailing `--max-bytes` in memory (exact cap, no rotation files) and flushes the whole buffer via `config.FS`. Optional stateful ANSI/control stripping for a readable plain log |
 | `qa` | ~1320 | Repo-local QA walkthrough framework: checklist parse/lint, scorecard state, shell runner, and `cmd/qa` CLI |
+| `actions` | ~80 | Typed action model (payloads) the command palette executes through `tmux.Runner` |
+| `help` | ~180 | Help-content SSOT (command + keybinding reference) shared by `zmux help` and the prefix+? viewer, so the two can't drift |
 
 ### UI
 
@@ -125,8 +127,10 @@ The flat `tui` root package was dissolved into focused leaf/surface packages; th
 | `tui/palette` | Command palette: registry, providers, executor |
 | `tui/dashboard` | Tabbed dashboard `App` and `Tab` interface |
 | `tui/dashboard/tabs` | Tab implementations: current, sessions, themes, bar, settings, help |
+| `tui/helpview` | `prefix+?` interactive help viewer — scroll, fuzzy filter, commands/keys/all scope toggle; renders from `internal/help` |
 | `tui/views` | Shared row/column components |
 | `tui/outline` | Tree-outline component |
+| `tui/scroll` | Shared viewport scrollbar renderer (dashboard tabs + help viewer) |
 | `preview` | UI prototype framework (`Page`, `Controls`, `RenderContext`) |
 
 ## Decisions
@@ -275,6 +279,8 @@ internal/tui/                 — no flat package; focused leaves + surfaces
 ├── recipeup/                 — recipe create/edit form wizard
 ├── outline/                  — tree-outline subcomponent
 ├── views/                    — shared row/column components
+├── scroll/                   — shared viewport scrollbar renderer (dashboard + help)
+├── helpview/                 — prefix+? interactive help viewer (scroll / fuzzy / scope)
 ├── palette/                  — command palette
 │   ├── registry.go           — ActionProvider interface
 │   ├── executor.go           — runs selected action
