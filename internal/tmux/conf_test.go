@@ -172,6 +172,7 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 
 	checks := []string{
 		`bind c new-window -c "#{pane_current_path}"`,
+		`bind j run-shell "/usr/local/bin/zmux tab split --notify"`,
 		"bind n next-window",
 		`bind . command-prompt -p "label tab (blank clears):"`,
 		`set-option -w -t #{window_id} @zmux_label`,
@@ -185,6 +186,29 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 		if !strings.Contains(conf, want) {
 			t.Errorf("conf missing window binding: %q", want)
 		}
+	}
+}
+
+func TestGenerateConfContainsMousePaneMenu(t *testing.T) {
+	cfg := config.DefaultConfig()
+	palette := testPalette()
+	conf := GenerateConf(&cfg, &palette, "/usr/local/bin/zmux")
+
+	checks := []string{
+		`bind -T root MouseDown3Pane display-menu`,
+		`-t "#{mouse_pane}"`,
+		`"Promote to full" f { select-pane -t "#{mouse_pane}" ; run-shell "/usr/local/bin/zmux tab full --pane \"#{mouse_pane}\" --after --notify" }`,
+		`"Hide to dock" h { select-pane -t "#{mouse_pane}" ; run-shell "/usr/local/bin/zmux tab hide --pane \"#{mouse_pane}\" --notify" }`,
+		`"Kill pane" x { select-pane -t "#{mouse_pane}" ; kill-pane }`,
+	}
+	for _, want := range checks {
+		if !strings.Contains(conf, want) {
+			t.Errorf("conf missing mouse pane menu fragment: %q", want)
+		}
+	}
+
+	if strings.Contains(conf, "MouseDrag1Border") {
+		t.Error("pane menu must not override MouseDrag1Border; border resize belongs to tmux")
 	}
 }
 

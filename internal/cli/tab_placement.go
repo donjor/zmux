@@ -3,11 +3,13 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/debug"
+	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
@@ -15,36 +17,57 @@ import (
 
 func newTabHideCmd(app *apppkg.App) *cobra.Command {
 	var sessionFlag string
+	var paneFlag string
+	var notifyFlag bool
 
 	cmd := &cobra.Command{
-		Use:   "hide <tab>",
+		Use:   "hide [tab]",
 		Short: "Park a tab in the hidden dock (keeps running, off the bar)",
 		Long: `Hide a tab in the reserved dock session. The process keeps running and
 stays addressable — send/type/watch/run -n reach it by name or id — it just
 leaves the bar and the window list. Bring it back with zmux tab show.
 
 A full tab moves its whole window; a tab living as a pane inside another tab
-breaks out into the dock on its own.`,
-		Args: cobra.ExactArgs(1),
+breaks out into the dock on its own. With no tab argument, the focused
+pane-tab is hidden.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			session, err := placementSession(app, sessionFlag)
-			if err != nil {
-				return err
-			}
-			t, err := resolvePlacementTab(app, session, args[0], false)
-			if err != nil {
-				return err
-			}
-			if err := tabs.HideTab(app.Runner, t); err != nil {
-				return err
-			}
-			name := tabs.DisplayName(t)
-			fmt.Fprintf(cmd.OutOrStdout(), "hidden: %s (show with: zmux tab show %s)\n", name, name)
-			return nil
+			msg, err := func() (string, error) {
+				t, err := resolveHideTab(app, sessionFlag, paneFlag, args)
+				if err != nil {
+					return "", err
+				}
+				if err := tabs.HideTab(app.Runner, t); err != nil {
+					return "", err
+				}
+				name := tabs.DisplayName(t)
+				return fmt.Sprintf("hidden: %s (show with: zmux tab show %s)", name, name), nil
+			}()
+			return notifyOutcome(app, cmd, notifyFlag, msg, nil, err)
 		},
 	}
 	cmd.Flags().StringVarP(&sessionFlag, "session", "s", "", "session for tab-name targets (default: current)")
+	cmd.Flags().StringVar(&paneFlag, "pane", "", "target pane id (mouse/menu path)")
+	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (mouse/menu path)")
+	_ = cmd.Flags().MarkHidden("pane")
 	return cmd
+}
+
+func resolveHideTab(app *apppkg.App, sessionFlag, paneFlag string, args []string) (*tabs.LogicalTab, error) {
+	if paneFlag != "" {
+		if len(args) > 0 {
+			return nil, fmt.Errorf("--pane cannot be combined with a tab argument")
+		}
+		return logicalTabByPane(app.Runner, paneFlag)
+	}
+	if len(args) == 0 {
+		return tabs.CurrentTab(app.Runner)
+	}
+	session, err := placementSession(app, sessionFlag)
+	if err != nil {
+		return nil, err
+	}
+	return resolvePlacementTab(app, session, args[0], false)
 }
 
 func newTabShowCmd(app *apppkg.App) *cobra.Command {
@@ -139,8 +162,111 @@ relative to the host pane (default: --right).`,
 	return cmd
 }
 
+func newTabSplitCmd(app *apppkg.App) *cobra.Command {
+	var sizeFlag string
+	var notifyFlag bool
+	var dirRight, dirLeft, dirUp, dirDown bool
+
+	cmd := &cobra.Command{
+		Use:   "split",
+		Short: "Create a new tab as a pane beside the current one",
+		Long: `Create a managed tab in the current pane's cwd and immediately
+join it beside the tab under your cursor. This is the first-class one-key
+tab-to-pane path; use zmux tab pane <tab> when the tab already exists.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var warnings []string
+			msg, err := func() (string, error) {
+				dir, err := paneDirection(dirRight, dirLeft, dirUp, dirDown)
+				if err != nil {
+					return "", err
+				}
+				created, host, w, err := createJoinedTab(app, dir, sizeFlag)
+				warnings = w
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("split: %s → beside %s (%s)",
+					tabs.DisplayName(created), tabs.DisplayName(host), host.Session), nil
+			}()
+			return notifyOutcome(app, cmd, notifyFlag, msg, warnings, err)
+		},
+	}
+	cmd.Flags().StringVar(&sizeFlag, "size", "", "pane size, e.g. 40% or 80")
+	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (keybind path)")
+	cmd.Flags().BoolVar(&dirRight, "right", false, "place right of the host pane (default)")
+	cmd.Flags().BoolVar(&dirLeft, "left", false, "place left of the host pane")
+	cmd.Flags().BoolVar(&dirUp, "up", false, "place above the host pane")
+	cmd.Flags().BoolVar(&dirDown, "down", false, "place below the host pane")
+	return cmd
+}
+
+func createJoinedTab(app *apppkg.App, dir tmux.SplitDirection, size string) (*tabs.LogicalTab, *tabs.LogicalTab, []string, error) {
+	// The order is load-bearing: NewWindow without -d steals focus, so resolve
+	// the host before creating the tab and always create detached.
+	host, err := tabs.CurrentHost(app.Runner)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	cwd, err := currentPaneCWD(app)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	paneID, err := app.Runner.NewWindow(host.Session, "", cwd, tmux.Detached())
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create tab: %w", err)
+	}
+	if paneID == "" {
+		return nil, nil, nil, fmt.Errorf("create tab: tmux did not report the new pane id")
+	}
+	if _, err := tabs.Stamp(app.Runner, paneID, paneID, "", tablabel.SourcePane); err != nil {
+		return nil, nil, nil, fmt.Errorf("stamp tab: %w", err)
+	}
+	created, err := logicalTabByPane(app.Runner, paneID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	warnings, err := tabs.JoinTab(app.Runner, created, host, tabs.JoinOptions{
+		Direction: dir,
+		Size:      size,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return created, host, warnings, nil
+}
+
+func currentPaneCWD(app *apppkg.App) (string, error) {
+	cwd, err := app.Runner.DisplayMessage("", "#{pane_current_path}")
+	if err != nil {
+		return "", fmt.Errorf("resolve current pane cwd: %w", err)
+	}
+	cwd = strings.TrimSpace(cwd)
+	if cwd != "" {
+		return cwd, nil
+	}
+	if fallback, ferr := os.Getwd(); ferr == nil {
+		return fallback, nil
+	}
+	return "", fmt.Errorf("resolve current pane cwd: empty pane_current_path")
+}
+
+func logicalTabByPane(r tmux.Runner, paneID string) (*tabs.LogicalTab, error) {
+	all, err := tabs.ListLogicalTabs(r)
+	if err != nil {
+		return nil, fmt.Errorf("scan tabs: %w", err)
+	}
+	for i := range all {
+		if all[i].PaneID == paneID {
+			return &all[i], nil
+		}
+	}
+	return nil, fmt.Errorf("pane %s is not a zmux tab", paneID)
+}
+
 func newTabFullCmd(app *apppkg.App) *cobra.Command {
 	var sessionFlag string
+	var paneFlag string
 	var afterFlag bool
 	var notifyFlag bool
 
@@ -160,7 +286,15 @@ inserts it directly after its old host window instead.`,
 					return "", err
 				}
 				var t *tabs.LogicalTab
-				if len(args) == 0 {
+				if paneFlag != "" {
+					if len(args) > 0 {
+						return "", fmt.Errorf("--pane cannot be combined with a tab argument")
+					}
+					t, err = logicalTabByPane(app.Runner, paneFlag)
+					if err != nil {
+						return "", err
+					}
+				} else if len(args) == 0 {
 					t, err = tabs.CurrentTab(app.Runner)
 					if err != nil {
 						return "", err
@@ -183,8 +317,10 @@ inserts it directly after its old host window instead.`,
 		},
 	}
 	cmd.Flags().StringVarP(&sessionFlag, "session", "s", "", "session for tab-name targets (default: current)")
+	cmd.Flags().StringVar(&paneFlag, "pane", "", "target pane id (mouse/menu path)")
 	cmd.Flags().BoolVar(&afterFlag, "after", false, "insert directly after the old host window instead of appending")
 	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (keybind path)")
+	_ = cmd.Flags().MarkHidden("pane")
 	return cmd
 }
 

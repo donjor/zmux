@@ -29,6 +29,7 @@ func newTabCmd(app *apppkg.App) *cobra.Command {
 	cmd.AddCommand(newTabHideCmd(app))
 	cmd.AddCommand(newTabShowCmd(app))
 	cmd.AddCommand(newTabPaneCmd(app))
+	cmd.AddCommand(newTabSplitCmd(app))
 	cmd.AddCommand(newTabFullCmd(app))
 	cmd.AddCommand(newTabMarkAgentCmd(app))
 	cmd.AddCommand(newTabAdoptCmd(app))

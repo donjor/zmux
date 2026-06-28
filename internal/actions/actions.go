@@ -66,6 +66,7 @@ var specs = []Spec{
 
 	// ── Tabs (prefix) ──
 	{ID: "new", Palette: Excluded, Exec: ExecNone, Reason: "a zmux tab needs the tab-creation path (pane marker), handled via the dashboard create flow; palette new-tab deferred"},
+	{ID: "tab.split", Palette: Excluded, Exec: ExecNone, Reason: "creates and joins a fresh shell tab through the CLI composite path; the palette currently executes only direct tmux primitives or target-backed tab families"},
 	{ID: "tab.next", Palette: Executable, Exec: ExecTmux},
 	{ID: "tab.prev", Palette: Executable, Exec: ExecTmux},
 	{ID: "reorder.left", Palette: Executable, Exec: ExecTmux},

@@ -106,6 +106,9 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	// Windows (tabs)
 	writeSection(&b, "Windows")
 	fmt.Fprintf(&b, "bind %s new-window -c \"#{pane_current_path}\"\n", keys.NewTab.Key)
+	if zmuxBin != "" {
+		fmt.Fprintf(&b, "bind %s run-shell \"%s tab split --notify\"\n", keys.TabSplit.Key, zmuxBin)
+	}
 	fmt.Fprintf(&b, "bind %s next-window\n", keys.TabNext.Key)
 	fmt.Fprintf(&b, "bind %s previous-window\n", keys.TabPrev.Key)
 	fmt.Fprintf(&b, "bind %s command-prompt -p \"label tab (blank clears):\" \"set-option -w -t #{window_id} @zmux_label '%%%%' \\; set-option -w -t #{window_id} @zmux_label_source manual\"\n", keys.LabelTab.Key)
@@ -121,6 +124,16 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		fmt.Fprintf(&b, "bind %s run-shell \"%s tab full --after --notify\"\n", keys.TabFull.Key, zmuxBin)
 	}
 	b.WriteString("\n")
+
+	// Mouse pane menu. Header drag-swap stays deferred: tmux 3.4 exposes pane
+	// headers through generic Pane/Border locations, and MouseDrag1Border is
+	// the native resize path. This menu-only fallback binds the pane body and
+	// leaves border resize untouched.
+	if zmuxBin != "" {
+		writeSection(&b, "Mouse pane menu")
+		fmt.Fprintf(&b, "bind -T root MouseDown3Pane display-menu -T \"Pane #{pane_index}\" -t \"#{mouse_pane}\" -x M -y M \"Promote to full\" f { select-pane -t \"#{mouse_pane}\" ; run-shell \"%s tab full --pane \\\"#{mouse_pane}\\\" --after --notify\" } \"Hide to dock\" h { select-pane -t \"#{mouse_pane}\" ; run-shell \"%s tab hide --pane \\\"#{mouse_pane}\\\" --notify\" } \"Kill pane\" x { select-pane -t \"#{mouse_pane}\" ; kill-pane }\n", zmuxBin, zmuxBin)
+		b.WriteString("\n")
+	}
 
 	// Alt+1-9 tab switching (no prefix)
 	b.WriteString("# Alt+1-9 tab switching (no prefix)\n")

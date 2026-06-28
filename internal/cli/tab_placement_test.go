@@ -144,6 +144,73 @@ func TestTabHideUnknownTabErrors(t *testing.T) {
 	}
 }
 
+func TestTabHideDefaultsToCurrentPaneTabAndNotifies(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", "test-session", "@5", 1, "ztab_wrk001", "work"),
+	}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{pane_id}":    "%2\n",
+		"session_group": "\t1\t1\n",
+		"#{window_id}":  "@99\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "hide", "--notify"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab hide --notify failed: %v", err)
+	}
+
+	var moved, flashed bool
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" && c.Args[0] == "@5" && c.Args[1] == tabs.DockSession+":" {
+			moved = true
+		}
+		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "hidden: work") {
+			flashed = true
+		}
+	}
+	if !moved || !flashed {
+		t.Fatalf("expected current tab hidden with notification: moved=%v flashed=%v calls=%#v", moved, flashed, mock.Calls)
+	}
+}
+
+func TestTabHidePaneFlagTargetsPaneAndNotifies(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", "test-session", "@2", 1, "ztab_wrk001", "work"),
+		logicalRow("%3", "test-session", "@5", 2, "ztab_tst001", "tests"),
+	}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{pane_id}":    "%2\n",
+		"session_group": "\t1\t1\n",
+		"#{window_id}":  "@99\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "hide", "--pane", "%3", "--notify"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab hide --pane --notify failed: %v", err)
+	}
+
+	var movedClicked, movedFocused, flashed bool
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" && c.Args[0] == "@5" && c.Args[1] == tabs.DockSession+":" {
+			movedClicked = true
+		}
+		if c.Method == "MoveWindow" && c.Args[0] == "@2" {
+			movedFocused = true
+		}
+		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "hidden: tests") {
+			flashed = true
+		}
+	}
+	if !movedClicked || movedFocused || !flashed {
+		t.Fatalf("expected clicked pane tab hidden, not focused tab: movedClicked=%v movedFocused=%v flashed=%v calls=%#v",
+			movedClicked, movedFocused, flashed, mock.Calls)
+	}
+}
+
 // pane joins a tab into an explicit --into host: join-pane detached, anchor
 // recorded on the moved pane.
 func TestTabPaneJoinsIntoHost(t *testing.T) {
@@ -282,6 +349,99 @@ func TestTabPaneNotifyRoutesFailureToMessage(t *testing.T) {
 	if !flashed {
 		t.Error("expected the failure to be flashed via ShowMessage")
 	}
+}
+
+func TestTabSplitCreatesDetachedThenJoinsSnapshottedHost(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.NewWindowPaneID = "%9"
+	host := logicalRow("%2", "test-session", "@2", 1, "ztab_wrk001", "work")
+	created := logicalRow("%9", "test-session", "@9", 2, "ztab_new001", "")
+	mock.LogicalRowsByCall = [][]tmux.LogicalPaneRow{
+		{host},          // CurrentHost snapshot before the create.
+		{host, created}, // Lookup of the freshly stamped tab.
+		{host, created}, // Placement epilogue reconcile.
+	}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{pane_id}":           "%2\n",
+		"#{pane_current_path}": "/repo/current\n",
+		"session_group":        "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t1\t%2\n",
+		"#{window_panes}": "2\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "split"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab split failed: %v", err)
+	}
+
+	order := callOrder(mock.Calls, "ListLogicalPaneRows", "NewWindow", "ApplyOptions", "JoinPane")
+	for name, idx := range order {
+		if idx < 0 {
+			t.Fatalf("missing %s call in %#v", name, mock.Calls)
+		}
+	}
+	if order["ListLogicalPaneRows"] >= order["NewWindow"] || order["NewWindow"] >= order["ApplyOptions"] || order["ApplyOptions"] >= order["JoinPane"] {
+		t.Fatalf("bad split ordering, want host scan < detached create < stamp < join; got %v calls=%#v", order, mock.Calls)
+	}
+
+	var detachedCreate, joinedBesideHost, stamped bool
+	for _, c := range mock.Calls {
+		switch c.Method {
+		case "NewWindow":
+			detachedCreate = c.Args[0] == "test-session" && c.Args[1] == "" &&
+				c.Args[2] == "/repo/current" && c.Args[3] == "detached=true"
+		case "ApplyOptions":
+			if c.Args[0] == "-p" && c.Args[1] == "%9" && c.Args[2] == tabs.OptTabID {
+				stamped = true
+			}
+		case "JoinPane":
+			joinedBesideHost = c.Args[0] == "%9" && c.Args[1] == "%2" &&
+				c.Args[2] == "right" && c.Args[4] == "detached=true"
+		}
+	}
+	if !detachedCreate || !stamped || !joinedBesideHost {
+		t.Fatalf("expected detached create + stamp + join beside snapshotted host: detached=%v stamped=%v joined=%v calls=%#v",
+			detachedCreate, stamped, joinedBesideHost, mock.Calls)
+	}
+}
+
+func TestTabSplitNotifyRoutesFailureToMessage(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{pane_id}": "%404\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "split", "--notify"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("--notify must exit 0 even on failure, got: %v", err)
+	}
+
+	var flashed bool
+	for _, c := range mock.Calls {
+		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "current pane is not a zmux tab") {
+			flashed = true
+		}
+		if c.Method == "NewWindow" {
+			t.Fatalf("split must not create a tab when host resolution fails: %#v", mock.Calls)
+		}
+	}
+	if !flashed {
+		t.Error("expected the failure to be flashed via ShowMessage")
+	}
+}
+
+func callOrder(calls []tmux.MockCall, methods ...string) map[string]int {
+	out := map[string]int{}
+	for _, method := range methods {
+		out[method] = -1
+	}
+	for i, c := range calls {
+		if _, ok := out[c.Method]; ok && out[c.Method] < 0 {
+			out[c.Method] = i
+		}
+	}
+	return out
 }
 
 func TestTabIndexArg(t *testing.T) {
@@ -489,6 +649,48 @@ func TestTabFullDefaultsToCurrentPaneTab(t *testing.T) {
 	}
 	if !broke {
 		t.Errorf("expected no-arg full to promote current pane-tab after host")
+	}
+}
+
+func TestTabFullPaneFlagTargetsPaneAndNotifies(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.BreakPaneWindowID = "@7"
+	host := logicalRow("%2", "test-session", "@2", 0, "ztab_wrk001", "work")
+	host.WindowPanes = 2
+	rider := logicalRow("%3", "test-session", "@2", 0, "ztab_tst001", "tests")
+	rider.WindowPanes = 2
+	rider.Anchor = "ztab_wrk001"
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, rider}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{session_name}": "test-session",
+		"#{pane_id}":      "%2\n",
+		"session_group":   "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t2\t%2\n",
+		"#{window_panes}": "1\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "full", "--pane", "%3", "--after", "--notify"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab full --pane --notify failed: %v", err)
+	}
+
+	var brokeClicked, brokeFocused, flashed bool
+	for _, c := range mock.Calls {
+		if c.Method == "BreakPane" && c.Args[0] == "%3" && c.Args[1] == "@2" &&
+			c.Args[2] == "tests" && c.Args[3] == "after=true" {
+			brokeClicked = true
+		}
+		if c.Method == "BreakPane" && c.Args[0] == "%2" {
+			brokeFocused = true
+		}
+		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "full: tests") {
+			flashed = true
+		}
+	}
+	if !brokeClicked || brokeFocused || !flashed {
+		t.Fatalf("expected clicked pane tab promoted, not focused tab: brokeClicked=%v brokeFocused=%v flashed=%v calls=%#v",
+			brokeClicked, brokeFocused, flashed, mock.Calls)
 	}
 }
 

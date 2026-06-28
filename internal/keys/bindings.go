@@ -16,6 +16,7 @@ var (
 
 	// Tabs (prefix).
 	NewTab          = Binding{Action: "new", Key: "c", Help: "New tab", Category: CatTabs, Context: Prefix}
+	TabSplit        = Binding{Action: "tab.split", Key: "j", Help: "Create a new tab as a pane", Category: CatTabs, Context: Prefix}
 	TabNext         = Binding{Action: "tab.next", Key: "n", Help: "Next tab", Category: CatTabs, Context: Prefix}
 	TabPrev         = Binding{Action: "tab.prev", Key: "N", Help: "Previous tab", Category: CatTabs, Context: Prefix}
 	TabReorderLeft  = Binding{Action: "reorder.left", Key: "<", Help: "Move tab left", Category: CatTabs, Context: Prefix}
@@ -104,7 +105,7 @@ var DashboardBindings = []Binding{
 // PrefixBindings lists the prefix-table bindings in help/doc render order.
 var PrefixBindings = []Binding{
 	Dashboard, Palette, ScratchShell, Help,
-	NewTab, TabNext, TabPrev, TabReorderLeft, TabReorderRight, TabKill, LabelTab, TabJoinPane, TabFull,
+	NewTab, TabSplit, TabNext, TabPrev, TabReorderLeft, TabReorderRight, TabKill, LabelTab, TabJoinPane, TabFull,
 	SessionPicker, SessionGoto, SessionPrev, SessionNext, RenameSession, NewSession,
 	PaneSwapLeft, PaneSwapRight, PaneSwapUp, PaneSwapDown, PaneEqualize, SplitOrient,
 	PaneRespawn, CopyModeKey, Paste, Reload,
