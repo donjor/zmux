@@ -4,38 +4,14 @@
 > Each item is self-contained enough to seed implementation without local
 > scratch files or session history.
 
-## Now — Surface parity
+## Now
 
-Two long-lived surfaces — the command palette and the help menu — have drifted
-behind the feature set and need to be pinned canonical so new verbs can't
-silently go missing. (Pane-mode UX — readable pane-border headers, layout-control
-keys, repeatable resize, split-aware hints, and index join with no
-keypress-to-dismiss view — shipped; see the changelog.)
-
-### Command palette parity
-
-- [ ] **Palette reflects the full, current command surface**
-  - The command palette (`prefix+p`, `internal/tui/palette/`) has fallen behind:
-    pane actions are entirely absent, and recent surface changes (the `zws_…`
-    workspace/session naming) aren't reflected.
-  - Re-derive palette providers from the canonical action/keybinding registry so
-    new and renamed verbs appear automatically rather than being hand-maintained.
-
-- [ ] **Test gate: every command is reachable from the palette**
-  - Features keep landing without a palette entry — the surface drifts silently.
-  - Add a coverage test that fails when a registered command/action has no
-    palette provider, mirroring how `TestKeybindingsDocInSync` pins the keys doc.
-
-### Help menu (`prefix+?`)
-
-- [ ] **Generate the help menu from the keybinding registry**
-  - `prefix+?` help can drift from the real bindings.
-  - Render it from `internal/keys` (the same source as the generated tmux conf
-    and `docs/keybindings.md`) so it can't disagree with what's actually bound.
-
-- [ ] **Help menu gets fzf search and working scroll**
-  - Add fuzzy search over the entries, and fix the scroll, which is currently
-    broken.
+The command-palette and help-menu surface-parity work shipped (the palette is
+re-derived from the action/keybinding registry behind a coverage gate, and
+`prefix+?` is rebuilt as a scrollable, fuzzy-filterable viewer that renders from
+the shared help source so it can't drift from `zmux help`), along with the core
+pane-mode UX — readable headers, layout-control keys, repeatable resize,
+split-aware hints, and index join. See the changelog. Three threads remain.
 
 ### Agent addressability — snapshot/tab-pane label resolution
 
@@ -51,6 +27,32 @@ keypress-to-dismiss view — shipped; see the changelog.)
     reuse the same window→logical-tab lookup `where` uses.
   - This is the CLAUDE.md "route address changes through `tab_target.go`" gotcha
     — `snapshot` is the verb that skips it.
+
+### Residual pane-mode UX
+
+- [ ] **Mouse pane-header interactions**
+  - Dragging a pane *header* should swap the two panes' positions, and right- or
+    double-clicking a header should open per-pane actions. Drag-to-resize on the
+    split border already works; this extends the direct-manipulation model to the
+    header strip itself.
+
+- [ ] **One-keystroke tab→pane**
+  - A single `prefix+<key>` that creates a new tab and joins it as a pane in one
+    motion, instead of the current create-then-join two-step.
+
+### Agent workspace — reuse active panes, harden tab↔pane join
+
+- [ ] **Reuse an active joined pane for long-running tasks**
+  - When a session already holds an active joined pane, agents and skill doctrine
+    should route new long-running work into it rather than spawning a fresh tab —
+    an open pane is usually deliberate, holding a long-running task the user wants
+    visible. Needs the agent/skill layer (zmux skill, peer/worker doctrine) to
+    prefer the existing pane over a new `run -n <name>` tab.
+
+- [ ] **Make the tab→pane join model solid end-to-end**
+  - The core pane/tab unification — create, join, promote-to-full, and address —
+    must behave consistently across the CLI, the TUI, and the agent skill, so the
+    "joining" concept means the same thing everywhere it is referenced.
 
 ## Next
 

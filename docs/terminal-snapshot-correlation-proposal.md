@@ -173,29 +173,30 @@ If the matched window is hidden or not visible:
 }
 ```
 
-### 4. Optional later: `zmux snapshot`
+### 4. `zmux snapshot` *(shipped)*
 
-Once terminal correlation is reliable, zmux can own the whole snapshot bundle:
+Shipped alongside terminal correlation. Captures per-pane text/ANSI and an
+optional PNG of the current terminal in one bundle:
 
 ```bash
-zmux snapshot --current --ansi --text --png --out ~/tmp/zmux-snapshots/foo --json
+zmux snapshot                          # all panes in current window: text + ANSI + PNG
+zmux snapshot --no-png                 # text + ANSI only
+zmux snapshot --pane %5 --pane %6      # specific panes (PNG only if both are current-window)
+zmux snapshot --lines 400 --out /tmp/run1 --json
 ```
 
-Bundle shape:
+Bundle shape (flat; per-pane files named by running command):
 
 ```text
 snapshot/
-├── panes/
-│   ├── %58.txt
-│   ├── %58.ansi
-│   ├── %136.txt
-│   └── %136.ansi
-├── terminal.png
-├── terminal.meta.json
-└── snapshot.json
+├── bash.txt           (per-pane plain text)
+├── bash.ansi          (per-pane ANSI with colour)
+├── bash.meta.json     (per-pane metadata: size, title, path, command)
+├── terminal.png       (optional; current terminal only)
+├── snapshot.json      (full result + modalities + warnings)
+├── manifest.json      (lightweight index for downstream consumers)
+└── README.md
 ```
-
-This can be a second mission. The first mission should focus on stable title/correlation metadata and screenshot target selection.
 
 ## Hyprland first-pass design
 
@@ -294,9 +295,9 @@ Automated/unit-ish:
 
 Implement in phases:
 
-1. stable terminal title string;
-2. `zmux terminals --json` with Hyprland/Ghostty support;
-3. `zmux terminal current --json` target selection;
-4. later, `zmux snapshot` for full text/ANSI/PNG bundles.
+1. ~~stable terminal title string~~ *(shipped)*;
+2. `zmux terminals --json` with Hyprland/Ghostty support *(dropped — not needed by snapshot)*;
+3. ~~`zmux terminal current --json` target selection~~ *(shipped)*;
+4. ~~`zmux snapshot` for full text/ANSI/PNG bundles~~ *(shipped — see §4 above)*.
 
 This gives `pi-clean-ui` and future agent-vision workflows a reliable target selector without forcing every extension to replicate wm/tmux correlation heuristics.

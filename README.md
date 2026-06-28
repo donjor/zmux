@@ -3,6 +3,15 @@
 An opinionated, all-in-one tmux management wrapper. Session picker, theming,
 status bar presets, and a popup dashboard — in a single binary.
 
+## Overview
+
+zmux is an opinionated layer over tmux — not a replacement for it. It keeps the
+raw `tmux` you already know (prefix keys, panes, `tmux.conf`) and adds a
+workspace/session model, a theme and status-bar system, a popup dashboard, a
+command palette, logical tabs, and agent-friendly terminal controls, all from a
+single Go binary. It drives tmux ≥ 3.2 through generated config; it is not a
+terminal emulator or its own multiplexer.
+
 ## Features
 
 - **Workspace-primary picker** — single flat list of workspaces with inline session expansion, fuzzy search, ghost tab completion, matched-char underlines
@@ -26,7 +35,7 @@ status bar presets, and a popup dashboard — in a single binary.
 - tmux >= 3.2
 - Linux or macOS
 
-## Install
+## Setup
 
 ```bash
 git clone https://github.com/donjor/zmux.git

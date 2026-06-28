@@ -65,3 +65,13 @@ identity model:
 - legacy v1/v2 raw session rename/stamp repair during reconcile
 - raw `zws_...` name hiding in normal lists and terminal titles
 - managed raw-name repair after direct tmux renames
+
+`checklists/sessionless-dashboard-fallback.toml` verifies the sessionless
+dashboard fallback and owned attach-return recovery.
+
+`checklists/qol-polish.toml` verifies timing- and glyph-sensitive QoL slices that
+unit tests cannot cover: top bar, session tab, and popup polish.
+
+`checklists/capture-tail-logging.toml` verifies tail-style output logging
+(`zmux log start/stop/status/tail`) over tmux pipe-pane: detached recording,
+truncation, plain-vs-ANSI, and the TUI boundary.

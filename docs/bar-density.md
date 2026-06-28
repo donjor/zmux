@@ -58,6 +58,14 @@ shipped:
    budget.
 6. **Indicator compaction** — session indicator as dots (`○●○`), numbers
    (`2/3`), or none.
+7. **Single-pane title** (automatic) — when a window holds one pane, its title
+   (e.g. an agent's task line) surfaces dim at the leading edge of the right bar,
+   truncated to 32 runes. Noise is filtered out — blank titles, the hostname
+   default, and titles matching the running command. Split windows already show
+   each pane's title in the pane-border header, so this only fires for lone panes.
+8. **Split-aware prefix hints** (automatic) — while the prefix is held the right
+   bar shows a hint cluster; a split window appends orient / move / even keys so
+   pane-layout controls surface only when they apply.
 
 ## Recommendation
 

@@ -21,6 +21,9 @@ For this repo's maintainer loop, `./dev.sh zmux` only refreshes the mirrors and
 relinks the Pi extension; it does not rewrite global agent settings.
 The skill keeps its hot operational doctrine in `SKILL.md`, with deeper command
 lookup in [`references/cli-catalog.md`](../skills/zmux/references/cli-catalog.md).
+The raw-tmux→zmux verb mapping table, guard exemptions, and tab lifecycle glyphs
+live in
+[`references/guard-and-tab-states.md`](../skills/zmux/references/guard-and-tab-states.md).
 
 ## Purpose
 
@@ -68,9 +71,11 @@ The extension intercepts Pi `bash` tool calls and classifies commands as:
 - runtime — should use `zmux_runtime_ensure`;
 - interactive — should use `zmux_interactive_type`;
 - background — blocks `&`, `nohup`, and `disown` style hidden jobs;
-- direct zmux/tmux CLI — blocks common `zmux ...` and stateful `tmux ...` bash
-  calls when an equivalent typed tool exists, so agents use deterministic tool
-  calls for tab/pane/send/runtime operations.
+- `direct_zmux` — blocks `zmux <verb>` calls that have an equivalent typed tool
+  (e.g. `zmux tabs` → `zmux_tabs`, `zmux run` → `zmux_runtime_ensure`);
+- `direct_tmux` — blocks raw `tmux <subcommand>` calls that have a zmux or typed
+  equivalent; socket-scoped (`-L`) and unmapped subcommands (e.g. `tmux info`,
+  `tmux has-session`) pass through as safe.
 
 Policy mode is configurable:
 
