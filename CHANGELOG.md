@@ -5,7 +5,36 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.10.0...HEAD`
+> Release tag: pending | Topics: `panes`, `tabs`, `agents` | Compare: `v0.10.0...HEAD`
+
+### Added
+
+- **`zmux tab split` joins a new pane in one keystroke** `tabs` - a single
+  `prefix` binding creates a managed tab in the current cwd and joins it beside
+  the focused pane in one motion, replacing the create-then-join two-step. The
+  host is snapshotted before the detached `NewWindow` so creating the tab can't
+  steal focus from the pane it joins.
+- **Right-click pane menu** `panes` - right-clicking a joined pane opens a
+  native tmux `display-menu` scoped to that pane with promote-to-full,
+  hide-to-dock, and kill actions, each targeting `#{mouse_pane}` rather than the
+  focused pane. (Header drag-swap stays deferred — tmux 3.4 can't separate a
+  header drag from native border-resize; see ROADMAP → Later.)
+- **`pane list --joined` agent discovery surface** `agents` - lists the
+  session's joined logical panes (tab, host, anchor, caller) so agents and the
+  peer/worker skill doctrine can reuse an already-active joined pane for
+  long-running visible work instead of minting a fresh `run -n` tab.
+
+### Fixed
+
+- **`snapshot --pane` honours the shared tab resolver** `panes` - a `--pane`
+  arg is now resolved through the same logical-tab lookup as `watch`/`send`/`run`
+  and the captured pane is named from its pinned tab label (command as fallback)
+  instead of the raw command; raw `%pane` ids still bypass the resolver for
+  evidence capture.
+- **`CurrentHost` is pane-canonical** `tabs` - the join host is now the focused
+  pane's logical tab rather than the focused window's full owner, so bare
+  `zmux tab pane <tab>`, the command palette's join rows, and `zmux where` agree
+  on the same target when focus sits on a joined rider pane.
 
 ## [0.10.0] - 2026-06-28
 > Release tag: `v0.10.0` | Topics: `agents`, `palette`, `help`, `panes`, `tabs`, `session` | Compare: `v0.9.0...v0.10.0`

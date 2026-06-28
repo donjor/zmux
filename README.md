@@ -136,8 +136,9 @@ zmux tab move <tab> <dest>          Move tab to another session
 zmux tab label [label]              Set/clear stable label for current tab
 zmux tab state <state> [tab]        Set lifecycle glyph: attention/running/done/failed/clear
 zmux tab pane <tab|N> [--into host] Join a tab (by name or bar index N) as a pane beside another
-zmux tab full [tab]                 Promote focused/named pane-of tab back to full
-zmux tab hide <tab>                 Park a tab off the bar in the hidden dock
+zmux tab split                      Create a new tab and join it as a pane in one step (prefix+j)
+zmux tab full [tab] / [--pane <id>] Promote focused/named/clicked pane-of tab back to full
+zmux tab hide <tab> / [--pane <id>] Park a tab off the bar in the hidden dock
 zmux tab show <tab>                 Return a hidden tab to its origin session
 zmux tab kill <tab>                 Kill a tab
 zmux reap                           Adopt/flag/kill stale tabs by lifecycle policy
@@ -179,6 +180,7 @@ zmux pane open --label-tab ...        Preserve tab label before sidecar split
 zmux pane toggle <name> -r 40 -- <cmd> Toggle named pane (close/open)
 zmux pane current [--json]            Print current pane id/details
 zmux pane list / zmux panes           List panes in current window
+zmux pane list --joined --session     List the session's joined logical panes (agent pane reuse)
 zmux pane focus <pane>                Focus pane by id/title/index
 zmux pane resize <pane> --size 40%    Resize pane width
 zmux pane close <pane>                Close pane by id/title/index
@@ -262,9 +264,11 @@ Prefix: `Ctrl+Space` (configurable)
 | Alt+` | Tab switcher (no prefix) |
 
 Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
-borders resizes them. Failed or signalled foreground commands stay visible as
-dead panes, so Ctrl+C spam cannot silently delete the tab; clean exits close
-normally. Use `prefix+x` / `zmux tab kill` when you mean to close a stopped tab.
+borders resizes them. Right-clicking a joined pane opens a per-pane menu —
+promote to full, hide to dock, or kill the pane. Failed or signalled foreground
+commands stay visible as dead panes, so Ctrl+C spam cannot silently delete the
+tab; clean exits close normally. Use `prefix+x` / `zmux tab kill` when you mean
+to close a stopped tab.
 Split windows render pane-border headers in one unified shape —
 `<index> <name> <detail>`: the pane index, the tab's label (or its command when
 the pane isn't zmux-managed), and the pane title. Active and inactive panes use

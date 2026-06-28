@@ -6,53 +6,17 @@
 
 ## Now
 
-The command-palette and help-menu surface-parity work shipped (the palette is
-re-derived from the action/keybinding registry behind a coverage gate, and
-`prefix+?` is rebuilt as a scrollable, fuzzy-filterable viewer that renders from
-the shared help source so it can't drift from `zmux help`), along with the core
-pane-mode UX — readable headers, layout-control keys, repeatable resize,
-split-aware hints, and index join. See the changelog. Three threads remain.
+The pane/tab foundation and agent-addressability close-out shipped (plan 042 —
+see the changelog): `snapshot --pane` and bare `tab pane` now honour the shared
+tab resolver, `CurrentHost` is pane-canonical so the join host matches what
+`zmux where` reports, `pane list --joined` plus peer/worker doctrine let agents
+reuse an active joined pane, a one-key `tab split` creates-and-joins in one
+motion, and a right-click pane menu exposes promote/hide/kill per pane. That
+clears the Now bucket; the next focus is **Remote & nested zmux** (below).
 
-### Agent addressability — snapshot/tab-pane label resolution
-
-- [ ] **`snapshot --pane` and bare `tab pane` honour the shared tab resolver**
-  - `snapshot --pane <label>` treats its arg as a raw tmux pane id, so a tab
-    label (`sim`) fails lookup, and it names captured panes by command (`ssh-2`)
-    instead of the pinned label (`sim`). Route each `--pane` arg through
-    `resolveTabTarget` / `tabs.Resolve` and name the target from the resolved tab
-    label (command as fallback) — a one-file fix in `internal/cli/snapshot.go`
-    that closes both the lookup and the naming gap.
-  - Bare `zmux tab pane <tab>` errors "current window is not a zmux tab" from a
-    window `zmux where` reports as that tab; make its implicit-host resolution
-    reuse the same window→logical-tab lookup `where` uses.
-  - This is the CLAUDE.md "route address changes through `tab_target.go`" gotcha
-    — `snapshot` is the verb that skips it.
-
-### Residual pane-mode UX
-
-- [ ] **Mouse pane-header interactions**
-  - Dragging a pane *header* should swap the two panes' positions, and right- or
-    double-clicking a header should open per-pane actions. Drag-to-resize on the
-    split border already works; this extends the direct-manipulation model to the
-    header strip itself.
-
-- [ ] **One-keystroke tab→pane**
-  - A single `prefix+<key>` that creates a new tab and joins it as a pane in one
-    motion, instead of the current create-then-join two-step.
-
-### Agent workspace — reuse active panes, harden tab↔pane join
-
-- [ ] **Reuse an active joined pane for long-running tasks**
-  - When a session already holds an active joined pane, agents and skill doctrine
-    should route new long-running work into it rather than spawning a fresh tab —
-    an open pane is usually deliberate, holding a long-running task the user wants
-    visible. Needs the agent/skill layer (zmux skill, peer/worker doctrine) to
-    prefer the existing pane over a new `run -n <name>` tab.
-
-- [ ] **Make the tab→pane join model solid end-to-end**
-  - The core pane/tab unification — create, join, promote-to-full, and address —
-    must behave consistently across the CLI, the TUI, and the agent skill, so the
-    "joining" concept means the same thing everywhere it is referenced.
+One residual is deferred to *Later → Pane direct-manipulation* (header
+drag-swap) — the right-click menu shipped, but tmux 3.4 cannot separate a
+header drag from the native resize-border drag.
 
 ## Next
 
@@ -129,6 +93,18 @@ entry/creation/management surface (`internal/tui/workspaceoutline` +
     placement.
 
 ## Later / unscheduled
+
+### Pane direct-manipulation
+
+- [ ] **Header drag-swap**
+  - Dragging one pane *header* onto another should swap their positions. The
+    right-click per-pane menu (promote/hide/kill) already shipped; this is the
+    remaining direct-manipulation gesture.
+  - Blocked by tmux 3.4: pane headers are reachable only through generic
+    `Pane`/`Border` mouse locations, so a header drag can't be told apart from
+    the native resize-border drag without breaking resize. Revisit if a later
+    tmux exposes a header-specific mouse zone, or gate it behind a coordinate
+    heuristic proven safe in `zzmux`.
 
 ### Remote management
 
