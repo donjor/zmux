@@ -468,6 +468,47 @@ func TestResolveTabTargetScopedPrefersInSessionLegacyWindow(t *testing.T) {
 	}
 }
 
+// report 016: a roster name (codex-peer) live in 2+ SIBLING sessions made the
+// server-wide resolve ambiguous, which the create path returned as a fatal
+// error — refusing to spawn locally. Under session-only scope every match is
+// out-of-session, so the ambiguity must be dropped and resolution fall through
+// to the in-session create fallback, exactly like the unique cross-session case.
+func TestResolveTabTargetForMutationDropsCrossSessionAmbiguity(t *testing.T) {
+	app, mock := newTestApp(t)
+	mock.Sessions = []tmux.Session{{Name: "source"}, {Name: "peerA"}, {Name: "peerB"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%1", "peerA", "@1", 0, "ztab_peerA01", "codex-peer"),
+		logicalRow("%2", "peerB", "@2", 0, "ztab_peerB01", "codex-peer"),
+	}
+
+	rt, err := resolveTabTargetForMutation(app, "source", "codex-peer", "codex-peer")
+	if err != nil {
+		t.Fatalf("errored on a purely cross-session ambiguity (report 016): %v", err)
+	}
+	if rt.found() {
+		t.Fatalf("resolved a cross-session tab (Tab=%v Win=%v) — must create locally", rt.Tab, rt.Win)
+	}
+	if rt.Target != "source:codex-peer" {
+		t.Fatalf("target = %q, want in-session raw fallback source:codex-peer", rt.Target)
+	}
+}
+
+// The drop must be precise: an ambiguity that INCLUDES an in-session match is a
+// real collision and must still surface — a blanket "scopeSessionOnly → break"
+// would silently spawn a duplicate over it.
+func TestResolveTabTargetScopedSurfacesInSessionAmbiguity(t *testing.T) {
+	app, mock := newTestApp(t)
+	mock.Sessions = []tmux.Session{{Name: "source"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%1", "source", "@1", 0, "ztab_src01", "dup"),
+		logicalRow("%2", "source", "@2", 1, "ztab_src02", "dup"),
+	}
+
+	if _, err := resolveTabTargetScoped(app, "source", "dup", scopeSessionOnly); err == nil {
+		t.Fatalf("expected an in-session ambiguity to surface, got nil")
+	}
+}
+
 func tabMoveCrossWorkspaceApp(t *testing.T) (*apppkg.App, *tmux.MockRunner) {
 	t.Helper()
 	app, mock := newTestApp(t)

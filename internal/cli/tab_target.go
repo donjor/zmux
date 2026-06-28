@@ -64,6 +64,18 @@ func resolveTabTarget(app *apppkg.App, session, name string) (resolvedTab, error
 	return resolveTabTargetScoped(app, session, name, scopeAllowElsewhere)
 }
 
+// anyInScope reports whether any match belongs to session. It distinguishes an
+// all-out-of-session ambiguity (safe to drop under scopeSessionOnly) from a
+// real in-session collision (must surface).
+func anyInScope(matches []tabs.LogicalTab, session string) bool {
+	for i := range matches {
+		if matches[i].InScope(session) {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveTabTargetScoped is resolveTabTarget with an explicit cross-session
 // policy. See resolveScope.
 func resolveTabTargetScoped(app *apppkg.App, session, name string, scope resolveScope) (resolvedTab, error) {
@@ -93,6 +105,18 @@ func resolveTabTargetScoped(app *apppkg.App, session, name string, scope resolve
 				stateOK: true,
 			}, nil
 		case !errors.Is(rerr, tabs.ErrNotFound):
+			// Ambiguous: 2+ server-wide matches. Under session-only scope these
+			// are all out-of-session (an in-session label is per-session-unique
+			// and would have resolved on the rerr==nil branch), so drop them and
+			// fall through to create in-scope — symmetric with the unique
+			// out-of-session case above (report 016: a roster name live in 2+
+			// sibling sessions must not block a local spawn). An ambiguity that
+			// includes an in-session match is a real collision — surface it, as
+			// does the cross-session read path.
+			var ambig *tabs.AmbiguousError
+			if scope == scopeSessionOnly && session != "" && errors.As(rerr, &ambig) && !anyInScope(ambig.Matches, session) {
+				break
+			}
 			return resolvedTab{}, rerr // ambiguous — never guess a target
 		}
 	}
