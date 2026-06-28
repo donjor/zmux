@@ -13,6 +13,7 @@ import (
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/procfs"
 	"github.com/donjor/zmux/internal/snapshot"
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/terminal"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/wm"
@@ -64,7 +65,12 @@ func runSnapshot(app *apppkg.App, cmd *cobra.Command, flags *snapshotFlags, adap
 	currentPane := os.Getenv("TMUX_PANE")
 
 	var seed []string
-	targets, explicit, err := resolvePaneTargets(app.Runner, flags.panes)
+	sessionName, err := snapshotPaneSession(app, flags.panes)
+	var targets []snapshot.PaneTarget
+	var explicit bool
+	if err == nil {
+		targets, explicit, err = resolvePaneTargets(app, sessionName, flags.panes)
+	}
 	if err != nil {
 		// Degrade to an empty capture (the snapshot records the reason) rather
 		// than hard-failing an evidence command.
@@ -122,10 +128,34 @@ func resolveOutDir(snapshotsDir, out string) string {
 	return filepath.Join(snapshotsDir, snapshot.Stamp(time.Now()))
 }
 
-// resolvePaneTargets builds capture targets. Explicit --pane ids keep their id
-// as the name source; with none given it captures all panes in the current
-// window. Names are de-duplicated so artifacts never collide.
-func resolvePaneTargets(runner tmux.Runner, paneIDs []string) (targets []snapshot.PaneTarget, explicit bool, err error) {
+func snapshotPaneSession(app *apppkg.App, paneIDs []string) (string, error) {
+	for _, id := range paneIDs {
+		id = strings.TrimSpace(id)
+		if id == "" || strings.HasPrefix(id, "%") {
+			continue
+		}
+		if !app.Runner.IsInsideTmux() {
+			return "", fmt.Errorf("--pane label %q requires a current tmux session", id)
+		}
+		name, err := app.Runner.DisplayMessage("", "#{session_name}")
+		if err != nil {
+			return "", fmt.Errorf("current session: %w", err)
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return "", fmt.Errorf("current session is empty")
+		}
+		return name, nil
+	}
+	return "", nil
+}
+
+// resolvePaneTargets builds capture targets. Raw % pane ids keep their current
+// behavior; tab labels resolve through the shared tab resolver. With no panes
+// given it captures all panes in the current window. Names are de-duplicated so
+// artifacts never collide.
+func resolvePaneTargets(app *apppkg.App, session string, paneIDs []string) (targets []snapshot.PaneTarget, explicit bool, err error) {
+	runner := app.Runner
 	dedupe := newNameDeduper()
 	if len(paneIDs) > 0 {
 		byID := paneCommandsByID(runner)
@@ -134,7 +164,24 @@ func resolvePaneTargets(runner tmux.Runner, paneIDs []string) (targets []snapsho
 			if id == "" {
 				continue
 			}
-			targets = append(targets, snapshot.PaneTarget{Name: dedupe(paneName(byID[id], id)), PaneID: id})
+			if strings.HasPrefix(id, "%") {
+				targets = append(targets, snapshot.PaneTarget{Name: dedupe(paneName(byID[id], id)), PaneID: id})
+				continue
+			}
+			if session == "" {
+				return nil, true, fmt.Errorf("--pane label %q requires a current tmux session", id)
+			}
+			rt, err := resolveTabTarget(app, session, id)
+			if err != nil {
+				return nil, true, err
+			}
+			var name string
+			if rt.Tab != nil {
+				name = tabs.DisplayName(rt.Tab)
+			} else {
+				name = paneName(byID[rt.Target], id)
+			}
+			targets = append(targets, snapshot.PaneTarget{Name: dedupe(name), PaneID: rt.Target})
 		}
 		return targets, true, nil
 	}
