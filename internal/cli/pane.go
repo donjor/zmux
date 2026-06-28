@@ -34,6 +34,7 @@ type paneListFlags struct {
 	target  string
 	session bool
 	all     bool
+	joined  bool
 	quiet   bool
 	json    bool
 }

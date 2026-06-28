@@ -48,6 +48,19 @@ A worker is bound to a pair: **(zmux session, worktree path)**. Honor both:
   **Never** spawn an automated worker with `zmux new <ws> <worker-session>`: `new`
   attaches (steals the conductor's focus) and births a blank shell tab beside the CLI —
   the report-009 failure this primitive exists to fix.
+- **Reuse joined worker panes in an existing session.** When the worker/session already
+  exists (or a single worker lives in the current session) and you are about to run a
+  long-running visible command with `run -n <worker-tab>`, first inspect joined logical
+  panes in that session:
+    ```bash
+    zmux pane list --joined --session --target <worker-session> --json
+    ```
+  If a row matches the worker purpose/worktree, route into its resolved `tabName`:
+  `zmux run '<cli launch>' -n <tabName> -d -s <worker-session>`. Do not target the raw
+  `paneID` for normal work; `run -n` keeps tab state, logs, placement, and lifecycle on
+  the normal zmux resolver. This is spawn discipline for the existing roster/reaping
+  model, not a separate worker task manager. For first birth via `zmux session run`,
+  there is no worker session to search yet.
 - **Spawn the CLI in the worktree.** Launch with the CLI's cwd set to the worktree
   (`codex -C <worktree>`, or `cd <worktree> && <cli>` inside the tab). The worker stays
   there for its whole life — it never wanders to the primary checkout or a sibling worktree.

@@ -122,6 +122,20 @@ same job?** Re-fire `run -n <name>` into its existing tab — it reuses (the pri
 process has exited), so never bump the name `x`→`x2`→`x3`. Full roster +
 reviewability detail → **`references/guard-and-tab-states.md`**.
 
+**Joined panes are roster tabs too.** Before minting a fresh `run -n <name>` tab for
+long-running visible work, check whether this session already has a joined logical
+tab for that purpose:
+
+```bash
+zmux pane list --joined --session --json
+```
+
+When driving an explicit session, add `--target <session>`. If a row matches the
+work, route into its resolved `tabName`: `zmux run '<cmd>' -n <tabName> -s <session>`.
+Do not address the raw `paneID` for normal work; `run -n` keeps the usual resolver,
+state, logging, and lifecycle behavior. This is the roster/reaping model applied
+before spawn, not a separate agent task manager.
+
 **Tab hygiene — spawn less, tear down after.** The guard pushes long-running work
 into named tabs; the unspoken other half is not leaving sprawl behind.
 

@@ -85,6 +85,7 @@ Reuse first — but verify identity:
 
 ```bash
 zmux tabs <session>
+zmux pane list --joined --session --target <session> --json
 zmux watch <peer> -s <session>
 ```
 
@@ -94,6 +95,20 @@ If a human has typed partial input, or the peer is generating, stop and wait. If
 a peer already landed in the wrong session, recover with
 `zmux tab move <peer> <session>` (add `-f` to pull it across workspaces) or kill
 it and respawn pinned.
+
+Before minting a fresh peer tab for long-running visible work, inspect the joined
+pane list above. If it already contains the peer you need, route through that row's
+`tabName` with the normal resolver:
+
+```bash
+zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n <tabName> -d -s <session>
+zmux watch <tabName> -s <session> --idle 3 -T 30
+```
+
+The raw `paneID` is diagnostic; do not target it for the peer loop. `run -n
+<tabName>` preserves zmux state, logging, placement, and lifecycle behavior for
+the joined tab. This does not create a new roster category or bypass tab reaping;
+it is the same roster reuse check before creating another visible peer tab.
 
 Spawn detached with the max-permission profile:
 
