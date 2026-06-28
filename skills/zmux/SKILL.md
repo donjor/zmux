@@ -117,7 +117,9 @@ terminal capability diagnosis.
 - `<x>-peer` — a review peer (peer skill); `worker-*` — orchestrate sessions.
 
 Inventing `eval-2` / `test-run` is the slip — that's `scratch` (or `dev`). Don't add
-`test` / `build` / `lint` tabs; bounded checks stay in your shell. Full roster +
+`test` / `build` / `lint` tabs; bounded checks stay in your shell. **Re-running the
+same job?** Re-fire `run -n <name>` into its existing tab — it reuses (the prior
+process has exited), so never bump the name `x`→`x2`→`x3`. Full roster +
 reviewability detail → **`references/guard-and-tab-states.md`**.
 
 **Tab hygiene — spawn less, tear down after.** The guard pushes long-running work
@@ -144,6 +146,10 @@ into named tabs; the unspoken other half is not leaving sprawl behind.
 - raw `tmux` for app-level actions (the guard blocks it).
 - your own `:::DONE:::` markers (`zmux run` handles sentinels) or `sleep N && watch`
   (`run` already waits).
+- a hand-rolled poll-loop / external watcher to await one job — `zmux run -n`
+  already waits and `zmux watch` reads progress. And never `pgrep -f` / `pkill -f` a
+  pattern that also matches your own command line: it self-matches (false "alive")
+  and `pkill` can SIGKILL your own shell.
 - guessing process state — read it with `zmux watch` / `zmux tabs`.
 - `zmux refresh` / `terminal refresh` from an agent session without weighing the
   client-reattach disruption.
@@ -166,6 +172,12 @@ exit code. It injects its own completion sentinel internally — **do not add yo
 `echo ":::DONE:::"` markers**. If a tab with that name already exists, the command is
 sent to it (reused, not recreated). `-d` creates the tab **without stealing your
 focus**. Use `-d` **only** for processes expected to run forever.
+
+> **A long run reported "failed, exit 1" at ~120s is the wait cap, not your command.**
+> That's the harness wrapper hitting its timeout while the process keeps running in
+> the tab. Verify with `zmux watch <tab>` (or the log) before concluding failure or
+> relaunching — and prefer `run -n <tab> -T <secs>` (or `-d` + `watch`) for jobs you
+> know run long.
 
 > **Tab names are stable.** The first time you address a tab by name with `run`,
 > `send`, or `type` and it matches, zmux pins that name as a stable label — so the tab

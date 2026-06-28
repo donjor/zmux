@@ -59,6 +59,15 @@ in *your* session and cannot land on another session's tab, and `send`/`type`/
 `kill` refuse to cross — an out-of-session name surfaces a clean in-session
 miss instead of acting on a sibling's pane.
 
+**Caveat — the create path can still collide (report 016).** That guarantee holds
+for read/move/kill, but on the current build the *create* path resolves the name
+server-wide first: if the roster name is **already live in a sibling session**,
+`zmux run -n <peer> -d` refuses with `tab "<peer>" is ambiguous — use an id …` and
+creates *nothing* — even with `-s <session>`. Until the create path is session-
+scoped, spawn under a `<topic>-peer` task-specific name (e.g. `readback-peer`) when
+any sibling session may hold the roster name — it sidesteps the global match and
+lands cleanly in yours.
+
 **Pin the current session on reads.** The read path still resolves a unique
 name server-wide, so a bare `watch <peer>` (or `log tail` / `tab show`) with no
 local match reads a *sibling* session's peer (a real failure: a `claude-peer`
