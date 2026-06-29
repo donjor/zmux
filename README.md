@@ -23,7 +23,7 @@ terminal emulator or its own multiplexer.
 - **Status bar** — 9 presets with dynamic segments (git, lang, workspace, directory)
 - **Recipes** — declarative TOML launch plans for workspaces, sessions, tabs, and commands
 - **Terminal commands** — run, watch, send, type for agent/scripting workflows
-- **Logical tabs** — tabs can run full-screen, ride as panes, or park hidden while staying addressable
+- **Logical tabs** — tabs can run full-screen, ride as panes, or park hidden under a parent while staying addressable
 - **Attention states** — running/done/failed/needs-human glyphs in the bar
 - **Tab reaper** — auto-expires idle agent-task tabs by lifecycle policy; live work and `--keep`/daemon tabs are spared
 - **Multi-source discovery** — find sessions across tmux sockets and overmind
@@ -138,9 +138,9 @@ zmux tab label [label]              Set/clear stable label for current tab
 zmux tab state <state> [tab]        Set lifecycle glyph: attention/running/done/failed/clear
 zmux tab pane <tab|N> [--into host] Join a tab (by name or bar index N) as a pane beside another
 zmux tab split                      Create a new tab and join it as a pane in one step (prefix+j)
-zmux tab full [tab] / [--pane <id>] Promote focused/named/clicked pane-of tab back to full
-zmux tab hide <tab> / [--pane <id>] Park a tab off the bar in the hidden dock
-zmux tab show <tab|N>               Return hidden tab by name or shown dock index
+zmux tab full [tab] / [--pane <id>] Promote visible/hidden pane-tab to full
+zmux tab hide <tab> / [--pane <id>] Park a joined pane under its parent tab
+zmux tab show <tab|N>               Rejoin hidden pane by name or parent-local index
 zmux tab kill <tab>                 Kill a tab
 zmux reap                           Adopt/flag/kill stale tabs by lifecycle policy
 zmux reap --dry-run                 Preview verdicts only — change nothing
@@ -239,7 +239,7 @@ Prefix: `Ctrl+Space` (configurable)
 | prefix + x                   | Close tab (with confirm)                                |
 | prefix + J                   | Join a tab into this tab as a pane                      |
 | prefix + F                   | Promote focused pane-tab to full tab                    |
-| prefix + h / H               | Hide focused tab / show hidden tab by # or name         |
+| prefix + h / H               | Hide focused pane / rejoin hidden pane by # or name     |
 | prefix + R                   | Respawn stopped/dead pane                               |
 | prefix + .                   | Label tab (blank clears label)                          |
 | prefix + ,                   | Rename session                                          |
@@ -267,9 +267,10 @@ Prefix: `Ctrl+Space` (configurable)
 
 Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
 borders resizes them. Right-clicking a managed pane or logical tab-row cell opens
-a target-aware menu — show/unhide, promote to full, hide to dock, or kill the
-tab where that action applies. Docked tabs render with index badges like
-`[1] logs~`, and `prefix+H` accepts that short index as well as the full name.
+a target-aware menu — join back, promote to full, hide pane, or kill the tab
+where that action applies. Hidden panes render under their parent as compact
+parked badges like `󰏤[1] logs~`, and `prefix+H` accepts that parent-local index
+as well as the full name.
 Failed or signalled foreground
 commands stay visible as dead panes, so Ctrl+C spam cannot silently delete the
 tab; clean exits close normally. Use `prefix+x` / `zmux tab kill` when you mean

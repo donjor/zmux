@@ -30,13 +30,13 @@ func tabsRowFixture() []tmux.LogicalPaneRow {
 		// docked tab, origin dev, attention
 		{
 			PaneID: "%4", Session: tabs.DockSession, WindowID: "@9", WindowIndex: 0, WindowName: "logs",
-			WindowPanes: 1, TabID: "ztab_log", Label: "logs", State: "attention", Hidden: "dev",
+			WindowPanes: 1, TabID: "ztab_log", Label: "logs", State: "attention", Anchor: "ztab_bud", Hidden: "dev",
 		},
 		// second docked tab, origin dev, stateless — pins the per-entry
 		// dim reset (the first tab's glyph fg must not bleed into it)
 		{
 			PaneID: "%7", Session: tabs.DockSession, WindowID: "@10", WindowIndex: 2, WindowName: "brk",
-			WindowPanes: 1, TabID: "ztab_brk", Label: "brk", Hidden: "dev",
+			WindowPanes: 1, TabID: "ztab_brk", Label: "brk", Anchor: "ztab_bud", Hidden: "dev",
 		},
 		// another session's window + docked tab from elsewhere: excluded
 		{
@@ -68,7 +68,7 @@ func TestRenderTabsRowComposition(t *testing.T) {
 		SpinnerFrame(now),   // running glyph animates from the wall clock
 		"+tests",            // pane-of rider in the host cell
 		stateGlyphs["done"], // rider's own pane-canonical glyph
-		"(dock [1] logs~",   // docked tab grouped with a visible show-index badge
+		"󰏤[1] logs~",        // parked pane grouped inside its parent tab cell
 		stateGlyphs["attention"],
 	} {
 		if !strings.Contains(flat, want) {
@@ -89,6 +89,7 @@ func TestRenderTabsRowHiddenGroupStyling(t *testing.T) {
 	out := RenderTabsRow(testPalette(), Default, "dev", "dev", tabsRowFixture(), false, time.Unix(0, 0))
 	p := testPalette()
 	for _, want := range []string{
+		"#[fg=" + p.Dim.Hex() + ",nobold] " + parkedPaneGlyph,
 		"#[fg=" + p.Accent.Hex() + ",bold][1]",
 		"#[fg=" + p.Accent.Hex() + ",bold][2]",
 		"#[fg=" + p.Dim.Hex() + ",nobold] brk~",
@@ -135,9 +136,9 @@ func TestRenderTabsRowGlyphSpacing(t *testing.T) {
 	flat := stripStyles(RenderTabsRow(testPalette(), Default, "dev", "dev", tabsRowFixture(), false, now))
 
 	for _, want := range []string{
-		"buddy " + SpinnerFrame(now),            // full-tab glyph spaced
-		"+tests " + stateGlyphs["done"],         // rider glyph spaced
-		"[1] logs~ " + stateGlyphs["attention"], // docked glyph spaced after index badge
+		"buddy " + SpinnerFrame(now),             // full-tab glyph spaced
+		"+tests " + stateGlyphs["done"],          // rider glyph spaced
+		"󰏤[1] logs~ " + stateGlyphs["attention"], // parked glyph spaced after index badge
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("row missing spaced glyph %q:\n%s", want, flat)

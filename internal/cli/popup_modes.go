@@ -380,10 +380,11 @@ func showPickedTab(app *apppkg.App, sessionName, tabID string) error {
 	if t == nil {
 		return fmt.Errorf("hidden tab no longer exists")
 	}
-	origin, err := tabspkg.ShowTab(app.Runner, t)
+	_, err = tabspkg.ShowTab(app.Runner, t)
 	if err != nil {
 		return err
 	}
+	origin := t.OriginSession
 	if session.RootName(origin) != sessionName {
 		if err := session.Switch(app.Runner, origin); err != nil {
 			return err

@@ -143,18 +143,34 @@ func restoreLayoutOnly(r tmux.Runner, snap winSnapshot) []string {
 	return restoreWindow(r, zoomless, "")
 }
 
-// Promote breaks a pane-of tab out into its own full window in its session —
-// `tab full`. S3 settled: append by default; after=true inserts directly
-// after the old host window (break-pane -a) — indexes are never persisted.
-// Returns the new window id and non-fatal restore warnings.
+// Promote breaks a pane-of tab out into its own full window, or returns a
+// hidden pane as a full window in its origin session. S3 settled: append by
+// default; after=true inserts visible panes directly after the old host window
+// (break-pane -a) — indexes are never persisted. Returns the new window id and
+// non-fatal restore warnings.
 func Promote(r tmux.Runner, t *LogicalTab, after bool) (string, []string, error) {
 	switch t.Placement {
 	case PlacementFull:
 		return "", nil, fmt.Errorf("tab %q is already a full tab", DisplayName(t))
 	case PlacementDock:
-		return "", nil, fmt.Errorf("tab %q is hidden — return it with: zmux tab show %s",
-			DisplayName(t), DisplayName(t))
-	case PlacementPaneOf: // the one promotable placement
+		origin := t.OriginSession
+		if origin == "" || origin == DockSession {
+			return "", nil, fmt.Errorf("tab %q has no recorded origin session", DisplayName(t))
+		}
+		if !r.HasSession(origin) {
+			return "", nil, fmt.Errorf("origin session %q is gone — cannot promote tab %q there", origin, DisplayName(t))
+		}
+		if err := r.MoveWindow(t.WindowID, origin+":"); err != nil {
+			return "", nil, fmt.Errorf("promote hidden tab %q: %w", DisplayName(t), err)
+		}
+		if err := r.ApplyOptions([]tmux.OptionWrite{
+			{Scope: tmux.ScopePane, Target: t.PaneID, Key: OptHidden, Unset: true},
+			{Scope: tmux.ScopePane, Target: t.PaneID, Key: OptAnchor, Unset: true},
+		}); err != nil {
+			return "", nil, fmt.Errorf("clear hidden state on %q: %w", DisplayName(t), err)
+		}
+		return t.WindowID, nil, nil
+	case PlacementPaneOf: // visible pane promotable path below
 	}
 
 	hostSnap, err := snapshotWindow(r, t.WindowID)

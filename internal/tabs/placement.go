@@ -124,7 +124,7 @@ func Show(r tmux.Runner, t *LogicalTab) (string, error) {
 		return "", fmt.Errorf("hidden pane %q parent %q is outside origin session %q", DisplayName(t), DisplayName(host), origin)
 	}
 	_, err = Join(r, t, host, JoinOptions{Direction: tmux.SplitRight})
-	return DisplayName(host), err
+	return origin, err
 }
 
 // DisplayName is a tab's addressable display name: label, else the live window

@@ -133,16 +133,20 @@ func TestApplyCloseRefusesLastWindow(t *testing.T) {
 }
 
 // show from the picker mirrors `zmux tab show`: clone-block on the origin,
-// move the window home, record the selection in the origin's MRU.
+// rejoin the pane to its parent, record the selection in the origin's MRU.
 func TestApplyShowReturnsDockedTab(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.Sessions = []tmux.Session{{Name: "dev"}}
+	host := logicalRow("%2", "dev", "@2", 1, "ztab_host", "work")
 	docked := logicalRow("%4", tabs.DockSession, "@9", 0, "ztab_log", "logs")
 	docked.Hidden = "dev"
-	mock.LogicalRows = []tmux.LogicalPaneRow{docked}
+	docked.Anchor = "ztab_host"
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, docked}
 	mock.DisplayMessageFunc = displayByFormat(map[string]string{
 		"session_group": "\t1\t1\n", // ungrouped — not clone-blocked
-		tabs.OptMRU:     "",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t1\t%2\n",
+		"#{window_panes}": "2\n",
+		tabs.OptMRU:       "",
 	})
 
 	err := applyTabPickerResult(a, "dev", tabpicker.TabPickerResult{
@@ -152,14 +156,14 @@ func TestApplyShowReturnsDockedTab(t *testing.T) {
 		t.Fatalf("apply show: %v", err)
 	}
 
-	var moved bool
+	var joined bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@9" && c.Args[1] == "dev:" {
-			moved = true
+		if c.Method == "JoinPane" && c.Args[0] == "%4" && c.Args[1] == "%2" {
+			joined = true
 		}
 	}
-	if !moved {
-		t.Error("show must move the docked window back to its origin")
+	if !joined {
+		t.Error("show must rejoin the docked pane to its parent")
 	}
 	if got := mruWrite(mock.Calls, "dev"); got != "ztab_log" {
 		t.Errorf("MRU write = %q, want ztab_log", got)

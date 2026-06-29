@@ -8,9 +8,9 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
-// hide on a full tab: whole window moves into the (lazily created) dock,
-// the origin session is recorded on the pane.
-func TestTabHideFullTabMovesToDock(t *testing.T) {
+// hide on a full tab is refused: only joined panes are collapsible under a
+// parent tab.
+func TestTabHideFullTabErrors(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
 	mock.LogicalRows = []tmux.LogicalPaneRow{
@@ -18,27 +18,20 @@ func TestTabHideFullTabMovesToDock(t *testing.T) {
 	}
 	mock.DisplayMessageFunc = displayByFormat(map[string]string{
 		"#{session_name}": "test-session",
-		"session_group":   "\t1\t1\n", // ungrouped — not clone-blocked
-		"#{window_id}":    "@99\n",    // fresh dock placeholder
+		"session_group":   "\t1\t1\n",
 	})
 
 	rootCmd.SetArgs([]string{"tab", "hide", "buddy"})
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("tab hide failed: %v", err)
+	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "cannot be hidden") {
+		t.Fatalf("expected full-tab hide refusal, got %v", err)
 	}
-
-	var moved, hiddenSet bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@5" && c.Args[1] == tabs.DockSession+":" {
-			moved = true
+		if c.Method == "MoveWindow" || c.Method == "BreakPane" {
+			t.Errorf("full-tab hide must not move anything: %s %v", c.Method, c.Args)
 		}
-		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" &&
-			c.Args[2] == tabs.OptHidden && c.Args[3] == "test-session" {
-			hiddenSet = true
-		}
-	}
-	if !moved || !hiddenSet {
-		t.Errorf("expected move-to-dock + origin record: moved=%v hidden=%v", moved, hiddenSet)
 	}
 }
 
@@ -68,17 +61,20 @@ func TestTabHideBlockedByAttachedClones(t *testing.T) {
 	}
 }
 
-// show returns a docked tab (resolved from its origin scope) to the origin
-// session and clears the hidden flag.
-func TestTabShowReturnsDockedTab(t *testing.T) {
+// show rejoins a docked pane to its recorded parent and clears the hidden flag.
+func TestTabShowRejoinsDockedPaneToParent(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	host := logicalRow("%2", "test-session", "@5", 1, "ztab_host001", "work")
 	dock := logicalRow("%3", tabs.DockSession, "@7", 0, "ztab_bud001", "buddy")
 	dock.Hidden = "test-session"
-	mock.LogicalRows = []tmux.LogicalPaneRow{dock}
+	dock.Anchor = "ztab_host001"
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, dock}
 	mock.DisplayMessageFunc = displayByFormat(map[string]string{
 		"#{session_name}": "test-session",
 		"session_group":   "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t1\t%2\n",
+		"#{window_panes}": "2\n",
 	})
 
 	rootCmd.SetArgs([]string{"tab", "show", "buddy"})
@@ -86,32 +82,38 @@ func TestTabShowReturnsDockedTab(t *testing.T) {
 		t.Fatalf("tab show failed: %v", err)
 	}
 
-	var moved, cleared bool
+	var joined, cleared bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@7" && c.Args[1] == "test-session:" {
-			moved = true
+		if c.Method == "JoinPane" && c.Args[0] == "%3" && c.Args[1] == "%2" {
+			joined = true
 		}
 		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" &&
 			c.Args[2] == tabs.OptHidden && c.Args[4] == "unset=true" {
 			cleared = true
 		}
 	}
-	if !moved || !cleared {
-		t.Errorf("expected move-to-origin + hidden clear: moved=%v cleared=%v", moved, cleared)
+	if !joined || !cleared {
+		t.Errorf("expected join-to-parent + hidden clear: joined=%v cleared=%v calls=%#v", joined, cleared, mock.Calls)
 	}
 }
 
-func TestTabShowNumericArgTargetsHiddenIndex(t *testing.T) {
+func TestTabShowNumericArgTargetsHiddenIndexUnderCurrentParent(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	host := logicalRow("%2", "test-session", "@5", 1, "ztab_host001", "work")
 	first := logicalRow("%3", tabs.DockSession, "@7", 0, "ztab_log001", "logs")
 	first.Hidden = "test-session"
+	first.Anchor = "ztab_host001"
 	second := logicalRow("%4", tabs.DockSession, "@8", 1, "ztab_dbg001", "debug")
 	second.Hidden = "test-session"
-	mock.LogicalRows = []tmux.LogicalPaneRow{first, second}
+	second.Anchor = "ztab_host001"
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, first, second}
 	mock.DisplayMessageFunc = displayByFormat(map[string]string{
 		"#{session_name}": "test-session",
+		"#{pane_id}":      "%2\n",
 		"session_group":   "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t1\t%2\n",
+		"#{window_panes}": "2\n",
 	})
 
 	rootCmd.SetArgs([]string{"tab", "show", "2"})
@@ -119,29 +121,33 @@ func TestTabShowNumericArgTargetsHiddenIndex(t *testing.T) {
 		t.Fatalf("tab show 2 failed: %v", err)
 	}
 
-	var movedSecond, movedFirst bool
+	var joinedSecond, joinedFirst bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@8" && c.Args[1] == "test-session:" {
-			movedSecond = true
+		if c.Method == "JoinPane" && c.Args[0] == "%4" && c.Args[1] == "%2" {
+			joinedSecond = true
 		}
-		if c.Method == "MoveWindow" && c.Args[0] == "@7" {
-			movedFirst = true
+		if c.Method == "JoinPane" && c.Args[0] == "%3" {
+			joinedFirst = true
 		}
 	}
-	if !movedSecond || movedFirst {
-		t.Fatalf("expected hidden index 2 to show second tab only: movedSecond=%v movedFirst=%v calls=%#v", movedSecond, movedFirst, mock.Calls)
+	if !joinedSecond || joinedFirst {
+		t.Fatalf("expected hidden index 2 to join second pane only: joinedSecond=%v joinedFirst=%v calls=%#v", joinedSecond, joinedFirst, mock.Calls)
 	}
 }
 
 func TestTabShowPaneFlagTargetsDockedPaneAndNotifies(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	host := logicalRow("%2", "test-session", "@5", 1, "ztab_host001", "work")
 	dock := logicalRow("%4", tabs.DockSession, "@7", 0, "ztab_log001", "logs")
 	dock.Hidden = "test-session"
-	mock.LogicalRows = []tmux.LogicalPaneRow{dock}
+	dock.Anchor = "ztab_host001"
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, dock}
 	mock.DisplayMessageFunc = displayByFormat(map[string]string{
 		"#{session_name}": "test-session",
 		"session_group":   "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t1\t%2\n",
+		"#{window_panes}": "2\n",
 	})
 
 	rootCmd.SetArgs([]string{"tab", "show", "--pane", "%4", "--notify"})
@@ -149,17 +155,17 @@ func TestTabShowPaneFlagTargetsDockedPaneAndNotifies(t *testing.T) {
 		t.Fatalf("tab show --pane --notify failed: %v", err)
 	}
 
-	var moved, flashed bool
+	var joined, flashed bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@7" && c.Args[1] == "test-session:" {
-			moved = true
+		if c.Method == "JoinPane" && c.Args[0] == "%4" && c.Args[1] == "%2" {
+			joined = true
 		}
 		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "shown: logs") {
 			flashed = true
 		}
 	}
-	if !moved || !flashed {
-		t.Fatalf("expected docked pane shown with notification: moved=%v flashed=%v calls=%#v", moved, flashed, mock.Calls)
+	if !joined || !flashed {
+		t.Fatalf("expected docked pane rejoined with notification: joined=%v flashed=%v calls=%#v", joined, flashed, mock.Calls)
 	}
 }
 
@@ -209,11 +215,12 @@ func TestTabHideUnknownTabErrors(t *testing.T) {
 func TestTabHideDefaultsToCurrentPaneTabAndNotifies(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
-	mock.LogicalRows = []tmux.LogicalPaneRow{
-		logicalRow("%2", "test-session", "@5", 1, "ztab_wrk001", "work"),
-	}
+	host := logicalRow("%2", "test-session", "@5", 1, "ztab_wrk001", "work")
+	rider := logicalRow("%3", "test-session", "@5", 1, "ztab_log001", "logs")
+	rider.Anchor = "ztab_wrk001"
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, rider}
 	mock.DisplayMessageFunc = displayByFormat(map[string]string{
-		"#{pane_id}":    "%2\n",
+		"#{pane_id}":    "%3\n",
 		"session_group": "\t1\t1\n",
 		"#{window_id}":  "@99\n",
 	})
@@ -223,27 +230,28 @@ func TestTabHideDefaultsToCurrentPaneTabAndNotifies(t *testing.T) {
 		t.Fatalf("tab hide --notify failed: %v", err)
 	}
 
-	var moved, flashed bool
+	var broke, flashed bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@5" && c.Args[1] == tabs.DockSession+":" {
-			moved = true
+		if c.Method == "BreakPane" && c.Args[0] == "%3" && c.Args[1] == tabs.DockSession+":" {
+			broke = true
 		}
-		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "hidden: work") {
+		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "hidden: logs") {
 			flashed = true
 		}
 	}
-	if !moved || !flashed {
-		t.Fatalf("expected current tab hidden with notification: moved=%v flashed=%v calls=%#v", moved, flashed, mock.Calls)
+	if !broke || !flashed {
+		t.Fatalf("expected current pane hidden with notification: broke=%v flashed=%v calls=%#v", broke, flashed, mock.Calls)
 	}
 }
 
 func TestTabHidePaneFlagTargetsPaneAndNotifies(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}
-	mock.LogicalRows = []tmux.LogicalPaneRow{
-		logicalRow("%2", "test-session", "@2", 1, "ztab_wrk001", "work"),
-		logicalRow("%3", "test-session", "@5", 2, "ztab_tst001", "tests"),
-	}
+	host := logicalRow("%2", "test-session", "@2", 1, "ztab_wrk001", "work")
+	clicked := logicalRow("%3", "test-session", "@2", 1, "ztab_tst001", "tests")
+	clicked.Anchor = "ztab_wrk001"
+	focused := logicalRow("%5", "test-session", "@5", 2, "ztab_foc001", "focus")
+	mock.LogicalRows = []tmux.LogicalPaneRow{host, clicked, focused}
 	mock.DisplayMessageFunc = displayByFormat(map[string]string{
 		"#{pane_id}":    "%2\n",
 		"session_group": "\t1\t1\n",
@@ -255,21 +263,21 @@ func TestTabHidePaneFlagTargetsPaneAndNotifies(t *testing.T) {
 		t.Fatalf("tab hide --pane --notify failed: %v", err)
 	}
 
-	var movedClicked, movedFocused, flashed bool
+	var brokeClicked, movedFocused, flashed bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@5" && c.Args[1] == tabs.DockSession+":" {
-			movedClicked = true
+		if c.Method == "BreakPane" && c.Args[0] == "%3" && c.Args[1] == tabs.DockSession+":" {
+			brokeClicked = true
 		}
-		if c.Method == "MoveWindow" && c.Args[0] == "@2" {
+		if (c.Method == "MoveWindow" || c.Method == "BreakPane") && c.Args[0] == "%5" {
 			movedFocused = true
 		}
 		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "hidden: tests") {
 			flashed = true
 		}
 	}
-	if !movedClicked || movedFocused || !flashed {
-		t.Fatalf("expected clicked pane tab hidden, not focused tab: movedClicked=%v movedFocused=%v flashed=%v calls=%#v",
-			movedClicked, movedFocused, flashed, mock.Calls)
+	if !brokeClicked || movedFocused || !flashed {
+		t.Fatalf("expected clicked pane tab hidden, not focused tab: brokeClicked=%v movedFocused=%v flashed=%v calls=%#v",
+			brokeClicked, movedFocused, flashed, mock.Calls)
 	}
 }
 

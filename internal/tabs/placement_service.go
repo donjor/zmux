@@ -62,10 +62,15 @@ func JoinTab(r tmux.Runner, t, host *LogicalTab, opts JoinOptions) ([]string, er
 	return warnings, nil
 }
 
-// PromoteTab breaks t out into its own full window, guarding its session's
-// clones, then heals. Returns the new window id and any non-fatal warnings.
+// PromoteTab breaks t out into its own full window, guarding the affected
+// session's clones, then heals. Returns the new window id and any non-fatal
+// warnings.
 func PromoteTab(r tmux.Runner, t *LogicalTab, after bool) (string, []string, error) {
-	if err := guardClones(r, t.Session); err != nil {
+	guardSession := t.Session
+	if t.Placement == PlacementDock {
+		guardSession = t.OriginSession
+	}
+	if err := guardClones(r, guardSession); err != nil {
 		return "", nil, err
 	}
 	windowID, warnings, err := Promote(r, t, after)

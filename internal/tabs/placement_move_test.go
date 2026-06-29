@@ -215,7 +215,7 @@ func TestPromoteAfterInsertsBehindHost(t *testing.T) {
 	}
 }
 
-func TestPromoteRejectsFullAndDocked(t *testing.T) {
+func TestPromoteRejectsFullAndPromotesDocked(t *testing.T) {
 	mock := tmux.NewMockRunner()
 
 	full := fullTab("buddy", "%1", "dev", "@1", 1)
@@ -226,9 +226,25 @@ func TestPromoteRejectsFullAndDocked(t *testing.T) {
 
 	docked := fullTab("logs", "%5", DockSession, "@9", 1)
 	docked.Placement = PlacementDock
-	if _, _, err := Promote(mock, docked, false); err == nil ||
-		!strings.Contains(err.Error(), "tab show") {
-		t.Errorf("docked promote must point at tab show, got %v", err)
+	docked.OriginSession = "dev"
+	mock.Sessions = []tmux.Session{{Name: "dev"}}
+	if windowID, warnings, err := Promote(mock, docked, false); err != nil || windowID != "@9" || len(warnings) != 0 {
+		t.Fatalf("docked promote = windowID %q warnings %v err %v, want @9/no warnings/nil", windowID, warnings, err)
+	}
+	var moved, hiddenCleared, anchorCleared bool
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" && c.Args[0] == "@9" && c.Args[1] == "dev:" {
+			moved = true
+		}
+		if c.Method == "ApplyOptions" && c.Args[1] == "%5" && c.Args[2] == OptHidden && c.Args[4] == "unset=true" {
+			hiddenCleared = true
+		}
+		if c.Method == "ApplyOptions" && c.Args[1] == "%5" && c.Args[2] == OptAnchor && c.Args[4] == "unset=true" {
+			anchorCleared = true
+		}
+	}
+	if !moved || !hiddenCleared || !anchorCleared {
+		t.Errorf("docked promote incomplete: moved=%v hiddenCleared=%v anchorCleared=%v calls=%#v", moved, hiddenCleared, anchorCleared, mock.Calls)
 	}
 }
 

@@ -12,11 +12,13 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
+const parkedPaneGlyph = "󰏤"
+
 // RenderTabsRow renders the logical tab row for one session from a single
 // server scan: every window of the session in index order (label-aware
 // names, pane-canonical state glyphs), pane-of tabs riding inside their host
-// cell, and the session's docked tabs grouped in a trailing dim section —
-// hidden, never invisible. The #() job re-runs every status interval, so the
+// cell, and hidden pane-of tabs parked under their recorded parent — hidden,
+// never invisible. The #() job re-runs every status interval, so the
 // running spinner frame is picked here from the wall clock.
 //
 // Cells wear the preset's chrome (renderTabCell — the window-status-format
@@ -50,13 +52,18 @@ func RenderTabsRow(p *theme.Palette, preset Preset, session, originScope string,
 
 	fullByWin := make(map[string]*tabs.LogicalTab)
 	ridersByWin := make(map[string][]*tabs.LogicalTab)
-	var hidden []*tabs.LogicalTab
+	hiddenByAnchor := make(map[string][]*tabs.LogicalTab)
+	var orphanHidden []*tabs.LogicalTab
 	for i := range all {
 		t := &all[i]
 		switch {
 		case t.Placement == tabs.PlacementDock:
 			if t.OriginSession == originScope {
-				hidden = append(hidden, t)
+				if t.AnchorID != "" {
+					hiddenByAnchor[t.AnchorID] = append(hiddenByAnchor[t.AnchorID], t)
+				} else {
+					orphanHidden = append(orphanHidden, t)
+				}
 			}
 		case t.Session != session:
 		case t.Placement == tabs.PlacementFull:
@@ -89,6 +96,15 @@ func RenderTabsRow(p *theme.Palette, preset Preset, session, originScope string,
 		cell.WriteString(name)
 		if full != nil {
 			cell.WriteString(tabStateGlyph(p, full.State, now))
+			if parked := hiddenByAnchor[full.ID]; len(parked) > 0 {
+				if hostRange != "" {
+					cell.WriteString(tabPaneRangeEnd())
+				}
+				cell.WriteString(renderParkedPanes(p, parked, now))
+				if hostRange != "" {
+					cell.WriteString(hostRange)
+				}
+			}
 		}
 		// Pane-of tabs ride inside the host cell: +name, own state glyph.
 		for _, r := range ridersByWin[w.id] {
@@ -102,6 +118,9 @@ func RenderTabsRow(p *theme.Palette, preset Preset, session, originScope string,
 			if riderRange != "" {
 				cell.WriteString(tabPaneRangeEnd())
 			}
+			if parked := hiddenByAnchor[r.ID]; len(parked) > 0 {
+				cell.WriteString(renderParkedPanes(p, parked, now))
+			}
 			if hostRange != "" {
 				cell.WriteString(hostRange)
 			}
@@ -113,28 +132,31 @@ func RenderTabsRow(p *theme.Palette, preset Preset, session, originScope string,
 		b.WriteString(rendered)
 	}
 
-	if len(hidden) > 0 {
-		fmt.Fprintf(&b, "#[fg=%s,nobold] (dock ", p.Dim.Hex())
-		for i, h := range hidden {
-			if i > 0 {
-				b.WriteString(" ")
-			}
-			hiddenRange := tabPaneRange(h.PaneID)
-			b.WriteString(hiddenRange)
-			// Re-dim per entry — the previous tab's state glyph fg would
-			// otherwise bleed into this name. Render the 1-based dock index as
-			// an accent badge so the prefix+H shortcut's numeric target is visible
-			// as an affordance, not just a name prefix.
-			fmt.Fprintf(&b, "#[fg=%s,bold][%d]", p.Accent.Hex(), i+1)
-			fmt.Fprintf(&b, "#[fg=%s,nobold] %s~", p.Dim.Hex(), tabs.DisplayName(h))
-			b.WriteString(tabStateGlyph(p, h.State, now))
-			if hiddenRange != "" {
-				b.WriteString(tabPaneRangeEnd())
-			}
-		}
+	if len(orphanHidden) > 0 {
+		fmt.Fprintf(&b, "#[fg=%s,nobold] (parked", p.Dim.Hex())
+		b.WriteString(renderParkedPanes(p, orphanHidden, now))
 		fmt.Fprintf(&b, "#[fg=%s,nobold])", p.Dim.Hex())
 	}
 
+	return b.String()
+}
+
+func renderParkedPanes(p *theme.Palette, parked []*tabs.LogicalTab, now time.Time) string {
+	var b strings.Builder
+	for i, h := range parked {
+		hiddenRange := tabPaneRange(h.PaneID)
+		b.WriteString(hiddenRange)
+		// Re-dim per entry — the previous tab's state glyph fg would otherwise
+		// bleed into this name. The accent badge is the target accepted by
+		// prefix+H in the current parent context.
+		fmt.Fprintf(&b, "#[fg=%s,nobold] %s", p.Dim.Hex(), parkedPaneGlyph)
+		fmt.Fprintf(&b, "#[fg=%s,bold][%d]", p.Accent.Hex(), i+1)
+		fmt.Fprintf(&b, "#[fg=%s,nobold] %s~", p.Dim.Hex(), tabs.DisplayName(h))
+		b.WriteString(tabStateGlyph(p, h.State, now))
+		if hiddenRange != "" {
+			b.WriteString(tabPaneRangeEnd())
+		}
+	}
 	return b.String()
 }
 

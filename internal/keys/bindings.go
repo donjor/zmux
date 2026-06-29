@@ -25,8 +25,8 @@ var (
 	LabelTab        = Binding{Action: "label.tab", Key: ".", Help: "Set stable tab label (blank clears)", Category: CatTabs, Context: Prefix}
 	TabJoinPane     = Binding{Action: "tab.pane", Key: "J", Help: "Join a tab into this tab as a pane", Category: CatTabs, Context: Prefix}
 	TabFull         = Binding{Action: "tab.full", Key: "F", Help: "Promote focused pane-tab to full tab", Category: CatTabs, Context: Prefix}
-	TabHide         = Binding{Action: "tab.hide", Key: "h", Help: "Hide focused tab to dock", Category: CatTabs, Context: Prefix}
-	TabShow         = Binding{Action: "tab.show", Key: "H", Help: "Show hidden tab by index/name", Category: CatTabs, Context: Prefix}
+	TabHide         = Binding{Action: "tab.hide", Key: "h", Help: "Hide focused pane under its parent tab", Category: CatTabs, Context: Prefix}
+	TabShow         = Binding{Action: "tab.show", Key: "H", Help: "Rejoin hidden pane by parent index/name", Category: CatTabs, Context: Prefix}
 
 	// Sessions (prefix).
 	RenameSession = Binding{Action: "rename", Key: ",", Help: "Rename session", Category: CatSessions, Context: Prefix}

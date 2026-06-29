@@ -22,14 +22,15 @@ func newTabHideCmd(app *apppkg.App) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "hide [tab]",
-		Short: "Park a tab in the hidden dock (keeps running, off the bar)",
-		Long: `Hide a tab in the reserved dock session. The process keeps running and
-stays addressable — send/type/watch/run -n reach it by name or id — it just
-leaves the bar and the window list. Bring it back with zmux tab show.
+		Short: "Park a pane-tab under its parent (keeps running, out of layout)",
+		Long: `Hide a tab that lives as a pane inside another tab. The pane breaks out
+into the reserved dock session, keeps running, stays addressable by pane id, and
+is rendered as a parked badge under its recorded parent. Bring it back with
+zmux tab show.
 
-A full tab moves its whole window; a tab living as a pane inside another tab
-breaks out into the dock on its own. With no tab argument, the focused
-pane-tab is hidden.`,
+Full tabs are top-level workspace units and are intentionally not hideable;
+join one as a pane first if it should become collapsible. With no tab argument,
+the focused pane-tab is hidden.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			msg, err := func() (string, error) {
@@ -77,11 +78,11 @@ func newTabShowCmd(app *apppkg.App) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "show [tab]",
-		Short: "Return a hidden tab from the dock to its origin session",
-		Long: `Show a hidden tab: its window moves back to the session it was hidden
-from (recorded at hide time) as a full tab, appended after the existing tabs.
-<tab> may be a name/label or the 1-based hidden index shown in the tab row.
-It never auto-joins into another tab — use zmux tab pane for that.`,
+		Short: "Rejoin a parked pane-tab to its recorded parent",
+		Long: `Show a hidden pane-tab: it rejoins the visible parent it was parked
+under and clears the hidden marker. <tab> may be a name/label or the 1-based
+parked index shown beside the current parent in the tab row. Promote a parked
+pane to a full tab explicitly with zmux tab full.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			msg, err := func() (string, error) {
@@ -131,16 +132,52 @@ func hiddenTabAtIndex(r tmux.Runner, session string, index int) (*tabs.LogicalTa
 	if err != nil {
 		return nil, fmt.Errorf("scan tabs: %w", err)
 	}
+	current, err := currentTabFromList(r, all)
+	if err != nil {
+		return nil, fmt.Errorf("hidden indexes are parent-scoped; %w", err)
+	}
+	anchors := []string{current.ID}
+	if current.AnchorID != "" {
+		anchors = append(anchors, current.AnchorID)
+	}
+	for _, anchor := range anchors {
+		hidden := hiddenTabsForAnchor(all, session, anchor)
+		if len(hidden) == 0 {
+			continue
+		}
+		if index < 1 || index > len(hidden) {
+			return nil, fmt.Errorf("no hidden pane at index %d under %s", index, tabs.DisplayName(current))
+		}
+		return &hidden[index-1], nil
+	}
+	return nil, fmt.Errorf("no hidden panes under %s", tabs.DisplayName(current))
+}
+
+func currentTabFromList(r tmux.Runner, all []tabs.LogicalTab) (*tabs.LogicalTab, error) {
+	if !r.IsInsideTmux() {
+		return nil, fmt.Errorf("run inside tmux or use a hidden pane name")
+	}
+	paneID, err := r.DisplayMessage("", "#{pane_id}")
+	if err != nil {
+		return nil, fmt.Errorf("resolve current pane: %w", err)
+	}
+	paneID = strings.TrimSpace(paneID)
+	for i := range all {
+		if all[i].PaneID == paneID {
+			return &all[i], nil
+		}
+	}
+	return nil, fmt.Errorf("current pane is not a zmux tab")
+}
+
+func hiddenTabsForAnchor(all []tabs.LogicalTab, session, anchor string) []tabs.LogicalTab {
 	var hidden []tabs.LogicalTab
 	for i := range all {
-		if all[i].Placement == tabs.PlacementDock && all[i].OriginSession == session {
+		if all[i].Placement == tabs.PlacementDock && all[i].OriginSession == session && all[i].AnchorID == anchor {
 			hidden = append(hidden, all[i])
 		}
 	}
-	if index < 1 || index > len(hidden) {
-		return nil, fmt.Errorf("no hidden tab at index %d in %s", index, session)
-	}
-	return &hidden[index-1], nil
+	return hidden
 }
 
 func newTabPaneCmd(app *apppkg.App) *cobra.Command {
@@ -314,11 +351,12 @@ func newTabFullCmd(app *apppkg.App) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "full [tab]",
-		Short: "Promote a pane-of tab back to a full window",
+		Short: "Promote a visible or hidden pane-tab to a full window",
 		Long: `Break a tab living as a pane inside another tab out into its own full
 window, appended after the session's existing tabs (S3: indexes are never
-persisted). With no tab argument, the focused pane-tab is promoted. --after
-inserts it directly after its old host window instead.`,
+persisted). Hidden panes are returned to their origin session as full tabs.
+With no tab argument, the focused pane-tab is promoted. --after inserts a
+visible pane directly after its old host window instead.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var warnings []string

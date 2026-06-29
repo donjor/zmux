@@ -110,37 +110,20 @@ func TestEnsureDockExistingMarkedIsNoop(t *testing.T) {
 	}
 }
 
-// hide(full) = move-window (raw splits ride along); the origin session lands
-// in @zmux_hidden and the fresh dock's placeholder dies after move-in.
-func TestHideFullMovesWindowAndRecordsOrigin(t *testing.T) {
+func TestHideFullErrors(t *testing.T) {
 	mock := tmux.NewMockRunner()
-	mock.DisplayMessageResult = "@99\n" // placeholder of the fresh dock
 	tab := &LogicalTab{
 		ID: "ztab_a", Label: "buddy", PaneID: "%3", Session: "dev",
 		OriginSession: "dev", WindowID: "@5", Placement: PlacementFull,
 	}
 
-	if err := Hide(mock, tab); err != nil {
-		t.Fatalf("Hide: %v", err)
+	if err := Hide(mock, tab); err == nil || !strings.Contains(err.Error(), "cannot be hidden") {
+		t.Fatalf("expected full-tab hide refusal, got %v", err)
 	}
-	var moved, hiddenSet, placeholderKilled bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@5" && c.Args[1] == DockSession+":" {
-			moved = true
+		if c.Method == "MoveWindow" || c.Method == "BreakPane" {
+			t.Errorf("full-tab hide must not move anything: %s %v", c.Method, c.Args)
 		}
-		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" &&
-			c.Args[2] == OptHidden && c.Args[3] == "dev" {
-			hiddenSet = true
-		}
-		if c.Method == "KillWindowByID" && c.Args[0] == "@99" {
-			placeholderKilled = true
-		}
-		if c.Method == "BreakPane" {
-			t.Error("full tabs move whole windows, never break")
-		}
-	}
-	if !moved || !hiddenSet || !placeholderKilled {
-		t.Errorf("moved=%v hiddenSet=%v placeholderKilled=%v", moved, hiddenSet, placeholderKilled)
 	}
 }
 
@@ -182,12 +165,20 @@ func TestHideDockedErrors(t *testing.T) {
 	}
 }
 
-func TestShowReturnsToOriginAndClearsHidden(t *testing.T) {
+func TestShowRejoinsToRecordedParentAndClearsHidden(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	mock.Sessions = []tmux.Session{{Name: "dev"}}
+	mock.DisplayMessageFunc = displayByTarget(map[[2]string]string{
+		{"@2", snapFmt}:           "L\t0\t1\t%2\n",
+		{"@2", "#{window_panes}"}: "2\n",
+	})
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		{PaneID: "%2", Session: "dev", WindowID: "@2", WindowIndex: 1, WindowName: "work", WindowPanes: 1, TabID: "ztab_h", Label: "work"},
+		{PaneID: "%3", Session: DockSession, WindowID: "@7", WindowIndex: 0, WindowName: "buddy", WindowPanes: 1, TabID: "ztab_a", Label: "buddy", Anchor: "ztab_h", Hidden: "dev"},
+	}
 	tab := &LogicalTab{
 		ID: "ztab_a", Label: "buddy", PaneID: "%3", Session: DockSession,
-		OriginSession: "dev", WindowID: "@7", Placement: PlacementDock,
+		OriginSession: "dev", WindowID: "@7", Placement: PlacementDock, AnchorID: "ztab_h",
 	}
 
 	origin, err := Show(mock, tab)
@@ -197,18 +188,18 @@ func TestShowReturnsToOriginAndClearsHidden(t *testing.T) {
 	if origin != "dev" {
 		t.Errorf("origin = %q, want dev", origin)
 	}
-	var moved, cleared bool
+	var joined, cleared bool
 	for _, c := range mock.Calls {
-		if c.Method == "MoveWindow" && c.Args[0] == "@7" && c.Args[1] == "dev:" {
-			moved = true
+		if c.Method == "JoinPane" && c.Args[0] == "%3" && c.Args[1] == "%2" {
+			joined = true
 		}
 		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" &&
 			c.Args[2] == OptHidden && c.Args[4] == "unset=true" {
 			cleared = true
 		}
 	}
-	if !moved || !cleared {
-		t.Errorf("moved=%v hiddenCleared=%v", moved, cleared)
+	if !joined || !cleared {
+		t.Errorf("joined=%v hiddenCleared=%v calls=%#v", joined, cleared, mock.Calls)
 	}
 }
 
