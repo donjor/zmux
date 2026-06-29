@@ -17,8 +17,8 @@ discovery. The full shared-skills setup, including Pi settings, lives in
 node /home/user/donjor/skills/pi/sync-pi.mjs
 ```
 
-For this repo's maintainer loop, `./dev.sh zmux` refreshes the mirrors and keeps
-the legacy global extension symlink aligned for quick local tests; `node
+For this repo's maintainer loop, `./dev.sh zmux` refreshes the mirrors and
+removes the retired global extension symlink if present; `node
 /home/user/donjor/skills/pi/sync-pi.mjs` is the settings source of truth.
 The skill keeps its hot operational doctrine in `SKILL.md`, with deeper command
 lookup in [`references/cli-catalog.md`](../skills/zmux/references/cli-catalog.md).

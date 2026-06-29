@@ -484,8 +484,8 @@ Agent integration lives in this repo:
 - `pi-extension/` registers typed Pi tools and bash guardrails for deterministic
   runtime, tab/pane/send, sidecar, interactive-command, and terminal-capability
   orchestration. The shared skills repo loads it as a local Pi package
-  (`../../donjor/zmux/pi-extension`); `./dev.sh zmux` also keeps the legacy
-  global symlink aligned for quick local tests.
+  (`../../donjor/zmux/pi-extension`); `./dev.sh zmux` removes the retired global
+  symlink if it would mask that settings-managed package.
 
 See [docs/pi-zmux-extension.md](docs/pi-zmux-extension.md).
 

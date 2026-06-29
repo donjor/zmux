@@ -105,6 +105,7 @@ esac
 bold='\033[1m'
 dim='\033[38;2;90;99;120m'
 green='\033[38;2;127;217;98m'
+yellow='\033[38;2;245;158;11m'
 reset='\033[0m'
 
 VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
@@ -166,11 +167,15 @@ if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_AGENT_INTEGRATIONS:-0}" != "1" ]; th
 		printf "${dim}skipping gemini mirror; missing node or %s/gemini/sync-gemini.mjs${reset}\n" "$SKILLS_ROOT"
 	fi
 
-	printf "${dim}linking pi extension...${reset} "
-	mkdir -p "$HOME/.pi/agent/extensions"
-	rm -rf "$HOME/.pi/agent/extensions/pi-zmux"
-	ln -s "$ZMUX_ROOT/pi-extension" "$HOME/.pi/agent/extensions/pi-zmux"
-	printf "${green}ok${reset}  ${dim}~/.pi/agent/extensions/pi-zmux${reset}\n"
+	printf "${dim}checking pi extension package...${reset} "
+	if [ -L "$HOME/.pi/agent/extensions/pi-zmux" ]; then
+		rm -f "$HOME/.pi/agent/extensions/pi-zmux"
+		printf "${green}ok${reset}  ${dim}removed legacy ~/.pi/agent/extensions/pi-zmux; settings package is source of truth${reset}\n"
+	elif [ -e "$HOME/.pi/agent/extensions/pi-zmux" ]; then
+		printf "${yellow}skip${reset}  ${dim}~/.pi/agent/extensions/pi-zmux exists but is not a symlink${reset}\n"
+	else
+		printf "${green}ok${reset}  ${dim}settings package is source of truth${reset}\n"
+	fi
 	run_local_hook zmux_dev_after_integrations "$TARGET" "$ZMUX_ROOT" "$SKILLS_ROOT"
 elif [ "$TARGET" = "zmux" ]; then
 	printf "${dim}skipping agent integrations; ZMUX_SKIP_AGENT_INTEGRATIONS=1${reset}\n"
