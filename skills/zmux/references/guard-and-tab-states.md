@@ -1,8 +1,9 @@
 # Guard & tab states (the zmux hooks layer)
 
-The two `skills/zmux/hooks/` hooks that enforce this skill's hygiene: a `PreToolUse`
-guard that keeps you on zmux instead of raw tmux, and a tab-state layer that renders
-lifecycle glyphs in the bar. `SKILL.md` carries the invariants; this is the detail.
+The harness-specific guardrails that enforce this skill's hygiene. Claude uses
+`skills/zmux/hooks/` (`PreToolUse` guard + tab-state hooks); Pi uses the repo's
+`pi-extension/` typed tools and bash guard. `SKILL.md` carries the invariants;
+this is the detail.
 
 ## Raw tmux → zmux verb mapping
 
@@ -54,15 +55,16 @@ Pairs with **tab hygiene** in `SKILL.md`: spawn into the roster, reuse by purpos
 
 ## The guard hook
 
-`hooks/zmux-guard.mjs` (symlinked into `~/.claude/hooks/`) **blocks** raw tmux calls
-and prints the mapping back to you — so a slip self-corrects instead of silently
-targeting the wrong window. The same guard enforces the rest of this skill's hygiene:
-a dev server / background job (`npm run dev`, `&`, `nohup`, or the Bash tool's
-`run_in_background: true`) is **blocked** toward `zmux run -n <name> -d`, and an
-interactive/remote command (`sudo`, `ssh`, a REPL) draws a non-blocking **warn**
-nudging it into a shared tab. The `run_in_background` case is a Claude-hook adapter
-check (it's a tool param, not a shell token), so it lives in `zmux-guard.mjs` only,
-outside the shared command-string classifier.
+Claude's `hooks/zmux-guard.mjs` (symlinked into `~/.claude/hooks/`) **blocks** raw
+tmux calls and prints the mapping back to you — so a slip self-corrects instead of
+silently targeting the wrong window. Pi's `pi-extension/` enforces the same doctrine
+through typed tools (`zmux_runtime_ensure`, `zmux_interactive_type`, tab/pane tools)
+and a `bash` tool-call guard. Both guard surfaces enforce the rest of this skill's
+hygiene: a dev server / background job (`npm run dev`, `&`, `nohup`, or any
+harness-native hidden-background option the adapter can see) is **blocked** toward a
+visible named zmux runtime, and an interactive/remote command (`sudo`, `ssh`, a REPL)
+is nudged into a shared tab. The Claude-only `run_in_background` parameter check lives
+in `zmux-guard.mjs` because it is a tool param, not a shell token.
 
 **Exemptions** — genuinely need the raw command (zmux development, socket inspection,
 a one-off)? Any of: prefix `ZMUX_ALLOW=1`, append `# zmux: allow`, use an explicit

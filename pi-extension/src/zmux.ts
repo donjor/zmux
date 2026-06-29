@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { writeRespawnContinuation } from "./respawn-continuation.js";
 import { runFile, spawnDetached, trimOutput } from "./shell.js";
 
@@ -20,14 +20,30 @@ export interface InteractiveTypeOptions {
 	timeoutSeconds?: number;
 	lines?: number;
 	focus?: boolean;
+	session?: string;
+}
+
+function zmuxBin(): string {
+	return process.env.PI_ZMUX_BIN?.trim() || "zmux";
+}
+
+function tmuxPrefix(): string[] {
+	const explicitSocket = process.env.PI_ZMUX_TMUX_SOCKET?.trim();
+	if (explicitSocket) return ["-L", explicitSocket];
+	if (basename(zmuxBin()) === "zzmux") return ["-L", "zzmux"];
+	return [];
+}
+
+function withSession(args: string[], session?: string): string[] {
+	return session ? [...args, "-s", session] : args;
 }
 
 export async function zmux(args: string[], options: { cwd?: string; timeoutMs?: number } = {}) {
-	return runFile("zmux", args, options);
+	return runFile(zmuxBin(), args, options);
 }
 
 async function tmux(args: string[], options: { cwd?: string; timeoutMs?: number } = {}) {
-	return runFile("tmux", args, options);
+	return runFile("tmux", [...tmuxPrefix(), ...args], options);
 }
 
 export async function currentPane(cwd: string): Promise<CurrentPane | undefined> {
@@ -39,9 +55,9 @@ export async function currentPane(cwd: string): Promise<CurrentPane | undefined>
 	}
 }
 
-export async function listTabs(cwd: string): Promise<string> {
+export async function listTabs(cwd: string, session?: string): Promise<string> {
 	try {
-		const result = await zmux(["tabs"], { cwd, timeoutMs: 5_000 });
+		const result = await zmux(withSession(["tabs"], session), { cwd, timeoutMs: 5_000 });
 		return trimOutput(result.stdout);
 	} catch (error) {
 		return `unavailable: ${error instanceof Error ? error.message : String(error)}`;
@@ -53,9 +69,9 @@ export async function killTab(tab: string, cwd: string): Promise<{ text: string;
 	return { text: `killed tab ${tab}`, details: { tab } };
 }
 
-export async function sendKeys(tab: string, keys: string[], cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	await zmux(["send", tab, ...keys], { cwd, timeoutMs: 5_000 });
-	return { text: `sent keys to ${tab}: ${keys.join(" ")}`, details: { tab, keys } };
+export async function sendKeys(tab: string, keys: string[], cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(withSession(["send", tab, ...keys], session), { cwd, timeoutMs: 5_000 });
+	return { text: `sent keys to ${tab}: ${keys.join(" ")}`, details: { tab, keys, session } };
 }
 
 export async function sendPaneKeys(pane: string, keys: string[], cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
@@ -63,9 +79,9 @@ export async function sendPaneKeys(pane: string, keys: string[], cwd: string): P
 	return { text: `sent keys to pane ${pane}: ${keys.join(" ")}`, details: { pane, keys } };
 }
 
-export async function typeText(tab: string, text: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	await zmux(["type", tab, text], { cwd, timeoutMs: 5_000 });
-	return { text: `typed text into ${tab}`, details: { tab, text } };
+export async function typeText(tab: string, text: string, cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(withSession(["type", tab, text], session), { cwd, timeoutMs: 5_000 });
+	return { text: `typed text into ${tab}`, details: { tab, text, session } };
 }
 
 export async function typePaneText(pane: string, text: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
@@ -73,13 +89,30 @@ export async function typePaneText(pane: string, text: string, cwd: string): Pro
 	return { text: `typed text into pane ${pane}`, details: { pane, text } };
 }
 
-export async function listPanes(cwd: string): Promise<string> {
+export async function listPanes(cwd: string, session?: string): Promise<string> {
 	try {
-		const result = await zmux(["pane", "list"], { cwd, timeoutMs: 5_000 });
+		const args = session ? ["pane", "list", "--session", "--target", session] : ["pane", "list"];
+		const result = await zmux(args, { cwd, timeoutMs: 5_000 });
 		return trimOutput(result.stdout);
 	} catch (error) {
 		return `unavailable: ${error instanceof Error ? error.message : String(error)}`;
 	}
+}
+
+export function buildPaneOpenArgs(params: { name: string; command: string; cwd: string; direction?: "right" | "left" | "down" | "up"; size?: string; target?: string; labelTab?: boolean }): string[] {
+	const args = ["pane", "open", params.name, "--cwd", params.cwd];
+	if (params.target) args.push("--target", params.target);
+	const directionFlag = params.direction ? ({ right: "-r", left: "-l", down: "-d", up: "-u" } as const)[params.direction] : "-r";
+	args.push(directionFlag);
+	if (params.size) args.push(params.size);
+	if (params.labelTab) args.push("--label-tab");
+	args.push("--", "bash", "-lc", params.command);
+	return args;
+}
+
+export async function openPane(params: { name: string; command: string; cwd: string; direction?: "right" | "left" | "down" | "up"; size?: string; target?: string; labelTab?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(buildPaneOpenArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
+	return { text: `opened pane ${params.name}`, details: { ...params } };
 }
 
 export async function focusPane(pane: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
@@ -90,6 +123,11 @@ export async function focusPane(pane: string, cwd: string): Promise<{ text: stri
 export async function closePane(pane: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
 	await zmux(["pane", "close", pane], { cwd, timeoutMs: 5_000 });
 	return { text: `closed pane ${pane}`, details: { pane } };
+}
+
+export async function resizePane(pane: string, cwd: string, size: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(["pane", "resize", pane, "--size", size], { cwd, timeoutMs: 5_000 });
+	return { text: `resized pane ${pane} to ${size}`, details: { pane, size } };
 }
 
 export async function capabilities(cwd: string): Promise<string> {
@@ -109,25 +147,26 @@ export async function runtimeEnsure(params: {
 	timeoutSeconds?: number;
 	restart?: boolean;
 	labelTab?: boolean;
+	session?: string;
 }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const details: Record<string, unknown> = { tab: params.tab, command: params.command, cwd: params.cwd };
+	const details: Record<string, unknown> = { tab: params.tab, command: params.command, cwd: params.cwd, session: params.session };
 	const output: string[] = [];
 
 	if (params.restart) {
 		try {
-			await zmux(["send", params.tab, "C-c"], { cwd: params.cwd, timeoutMs: 5_000 });
+			await zmux(withSession(["send", params.tab, "C-c"], params.session), { cwd: params.cwd, timeoutMs: 5_000 });
 			output.push(`sent C-c to ${params.tab}`);
 		} catch (error) {
 			output.push(`restart stop skipped: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
-	await zmux(["run", params.command, "-n", params.tab, "-d"], { cwd: params.cwd, timeoutMs: 10_000 });
+	await zmux(withSession(["run", params.command, "-n", params.tab, "-d"], params.session), { cwd: params.cwd, timeoutMs: 10_000 });
 	output.push(`runtime ${params.tab} ensured via zmux run -d`);
 
 	if (params.labelTab) {
 		try {
-			await zmux(["tab", "label", params.tab], { cwd: params.cwd, timeoutMs: 5_000 });
+			await zmux(withSession(["tab", "label", params.tab], params.session), { cwd: params.cwd, timeoutMs: 5_000 });
 			details.labelTab = true;
 		} catch {
 			// Labeling is helpful but not required for runtime ownership.
@@ -137,7 +176,7 @@ export async function runtimeEnsure(params: {
 	if (params.readiness) {
 		const timeout = String(params.timeoutSeconds ?? 90);
 		try {
-			const watch = await zmux(["watch", params.tab, "--until", params.readiness, "-T", timeout, "-l", "120"], {
+			const watch = await zmux(withSession(["watch", params.tab, "--until", params.readiness, "-T", timeout, "-l", "120"], params.session), {
 				cwd: params.cwd,
 				timeoutMs: (Number(timeout) + 5) * 1000,
 			});
@@ -150,7 +189,7 @@ export async function runtimeEnsure(params: {
 	}
 
 	try {
-		const logs = await runtimeLogs(params.tab, params.cwd, 80);
+		const logs = await runtimeLogs(params.tab, params.cwd, 80, params.session);
 		output.push("", "latest logs:", logs.text);
 		details.logs = logs.details;
 	} catch {
@@ -160,36 +199,32 @@ export async function runtimeEnsure(params: {
 	return { text: trimOutput(output.join("\n")), details };
 }
 
-export async function runtimeLogs(tab: string, cwd: string, lines = 120): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(["watch", tab, "-l", String(lines)], { cwd, timeoutMs: 10_000 });
-	return { text: trimOutput(result.stdout), details: { tab, lines } };
+export async function runtimeLogs(tab: string, cwd: string, lines = 120, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(withSession(["watch", tab, "-l", String(lines)], session), { cwd, timeoutMs: 10_000 });
+	return { text: trimOutput(result.stdout), details: { tab, lines, session } };
 }
 
-export async function runtimeStop(tab: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	await zmux(["send", tab, "C-c"], { cwd, timeoutMs: 5_000 });
-	return { text: `sent C-c to ${tab}`, details: { tab } };
+export async function runtimeStop(tab: string, cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(withSession(["send", tab, "C-c"], session), { cwd, timeoutMs: 5_000 });
+	return { text: `sent C-c to ${tab}`, details: { tab, session } };
 }
 
 function delay(ms: number): Promise<void> {
 	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function tabExists(tab: string, cwd: string): Promise<boolean> {
+async function tabExists(tab: string, cwd: string, session?: string): Promise<boolean> {
 	try {
-		await runtimeLogs(tab, cwd, 1);
+		await runtimeLogs(tab, cwd, 1, session);
 		return true;
 	} catch {
 		return false;
 	}
 }
 
-async function ensureInteractiveShellTab(tab: string, cwd: string, focus: boolean): Promise<void> {
-	const pane = await currentPane(cwd);
-	if (!pane?.Session) throw new Error("cannot resolve current zmux session for interactive tab creation");
-	const args = ["new-window"];
-	if (!focus) args.push("-d");
-	args.push("-t", pane.Session, "-n", tab, "-c", cwd, "exec bash -l");
-	await tmux(args, { cwd, timeoutMs: 5_000 });
+async function ensureInteractiveShellTab(tab: string, cwd: string, focus: boolean, session?: string): Promise<void> {
+	await zmux(withSession(["run", "exec bash -l", "-n", tab, "-d"], session), { cwd, timeoutMs: 10_000 });
+	if (focus) await focusTab(tab, cwd);
 	await delay(300);
 }
 
@@ -225,15 +260,25 @@ export async function schedulePiRespawn(params: {
 		details.continuationHandoff = handoffPath;
 		details.continuationPath = continuationPath;
 	}
-	const delay = Math.max(0, params.delayMs ?? 300) / 1000;
-	const script = [
-		`cd ${shellQuote(params.cwd)}`,
-		`sleep ${delay}`,
-		`tmux respawn-pane -k -t ${shellQuote(pane)} -c ${shellQuote(params.cwd)} ${shellQuote(command)}`,
-	].join("; ");
+	const script = buildTmuxRespawnScript({
+		cwd: params.cwd,
+		pane,
+		command,
+		delayMs: params.delayMs ?? 300,
+	});
 	spawnDetached("bash", ["-lc", script], { cwd: params.cwd });
 	details.command = command;
 	return { text: `scheduled Pi pane respawn for ${pane} using ${command}`, details };
+}
+
+export function buildTmuxRespawnScript(params: { cwd: string; pane: string; command: string; delayMs: number }): string {
+	const delay = Math.max(0, params.delayMs) / 1000;
+	const tmuxArgs = ["tmux", ...tmuxPrefix(), "respawn-pane", "-k", "-t", params.pane, "-c", params.cwd, params.command];
+	return [
+		`cd ${shellQuote(params.cwd)}`,
+		`sleep ${delay}`,
+		tmuxArgs.map(shellQuote).join(" "),
+	].join("; ");
 }
 
 function shellQuote(value: string): string {
@@ -323,11 +368,13 @@ export interface UserInputPrompt {
 }
 
 export class UserInputRequiredError extends Error {
-	constructor(
-		readonly output: string,
-		readonly prompt: UserInputPrompt,
-	) {
+	readonly output: string;
+	readonly prompt: UserInputPrompt;
+
+	constructor(output: string, prompt: UserInputPrompt) {
 		super(`user input required: ${prompt.kind}`);
+		this.output = output;
+		this.prompt = prompt;
 	}
 }
 
@@ -348,12 +395,12 @@ async function pollTab(
 	lines: number,
 	timeoutSeconds: number,
 	predicate: (output: string) => boolean,
-	options: { detectUserInput?: boolean; baseline?: string } = {},
+	options: { detectUserInput?: boolean; baseline?: string; session?: string } = {},
 ): Promise<string> {
 	const deadline = Date.now() + timeoutSeconds * 1000;
 	let latest = "";
 	while (Date.now() <= deadline) {
-		latest = (await runtimeLogs(tab, cwd, lines)).text;
+		latest = (await runtimeLogs(tab, cwd, lines, options.session)).text;
 		if (predicate(latest)) return latest;
 		if (options.detectUserInput) {
 			const scoped = outputAfterBaseline(latest, options.baseline ?? "");
@@ -373,11 +420,12 @@ async function pollWaitScript(
 	script: WaitScript,
 	baseline: string,
 	detectUserInput: boolean,
+	session?: string,
 ): Promise<{ output: string; exitCode: number }> {
 	const deadline = Date.now() + timeoutSeconds * 1000;
 	let latest = "";
 	while (Date.now() <= deadline) {
-		latest = (await runtimeLogs(tab, cwd, lines)).text;
+		latest = (await runtimeLogs(tab, cwd, lines, session)).text;
 		const exitCode = await readExitCode(script.statusPath);
 		if (exitCode !== undefined) return { output: latest, exitCode };
 		if (detectUserInput) {
@@ -397,8 +445,9 @@ export async function interactiveType(
 	options: InteractiveTypeOptions = {},
 ): Promise<{ text: string; details: Record<string, unknown> }> {
 	const focus = options.focus ?? false;
-	if (!(await tabExists(tab, cwd))) {
-		await ensureInteractiveShellTab(tab, cwd, focus);
+	const session = options.session;
+	if (!(await tabExists(tab, cwd, session))) {
+		await ensureInteractiveShellTab(tab, cwd, focus, session);
 	} else if (focus) {
 		await focusTab(tab, cwd);
 	}
@@ -406,13 +455,13 @@ export async function interactiveType(
 	const timeoutSeconds = options.timeoutSeconds ?? 90;
 	const lines = options.lines ?? 160;
 	const output = [`typed command into ${tab}${focus ? " and focused it" : " without changing focus"}; user may need to respond there`];
-	const details: Record<string, unknown> = { tab, command, waitForExit: options.waitForExit ?? false, focus };
+	const details: Record<string, unknown> = { tab, command, waitForExit: options.waitForExit ?? false, focus, session };
 	if (options.waitForExit) {
-		const baseline = await runtimeLogs(tab, cwd, lines).then((logs) => logs.text).catch(() => "");
+		const baseline = await runtimeLogs(tab, cwd, lines, session).then((logs) => logs.text).catch(() => "");
 		const script = await writeWaitScript(command);
 		try {
-			await zmux(["type", tab, `bash ${shellQuote(script.runPath)}`], { cwd, timeoutMs: 5_000 });
-			const result = await pollWaitScript(tab, cwd, lines, timeoutSeconds, script, baseline, !focus);
+			await zmux(withSession(["type", tab, `bash ${shellQuote(script.runPath)}`], session), { cwd, timeoutMs: 5_000 });
+			const result = await pollWaitScript(tab, cwd, lines, timeoutSeconds, script, baseline, !focus, session);
 			const scoped = stripRunnerCommand(outputAfterBaseline(result.output, baseline), script.runPath);
 			if (scoped) output.push("", scoped);
 			details.completed = true;
@@ -436,13 +485,14 @@ export async function interactiveType(
 			}
 		}
 	} else if (options.waitFor) {
-		const baseline = await runtimeLogs(tab, cwd, lines).then((logs) => logs.text).catch(() => "");
-		await zmux(["type", tab, command], { cwd, timeoutMs: 5_000 });
+		const baseline = await runtimeLogs(tab, cwd, lines, session).then((logs) => logs.text).catch(() => "");
+		await zmux(withSession(["type", tab, command], session), { cwd, timeoutMs: 5_000 });
 		const waitPattern = new RegExp(options.waitFor);
 		try {
 			const result = await pollTab(tab, cwd, lines, timeoutSeconds, (text) => waitPattern.test(outputAfterBaseline(text, baseline)), {
 				detectUserInput: !focus,
 				baseline,
+				session,
 			});
 			output.push("", outputAfterBaseline(result, baseline));
 			details.waitFor = options.waitFor;
@@ -453,7 +503,7 @@ export async function interactiveType(
 			details.matched = false;
 		}
 	} else {
-		await zmux(["type", tab, command], { cwd, timeoutMs: 5_000 });
+		await zmux(withSession(["type", tab, command], session), { cwd, timeoutMs: 5_000 });
 	}
 	return { text: output.join("\n"), details };
 }

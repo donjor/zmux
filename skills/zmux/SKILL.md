@@ -22,11 +22,13 @@ from under you and your next command lands on the wrong slot. Reach for the zmux
 `tabs`/`ls` over `list-windows`/`list-sessions`, `pane open` over `split-window`,
 `run -n` over `new-window`.
 
-A harness hook guard (`hooks/zmux-guard.mjs`; Claude wires it as `PreToolUse`, Pi via
-this repo's `pi-zmux` extension) **blocks** raw tmux and ad-hoc background jobs
-— shell `&`/`nohup`, `npm run dev`, and Claude's Bash `run_in_background: true` — and
-prints the right verb back, so a slip self-corrects. The full mapping table, guard
-exemptions, and tab-state glyph behavior → **`references/guard-and-tab-states.md`**.
+Harness-specific guardrails backstop this doctrine. Claude uses the
+`hooks/zmux-guard.mjs` PreToolUse hook; Pi uses the `pi-extension/` typed tools
+and bash guard; other agents may have their own adapter. These guards block or
+warn on raw tmux, ad-hoc background jobs (`&`/`nohup`), foreground dev servers,
+and harness-native hidden-background options where available, then print the
+right zmux/typed-tool replacement. The full mapping table, guard exemptions, and
+tab-state glyph behavior → **`references/guard-and-tab-states.md`**.
 
 A tab also carries a lifecycle glyph in the bar (● needs-human / ◐ running / ✓ done /
 ✗ failed), mostly set automatically by `run`/`send`/`type` + a `Stop` hook. Set it by

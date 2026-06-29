@@ -1,6 +1,6 @@
 {
   "name": "pi-zmux",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Pi extension for deterministic zmux runtime and interactive terminal orchestration.",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.2",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.10.1",
     "typescript": "^6.0.2"
   }
 }

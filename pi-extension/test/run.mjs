@@ -13,7 +13,7 @@ try {
 
   const { classifyBash, hasExplicitBypass, stripQuotedSegments } = await import(join(outDir, 'src/classify.js'));
   const { loadConfig } = await import(join(outDir, 'src/config.js'));
-  const { detectUserInputPrompt } = await import(join(outDir, 'src/zmux.js'));
+  const { buildPaneOpenArgs, buildTmuxRespawnScript, detectUserInputPrompt } = await import(join(outDir, 'src/zmux.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
 
   const cfg = { policy: { mode: 'enforce', blockBackgroundJobs: true, redirectInteractive: true }, runtimes: {} };
@@ -83,6 +83,18 @@ try {
   assert.equal(detectUserInputPrompt('Are you sure you want to continue connecting (yes/no/[fingerprint])?')?.kind, 'ssh_confirm');
   assert.equal(detectUserInputPrompt('Status: inactive'), undefined);
 
+  assert.deepEqual(buildPaneOpenArgs({ name: 'logs', command: 'npm run dev', cwd: '/repo', direction: 'right', size: '40%' }), [
+    'pane', 'open', 'logs', '--cwd', '/repo', '-r', '40%', '--', 'bash', '-lc', 'npm run dev',
+  ]);
+
+  delete process.env.PI_ZMUX_TMUX_SOCKET;
+  process.env.PI_ZMUX_BIN = 'zzmux';
+  assert.equal(buildTmuxRespawnScript({ cwd: '/repo', pane: '%42', command: 'pi -c', delayMs: 300 }), "cd '/repo'; sleep 0.3; 'tmux' '-L' 'zzmux' 'respawn-pane' '-k' '-t' '%42' '-c' '/repo' 'pi -c'");
+  process.env.PI_ZMUX_TMUX_SOCKET = 'edge';
+  assert.equal(buildTmuxRespawnScript({ cwd: '/repo', pane: '%42', command: 'pi -c', delayMs: 0 }), "cd '/repo'; sleep 0; 'tmux' '-L' 'edge' 'respawn-pane' '-k' '-t' '%42' '-c' '/repo' 'pi -c'");
+  delete process.env.PI_ZMUX_BIN;
+  delete process.env.PI_ZMUX_TMUX_SOCKET;
+
   const project = mkdtempSync(join(tmpdir(), 'pi-zmux-config-'));
   mkdirSync(join(project, '.pi'));
   writeFileSync(join(project, '.pi/zmux.json'), JSON.stringify({
@@ -96,6 +108,13 @@ try {
   assert.equal(loaded.policy.redirectInteractive, false);
   assert.equal(loaded.runtimes.server.command, 'go run ./cmd/api');
   assert.equal(loaded.runtimes.server.tab, 'api');
+  assert.equal(loaded.projectTrusted, true);
+
+  loaded = loadConfig(project, { projectTrusted: false });
+  assert.equal(loaded.policy.mode, 'enforce');
+  assert.equal(loaded.ignoredReason, 'project-untrusted');
+  assert.equal(loaded.path.endsWith('.pi/zmux.json'), true);
+  assert.deepEqual(loaded.runtimes, {});
 
   process.env.PI_ZMUX_POLICY = 'observe';
   loaded = loadConfig(project);

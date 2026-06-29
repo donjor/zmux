@@ -11,6 +11,7 @@ export interface RuntimeConfig {
 	cwd?: string;
 	port?: number;
 	timeoutSeconds?: number;
+	session?: string;
 }
 
 export interface PiZmuxConfig {
@@ -21,6 +22,12 @@ export interface PiZmuxConfig {
 	};
 	runtimes: Record<string, RuntimeConfig>;
 	path?: string;
+	ignoredReason?: "project-untrusted" | "invalid-json";
+	projectTrusted: boolean;
+}
+
+export interface LoadConfigOptions {
+	projectTrusted?: boolean;
 }
 
 function defaultPolicy(): PiZmuxConfig["policy"] {
@@ -61,7 +68,7 @@ function asRuntimeConfig(value: unknown): RuntimeConfig | undefined {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
 	const input = value as Record<string, unknown>;
 	const out: RuntimeConfig = {};
-	for (const key of ["command", "tab", "readiness", "kind", "cwd"] as const) {
+	for (const key of ["command", "tab", "readiness", "kind", "cwd", "session"] as const) {
 		if (typeof input[key] === "string" && input[key].trim() !== "") out[key] = input[key].trim();
 	}
 	if (typeof input.port === "number") out.port = input.port;
@@ -69,9 +76,19 @@ function asRuntimeConfig(value: unknown): RuntimeConfig | undefined {
 	return out;
 }
 
-export function loadConfig(cwd: string): PiZmuxConfig {
+export function loadConfig(cwd: string, options: LoadConfigOptions = {}): PiZmuxConfig {
+	const projectTrusted = options.projectTrusted ?? true;
 	const path = findConfig(cwd);
-	if (!path) return { policy: defaultPolicy(), runtimes: {} };
+	if (!path) return { policy: defaultPolicy(), runtimes: {}, projectTrusted };
+	if (!projectTrusted) {
+		return {
+			path,
+			policy: defaultPolicy(),
+			runtimes: {},
+			ignoredReason: "project-untrusted",
+			projectTrusted,
+		};
+	}
 	try {
 		const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
 		const policyInput = raw.policy && typeof raw.policy === "object" ? (raw.policy as Record<string, unknown>) : {};
@@ -83,6 +100,7 @@ export function loadConfig(cwd: string): PiZmuxConfig {
 		}
 		return {
 			path,
+			projectTrusted,
 			policy: {
 				mode: envMode() ?? asMode(policyInput.mode, defaultPolicy().mode),
 				blockBackgroundJobs: asBool(policyInput.blockBackgroundJobs, defaultPolicy().blockBackgroundJobs),
@@ -91,7 +109,7 @@ export function loadConfig(cwd: string): PiZmuxConfig {
 			runtimes,
 		};
 	} catch {
-		return { policy: defaultPolicy(), runtimes: {}, path };
+		return { policy: defaultPolicy(), runtimes: {}, path, ignoredReason: "invalid-json", projectTrusted };
 	}
 }
 

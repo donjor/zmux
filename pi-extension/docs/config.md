@@ -1,7 +1,10 @@
 # pi-zmux config
 
 Optional project config lives at `.pi/zmux.json` or `.config/pi-zmux.json` in the
-current project or an ancestor directory.
+current project or an ancestor directory. Because config can contain commands,
+the global extension reads it only when Pi trusts the project. If project trust is
+false, the extension reports the config path as ignored and falls back to default
+policy/no configured runtimes.
 
 ```json
 {
@@ -28,6 +31,15 @@ current project or an ancestor directory.
 }
 ```
 
+For objective grounding against the isolated profile, set the zmux binary:
+
+```sh
+PI_ZMUX_BIN=zzmux pi -e ./pi-extension
+```
+
+If a low-level pane operation needs raw tmux, `PI_ZMUX_BIN=zzmux` implies
+`tmux -L zzmux`. Override with `PI_ZMUX_TMUX_SOCKET=<socket>` for custom profiles.
+
 Interactive one-shot commands can be waited on generically with a temporary
 wrapper script and status file, without printing sentinel markers into the
 terminal. With `focus: false`, common password/manual-input prompts return early
@@ -42,3 +54,12 @@ zmux_interactive_type({
   "focus": false
 })
 ```
+
+After extension changes, prefer the soft reload path:
+
+```text
+zmux_reload({})
+```
+
+It queues `/zmux reload` as a follow-up command. Use `zmux_pi_respawn` only when
+soft reload is unavailable or Pi is wedged.

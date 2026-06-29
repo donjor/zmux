@@ -176,6 +176,24 @@ if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_AGENT_INTEGRATIONS:-0}" != "1" ]; th
 	else
 		printf "${green}ok${reset}  ${dim}settings package is source of truth${reset}\n"
 	fi
+	if command -v node >/dev/null 2>&1 && [ -f "$HOME/.pi/agent/settings.json" ]; then
+		node - "$HOME/.pi/agent/settings.json" <<'NODE'
+const fs = require('node:fs');
+const settingsPath = process.argv[2];
+try {
+  const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+  const extensions = Array.isArray(settings.extensions) ? settings.extensions : [];
+  const disabled = extensions.some((entry) => entry === '-extensions/pi-zmux/index.ts' || entry === '-extensions/pi-zmux' || entry === '-extensions/pi-zmux/index.js');
+  if (disabled) {
+    console.log('warning pi-zmux extension is disabled in ~/.pi/agent/settings.json (remove the -extensions/pi-zmux entry, then /zmux reload or restart Pi)');
+  } else {
+    console.log('ok pi-zmux extension is not disabled by ~/.pi/agent/settings.json');
+  }
+} catch (error) {
+  console.log(`warning could not inspect ~/.pi/agent/settings.json: ${error.message}`);
+}
+NODE
+	fi
 	run_local_hook zmux_dev_after_integrations "$TARGET" "$ZMUX_ROOT" "$SKILLS_ROOT"
 elif [ "$TARGET" = "zmux" ]; then
 	printf "${dim}skipping agent integrations; ZMUX_SKIP_AGENT_INTEGRATIONS=1${reset}\n"
