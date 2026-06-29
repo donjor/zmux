@@ -13,15 +13,15 @@ export type BashClassification =
 	| { kind: "direct_tmux"; reason: string; suggestion: string };
 
 const directZmuxPatterns: Array<{ re: RegExp; reason: string; tool: string }> = [
-	{ re: /(^|[;&|]\s*)zmux\s+tabs\b/u, reason: "tab listing has a typed tool", tool: "zmux_tabs" },
-	{ re: /(^|[;&|]\s*)zmux\s+tab\s+kill\b/u, reason: "tab cleanup has a typed tool", tool: "zmux_tab_kill" },
-	{ re: /(^|[;&|]\s*)zmux\s+send\b/u, reason: "key sending has a typed tool", tool: "zmux_send_keys" },
-	{ re: /(^|[;&|]\s*)zmux\s+type\b/u, reason: "typing has typed tools", tool: "zmux_type or zmux_interactive_type" },
-	{ re: /(^|[;&|]\s*)zmux\s+pane\s+list\b/u, reason: "pane listing has a typed tool", tool: "zmux_pane_list" },
-	{ re: /(^|[;&|]\s*)zmux\s+pane\s+focus\b/u, reason: "pane focus has a typed tool", tool: "zmux_pane_focus" },
-	{ re: /(^|[;&|]\s*)zmux\s+pane\s+close\b/u, reason: "pane cleanup has a typed tool", tool: "zmux_pane_close" },
-	{ re: /(^|[;&|]\s*)zmux\s+run\b/u, reason: "runtime management has typed tools", tool: "zmux_runtime_ensure" },
-	{ re: /(^|[;&|]\s*)zmux\s+watch\b/u, reason: "runtime logs have a typed tool", tool: "zmux_runtime_logs" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tabs\b/u, reason: "tab listing has a typed tool", tool: "zmux_tabs" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+kill\b/u, reason: "tab cleanup has a typed tool", tool: "zmux_tab_kill" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+send\b/u, reason: "key sending has a typed tool", tool: "zmux_send_keys" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+type\b/u, reason: "typing has typed tools", tool: "zmux_type or zmux_interactive_type" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+list\b/u, reason: "pane listing has a typed tool", tool: "zmux_pane_list" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+focus\b/u, reason: "pane focus has a typed tool", tool: "zmux_pane_focus" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+close\b/u, reason: "pane cleanup has a typed tool", tool: "zmux_pane_close" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+run\b/u, reason: "runtime management has typed tools", tool: "zmux_runtime_ensure" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+watch\b/u, reason: "runtime logs have a typed tool", tool: "zmux_runtime_logs" },
 ];
 
 // Raw tmux app-subcommands that have a zmux equivalent. The KEY SET mirrors
@@ -229,16 +229,16 @@ function shellHeredocBodies(command: string): string[] {
 }
 
 const runtimePatterns: Array<{ re: RegExp; reason: string }> = [
-	{ re: /(^|[;&|]\s*)(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|serve|start:dev|watch)\b/u, reason: "package-manager dev/watch command" },
-	{ re: /(^|[;&|]\s*)(vite|next\s+dev|nuxt\s+dev|astro\s+dev|svelte-kit\s+dev)\b/u, reason: "frontend dev server" },
-	{ re: /(^|[;&|]\s*)(rails\s+s|rails\s+server|bin\/rails\s+s)\b/u, reason: "Rails server" },
-	{ re: /(^|[;&|]\s*)python\s+manage\.py\s+runserver\b/u, reason: "Django dev server" },
-	{ re: /(^|[;&|]\s*)(uvicorn|hypercorn|fastapi\s+dev|flask\s+run)\b/u, reason: "Python web server" },
-	{ re: /(^|[;&|]\s*)air\b/u, reason: "Go live-reload server" },
-	{ re: /(^|[;&|]\s*)go\s+run\s+\.\/(cmd\/)?(server|api|web)\b/u, reason: "Go server/API runtime command" },
-	{ re: /(^|[;&|]\s*)cargo\s+(run|watch)\b/u, reason: "Rust runtime/watch command" },
-	{ re: /(^|[;&|]\s*)make\s+(dev|serve|server|run|watch|start)\b/u, reason: "make runtime target" },
-	{ re: /(^|[;&|]\s*)(watchexec|entr|nodemon|ts-node-dev)\b/u, reason: "watch/reload command" },
+	{ re: /(^|[;&|\n]\s*)(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|serve|start:dev|watch)\b/u, reason: "package-manager dev/watch command" },
+	{ re: /(^|[;&|\n]\s*)(vite|next\s+dev|nuxt\s+dev|astro\s+dev|svelte-kit\s+dev)\b/u, reason: "frontend dev server" },
+	{ re: /(^|[;&|\n]\s*)(rails\s+s|rails\s+server|bin\/rails\s+s)\b/u, reason: "Rails server" },
+	{ re: /(^|[;&|\n]\s*)python\s+manage\.py\s+runserver\b/u, reason: "Django dev server" },
+	{ re: /(^|[;&|\n]\s*)(uvicorn|hypercorn|fastapi\s+dev|flask\s+run)\b/u, reason: "Python web server" },
+	{ re: /(^|[;&|\n]\s*)air\b/u, reason: "Go live-reload server" },
+	{ re: /(^|[;&|\n]\s*)go\s+run\s+\.\/(cmd\/)?(server|api|web)\b/u, reason: "Go server/API runtime command" },
+	{ re: /(^|[;&|\n]\s*)cargo\s+(run|watch)\b/u, reason: "Rust runtime/watch command" },
+	{ re: /(^|[;&|\n]\s*)make\s+(dev|serve|server|run|watch|start)\b/u, reason: "make runtime target" },
+	{ re: /(^|[;&|\n]\s*)(watchexec|entr|nodemon|ts-node-dev)\b/u, reason: "watch/reload command" },
 ];
 
 // docker compose up is runtime only in its foreground form. Detached
@@ -258,11 +258,11 @@ function foregroundComposeUp(scan: string): boolean {
 }
 
 const interactivePatterns: Array<{ re: RegExp; reason: string }> = [
-	{ re: /(^|[;&|]\s*)sudo\b/u, reason: "sudo requires shared user interaction" },
-	{ re: /(^|[;&|]\s*)su\b/u, reason: "su requires shared user interaction" },
-	{ re: /(^|[;&|]\s*)ssh\b/u, reason: "ssh may require interactive auth/control" },
-	{ re: /(^|[;&|]\s*)(psql|mysql|sqlite3|redis-cli)\b/u, reason: "interactive database shell" },
-	{ re: /(^|[;&|]\s*)(python|node|irb|pry|iex|ghci)\s*$/u, reason: "interactive REPL" },
+	{ re: /(^|[;&|\n]\s*)sudo\b/u, reason: "sudo requires shared user interaction" },
+	{ re: /(^|[;&|\n]\s*)su\b/u, reason: "su requires shared user interaction" },
+	{ re: /(^|[;&|\n]\s*)ssh\b/u, reason: "ssh may require interactive auth/control" },
+	{ re: /(^|[;&|\n]\s*)(psql|mysql|sqlite3|redis-cli)\b/u, reason: "interactive database shell" },
+	{ re: /(^|[;&|\n]\s*)(python|node|irb|pry|iex|ghci)\s*$/u, reason: "interactive REPL" },
 ];
 
 // hasBackgrounding flags a lone `&` backgrounding operator (excluding `&&`, the
@@ -332,7 +332,7 @@ export function stripQuotedSegments(command: string): string {
 // value alternation handles values with spaces (`FOO="a b" npm …`). Mirrors
 // internal/guard/guard.go's envAssignPrefix.
 function stripEnvPrefix(command: string): string {
-	return command.replace(/(^|[;&|]\s*)(env\s+)?([A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'[^']*'|\S+)\s+)+/gu, "$1");
+	return command.replace(/(^|[;&|\n]\s*)(env\s+)?([A-Za-z_][A-Za-z0-9_]*=("[^"]*"|'[^']*'|\S+)\s+)+/gu, "$1");
 }
 
 // stripHeredocs blanks the body of any here-document (`cmd <<EOF` … `EOF`) so
