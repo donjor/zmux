@@ -2,7 +2,7 @@
 
 A contributor-oriented map of the codebase. Read this once and you should know where to make a change for any user-visible behavior.
 
-For the product vision (the *why*), see [VISION.md](VISION.md). For keybindings (the user-visible API), see [keybindings.md](keybindings.md).
+For the product vision (the _why_), see [VISION.md](VISION.md). For keybindings (the user-visible API), see [keybindings.md](keybindings.md).
 
 ---
 
@@ -41,21 +41,21 @@ zmux/
 
 ### Top-level dirs at a glance
 
-| Path | Status | Notes |
-|------|--------|-------|
-| `cmd/` | Active | Go entry points |
-| `checklists/` | Active | QA walkthrough TOML specs consumed by `./qa` |
-| `internal/` | Active | All packages live here (Go internal/ visibility) |
-| `docs/` | Active | This file and friends |
-| `internal/recipe/recipes/` | Active | Bundled recipes — the recipe `go:embed` source (`internal/recipe/embed.go`) |
-| `internal/theme/bundled/` | Active | Bundled themes — the **only** `go:embed` source (`internal/theme/embed.go`) |
-| `themes/iterm2/` | Generated | Downloaded theme cache; gitignored. Runtime themes resolve under `~/.zmux/themes` |
-| `legacy/v0/{templates,themes}/` | Archived | v0's own real asset copies (de-symlinked from the repo root) |
-| `tests/` | Active | Integration tests, run with `go test -tags integration` |
-| `.qa/` | Generated | QA scorecards + cached `cmd/qa` binary; gitignored |
-| `skills/zmux/` | Active | Optional agent integration: terminal orchestration plus generic agent peer/worker doctrine |
-| `pi-extension/` | Active | Optional Pi agent integration (TypeScript) |
-| `legacy/v0/` | Archived | Old bash prototype — preserved, unsupported |
+| Path                            | Status    | Notes                                                                                      |
+| ------------------------------- | --------- | ------------------------------------------------------------------------------------------ |
+| `cmd/`                          | Active    | Go entry points                                                                            |
+| `checklists/`                   | Active    | QA walkthrough TOML specs consumed by `./qa`                                               |
+| `internal/`                     | Active    | All packages live here (Go internal/ visibility)                                           |
+| `docs/`                         | Active    | This file and friends                                                                      |
+| `internal/recipe/recipes/`      | Active    | Bundled recipes — the recipe `go:embed` source (`internal/recipe/embed.go`)                |
+| `internal/theme/bundled/`       | Active    | Bundled themes — the **only** `go:embed` source (`internal/theme/embed.go`)                |
+| `themes/iterm2/`                | Generated | Downloaded theme cache; gitignored. Runtime themes resolve under `~/.zmux/themes`          |
+| `legacy/v0/{templates,themes}/` | Archived  | v0's own real asset copies (de-symlinked from the repo root)                               |
+| `tests/`                        | Active    | Integration tests, run with `go test -tags integration`                                    |
+| `.qa/`                          | Generated | QA scorecards + cached `cmd/qa` binary; gitignored                                         |
+| `skills/zmux/`                  | Active    | Optional agent integration: terminal orchestration plus generic agent peer/worker doctrine |
+| `pi-extension/`                 | Active    | Optional Pi agent integration (TypeScript)                                                 |
+| `legacy/v0/`                    | Archived  | Old bash prototype — preserved, unsupported                                                |
 
 ---
 
@@ -65,73 +65,73 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 
 ### Foundation packages (no zmux deps)
 
-| Package | Lines | Role |
-|---------|-------|------|
-| `config` | ~325 | TOML config loading, defaults, `FS` interface for tests |
-| `debug` | ~70 | Opt-in debug logging (`ZMUX_DEBUG=1`) |
-| `procfs` | ~65 | Linux `/proc` process-tree inspection |
-| `tablabel` | ~30 | Stable optional tab-label overlay format |
-| `termtitle` | ~80 | tmux terminal-title format contract + parser (no zmux deps; dissolves the latent tmux↔terminal cycle) |
-| `terminal` | ~240 | Resolves strict screenshot targets for the current tmux client |
-| `keys` | ~280 | Keybinding registry — single source of truth for `conf.go`, help surfaces, and the generated `docs/keybindings.md` |
-| `guard` | ~480 | Classifies a shell command for agent terminal-hygiene (raw-tmux / background-job / shared-interaction), recursively scanning nested-form payloads (`sh -c`, env/path-prefixed shells, `xargs`, here-docs); ruleset shares `testdata/zmux-guard-corpus.jsonl` with the Claude hook + pi classifier. Pure leaf, no deps |
+| Package     | Lines | Role                                                                                                                                                                                                                                                                                                                  |
+| ----------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config`    | ~325  | TOML config loading, defaults, `FS` interface for tests                                                                                                                                                                                                                                                               |
+| `debug`     | ~70   | Opt-in debug logging (`ZMUX_DEBUG=1`)                                                                                                                                                                                                                                                                                 |
+| `procfs`    | ~65   | Linux `/proc` process-tree inspection                                                                                                                                                                                                                                                                                 |
+| `tablabel`  | ~30   | Stable optional tab-label overlay format                                                                                                                                                                                                                                                                              |
+| `termtitle` | ~80   | tmux terminal-title format contract + parser (no zmux deps; dissolves the latent tmux↔terminal cycle)                                                                                                                                                                                                                 |
+| `terminal`  | ~240  | Resolves strict screenshot targets for the current tmux client                                                                                                                                                                                                                                                        |
+| `keys`      | ~280  | Keybinding registry — single source of truth for `conf.go`, help surfaces, and the generated `docs/keybindings.md`                                                                                                                                                                                                    |
+| `guard`     | ~480  | Classifies a shell command for agent terminal-hygiene (raw-tmux / background-job / shared-interaction), recursively scanning nested-form payloads (`sh -c`, env/path-prefixed shells, `xargs`, here-docs); ruleset shares `testdata/zmux-guard-corpus.jsonl` with the Claude hook + pi classifier. Pure leaf, no deps |
 
 ### tmux boundary
 
-| Package | Lines | Role |
-|---------|-------|------|
-| `tmux` | ~2450 | Typed wrapper around the `tmux` CLI — `Runner` interface, `MockRunner` for tests, generated `tmux.conf`, logical-pane scan, and placement primitives |
+| Package | Lines | Role                                                                                                                                                 |
+| ------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tmux`  | ~2450 | Typed wrapper around the `tmux` CLI — `Runner` interface, `MockRunner` for tests, generated `tmux.conf`, logical-pane scan, and placement primitives |
 
 **`Runner` is the boundary.** Production uses `tmux.NewRunner()` which shells out to `tmux`. Tests use `tmux.MockRunner` for deterministic, observable interactions. Anything that calls `os/exec` for tmux **must** route through `Runner`.
 
 ### Domain packages
 
-| Package | Lines | Role |
-|---------|-------|------|
-| `session` | ~430 | Session model, CRUD, tmp-session helpers |
-| `recipe` | ~1650 | Recipe discovery, TOML parsing, pure planning, dry-run rendering, execution, plus fork/extend/create authoring |
-| `workspace` | ~1250 | Workspace state (TOML), v3 local-label session identity, session tracking, reconciliation |
-| `tabs` | ~1450 | Logical-tab identity, scanning, placement, dock hide/show, MRU, reconciliation, lifecycle stamps (`lifecycle.go`), and the reaper (`reap.go`) |
-| `tabstate` | ~280 | Pane-canonical tab lifecycle state (`running` / `done` / `failed` / `attention`) and bar glyph formatting |
-| `theme` | ~650 | Theme parsing, semantic palette, resolver, embed of bundled themes |
-| `bar` | ~2700 | Status bar generation, presets, two-line logical-tabs rendering, preview |
-| `sync` | ~220 | Pull-only theme sync targets (Ghostty, Neovim) |
-| `source` | ~545 | External source discovery (tmux sockets, catalog) + generic attach fallback |
-| `overmind` | ~120 | Overmind control client (`Client` interface: connect/restart/stop/logs) |
-| `setup` | ~190 | Shell-rc integration: pure plan + apply behind `config.FS` (markers, `.bak`, dry-run, removal) |
-| `wm` | ~150 | Window manager adapters (Hyprland today) |
-| `snapshot` | ~525 | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver` |
-| `capturelog` | ~155 | Bounded sink behind `zmux log` (tail-style logging). A `tmux pipe-pane` feeds the hidden `zmux log-sink`; the sink keeps only the trailing `--max-bytes` in memory (exact cap, no rotation files) and flushes the whole buffer via `config.FS`. Optional stateful ANSI/control stripping for a readable plain log |
-| `qa` | ~1320 | Repo-local QA walkthrough framework: checklist parse/lint, scorecard state, shell runner, and `cmd/qa` CLI |
-| `actions` | ~80 | Typed action model (payloads) the command palette executes through `tmux.Runner` |
-| `help` | ~180 | Help-content SSOT (command + keybinding reference) shared by `zmux help` and the prefix+? viewer, so the two can't drift |
+| Package      | Lines | Role                                                                                                                                                                                                                                                                                                              |
+| ------------ | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session`    | ~430  | Session model, CRUD, tmp-session helpers                                                                                                                                                                                                                                                                          |
+| `recipe`     | ~1650 | Recipe discovery, TOML parsing, pure planning, dry-run rendering, execution, plus fork/extend/create authoring                                                                                                                                                                                                    |
+| `workspace`  | ~1250 | Workspace state (TOML), v3 local-label session identity, session tracking, reconciliation                                                                                                                                                                                                                         |
+| `tabs`       | ~1450 | Logical-tab identity, scanning, placement, dock hide/show, MRU, reconciliation, lifecycle stamps (`lifecycle.go`), and the reaper (`reap.go`)                                                                                                                                                                     |
+| `tabstate`   | ~280  | Pane-canonical tab lifecycle state (`running` / `done` / `failed` / `attention`) and bar glyph formatting                                                                                                                                                                                                         |
+| `theme`      | ~650  | Theme parsing, semantic palette, resolver, embed of bundled themes                                                                                                                                                                                                                                                |
+| `bar`        | ~2700 | Status bar generation, presets, two-line logical-tabs rendering, preview                                                                                                                                                                                                                                          |
+| `sync`       | ~220  | Pull-only theme sync targets (Ghostty, Neovim)                                                                                                                                                                                                                                                                    |
+| `source`     | ~545  | External source discovery (tmux sockets, catalog) + generic attach fallback                                                                                                                                                                                                                                       |
+| `overmind`   | ~120  | Overmind control client (`Client` interface: connect/restart/stop/logs)                                                                                                                                                                                                                                           |
+| `setup`      | ~190  | Shell-rc integration: pure plan + apply behind `config.FS` (markers, `.bak`, dry-run, removal)                                                                                                                                                                                                                    |
+| `wm`         | ~150  | Window manager adapters (Hyprland today)                                                                                                                                                                                                                                                                          |
+| `snapshot`   | ~525  | Terminal/TUI evidence bundle — per-pane text/ANSI captures + optional strict PNG screenshot (`zmux snapshot`); Go-native port of the pi-parley vision tool. All side effects via `tmux.Runner` / `config.FS` / `TargetResolver`                                                                                   |
+| `capturelog` | ~155  | Bounded sink behind `zmux log` (tail-style logging). A `tmux pipe-pane` feeds the hidden `zmux log-sink`; the sink keeps only the trailing `--max-bytes` in memory (exact cap, no rotation files) and flushes the whole buffer via `config.FS`. Optional stateful ANSI/control stripping for a readable plain log |
+| `qa`         | ~1320 | Repo-local QA walkthrough framework: checklist parse/lint, scorecard state, shell runner, and `cmd/qa` CLI                                                                                                                                                                                                        |
+| `actions`    | ~80   | Typed action model (payloads) the command palette executes through `tmux.Runner`                                                                                                                                                                                                                                  |
+| `help`       | ~180  | Help-content SSOT (command + keybinding reference) shared by `zmux help` and the prefix+? viewer, so the two can't drift                                                                                                                                                                                          |
 
 ### UI
 
 The flat `tui` root package was dissolved into focused leaf/surface packages; there is no longer a `package tui`.
 
-| Package | Role |
-|---------|------|
-| `tui/styles` | Shared lipgloss styles leaf (`Styles`, `NewStyles`) |
-| `tui/workspaceview` | Workspace-view data adapter leaf (consumed by picker **and** dashboard; deps: session+workspace only) |
+| Package                | Role                                                                                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tui/styles`           | Shared lipgloss styles leaf (`Styles`, `NewStyles`)                                                                                                                                                           |
+| `tui/workspaceview`    | Workspace-view data adapter leaf (consumed by picker **and** dashboard; deps: session+workspace only)                                                                                                         |
 | `tui/workspaceoutline` | Shared workspace/session/external **row structure** built once and rendered by both the picker and the dashboard Workspaces tab; surface-specific labels, badges, and expansion arrive via `Policy` callbacks |
-| `tui/workspacelist` | Reusable workspace-list component used by the workspace switcher |
-| `tui/wspicker` | No-prefix `Alt+w` workspace switcher |
-| `tui/picker` | Primary workspace+session picker (model/update/view/actions + local keymap) |
-| `tui/tabpicker` | Alt+` tab switcher; understands full, pane-of, and hidden logical tabs |
-| `tui/themepicker` | Standalone theme picker |
-| `tui/wizard` | First-run `zmux init` setup wizard |
-| `tui/recipeup` | Recipe create/edit form wizard (`recipe create` / `recipe edit`) |
-| `tui/qapicker` | Human-facing QA walkthrough picker for `./qa` |
-| `tui/tkey` | Small key helpers shared by TUI surfaces |
-| `tui/palette` | Command palette: registry, providers, executor |
-| `tui/dashboard` | Tabbed dashboard `App` and `Tab` interface |
-| `tui/dashboard/tabs` | Tab implementations: current, sessions, themes, bar, settings, help |
-| `tui/helpview` | `prefix+?` interactive help viewer — scroll, fuzzy filter, commands/keys/all scope toggle; renders from `internal/help` |
-| `tui/views` | Shared row/column components |
-| `tui/outline` | Tree-outline component |
-| `tui/scroll` | Shared viewport scrollbar renderer (dashboard tabs + help viewer) |
-| `preview` | UI prototype framework (`Page`, `Controls`, `RenderContext`) |
+| `tui/workspacelist`    | Reusable workspace-list component used by the workspace switcher                                                                                                                                              |
+| `tui/wspicker`         | No-prefix `Alt+w` workspace switcher                                                                                                                                                                          |
+| `tui/picker`           | Primary workspace+session picker (model/update/view/actions + local keymap)                                                                                                                                   |
+| `tui/tabpicker`        | Alt+` tab switcher; understands full, pane-of, and hidden logical tabs                                                                                                                                        |
+| `tui/themepicker`      | Standalone theme picker                                                                                                                                                                                       |
+| `tui/wizard`           | First-run `zmux init` setup wizard                                                                                                                                                                            |
+| `tui/recipeup`         | Recipe create/edit form wizard (`recipe create` / `recipe edit`)                                                                                                                                              |
+| `tui/qapicker`         | Human-facing QA walkthrough picker for `./qa`                                                                                                                                                                 |
+| `tui/tkey`             | Small key helpers shared by TUI surfaces                                                                                                                                                                      |
+| `tui/palette`          | Command palette: registry, providers, executor                                                                                                                                                                |
+| `tui/dashboard`        | Tabbed dashboard `App` and `Tab` interface                                                                                                                                                                    |
+| `tui/dashboard/tabs`   | Tab implementations: current, sessions, themes, bar, settings, help                                                                                                                                           |
+| `tui/helpview`         | `prefix+?` interactive help viewer — scroll, fuzzy filter, commands/keys/all scope toggle; renders from `internal/help`                                                                                       |
+| `tui/views`            | Shared row/column components                                                                                                                                                                                  |
+| `tui/outline`          | Tree-outline component                                                                                                                                                                                        |
+| `tui/scroll`           | Shared viewport scrollbar renderer (dashboard tabs + help viewer)                                                                                                                                             |
+| `preview`              | UI prototype framework (`Page`, `Controls`, `RenderContext`)                                                                                                                                                  |
 
 ## Decisions
 
@@ -155,25 +155,25 @@ Durable decision records live in [decisions/](decisions/).
 
 Anything that does I/O or talks to the OS sits behind an interface so tests can use a mock. **Don't add new direct `os/exec` or `os.ReadFile` calls in business logic.**
 
-| Interface | Package | Production impl | Mock |
-|-----------|---------|-----------------|------|
-| `tmux.Runner` | `internal/tmux` | `NewRunner()` (shells out) | `MockRunner` |
-| `config.FS` | `internal/config` | OS filesystem (`RealFS`) | inline test fakes |
-| `qa.StateFS` | `internal/qa` | `.qa/` JSON scorecards | test fake |
-| `qa.CmdRunner` | `internal/qa` | `ShellRunner` (`sh -c`) | test fake |
-| `bar.Prober` | `internal/bar` | `ExecProber` (git/lang shellout) | fake prober |
-| `source.prober` (unexported) | `internal/source` | `systemProber` (socket scan / `ps` / live probe) | `fakeProber` — `Discover()` wraps `discoverWith(systemProber{})` |
-| `overmind.Client` | `internal/overmind` | `CLI` (shells out to overmind) | injected via `App.Overmind`; tests pass a fake/noop |
-| `theme.EnvSetter` | `internal/theme` | tmux setenv | test fake |
-| `theme.HTTPClient` | `internal/theme` | `http.Client` (for theme download) | test fake |
-| `sync.SyncTarget` | `internal/sync` | per-target impls (ghostty, nvim) | composed |
-| `sync.CmdRunner` | `internal/sync/nvim` | `os/exec` | test fake |
-| `wm.CommandRunner` | `internal/wm/hyprland` | `hyprctl` shellout | test fake |
-| `wm.Adapter` | `internal/wm` | `HyprlandAdapter` | mockable |
-| `procfs.Inspector` | `internal/procfs` | reads `/proc` | mockable |
-| `preview.Page` / `preview.Control` | `internal/preview` | many | n/a (composition) |
-| `dashboard.Tab` | `internal/tui/dashboard` | each tab impl | n/a |
-| `palette.ActionProvider` | `internal/tui/palette` | per-provider | composition |
+| Interface                          | Package                  | Production impl                                  | Mock                                                             |
+| ---------------------------------- | ------------------------ | ------------------------------------------------ | ---------------------------------------------------------------- |
+| `tmux.Runner`                      | `internal/tmux`          | `NewRunner()` (shells out)                       | `MockRunner`                                                     |
+| `config.FS`                        | `internal/config`        | OS filesystem (`RealFS`)                         | inline test fakes                                                |
+| `qa.StateFS`                       | `internal/qa`            | `.qa/` JSON scorecards                           | test fake                                                        |
+| `qa.CmdRunner`                     | `internal/qa`            | `ShellRunner` (`sh -c`)                          | test fake                                                        |
+| `bar.Prober`                       | `internal/bar`           | `ExecProber` (git/lang shellout)                 | fake prober                                                      |
+| `source.prober` (unexported)       | `internal/source`        | `systemProber` (socket scan / `ps` / live probe) | `fakeProber` — `Discover()` wraps `discoverWith(systemProber{})` |
+| `overmind.Client`                  | `internal/overmind`      | `CLI` (shells out to overmind)                   | injected via `App.Overmind`; tests pass a fake/noop              |
+| `theme.EnvSetter`                  | `internal/theme`         | tmux setenv                                      | test fake                                                        |
+| `theme.HTTPClient`                 | `internal/theme`         | `http.Client` (for theme download)               | test fake                                                        |
+| `sync.SyncTarget`                  | `internal/sync`          | per-target impls (ghostty, nvim)                 | composed                                                         |
+| `sync.CmdRunner`                   | `internal/sync/nvim`     | `os/exec`                                        | test fake                                                        |
+| `wm.CommandRunner`                 | `internal/wm/hyprland`   | `hyprctl` shellout                               | test fake                                                        |
+| `wm.Adapter`                       | `internal/wm`            | `HyprlandAdapter`                                | mockable                                                         |
+| `procfs.Inspector`                 | `internal/procfs`        | reads `/proc`                                    | mockable                                                         |
+| `preview.Page` / `preview.Control` | `internal/preview`       | many                                             | n/a (composition)                                                |
+| `dashboard.Tab`                    | `internal/tui/dashboard` | each tab impl                                    | n/a                                                              |
+| `palette.ActionProvider`           | `internal/tui/palette`   | per-provider                                     | composition                                                      |
 
 If you're adding new I/O — file, network, exec — introduce or reuse an interface. If you find yourself shelling out directly in a tab or domain package, that's a smell.
 
@@ -389,17 +389,17 @@ These flags live in `root.go` and route into the corresponding `tui/` flow.
 
 ## Where to make common changes
 
-| Want to… | Start in |
-|----------|----------|
-| Add a new CLI subcommand | `internal/cli/<name>.go` (cobra) — register in `internal/cli/root.go` |
-| Add a tmux keybinding | `internal/keys` — add the `Binding` to the right table. `conf.go`, the dashboard Help tab, `zmux help`, and `docs/keybindings.md` all derive from it. Run `make keys-gen` to regenerate the doc (the `TestKeybindingsDocInSync` golden test / CI enforces freshness) |
-| Add a dashboard tab | Implement `dashboard.Tab` under `internal/tui/dashboard/tabs/`. Register in `dashboard.App`. See an existing tab (e.g. `themes.go`) as a template. |
-| Change logical-tab placement or state | Start in `internal/tabs/` or `internal/tabstate/`, then update the shared resolver in `internal/cli/tab_target.go` if targeting behavior changes. Run `./qa lint` and the relevant checklist under `./qa`. |
-| Add a QA walkthrough | Add `checklists/<name>.toml`, validate with `./qa lint`, and document any human-only expectations in the checklist's `expect` fields. |
-| Add a bar preset | `internal/bar/bar.go` — preset table + segment definitions. Update preview in `internal/bar/preview.go` if visual changes need preview. |
-| Add a theme | Drop a new file into `internal/theme/bundled/` (iterm2-color-schemes format). It will be `go:embed`'d on next build. |
-| Change a generated tmux behavior | `internal/tmux/conf.go` — but verify `internal/tmux/conf_test.go` still covers the new section. |
-| Change session/workspace behavior | `internal/workspace/` (workspace-level), `internal/session/` (per-session), and `internal/cli/session_target.go` for CLI targeting. Run integration tests (`make test-integration`) — they exercise the built `zmux` CLI end-to-end (binary output, not real tmux). |
+| Want to…                              | Start in                                                                                                                                                                                                                                                             |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add a new CLI subcommand              | `internal/cli/<name>.go` (cobra) — register in `internal/cli/root.go`                                                                                                                                                                                                |
+| Add a tmux keybinding                 | `internal/keys` — add the `Binding` to the right table. `conf.go`, the dashboard Help tab, `zmux help`, and `docs/keybindings.md` all derive from it. Run `make keys-gen` to regenerate the doc (the `TestKeybindingsDocInSync` golden test / CI enforces freshness) |
+| Add a dashboard tab                   | Implement `dashboard.Tab` under `internal/tui/dashboard/tabs/`. Register in `dashboard.App`. See an existing tab (e.g. `themes.go`) as a template.                                                                                                                   |
+| Change logical-tab placement or state | Start in `internal/tabs/` or `internal/tabstate/`, then update the shared resolver in `internal/cli/tab_target.go` if targeting behavior changes. Run `./qa lint` and the relevant checklist under `./qa`.                                                           |
+| Add a QA walkthrough                  | Add `checklists/<name>.toml`, validate with `./qa lint`, and document any human-only expectations in the checklist's `expect` fields.                                                                                                                                |
+| Add a bar preset                      | `internal/bar/bar.go` — preset table + segment definitions. Update preview in `internal/bar/preview.go` if visual changes need preview.                                                                                                                              |
+| Add a theme                           | Drop a new file into `internal/theme/bundled/` (iterm2-color-schemes format). It will be `go:embed`'d on next build.                                                                                                                                                 |
+| Change a generated tmux behavior      | `internal/tmux/conf.go` — but verify `internal/tmux/conf_test.go` still covers the new section.                                                                                                                                                                      |
+| Change session/workspace behavior     | `internal/workspace/` (workspace-level), `internal/session/` (per-session), and `internal/cli/session_target.go` for CLI targeting. Run integration tests (`make test-integration`) — they exercise the built `zmux` CLI end-to-end (binary output, not real tmux).  |
 
 ---
 

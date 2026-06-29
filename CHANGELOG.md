@@ -100,7 +100,7 @@ versioning is semver-ish until the first public release.
   exits 0; the direct CLI keeps stdout and real exit codes.
 - **Interactive sessions' first window is now a joinable tab** `tabs` -
   interactive session creation (`new`, picker, popup, palette) never stamped the
-  first window's pane with `@zmux_tab_id`, so joining another tab *into* it
+  first window's pane with `@zmux_tab_id`, so joining another tab _into_ it
   (`tab pane`, `prefix+J`) failed with "current window is not a zmux tab".
   `session.Create` now stamps it at creation, matching the worker `session run`
   path.
@@ -115,7 +115,7 @@ versioning is semver-ish until the first public release.
   a clean miss. Read-only/explicit-cross verbs (`watch`, `log tail`, `tab show`,
   `tab move`) keep the cross-session reach with a warning. ID lookup prefers an
   in-scope row so session-group clones (same-ID rows per clone session) still
-  resolve clone-local. The create path drops an all-out-of-session *ambiguity*
+  resolve clone-local. The create path drops an all-out-of-session _ambiguity_
   too: a roster name live in 2+ sibling sessions previously surfaced a fatal
   `ambiguous — use an id` and refused the local spawn; `run -n <name>` now
   creates in the current session, while a genuine in-session collision still

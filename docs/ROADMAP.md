@@ -16,7 +16,7 @@ join-back/promote/hide/kill per pane. Follow-up UX also made hidden panes
 parent-scoped (`󰏤[N] name~`) and stopped hiding full tabs. That clears the Now
 bucket; the next focus is **Remote & nested zmux** (below).
 
-One residual is deferred to *Later → Pane direct-manipulation* (header
+One residual is deferred to _Later → Pane direct-manipulation_ (header
 drag-swap) — the right-click menu shipped, but tmux 3.4 cannot separate a
 header drag from the native resize-border drag.
 
@@ -99,7 +99,7 @@ entry/creation/management surface (`internal/tui/workspaceoutline` +
 ### Pane direct-manipulation
 
 - [ ] **Header drag-swap**
-  - Dragging one pane *header* onto another should swap their positions. The
+  - Dragging one pane _header_ onto another should swap their positions. The
     right-click per-pane menu (promote/hide/kill) already shipped; this is the
     remaining direct-manipulation gesture.
   - Blocked by tmux 3.4: pane headers are reachable only through generic

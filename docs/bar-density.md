@@ -1,18 +1,18 @@
 # Bar density & font scale (feasibility)
 
-Finding for the roadmap item *"Independent bar/header font scale — investigate
-feasibility"* (Bar layout & density, intake 2026-06-03). Companion to the
+Finding for the roadmap item _"Independent bar/header font scale — investigate
+feasibility"_ (Bar layout & density, intake 2026-06-03). Companion to the
 always-2-line + de-dup work in the same thread.
 
 **TL;DR:** zmux **cannot** give the bar its own font size — a terminal cell grid
 has no per-region font. What the request really wants (more information without
 the bar swallowing tabs) is a **density** problem, and zmux already owns every
-density lever. The realistic deliverable is a bundled *compact mode*, not a font
+density lever. The realistic deliverable is a bundled _compact mode_, not a font
 scale.
 
 ## Why an independent font scale isn't possible
 
-tmux — and therefore the zmux bar, which *is* tmux's status line — renders into
+tmux — and therefore the zmux bar, which _is_ tmux's status line — renders into
 a **fixed character-cell grid**. Every cell is one glyph in the terminal
 emulator's configured font, at the emulator's cell size. tmux has no concept of
 fonts, point sizes, or sub-cell scaling, and there is no escape sequence to ask
@@ -21,17 +21,17 @@ of the screen.
 
 So font/cell sizing is wholly the **emulator's** job:
 
-| Concern | Owner |
-|---|---|
-| Font family, weight, size, ligatures | Terminal emulator (Ghostty, etc.) |
-| Cell width/height (px) | Terminal emulator |
-| Per-region / per-row font scale | **Nobody** — not a terminal feature |
-| What fills each cell, how many cells | tmux / **zmux** |
+| Concern                              | Owner                               |
+| ------------------------------------ | ----------------------------------- |
+| Font family, weight, size, ligatures | Terminal emulator (Ghostty, etc.)   |
+| Cell width/height (px)               | Terminal emulator                   |
+| Per-region / per-row font scale      | **Nobody** — not a terminal feature |
+| What fills each cell, how many cells | tmux / **zmux**                     |
 
-A terminal can change *its* global font size, but that scales the whole grid
+A terminal can change _its_ global font size, but that scales the whole grid
 (panes included), not the bar alone. "Bar at 0.8×" is not expressible.
 
-## What zmux *can* control: density
+## What zmux _can_ control: density
 
 Density = information per cell. These are the achievable levers, most already
 shipped:
@@ -51,7 +51,7 @@ shipped:
 4. **Glyph vocabulary (preset)** — nerd-font pills/separators (powerline,
    rounded) pack more signal per cell but cost a nerd font; plain presets
    (minimal, zen, blocks) are wider-character but font-agnostic. Choosing a
-   denser preset *is* the closest thing to "smaller bar."
+   denser preset _is_ the closest thing to "smaller bar."
 5. **Truncation** — `shortenDir` keeps the top-row cwd overlay compact, while
    `status-left/right-length` caps and tmux's native `<`/`>` overflow markers
    with `list=focus` keep the current window visible when tabs exceed their
@@ -74,7 +74,7 @@ document and close). Pair with the emulator's own font-size config if a globally
 smaller terminal is wanted.
 
 Density: the levers above already exist but are scattered across config keys. The
-actionable follow-up — *not* part of this feasibility item — is a single
+actionable follow-up — _not_ part of this feasibility item — is a single
 **compact mode** that bundles a sensible dense default (e.g. two-line + de-dup +
 trimmed segments + a compact preset) behind one switch, so "make the bar denser"
 is one decision instead of six. Captured here for a future roadmap promotion.

@@ -20,7 +20,6 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 	var barRenderGroupSize string
 	var barRenderTopBar string
 	var barRenderPanes string
-	var barRenderPaneTitle string
 
 	cmd := &cobra.Command{
 		Use:    "bar-render <left|right>",
@@ -205,7 +204,6 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 		c.Flags().StringVar(&barRenderGroupSize, "group-size", "", "session group size (passed from tmux #{session_group_size})")
 		c.Flags().StringVar(&barRenderTopBar, "top-bar", "", "top bar variant: tabs, dots, minimal (passed from generate.go)")
 		c.Flags().StringVar(&barRenderPanes, "panes", "", "window pane count (passed from tmux #{window_panes})")
-		c.Flags().StringVar(&barRenderPaneTitle, "pane-title", "", "deprecated no-op; accepted for previously generated status formats")
 	}
 	registerFlags(cmd)
 

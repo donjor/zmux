@@ -226,43 +226,43 @@ Prefix: `Ctrl+Space` (configurable)
 
 ### tmux prefix
 
-| Key | Action |
-|-----|--------|
-| prefix + Space | Dashboard |
-| prefix + p | Command palette |
-| prefix + ! | Scratch shell popup ($SHELL, cwd from active pane) |
-| prefix + d | Detach |
-| prefix + ? | Help viewer (scroll, fuzzy filter, commands/keys scope) |
-| prefix + c | New tab |
-| prefix + n / N | Next / previous tab |
-| prefix + < / > | Move tab left / right |
-| prefix + x | Close tab (with confirm) |
-| prefix + J | Join a tab into this tab as a pane |
-| prefix + F | Promote focused pane-tab to full tab |
-| prefix + R | Respawn stopped/dead pane |
-| prefix + . | Label tab (blank clears label) |
-| prefix + , | Rename session |
-| prefix + C | New session in current workspace |
-| prefix + w | Workspace session picker |
-| prefix + [ / ] | Prev / next session in workspace |
-| prefix + Alt+1-9 | Switch to session N in workspace |
-| prefix + r | Reload config (zmux apply) |
-| prefix + v | Enter copy mode (vi keys) |
-| prefix + P | Paste buffer |
-| prefix + ← / → / ↑ / ↓ | Focus pane in direction (tmux default) |
-| prefix + Ctrl+← / → / ↑ / ↓ | Resize pane by one cell (tmux default) |
-| prefix + Alt+← / → / ↑ / ↓ | Resize pane by five cells (repeatable) |
-| prefix + Shift+← / → / ↑ / ↓ | Swap pane with the one in that direction (repeatable) |
-| prefix + = | Equalize / spread splits evenly |
-| prefix + s | Toggle split orientation (horizontal ↔ vertical) |
-| prefix + q | Show pane numbers/ids (tmux default) |
-| prefix + z | Toggle pane zoom (tmux default) |
-| prefix + o / ; | Next / previous pane (tmux default) |
-| prefix + % / " | Split pane right / below (tmux default) |
-| Alt+1-9 | Switch to tab (no prefix) |
-| Alt+w | Workspace switcher (no prefix) |
-| Alt+Shift+← / → / ↑ / ↓ | Focus pane in direction (no prefix) |
-| Alt+` | Tab switcher (no prefix) |
+| Key                          | Action                                                  |
+| ---------------------------- | ------------------------------------------------------- |
+| prefix + Space               | Dashboard                                               |
+| prefix + p                   | Command palette                                         |
+| prefix + !                   | Scratch shell popup ($SHELL, cwd from active pane)      |
+| prefix + d                   | Detach                                                  |
+| prefix + ?                   | Help viewer (scroll, fuzzy filter, commands/keys scope) |
+| prefix + c                   | New tab                                                 |
+| prefix + n / N               | Next / previous tab                                     |
+| prefix + < / >               | Move tab left / right                                   |
+| prefix + x                   | Close tab (with confirm)                                |
+| prefix + J                   | Join a tab into this tab as a pane                      |
+| prefix + F                   | Promote focused pane-tab to full tab                    |
+| prefix + R                   | Respawn stopped/dead pane                               |
+| prefix + .                   | Label tab (blank clears label)                          |
+| prefix + ,                   | Rename session                                          |
+| prefix + C                   | New session in current workspace                        |
+| prefix + w                   | Workspace session picker                                |
+| prefix + [ / ]               | Prev / next session in workspace                        |
+| prefix + Alt+1-9             | Switch to session N in workspace                        |
+| prefix + r                   | Reload config (zmux apply)                              |
+| prefix + v                   | Enter copy mode (vi keys)                               |
+| prefix + P                   | Paste buffer                                            |
+| prefix + ← / → / ↑ / ↓       | Focus pane in direction (tmux default)                  |
+| prefix + Ctrl+← / → / ↑ / ↓  | Resize pane by one cell (tmux default)                  |
+| prefix + Alt+← / → / ↑ / ↓   | Resize pane by five cells (repeatable)                  |
+| prefix + Shift+← / → / ↑ / ↓ | Swap pane with the one in that direction (repeatable)   |
+| prefix + =                   | Equalize / spread splits evenly                         |
+| prefix + s                   | Toggle split orientation (horizontal ↔ vertical)        |
+| prefix + q                   | Show pane numbers/ids (tmux default)                    |
+| prefix + z                   | Toggle pane zoom (tmux default)                         |
+| prefix + o / ;               | Next / previous pane (tmux default)                     |
+| prefix + % / "               | Split pane right / below (tmux default)                 |
+| Alt+1-9                      | Switch to tab (no prefix)                               |
+| Alt+w                        | Workspace switcher (no prefix)                          |
+| Alt+Shift+← / → / ↑ / ↓      | Focus pane in direction (no prefix)                     |
+| Alt+`                        | Tab switcher (no prefix)                                |
 
 Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
 borders resizes them. Right-clicking a joined pane opens a per-pane menu —
@@ -304,18 +304,18 @@ bindings, so the pane keys do not collide with the terminal or WM setup.
 
 ### Picker (outside tmux)
 
-| Key | Action |
-|-----|--------|
-| ↑ / ↓ | Navigate workspaces and sessions (tree traversal) |
+| Key                | Action                                                     |
+| ------------------ | ---------------------------------------------------------- |
+| ↑ / ↓              | Navigate workspaces and sessions (tree traversal)          |
 | enter (top action) | Create tmp session (empty input) or workspace+main (typed) |
-| enter (workspace) | Drill into sessions, or create default session if empty |
-| enter (session) | Attach |
-| tab | Accept ghost autocompletion |
-| ctrl+x | Delete workspace or session under cursor (with confirm) |
-| ctrl+h | Toggle hide-empty workspaces |
-| 1-9 | Quick-select session by index |
-| esc | Clear query, or quit if empty |
-| ctrl+c | Quit |
+| enter (workspace)  | Drill into sessions, or create default session if empty    |
+| enter (session)    | Attach                                                     |
+| tab                | Accept ghost autocompletion                                |
+| ctrl+x             | Delete workspace or session under cursor (with confirm)    |
+| ctrl+h             | Toggle hide-empty workspaces                               |
+| 1-9                | Quick-select session by index                              |
+| esc                | Clear query, or quit if empty                              |
+| ctrl+c             | Quit                                                       |
 
 ## Configuration
 
@@ -414,17 +414,17 @@ Place custom recipes in `~/.zmux/recipes/`. Bundled recipes include
 
 ## Status bar presets
 
-| Preset | Description |
-|--------|-------------|
-| default | Catppuccin-inspired rounded pills, icons, elevated surfaces |
-| minimal | Clean, barely decorated, content-first |
-| powerline | Angled separators, filled segments, directory chain |
-| blocks | Square bracket segments, monospace, dense |
-| rounded | Elevated pill segments, premium feel |
-| hacker | Matrix-inspired, monospace, dense info |
-| zen | Ultra-minimal, barely there |
-| starship | Colorful prompt-inspired, each segment its own color |
-| rpowerline | Rounded powerline — angled fills with rounded caps |
+| Preset     | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
+| default    | Catppuccin-inspired rounded pills, icons, elevated surfaces |
+| minimal    | Clean, barely decorated, content-first                      |
+| powerline  | Angled separators, filled segments, directory chain         |
+| blocks     | Square bracket segments, monospace, dense                   |
+| rounded    | Elevated pill segments, premium feel                        |
+| hacker     | Matrix-inspired, monospace, dense info                      |
+| zen        | Ultra-minimal, barely there                                 |
+| starship   | Colorful prompt-inspired, each segment its own color        |
+| rpowerline | Rounded powerline — angled fills with rounded caps          |
 
 All presets show dynamic segments: git branch/dirty/ahead-behind, language
 version, workspace with session position (e.g. `myapp 2/4`), directory,
