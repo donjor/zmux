@@ -29,7 +29,7 @@ Refresh mirrors and package diagnostics from this repo:
 settings-managed package. It deliberately does **not** rewrite global Pi
 settings. It warns when `~/.pi/agent/settings.json` disables the package with an
 entry such as `-extensions/pi-zmux/index.ts`; remove that exclusion and run
-`/zmux reload` or restart Pi to enable it.
+Pi's built-in `/reload` or restart Pi to enable it.
 
 For a one-off load smoke without changing global settings:
 
@@ -60,8 +60,10 @@ Core tools:
 
 - `zmux_current` — inspect current pane/session/tabs, terminal capabilities,
   selected zmux binary/profile, project trust, and loaded pi-zmux config.
-- `zmux_reload` — queue soft `/zmux reload` as a follow-up command. Prefer this
-after extension/skill changes before hard respawn.
+- `zmux_reload` — run `zmux reload` for zmux's own config/key/theme changes.
+- `zmux_pi_reload` — use zmux/tmux to type Pi's built-in `/reload` into the
+  current Pi pane, then nudge the agent after reload. Prefer this after Pi
+  extension/skill changes before hard respawn.
 - `zmux_tabs` / `zmux_tab_kill` / `zmux_tab_focus` — list, intentionally remove,
   or focus tabs. Ask before focusing in agent sessions.
 - `zmux_send_keys` / `zmux_type` — send raw keys or type text into existing tabs.
@@ -77,7 +79,7 @@ after extension/skill changes before hard respawn.
   completion using the status-file wrapper.
 - `zmux_pi_respawn` — hard fallback: respawn the current Pi pane with `pi -c`.
   This kills the current pane process and discards unsent input; use only when
-  soft reload is unavailable or Pi is wedged.
+  soft Pi reload is unavailable or Pi is wedged.
 
 ## Bash guardrails
 

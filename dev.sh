@@ -185,7 +185,7 @@ try {
   const extensions = Array.isArray(settings.extensions) ? settings.extensions : [];
   const disabled = extensions.some((entry) => entry === '-extensions/pi-zmux/index.ts' || entry === '-extensions/pi-zmux' || entry === '-extensions/pi-zmux/index.js');
   if (disabled) {
-    console.log('warning pi-zmux extension is disabled in ~/.pi/agent/settings.json (remove the -extensions/pi-zmux entry, then /zmux reload or restart Pi)');
+    console.log('warning pi-zmux extension is disabled in ~/.pi/agent/settings.json (remove the -extensions/pi-zmux entry, then run Pi /reload or restart Pi)');
   } else {
     console.log('ok pi-zmux extension is not disabled by ~/.pi/agent/settings.json');
   }

@@ -13,10 +13,12 @@ import {
 	listPanes,
 	listTabs,
 	openPane,
+	reloadZmux,
 	resizePane,
 	runtimeEnsure,
 	runtimeLogs,
 	runtimeStop,
+	schedulePiReload,
 	schedulePiRespawn,
 	sendKeys,
 	sendPaneKeys,
@@ -105,13 +107,39 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_reload",
 		label: "zmux reload",
-		description: "Queue a soft Pi runtime reload via `/zmux reload`. Use after changing Pi extensions, skills, prompts, or themes when a non-destructive reload is enough. This queues a follow-up command because tools cannot call ctx.reload() directly.",
-		promptSnippet: "Queue a soft Pi extension/runtime reload",
-		promptGuidelines: ["Use zmux_reload after editing Pi extension code before trying hard respawn; it queues `/zmux reload` as a follow-up command."],
+		description: "Reload zmux's own tmux configuration via `zmux reload`. This is for zmux config/key/theme changes, not Pi runtime reload.",
+		promptSnippet: "Reload zmux configuration",
+		promptGuidelines: ["Use zmux_reload only for zmux config/key/theme changes; use zmux_pi_reload to reload the current Pi runtime after Pi extension, skill, prompt, or theme changes."],
 		parameters: Type.Object({}),
-		async execute() {
-			pi.sendUserMessage("/zmux reload", { deliverAs: "followUp" });
-			return content("Queued /zmux reload as a follow-up command.", { queued: true });
+		async execute(_id, _params, _signal, _onUpdate, ctx) {
+			const result = await reloadZmux(ctx.cwd);
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_pi_reload",
+		label: "zmux Pi reload",
+		description: "Soft-reload the current Pi runtime by using zmux/tmux to type Pi's built-in `/reload` into the current Pi pane, then nudge the agent after reload. Use after changing Pi extensions, skills, prompts, or themes when a non-destructive Pi reload is enough.",
+		promptSnippet: "Reload the current Pi runtime via zmux",
+		promptGuidelines: [
+			"Use zmux_pi_reload after editing Pi extension code, skills, prompts, or themes before trying hard respawn.",
+			"Do not use zmux_pi_reload if the user may have unsent input in the Pi editor; it types `/reload` into the current Pi pane.",
+		],
+		parameters: Type.Object({
+			paneId: Type.Optional(Type.String({ description: "Target tmux pane id; defaults to the current Pi pane" })),
+			continuationPrompt: Type.Optional(Type.String({ description: "Prompt to inject after reload so the agent resumes. Defaults to a generic reload-continuation nudge." })),
+			delayMs: Type.Optional(Type.Number({ description: "Delay before typing /reload; default 5000ms so the current assistant response can finish" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await schedulePiReload({
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+				paneId: params.paneId,
+				continuationPrompt: params.continuationPrompt,
+				delayMs: params.delayMs,
+			});
+			return content(result.text, result.details);
 		},
 	});
 
@@ -318,10 +346,10 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_pi_respawn",
 		label: "zmux Pi respawn",
-		description: "Hard-restart the current Pi agent pane by respawning it with `pi -c`. Use only when soft `/zmux reload` is unavailable or Pi is wedged; this kills the current pane process and discards unsent input. If autonomous follow-up is expected, pass continuationPrompt.",
+		description: "Hard-restart the current Pi agent pane by respawning it with `pi -c`. Use only when soft Pi `/reload` via zmux_pi_reload is unavailable or Pi is wedged; this kills the current pane process and discards unsent input. If autonomous follow-up is expected, pass continuationPrompt.",
 		promptSnippet: "Hard-restart/respawn the current Pi pane",
 		promptGuidelines: [
-			"Prefer zmux_reload / `/zmux reload` after changing Pi extensions or tools; use zmux_pi_respawn only as a hard fallback.",
+			"Prefer zmux_pi_reload after changing Pi extensions or tools; use zmux_pi_respawn only as a hard fallback.",
 			"If work should continue after respawn, pass continuationPrompt with the exact next smoke/validation steps.",
 			"Do not use if the user may have unsent input or manual validation is in progress; explain that it hard-restarts the current Pi pane.",
 		],

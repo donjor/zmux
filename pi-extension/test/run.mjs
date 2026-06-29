@@ -13,7 +13,8 @@ try {
 
   const { classifyBash, hasExplicitBypass, stripQuotedSegments } = await import(join(outDir, 'src/classify.js'));
   const { loadConfig } = await import(join(outDir, 'src/config.js'));
-  const { buildPaneOpenArgs, buildTmuxRespawnScript, detectUserInputPrompt } = await import(join(outDir, 'src/zmux.js'));
+  const { buildPaneOpenArgs, buildPiReloadScript, buildTmuxRespawnScript, detectUserInputPrompt } = await import(join(outDir, 'src/zmux.js'));
+  const { reloadContinuationPath, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
 
   const cfg = { policy: { mode: 'enforce', blockBackgroundJobs: true, redirectInteractive: true }, runtimes: {} };
@@ -89,8 +90,10 @@ try {
 
   delete process.env.PI_ZMUX_TMUX_SOCKET;
   process.env.PI_ZMUX_BIN = 'zzmux';
+  assert.equal(buildPiReloadScript({ cwd: '/repo', pane: '%42', delayMs: 750 }), "cd '/repo'; sleep 0.75; 'tmux' '-L' 'zzmux' 'send-keys' '-t' '%42' '/reload' 'Enter'");
   assert.equal(buildTmuxRespawnScript({ cwd: '/repo', pane: '%42', command: 'pi -c', delayMs: 300 }), "cd '/repo'; sleep 0.3; 'tmux' '-L' 'zzmux' 'respawn-pane' '-k' '-t' '%42' '-c' '/repo' 'pi -c'");
   process.env.PI_ZMUX_TMUX_SOCKET = 'edge';
+  assert.equal(buildPiReloadScript({ cwd: '/repo', pane: '%42', delayMs: 0 }), "cd '/repo'; sleep 0; 'tmux' '-L' 'edge' 'send-keys' '-t' '%42' '/reload' 'Enter'");
   assert.equal(buildTmuxRespawnScript({ cwd: '/repo', pane: '%42', command: 'pi -c', delayMs: 0 }), "cd '/repo'; sleep 0; 'tmux' '-L' 'edge' 'respawn-pane' '-k' '-t' '%42' '-c' '/repo' 'pi -c'");
   delete process.env.PI_ZMUX_BIN;
   delete process.env.PI_ZMUX_TMUX_SOCKET;
@@ -119,6 +122,12 @@ try {
   process.env.PI_ZMUX_POLICY = 'observe';
   loaded = loadConfig(project);
   assert.equal(loaded.policy.mode, 'observe');
+
+  const reloadContinuationRoot = mkdtempSync(join(tmpdir(), 'pi-zmux-reload-continuation-'));
+  const reloadPath = writeReloadContinuation(reloadContinuationRoot, { createdAt: '2026-05-04T00:00:00.000Z', prompt: 'continue after reload' });
+  assert.equal(reloadPath, reloadContinuationPath(reloadContinuationRoot));
+  assert.equal(takeReloadContinuation(reloadContinuationRoot)?.prompt, 'continue after reload');
+  assert.equal(existsSync(reloadPath), false);
 
   const continuationRoot = mkdtempSync(join(tmpdir(), 'pi-zmux-continuation-'));
   const continuationPath = writeRespawnContinuation(continuationRoot, { createdAt: '2026-05-04T00:00:00.000Z', prompt: 'continue smoke', handoffPath: '/tmp/handoff.md' });

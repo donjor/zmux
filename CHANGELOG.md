@@ -12,8 +12,8 @@ versioning is semver-ish until the first public release.
 
 - **Current Pi zmux extension overhaul** `agents` - `pi-extension/` now targets
   current Pi (`0.80.x`), loads as the settings-managed local package, exposes
-  refreshed typed tools for runtimes, panes, tab input, soft `/zmux reload`, and
-  hard respawn fallback, and keeps bash guardrails aligned with the shared zmux
+  refreshed typed tools for runtimes, panes, tab input, zmux config reload,
+  soft Pi `/reload` via `zmux_pi_reload`, and hard respawn fallback, and keeps bash guardrails aligned with the shared zmux
   classifier corpus. `./dev.sh zmux` now reports disabled Pi settings and
   removes the retired global extension symlink instead of silently relinking it.
 - **Parent-scoped parked pane affordances** `tabs` `panes` - `prefix+h` hides a
@@ -228,7 +228,7 @@ versioning is semver-ish until the first public release.
   request now tail-trims the plain capture to the requested line count without
   affecting snapshot/full-capture or idle-detection paths.
 - **`kill` addresses managed sessions by target** `workspace` - `zmux kill
-  workspace/session` (and bare workspace-local labels) now routes through the
+workspace/session` (and bare workspace-local labels) now routes through the
   shared session-target resolver instead of only matching raw tmux names, so a
   managed session is killable by the same address `run`, `send`, and `watch`
   use. `kill -y/--yes` skips the workspace teardown confirmation for scripted

@@ -55,11 +55,15 @@ zmux_interactive_type({
 })
 ```
 
-After extension changes, prefer the soft reload path:
+After Pi extension/skill changes, prefer the soft Pi reload path:
 
 ```text
-zmux_reload({})
+zmux_pi_reload({
+  "continuationPrompt": "Reload complete; verify the updated tools and continue."
+})
 ```
 
-It queues `/zmux reload` as a follow-up command. Use `zmux_pi_respawn` only when
-soft reload is unavailable or Pi is wedged.
+It uses zmux/tmux to type Pi's built-in `/reload` into the current Pi pane after
+a short delay, then nudges the agent after reload. `zmux_reload` is reserved for
+zmux's own config reload. Use `zmux_pi_respawn` only when soft Pi reload is
+unavailable or Pi is wedged.

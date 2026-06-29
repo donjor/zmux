@@ -1,9 +1,10 @@
 import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { classifyBash, hasExplicitBypass, shouldBlock } from "./classify.js";
 import { loadConfig } from "./config.js";
-import { takeRespawnContinuation } from "./respawn-continuation.js";
+import { takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
+import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
 import { registerZmuxTools } from "./tools.js";
-import { currentPane, listTabs, zmux } from "./zmux.js";
+import { currentPane, listTabs, reloadZmux, zmux } from "./zmux.js";
 
 
 function compact(value: string, max = 1200): string {
@@ -42,6 +43,23 @@ async function buildContext(cwd: string, projectTrusted: boolean): Promise<strin
 	].join("\n");
 }
 
+function sendContinuation(
+	pi: ExtensionAPI,
+	kind: "reload" | "respawn",
+	continuation: ReloadContinuation | RespawnContinuation,
+): void {
+	pi.sendMessage({
+		customType: `pi-zmux-${kind}-continuation`,
+		content: continuation.prompt,
+		display: true,
+		details: {
+			kind: `${kind}_continuation`,
+			createdAt: continuation.createdAt,
+			...("handoffPath" in continuation ? { handoffPath: continuation.handoffPath } : {}),
+		},
+	}, { deliverAs: "followUp", triggerTurn: true });
+}
+
 export default function (pi: ExtensionAPI): void {
 	registerZmuxTools(pi);
 
@@ -52,19 +70,17 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => {
-		const continuation = takeRespawnContinuation(ctx.cwd);
-		if (!continuation) return;
+		const reloadContinuation = takeReloadContinuation(ctx.cwd);
+		if (reloadContinuation) {
+			ctx.ui.notify("pi-zmux · reload continuation ready", "info");
+			sendContinuation(pi, "reload", reloadContinuation);
+			return;
+		}
+
+		const respawnContinuation = takeRespawnContinuation(ctx.cwd);
+		if (!respawnContinuation) return;
 		ctx.ui.notify("pi-zmux · respawn continuation ready", "info");
-		pi.sendMessage({
-			customType: "pi-zmux-respawn-continuation",
-			content: continuation.prompt,
-			display: true,
-			details: {
-				kind: "respawn_continuation",
-				createdAt: continuation.createdAt,
-				handoffPath: continuation.handoffPath,
-			},
-		}, { deliverAs: "followUp", triggerTurn: true });
+		sendContinuation(pi, "respawn", respawnContinuation);
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
@@ -95,11 +111,12 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("zmux", {
-		description: "Show pi-zmux context and policy, or reload with `/zmux reload`",
+		description: "Show pi-zmux context and policy, or run zmux config reload with `/zmux reload`",
 		handler: async (args, ctx) => {
 			const command = args.trim();
 			if (command === "reload") {
-				await ctx.reload();
+				const result = await reloadZmux(ctx.cwd);
+				ctx.ui.notify(result.text, "info");
 				return;
 			}
 			if (command && command !== "status") {

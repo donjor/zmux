@@ -1,6 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { writeReloadContinuation } from "./reload-continuation.js";
 import { writeRespawnContinuation } from "./respawn-continuation.js";
 import { runFile, spawnDetached, trimOutput } from "./shell.js";
 
@@ -139,6 +140,12 @@ export async function capabilities(cwd: string): Promise<string> {
 	}
 }
 
+export async function reloadZmux(cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(["reload"], { cwd, timeoutMs: 15_000 });
+	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+	return { text: output || "reloaded zmux", details: { command: "zmux reload" } };
+}
+
 export async function runtimeEnsure(params: {
 	tab: string;
 	command: string;
@@ -233,6 +240,38 @@ export async function focusTab(tab: string, cwd: string): Promise<{ text: string
 	if (!pane?.Session) throw new Error("cannot resolve current zmux session for tab focus");
 	await tmux(["select-window", "-t", `${pane.Session}:${tab}`], { cwd, timeoutMs: 5_000 });
 	return { text: `focused tab ${tab}`, details: { tab, session: pane.Session } };
+}
+
+export async function schedulePiReload(params: {
+	cwd: string;
+	paneId?: string;
+	delayMs?: number;
+	continuationPrompt?: string;
+}): Promise<{ text: string; details: Record<string, unknown> }> {
+	const pane = params.paneId ?? (await currentPane(params.cwd))?.ID;
+	if (!pane) throw new Error("cannot resolve current pane for Pi reload");
+	const prompt = params.continuationPrompt?.trim() || "Pi runtime reload complete. Continue the work from before reload; first verify the reloaded tool/extension surface if that was the reason for reload.";
+	const continuationPath = writeReloadContinuation(params.cwd, {
+		createdAt: new Date().toISOString(),
+		prompt,
+	});
+	const delayMs = params.delayMs ?? 5_000;
+	const script = buildPiReloadScript({ cwd: params.cwd, pane, delayMs });
+	spawnDetached("bash", ["-lc", script], { cwd: params.cwd });
+	return {
+		text: `scheduled Pi /reload for ${pane}`,
+		details: { pane, delayMs, continuationPath, method: "tmux send-keys /reload Enter" },
+	};
+}
+
+export function buildPiReloadScript(params: { cwd: string; pane: string; delayMs: number }): string {
+	const delay = Math.max(0, params.delayMs) / 1000;
+	const tmuxArgs = ["tmux", ...tmuxPrefix(), "send-keys", "-t", params.pane, "/reload", "Enter"];
+	return [
+		`cd ${shellQuote(params.cwd)}`,
+		`sleep ${delay}`,
+		tmuxArgs.map(shellQuote).join(" "),
+	].join("; ");
 }
 
 export async function schedulePiRespawn(params: {
