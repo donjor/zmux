@@ -6,13 +6,15 @@
 
 ## Now
 
-The pane/tab foundation and agent-addressability close-out shipped (plan 042 —
-see the changelog): `snapshot --pane` and bare `tab pane` now honour the shared
-tab resolver, `CurrentHost` is pane-canonical so the join host matches what
-`zmux where` reports, `pane list --joined` plus peer/worker doctrine let agents
-reuse an active joined pane, a one-key `tab split` creates-and-joins in one
-motion, and a right-click pane menu exposes promote/hide/kill per pane. That
-clears the Now bucket; the next focus is **Remote & nested zmux** (below).
+The pane/tab foundation and agent-addressability close-out shipped; see the
+changelog for shipped details. `snapshot --pane` and bare `tab pane` now honour
+the shared tab resolver, `CurrentHost` is pane-canonical so the join host
+matches what `zmux where` reports, `pane list --joined` plus peer/worker
+doctrine let agents reuse an active joined pane, a one-key `tab split`
+creates-and-joins in one motion, and right-click pane/status-row menus expose
+join-back/promote/hide/kill per pane. Follow-up UX also made hidden panes
+parent-scoped (`󰏤[N] name~`) and stopped hiding full tabs. That clears the Now
+bucket; the next focus is **Remote & nested zmux** (below).
 
 One residual is deferred to *Later → Pane direct-manipulation* (header
 drag-swap) — the right-click menu shipped, but tmux 3.4 cannot separate a

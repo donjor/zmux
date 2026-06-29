@@ -5,20 +5,34 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
+
 > Release tag: pending | Topics: `panes`, `tabs`, `agents` | Compare: `v0.10.0...HEAD`
 
 ### Added
 
+- **Current Pi zmux extension overhaul** `agents` - `pi-extension/` now targets
+  current Pi (`0.80.x`), loads as the settings-managed local package, exposes
+  refreshed typed tools for runtimes, panes, tab input, soft `/zmux reload`, and
+  hard respawn fallback, and keeps bash guardrails aligned with the shared zmux
+  classifier corpus. `./dev.sh zmux` now reports disabled Pi settings and
+  removes the retired global extension symlink instead of silently relinking it.
+- **Parent-scoped parked pane affordances** `tabs` `panes` - `prefix+h` hides a
+  focused joined pane under its parent, `prefix+H` prompts for the visible
+  parent-local index/name to rejoin it, and the logical tabs row renders joined
+  and hidden children with one compact badge grammar (`󰏤 name`, `󰏤[1] name~`).
+  Full tabs stay top-level and are no longer hideable; hidden panes can still be
+  promoted to full tabs explicitly.
 - **`zmux tab split` joins a new pane in one keystroke** `tabs` - a single
   `prefix` binding creates a managed tab in the current cwd and joins it beside
   the focused pane in one motion, replacing the create-then-join two-step. The
   host is snapshotted before the detached `NewWindow` so creating the tab can't
   steal focus from the pane it joins.
-- **Right-click pane menu** `panes` - right-clicking a joined pane opens a
-  native tmux `display-menu` scoped to that pane with promote-to-full,
-  hide-to-dock, and kill actions, each targeting `#{mouse_pane}` rather than the
-  focused pane. (Header drag-swap stays deferred — tmux 3.4 can't separate a
-  header drag from native border-resize; see ROADMAP → Later.)
+- **Right-click pane/status-row menus** `panes` - right-clicking a joined pane
+  or managed logical tab-row cell opens a native tmux `display-menu` scoped to
+  the clicked pane via `{mouse}` / `#{pane_id}` with join-back, promote-to-full,
+  hide-pane, and kill actions where they apply. (Header drag-swap stays deferred
+  — tmux 3.4 can't separate a header drag from native border-resize; see ROADMAP
+  → Later.)
 - **`pane list --joined` agent discovery surface** `agents` - lists the
   session's joined logical panes (tab, host, anchor, caller) so agents and the
   peer/worker skill doctrine can reuse an already-active joined pane for
@@ -37,6 +51,7 @@ versioning is semver-ish until the first public release.
   on the same target when focus sits on a joined rider pane.
 
 ## [0.10.0] - 2026-06-28
+
 > Release tag: `v0.10.0` | Topics: `agents`, `palette`, `help`, `panes`, `tabs`, `session` | Compare: `v0.9.0...v0.10.0`
 
 ### Added
@@ -108,6 +123,7 @@ versioning is semver-ish until the first public release.
   the fallback works without touching the user's global setting.
 
 ## [0.9.0] - 2026-06-21
+
 > Release tag: `v0.9.0` | Topics: `agents`, `workspace`, `dashboard`, `ui` | Compare: `v0.8.0...v0.9.0`
 
 ### Added
@@ -223,6 +239,7 @@ versioning is semver-ish until the first public release.
   precondition check.
 
 ## [0.8.0] - 2026-06-09
+
 > Release tag: `v0.8.0` | Topics: `watch`, `tabs`, `qa`, `recipes`, `agents`, `docs` | Compare: `v0.7.0...v0.8.0`
 
 ### Added
@@ -258,6 +275,7 @@ versioning is semver-ish until the first public release.
   polished.
 
 ## [0.7.0] - 2026-06-04
+
 > Release tag: `v0.7.0` | Topics: `bar`, `picker`, `tabs`, `guard`, `agents`, `docs` | Compare: `v0.6.0...v0.7.0`
 
 ### Added
@@ -279,6 +297,7 @@ versioning is semver-ish until the first public release.
   through the active profile binary.
 
 ## [0.6.0] - 2026-05-26
+
 > Release tag: `v0.6.0` | Topics: `architecture`, `ci`, `snapshot`, `zzmux`, `tui`, `docs` | Compare: `v0.5.0...v0.6.0`
 
 ### Added
@@ -301,6 +320,7 @@ versioning is semver-ish until the first public release.
   closed after follow-up refactors.
 
 ## [0.5.0] - 2026-05-05
+
 > Release tag: `v0.5.0` | Topics: `workspace`, `panes`, `terminal`, `pi`, `tabs` | Compare: `v0.4.0...v0.5.0`
 
 ### Added
@@ -323,6 +343,7 @@ versioning is semver-ish until the first public release.
   only for failed exits.
 
 ## [0.4.0] - 2026-04-08
+
 > Release tag: `v0.4.0` | Topics: `workspace`, `dashboard`, `outline`, `tests`, `detox` | Compare: `v0.3.0...v0.4.0`
 
 ### Added
@@ -347,6 +368,7 @@ versioning is semver-ish until the first public release.
   were corrected.
 
 ## [0.3.0] - 2026-04-07
+
 > Release tag: `v0.3.0` | Topics: `keys`, `tabs`, `workspace`, `bar`, `docs` | Compare: `v0.2.0...v0.3.0`
 
 ### Added
@@ -373,6 +395,7 @@ versioning is semver-ish until the first public release.
   were corrected.
 
 ## [0.2.0] - 2026-03-20
+
 > Release tag: `v0.2.0` | Topics: `install`, `picker`, `dashboard`, `sessions`, `agents`, `docs` | Compare: `v0.1.0...v0.2.0`
 
 ### Added
@@ -395,6 +418,7 @@ versioning is semver-ish until the first public release.
   so old text cannot satisfy new waits.
 
 ## [0.1.0] - 2026-03-16
+
 > Release tag: `v0.1.0` | Topics: `core`, `themes`, `tmux`, `bar`, `tui`, `tests` | Compare: initial
 
 ### Added
