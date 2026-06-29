@@ -1,5 +1,5 @@
-import { Type } from "@mariozechner/pi-ai";
-import { defineTool, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "typebox";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolve } from "node:path";
 import { loadConfig, mergeRuntimeConfig } from "./config.js";
 import {
@@ -40,7 +40,7 @@ function shouldWaitForExit(command: string): boolean {
 }
 
 export function registerZmuxTools(pi: ExtensionAPI): void {
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_current",
 		label: "zmux current",
 		description: "Inspect current zmux/tmux context: pane, tabs, terminal RGB capabilities, and loaded pi-zmux config. Use before managing persistent runtimes, panes, sidecars, or ambiguous sessions.",
@@ -58,9 +58,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 				`terminal capabilities:\n${caps}`,
 			].join("\n"), { pane, tabs, capabilities: caps, config });
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_tabs",
 		label: "zmux tabs",
 		description: "List tabs/windows in the current zmux session. Prefer this over running `zmux tabs` through bash.",
@@ -70,9 +70,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const tabs = await listTabs(ctx.cwd);
 			return content(tabs, { tabs });
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_tab_kill",
 		label: "zmux tab kill",
 		description: "Kill a zmux tab/window by name. Use for intentional tab cleanup instead of shelling out to `zmux tab kill` in bash.",
@@ -85,9 +85,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await killTab(params.tab, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_tab_focus",
 		label: "zmux tab focus",
 		description: "Focus a zmux tab/window by name. Ask the user before using this in agent sessions because it moves terminal focus.",
@@ -100,9 +100,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await focusTab(params.tab, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_send_keys",
 		label: "zmux send keys",
 		description: "Send raw keys such as C-c, Enter, Escape, or arrows to a zmux tab. Prefer this over `zmux send` in bash.",
@@ -116,9 +116,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await sendKeys(params.tab, params.keys, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_type",
 		label: "zmux type",
 		description: "Type text plus Enter into an existing zmux tab. For sudo/password/manual-input commands, prefer zmux_interactive_type.",
@@ -132,9 +132,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await typeText(params.tab, params.text, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_pane_send_keys",
 		label: "zmux pane send keys",
 		description: "Send raw keys to a specific tmux pane id/title/index. Use for sidecar panes returned by clean_split_control instead of `tmux send-keys` in bash.",
@@ -148,9 +148,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await sendPaneKeys(params.pane, params.keys, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_pane_type",
 		label: "zmux pane type",
 		description: "Type text plus Enter into a specific tmux pane id/title/index. Use for sidecar panes returned by clean_split_control instead of `tmux send-keys` in bash.",
@@ -164,9 +164,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await typePaneText(params.pane, params.text, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_pane_list",
 		label: "zmux pane list",
 		description: "List panes in the current zmux window. Prefer this over `zmux pane list` in bash.",
@@ -176,9 +176,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const panes = await listPanes(ctx.cwd);
 			return content(panes, { panes });
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_pane_focus",
 		label: "zmux pane focus",
 		description: "Focus a zmux pane by id/title/index. Prefer this over `zmux pane focus` in bash.",
@@ -191,9 +191,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await focusPane(params.pane, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_pane_close",
 		label: "zmux pane close",
 		description: "Close a zmux pane by id/title/index. Use for intentional pane cleanup instead of shelling out to `zmux pane close` in bash.",
@@ -206,9 +206,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await closePane(params.pane, resolveCwd(ctx.cwd, params.cwd));
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_pi_respawn",
 		label: "zmux Pi respawn",
 		description: "Hard-restart the current Pi agent pane by respawning it with `pi -c`. Use after verified Pi extension/tooling changes when soft `/reload` is unavailable, or when Pi is wedged; this kills the current pane process and discards unsent input. If autonomous follow-up is expected, pass continuationPrompt.",
@@ -235,9 +235,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			});
 			return content(result.text, result.details);
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_runtime_ensure",
 		label: "zmux runtime ensure",
 		description: "Ensure software under development is running in a stable named zmux tab. Use for dev servers, API services, workers, watch processes, TUI demos, and any persistent runtime instead of running them through bash.",
@@ -272,9 +272,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			});
 			return content(result.text, { ...result.details, name: params.name, kind: runtime.kind, configPath: config.path });
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_runtime_logs",
 		label: "zmux runtime logs",
 		description: "Read logs/output from a named zmux runtime tab. Use when debugging software that should already be running instead of starting a duplicate process.",
@@ -291,9 +291,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await runtimeLogs(runtime.tab, resolveCwd(ctx.cwd, runtime.cwd), params.lines ?? 120);
 			return content(result.text, { ...result.details, name: params.name, configPath: config.path });
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_runtime_stop",
 		label: "zmux runtime stop",
 		description: "Stop a named zmux runtime tab by sending C-c. Use for visible, controlled shutdown of dev servers, watchers, workers, or demos.",
@@ -309,9 +309,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const result = await runtimeStop(runtime.tab, resolveCwd(ctx.cwd, runtime.cwd));
 			return content(result.text, { ...result.details, name: params.name, configPath: config.path });
 		},
-	}));
+	});
 
-	pi.registerTool(defineTool({
+	pi.registerTool({
 		name: "zmux_interactive_type",
 		label: "zmux interactive type",
 		description: "Type an interactive or privileged command into a shared zmux tab. Use for sudo, ssh, REPLs, database shells, or commands needing user input instead of running them in bash.",
@@ -346,5 +346,5 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 			const note = waitForExit || params.waitFor ? "" : `\nTell the user to complete any prompts in tab ${tab}.`;
 			return content(`${result.text}${note}`, result.details);
 		},
-	}));
+	});
 }

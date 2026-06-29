@@ -23,7 +23,7 @@ from under you and your next command lands on the wrong slot. Reach for the zmux
 `run -n` over `new-window`.
 
 A harness hook guard (`hooks/zmux-guard.mjs`; Claude wires it as `PreToolUse`, Pi via
-`pi-donjor-harness`'s `tool_call` hook) **blocks** raw tmux and ad-hoc background jobs
+this repo's `pi-zmux` extension) **blocks** raw tmux and ad-hoc background jobs
 — shell `&`/`nohup`, `npm run dev`, and Claude's Bash `run_in_background: true` — and
 prints the right verb back, so a slip self-corrects. The full mapping table, guard
 exemptions, and tab-state glyph behavior → **`references/guard-and-tab-states.md`**.

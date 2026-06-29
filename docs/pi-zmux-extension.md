@@ -1,24 +1,25 @@
 # Pi zmux extension
 
 The zmux repo owns a Pi extension in [`pi-extension/`](../pi-extension/). It is
-intended to be symlinked into Pi's global extension directory:
+loaded as a local Pi package from `~/.pi/agent/settings.json`:
 
-```bash
-ln -s /home/user/donjor/zmux/pi-extension ~/.pi/agent/extensions/pi-zmux
+```json
+{ "source": "../../donjor/zmux/pi-extension", "extensions": ["+index.ts"] }
 ```
 
 The repo also owns the zmux skill in [`skills/zmux/`](../skills/zmux/). On the
 maintainer setup, the skill is exposed to Pi through the shared generated skill
-mirror at `~/.pi/agent/skills/donjor/zmux` rather than the disabled direct
-`~/.pi/agent/skills/zmux` path. The full shared-skills setup, including Pi
-settings, lives in `~/donjor/skills`:
+mirror at `~/.pi/agent/skills/donjor/zmux` rather than direct extension resource
+discovery. The full shared-skills setup, including Pi settings, lives in
+`~/donjor/skills`:
 
 ```bash
 node /home/user/donjor/skills/pi/sync-pi.mjs
 ```
 
-For this repo's maintainer loop, `./dev.sh zmux` only refreshes the mirrors and
-relinks the Pi extension; it does not rewrite global agent settings.
+For this repo's maintainer loop, `./dev.sh zmux` refreshes the mirrors and keeps
+the legacy global extension symlink aligned for quick local tests; `node
+/home/user/donjor/skills/pi/sync-pi.mjs` is the settings source of truth.
 The skill keeps its hot operational doctrine in `SKILL.md`, with deeper command
 lookup in [`references/cli-catalog.md`](../skills/zmux/references/cli-catalog.md).
 The raw-tmux→zmux verb mapping table, guard exemptions, and tab lifecycle glyphs

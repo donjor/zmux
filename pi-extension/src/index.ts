@@ -1,16 +1,9 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { isToolCallEventType, type ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { classifyBash, hasExplicitBypass, shouldBlock } from "./classify.js";
 import { loadConfig } from "./config.js";
 import { takeRespawnContinuation } from "./respawn-continuation.js";
 import { registerZmuxTools } from "./tools.js";
 import { currentPane, listTabs } from "./zmux.js";
-
-const EXTENSION_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
-const REPO_ROOT = dirname(EXTENSION_ROOT);
-const SKILLS_DIR = join(REPO_ROOT, "skills");
 
 function compact(value: string, max = 1200): string {
 	if (value.length <= max) return value;
@@ -36,8 +29,6 @@ async function buildContext(cwd: string): Promise<string> {
 
 export default function (pi: ExtensionAPI): void {
 	registerZmuxTools(pi);
-
-	pi.on("resources_discover", async () => (existsSync(SKILLS_DIR) ? { skillPaths: [SKILLS_DIR] } : {}));
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		const zmuxContext = await buildContext(ctx.cwd);
