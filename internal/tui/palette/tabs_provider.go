@@ -11,13 +11,13 @@ import (
 // matches by id at run time, so a tab that moved or closed between palette-open
 // and execution is handled cleanly rather than acted on stale.
 
-// TabHidePayload parks a tab in the hidden dock.
+// TabHidePayload parks a joined pane under its parent.
 type TabHidePayload struct{ TabID string }
 
-// TabShowPayload returns a docked tab to its origin session.
+// TabShowPayload rejoins a hidden pane under its recorded parent.
 type TabShowPayload struct{ TabID string }
 
-// TabPromotePayload breaks a pane-of tab out into a full window.
+// TabPromotePayload breaks a visible or hidden pane-tab out into a full window.
 type TabPromotePayload struct{ TabID string }
 
 // TabJoinPayload joins a tab into the current tab as a pane.
@@ -54,16 +54,29 @@ func tabActionsFor(all []tabs.LogicalTab, currentID string) []Action {
 		name := tabs.DisplayName(t)
 		switch t.Placement {
 		case tabs.PlacementDock:
-			out = append(out, Action{
-				ID:       "tab:show:" + t.ID,
-				Group:    "Tabs",
-				Title:    "Show " + name,
-				Subtitle: "hidden",
-				Keywords: []string{"tab", "show", "unhide", "dock", name},
-				Kind:     ActionExec,
-				Covers:   "tab.show",
-				Payload:  TabShowPayload{TabID: t.ID},
-			})
+			out = append(
+				out,
+				Action{
+					ID:       "tab:show:" + t.ID,
+					Group:    "Tabs",
+					Title:    "Join back " + name,
+					Subtitle: "hidden pane",
+					Keywords: []string{"tab", "show", "unhide", "join", "parked", name},
+					Kind:     ActionExec,
+					Covers:   "tab.show",
+					Payload:  TabShowPayload{TabID: t.ID},
+				},
+				Action{
+					ID:       "tab:full:" + t.ID,
+					Group:    "Tabs",
+					Title:    "Promote " + name + " to a full tab",
+					Subtitle: "hidden pane",
+					Keywords: []string{"tab", "full", "promote", "parked", name},
+					Kind:     ActionExec,
+					Covers:   "tab.full",
+					Payload:  TabPromotePayload{TabID: t.ID},
+				},
+			)
 		case tabs.PlacementPaneOf:
 			out = append(
 				out,
@@ -79,7 +92,6 @@ func tabActionsFor(all []tabs.LogicalTab, currentID string) []Action {
 				tabHideAction(t, name),
 			)
 		case tabs.PlacementFull:
-			out = append(out, tabHideAction(t, name))
 			if currentID != "" && t.ID != currentID {
 				out = append(out, Action{
 					ID:       "tab:pane:" + t.ID,
@@ -100,8 +112,8 @@ func tabHideAction(t *tabs.LogicalTab, name string) Action {
 	return Action{
 		ID:       "tab:hide:" + t.ID,
 		Group:    "Tabs",
-		Title:    "Hide " + name,
-		Keywords: []string{"tab", "hide", "park", "dock", name},
+		Title:    "Hide pane " + name,
+		Keywords: []string{"tab", "hide", "park", "pane", name},
 		Kind:     ActionExec,
 		Covers:   "tab.hide",
 		Payload:  TabHidePayload{TabID: t.ID},

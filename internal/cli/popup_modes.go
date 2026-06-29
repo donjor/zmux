@@ -368,9 +368,9 @@ func touchPickerMRU(app *apppkg.App, sessionName, tabID string) {
 	}
 }
 
-// showPickedTab returns a hidden tab from the dock to its origin and focuses
+// showPickedTab rejoins a hidden pane under its recorded parent and focuses
 // it: same clone-block + Show + epilogue as `zmux tab show`, then a re-scan
-// finds where the window landed so the client can jump to it.
+// finds where the pane landed so the client can jump to it.
 func showPickedTab(app *apppkg.App, sessionName, tabID string) error {
 	all, err := tabspkg.ListLogicalTabs(app.Runner)
 	if err != nil {
@@ -378,7 +378,7 @@ func showPickedTab(app *apppkg.App, sessionName, tabID string) error {
 	}
 	t := tabspkg.ByID(all, tabID)
 	if t == nil {
-		return fmt.Errorf("hidden tab no longer exists")
+		return fmt.Errorf("hidden pane no longer exists")
 	}
 	_, err = tabspkg.ShowTab(app.Runner, t)
 	if err != nil {
@@ -394,6 +394,11 @@ func showPickedTab(app *apppkg.App, sessionName, tabID string) error {
 		if shown := tabspkg.ByID(all, tabID); shown != nil && shown.Session == origin {
 			if err := app.Runner.SelectWindow(origin, shown.WindowIndex); err != nil {
 				return err
+			}
+			if shown.PaneID != "" {
+				if err := app.Runner.SelectPane(shown.PaneID); err != nil {
+					return err
+				}
 			}
 		}
 	}

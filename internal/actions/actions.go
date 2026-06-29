@@ -75,10 +75,10 @@ var specs = []Spec{
 	{ID: "label.tab", Palette: Excluded, Exec: ExecNone, Reason: "prompts for a free-text label (command-prompt); needs input UX the palette lacks"},
 	{ID: "tab.pane", Palette: Dynamic, Exec: ExecDynamicProvider, Reason: "needs a source tab to join; surfaced as a per-tab family"},
 	{ID: "tab.full", Palette: Dynamic, Exec: ExecDynamicProvider, Reason: "needs a pane-tab to promote; surfaced as a per-tab family"},
-	// tab.hide/tab.show have no keybinding (CLI + palette only); surfaced by the
-	// same per-tab dynamic family as tab.pane/tab.full.
-	{ID: "tab.hide", Palette: Dynamic, Exec: ExecDynamicProvider, Reason: "needs a tab to hide; surfaced as a per-tab family"},
-	{ID: "tab.show", Palette: Dynamic, Exec: ExecDynamicProvider, Reason: "needs a docked tab to show; surfaced as a per-tab family"},
+	// tab.hide/tab.show are also keybound; the palette still surfaces them as
+	// targetful per-tab rows because they need a concrete pane/tab payload.
+	{ID: "tab.hide", Palette: Dynamic, Exec: ExecDynamicProvider, Reason: "needs a joined pane to hide; surfaced as a per-tab family"},
+	{ID: "tab.show", Palette: Dynamic, Exec: ExecDynamicProvider, Reason: "needs a hidden pane to join back; surfaced as a per-tab family"},
 
 	// ── Sessions (prefix) ──
 	{ID: "session.picker", Palette: Excluded, Exec: ExecNone, Reason: "nested workspace+session picker popup; the Sessions provider lists sessions directly"},

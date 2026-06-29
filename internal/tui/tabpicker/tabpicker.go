@@ -58,7 +58,7 @@ type TabPickerResult struct {
 
 // tabEntryKind says what a picker row actually is: a window slot (raw
 // window or full tab), a pane-of tab riding inside a host window, or a
-// docked tab whose origin is this session.
+// hidden pane-tab whose origin is this session.
 type tabEntryKind int
 
 const (
@@ -78,7 +78,7 @@ type tabEntry struct {
 }
 
 // displayName is the row label: the logical label when one exists, else
-// the window name (or the tab id for unlabeled riders/hidden tabs).
+// the window name (or the tab id for unlabeled riders/hidden panes).
 func (t *tabEntry) displayName() string {
 	if t.Tab != nil && (t.Kind != teWindow || t.Tab.Label != "") {
 		return tabs.DisplayName(t.Tab)
@@ -456,8 +456,8 @@ func (m TabPickerModel) handleTabLevel(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // selectResult maps the cursor row to its selection action: windows select
-// by index, riders focus their pane inside the host window, hidden tabs
-// come back from the dock via show.
+// by index, riders focus their pane inside the host window, and hidden panes
+// rejoin their recorded parent via show.
 func (m TabPickerModel) selectResult(t *tabEntry) TabPickerResult {
 	res := TabPickerResult{Session: m.drilled}
 	if t.Tab != nil {

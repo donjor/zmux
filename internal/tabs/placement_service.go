@@ -15,7 +15,7 @@ import (
 //
 // The raw moves (Hide/Show/Join/Promote) stay separate; these wrap them.
 
-// HideTab parks t in the hidden dock after the clone-block guard, then heals.
+// HideTab parks a pane-tab in the hidden dock after the clone-block guard, then heals.
 func HideTab(r tmux.Runner, t *LogicalTab) error {
 	if err := guardClones(r, t.Session); err != nil {
 		return err
@@ -27,7 +27,7 @@ func HideTab(r tmux.Runner, t *LogicalTab) error {
 	return nil
 }
 
-// ShowTab returns a docked tab to its origin session, guarding the origin's
+// ShowTab rejoins a hidden pane under its recorded parent, guarding the origin's
 // clones, then heals. Returns the origin session name.
 func ShowTab(r tmux.Runner, t *LogicalTab) (string, error) {
 	if t.Placement == PlacementDock {

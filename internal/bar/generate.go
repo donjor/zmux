@@ -65,8 +65,9 @@ const TmuxDefaultStatusFormat = statusFmtLeftSection + statusFmtWindowList + sta
 
 // TabsRowStatusFormat is TmuxDefaultStatusFormat with the native window list
 // swapped for the dynamic logical tabs row (`bar-render tabs`): pane-of tabs
-// ride their host cell, docked tabs group dim at the end, state glyphs come
-// from pane-canonical state. status-left/right keep native rendering. The
+// ride their host cell, hidden pane-tabs render dim under their parent, state
+// glyphs come from pane-canonical state. status-left/right keep native
+// rendering. The
 // native window list is the fallback when no zmux binary is available.
 //
 // No #[range=window|N] click targets in the dynamic row (directive support

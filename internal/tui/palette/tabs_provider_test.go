@@ -26,12 +26,11 @@ func TestTabActionsForEligibilityByPlacement(t *testing.T) {
 	got := payloadIDs(tabActionsFor(all, "ztab_cur"))
 
 	want := []string{
-		"tab:hide:ztab_full", // full → hide
 		"tab:pane:ztab_full", // full (not current) → join into current
-		"tab:hide:ztab_cur",  // current full → hide (allowed)
 		"tab:full:ztab_pane", // pane-of → promote
-		"tab:hide:ztab_pane", // pane-of → hide (breaks out to dock)
-		"tab:show:ztab_dock", // dock → show
+		"tab:hide:ztab_pane", // pane-of → hide under parent
+		"tab:show:ztab_dock", // hidden pane → join back
+		"tab:full:ztab_dock", // hidden pane → promote to full
 	}
 	for _, id := range want {
 		if _, ok := got[id]; !ok {
@@ -43,10 +42,10 @@ func TestTabActionsForEligibilityByPlacement(t *testing.T) {
 	if _, ok := got["tab:pane:ztab_cur"]; ok {
 		t.Errorf("current tab offered a join-into-self row")
 	}
-	// A docked tab is not hideable (already hidden) and not promotable.
-	for _, bad := range []string{"tab:hide:ztab_dock", "tab:full:ztab_dock"} {
+	// Full tabs are not hideable; hidden panes are already hidden.
+	for _, bad := range []string{"tab:hide:ztab_full", "tab:hide:ztab_cur", "tab:hide:ztab_dock"} {
 		if _, ok := got[bad]; ok {
-			t.Errorf("dock tab wrongly offered %q", bad)
+			t.Errorf("wrongly offered %q", bad)
 		}
 	}
 }
@@ -57,8 +56,8 @@ func TestTabActionsForNoCurrentHostOmitsJoin(t *testing.T) {
 	if _, ok := got["tab:pane:ztab_full"]; ok {
 		t.Errorf("join row emitted with no current host")
 	}
-	if _, ok := got["tab:hide:ztab_full"]; !ok {
-		t.Errorf("hide row should still appear without a host")
+	if _, ok := got["tab:hide:ztab_full"]; ok {
+		t.Errorf("full-tab hide row should not appear without a host")
 	}
 }
 
