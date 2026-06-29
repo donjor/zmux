@@ -12,14 +12,14 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
-const parkedPaneGlyph = "󰏤"
+const childPaneGlyph = "󰏤"
 
 // RenderTabsRow renders the logical tab row for one session from a single
 // server scan: every window of the session in index order (label-aware
-// names, pane-canonical state glyphs), pane-of tabs riding inside their host
-// cell, and hidden pane-of tabs parked under their recorded parent — hidden,
-// never invisible. The #() job re-runs every status interval, so the
-// running spinner frame is picked here from the wall clock.
+// names, pane-canonical state glyphs), pane-of tabs rendered as child badges
+// inside their host cell, and hidden pane-of tabs parked under their recorded
+// parent — hidden, never invisible. The #() job re-runs every status interval,
+// so the running spinner frame is picked here from the wall clock.
 //
 // Cells wear the preset's chrome (renderTabCell — the window-status-format
 // port); prefix mirrors #{client_prefix} for the presets that tint on it.
@@ -83,9 +83,9 @@ func RenderTabsRow(p *theme.Palette, preset Preset, session, originScope string,
 		if full != nil && full.Label != "" {
 			name = full.Label
 		}
-		// Cell body: name + glyph + riders, no bg directives so the
+		// Cell body: name + glyph + child pane badges, no bg directives so the
 		// preset chrome's pill background flows through. The outer full-tab
-		// range covers the whole preset cell; rider labels briefly close it and
+		// range covers the whole preset cell; child badges briefly close it and
 		// install their own pane range so right-click targets the text under the
 		// cursor instead of the host.
 		var cell strings.Builder
@@ -106,15 +106,15 @@ func RenderTabsRow(p *theme.Palette, preset Preset, session, originScope string,
 				}
 			}
 		}
-		// Pane-of tabs ride inside the host cell: +name, own state glyph.
+		// Pane-of tabs use the same compact child-badge grammar as parked
+		// panes, without the hidden index or trailing ~ marker.
 		for _, r := range ridersByWin[w.id] {
 			if hostRange != "" {
 				cell.WriteString(tabPaneRangeEnd())
 			}
 			riderRange := tabPaneRange(r.PaneID)
 			cell.WriteString(riderRange)
-			fmt.Fprintf(&cell, "#[fg=%s,nobold]+%s", p.Muted.Hex(), tabs.DisplayName(r))
-			cell.WriteString(tabStateGlyph(p, r.State, now))
+			cell.WriteString(renderJoinedPane(p, r, now))
 			if riderRange != "" {
 				cell.WriteString(tabPaneRangeEnd())
 			}
@@ -141,6 +141,10 @@ func RenderTabsRow(p *theme.Palette, preset Preset, session, originScope string,
 	return b.String()
 }
 
+func renderJoinedPane(p *theme.Palette, rider *tabs.LogicalTab, now time.Time) string {
+	return renderChildPaneBadge(p, tabs.DisplayName(rider), rider.State, 0, false, now)
+}
+
 func renderParkedPanes(p *theme.Palette, parked []*tabs.LogicalTab, now time.Time) string {
 	var b strings.Builder
 	for i, h := range parked {
@@ -149,14 +153,30 @@ func renderParkedPanes(p *theme.Palette, parked []*tabs.LogicalTab, now time.Tim
 		// Re-dim per entry — the previous tab's state glyph fg would otherwise
 		// bleed into this name. The accent badge is the target accepted by
 		// prefix+H in the current parent context.
-		fmt.Fprintf(&b, "#[fg=%s,nobold] %s", p.Dim.Hex(), parkedPaneGlyph)
-		fmt.Fprintf(&b, "#[fg=%s,bold][%d]", p.Accent.Hex(), i+1)
-		fmt.Fprintf(&b, "#[fg=%s,nobold] %s~", p.Dim.Hex(), tabs.DisplayName(h))
-		b.WriteString(tabStateGlyph(p, h.State, now))
+		b.WriteString(renderChildPaneBadge(p, tabs.DisplayName(h), h.State, i+1, true, now))
 		if hiddenRange != "" {
 			b.WriteString(tabPaneRangeEnd())
 		}
 	}
+	return b.String()
+}
+
+func renderChildPaneBadge(p *theme.Palette, name, state string, index int, hidden bool, now time.Time) string {
+	var b strings.Builder
+	fg := p.Muted.Hex()
+	if hidden {
+		fg = p.Dim.Hex()
+	}
+	fmt.Fprintf(&b, "#[fg=%s,nobold] %s", fg, childPaneGlyph)
+	if index > 0 {
+		fmt.Fprintf(&b, "#[fg=%s,bold][%d]", p.Accent.Hex(), index)
+	}
+	nameSuffix := ""
+	if hidden {
+		nameSuffix = "~"
+	}
+	fmt.Fprintf(&b, "#[fg=%s,nobold] %s%s", fg, name, nameSuffix)
+	b.WriteString(tabStateGlyph(p, state, now))
 	return b.String()
 }
 

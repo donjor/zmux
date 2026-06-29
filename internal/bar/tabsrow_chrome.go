@@ -10,7 +10,7 @@ package bar
 // #[push-default]/#[pop-default] per cell — in #() output styles leak across
 // cells unless each cell cleans up after itself.
 //
-// `content` arrives pre-rendered (name/label + state glyph + riders) carrying
+// `content` arrives pre-rendered (name/label + state glyph + child badges) carrying
 // no bg directives, so it inherits the cell's background — same in-pill
 // rationale as the old withTabStateFormats injection.
 
@@ -30,7 +30,7 @@ const (
 )
 
 // renderTabCell wraps one logical tab cell in preset chrome. index is the
-// tmux window index; content is the cell body (name, glyph, riders); prefix
+// tmux window index; content is the cell body (name, glyph, child badges); prefix
 // mirrors #{client_prefix} — Blocks/Default tint on it, same as their tmux
 // format conditionals did (which can't expand inside #() output).
 func renderTabCell(p *theme.Palette, preset Preset, index int, content string, active, prefix bool) string {

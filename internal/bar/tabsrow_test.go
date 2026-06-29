@@ -66,7 +66,7 @@ func TestRenderTabsRowComposition(t *testing.T) {
 		" 0 vim",            // raw window, by index
 		" 1 buddy",          // full tab shows its label, not the auto name
 		SpinnerFrame(now),   // running glyph animates from the wall clock
-		"+tests",            // pane-of rider in the host cell
+		"󰏤 tests",           // pane-of rider consolidated as a child badge
 		stateGlyphs["done"], // rider's own pane-canonical glyph
 		"󰏤[1] logs~",        // parked pane grouped inside its parent tab cell
 		stateGlyphs["attention"],
@@ -82,21 +82,26 @@ func TestRenderTabsRowComposition(t *testing.T) {
 	}
 }
 
-// TestRenderTabsRowHiddenGroupStyling pins the docked-group affordance: indexes
-// render as accent badges, and each docked name re-dims after the previous
-// tab's state glyph instead of inheriting that glyph color.
-func TestRenderTabsRowHiddenGroupStyling(t *testing.T) {
+// TestRenderTabsRowChildBadgeStyling pins the consolidated child-pane grammar:
+// visible joined panes and parked panes use the same compact glyph, hidden
+// entries add an accent index badge, and each hidden name re-dims after the
+// previous tab's state glyph instead of inheriting that glyph color.
+func TestRenderTabsRowChildBadgeStyling(t *testing.T) {
 	out := RenderTabsRow(testPalette(), Default, "dev", "dev", tabsRowFixture(), false, time.Unix(0, 0))
 	p := testPalette()
 	for _, want := range []string{
-		"#[fg=" + p.Dim.Hex() + ",nobold] " + parkedPaneGlyph,
+		"#[fg=" + p.Muted.Hex() + ",nobold] " + childPaneGlyph + "#[fg=" + p.Muted.Hex() + ",nobold] tests",
+		"#[fg=" + p.Dim.Hex() + ",nobold] " + childPaneGlyph,
 		"#[fg=" + p.Accent.Hex() + ",bold][1]",
 		"#[fg=" + p.Accent.Hex() + ",bold][2]",
 		"#[fg=" + p.Dim.Hex() + ",nobold] brk~",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("docked group missing %q:\n%s", want, out)
+			t.Errorf("child badge group missing %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(stripStyles(out), "+tests") {
+		t.Errorf("joined pane must not render as +name after consolidation:\n%s", stripStyles(out))
 	}
 }
 
@@ -112,7 +117,7 @@ func TestRenderTabsRowPaneRanges(t *testing.T) {
 	out := RenderTabsRow(testPalette(), Default, "dev", "dev", tabsRowFixture(), false, time.Unix(0, 0))
 	for _, want := range []string{
 		"#[range=pane|%2]", // managed full tab cell
-		"#[range=pane|%3]", // rider segment
+		"#[range=pane|%3]", // visible joined pane badge
 		"#[range=pane|%4]", // hidden entry
 		"#[range=pane|%7]", // second hidden entry
 	} {
@@ -137,7 +142,7 @@ func TestRenderTabsRowGlyphSpacing(t *testing.T) {
 
 	for _, want := range []string{
 		"buddy " + SpinnerFrame(now),             // full-tab glyph spaced
-		"+tests " + stateGlyphs["done"],          // rider glyph spaced
+		"󰏤 tests " + stateGlyphs["done"],         // rider glyph spaced
 		"󰏤[1] logs~ " + stateGlyphs["attention"], // parked glyph spaced after index badge
 	} {
 		if !strings.Contains(flat, want) {
@@ -190,7 +195,7 @@ func TestRenderTabsRowAllPresetsClean(t *testing.T) {
 			t.Errorf("%s: unbalanced pane ranges: starts=%d ends=%d\n%s", preset, starts, ends, out)
 		}
 		flat := stripStyles(out)
-		for _, want := range []string{"vim", "buddy", "+tests"} {
+		for _, want := range []string{"vim", "buddy", "󰏤 tests"} {
 			if !strings.Contains(flat, want) {
 				t.Errorf("%s: missing %q:\n%s", preset, want, flat)
 			}

@@ -268,9 +268,10 @@ Prefix: `Ctrl+Space` (configurable)
 Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
 borders resizes them. Right-clicking a managed pane or logical tab-row cell opens
 a target-aware menu — join back, promote to full, hide pane, or kill the tab
-where that action applies. Hidden panes render under their parent as compact
-parked badges like `󰏤[1] logs~`, and `prefix+H` accepts that parent-local index
-as well as the full name.
+where that action applies. Joined panes render under their parent as compact
+child badges like `󰏤 tests`; hidden panes use the same grammar with an index,
+like `󰏤[1] logs~`, and `prefix+H` accepts that parent-local index as well as
+the full name.
 Failed or signalled foreground
 commands stay visible as dead panes, so Ctrl+C spam cannot silently delete the
 tab; clean exits close normally. Use `prefix+x` / `zmux tab kill` when you mean
