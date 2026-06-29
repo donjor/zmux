@@ -114,9 +114,8 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			ctx.WorkspacePos = wsPos
 			ctx.WorkspaceCount = wsCount
 			// Pane-mode context (plan 040): split detection drives the
-			// split-aware prefix hints (1d); the title is the single-pane
-			// "detail" the border header would otherwise show (1b).
-			ctx.PaneTitle = barRenderPaneTitle
+			// split-aware prefix hints (1d). Pane titles render in tmux-native
+			// pane-border-format for both single-pane and split windows.
 			if n, err := strconv.Atoi(barRenderPanes); err == nil {
 				ctx.WindowPanes = n
 			}
@@ -206,7 +205,7 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 		c.Flags().StringVar(&barRenderGroupSize, "group-size", "", "session group size (passed from tmux #{session_group_size})")
 		c.Flags().StringVar(&barRenderTopBar, "top-bar", "", "top bar variant: tabs, dots, minimal (passed from generate.go)")
 		c.Flags().StringVar(&barRenderPanes, "panes", "", "window pane count (passed from tmux #{window_panes})")
-		c.Flags().StringVar(&barRenderPaneTitle, "pane-title", "", "active pane title (passed from tmux #{pane_title})")
+		c.Flags().StringVar(&barRenderPaneTitle, "pane-title", "", "deprecated no-op; accepted for previously generated status formats")
 	}
 	registerFlags(cmd)
 

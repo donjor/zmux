@@ -113,36 +113,6 @@ func prefixHints(p *theme.Palette, ctx BarContext) string {
 	return b.String()
 }
 
-// paneTitleDetail returns the active pane's title to surface as single-pane
-// "detail" (Phase 1b), or "" when the title is just noise. A split window
-// already shows each title in its border header, so the caller only uses this
-// for a lone pane.
-//
-// ponytail: the noise filter is a cheap hostname/command compare — apps set
-// pane_title to the host by default (see internal/cli/where.go). A real title
-// that happens to equal the host is hidden; acceptable, the border still shows
-// it when split. Upgrade to an explicit "title was set" signal only if it bites.
-func paneTitleDetail(ctx BarContext) string {
-	t := strings.TrimSpace(ctx.PaneTitle)
-	if t == "" || t == ctx.PaneCmd {
-		return ""
-	}
-	if h, err := os.Hostname(); err == nil && (t == h || strings.HasPrefix(t, h+":")) {
-		return ""
-	}
-	return truncTitle(t, 32)
-}
-
-// truncTitle clips an over-long title to max runes with an ellipsis, so a
-// chatty pane title can't blow the status-right width budget.
-func truncTitle(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return string(r[:max-1]) + "…"
-}
-
 // shortPrefixKey collapses verbose key names that don't fit the compact hint
 // format (e.g. "Space" → "spc"). One-off keys keep their literal spelling.
 func shortPrefixKey(k string) string {

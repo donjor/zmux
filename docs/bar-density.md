@@ -58,11 +58,11 @@ shipped:
    budget.
 6. **Indicator compaction** — session indicator as dots (`○●○`), numbers
    (`2/3`), or none.
-7. **Single-pane title** (automatic) — when a window holds one pane, its title
-   (e.g. an agent's task line) surfaces dim at the leading edge of the right bar,
-   truncated to 32 runes. Noise is filtered out — blank titles, the hostname
-   default, and titles matching the running command. Split windows already show
-   each pane's title in the pane-border header, so this only fires for lone panes.
+7. **Pane header detail** (automatic) — every pane, including a single-pane
+   window, uses the tmux pane-border header for `<index> <name> <detail>`. The
+   detail is the pane title (e.g. an agent's task line), so single-pane and split
+   views now share one label surface instead of moving lone-pane titles into the
+   right status bar.
 8. **Split-aware prefix hints** (automatic) — while the prefix is held the right
    bar shows a hint cluster; a split window appends orient / move / even keys so
    pane-layout controls surface only when they apply.

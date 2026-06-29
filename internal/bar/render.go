@@ -31,8 +31,7 @@ type BarContext struct {
 	ViewportID     string // "a" (root), "b", "c" etc. — empty when not grouped
 	PaneDir        string
 	PaneCmd        string
-	PaneTitle      string // active pane's #{pane_title} — agent task line, or noise (hostname)
-	WindowPanes    int    // #{window_panes}: pane count of the current window (0 if unknown)
+	WindowPanes    int // #{window_panes}: pane count of the current window (0 if unknown)
 	Prefix         bool
 	GitBranch      string
 	GitDirty       bool
@@ -261,29 +260,12 @@ func RenderTopOverlay(p *theme.Palette, ctx BarContext, profileName string) stri
 	return "#[align=right]" + strings.Join(parts, "")
 }
 
-// RenderRight generates the right side of the status bar.
-//
-// Phase 1b: a single-pane "detail" (the active pane's title) leads the right
-// cluster, preset-agnostic — a split window already shows each title in its
-// pane border header, so this only fires for a lone, non-prefix pane with a
-// non-noise title. Living in the dispatcher keeps it DRY across every preset
-// instead of editing each renderRight*.
+// RenderRight generates the right side of the status bar. Pane labels/details
+// live in pane-border-format for both single-pane and split windows, so this
+// stays focused on volatile right-side status (prefix hints, git/lang/clock).
 func RenderRight(p *theme.Palette, ctx BarContext, preset Preset) string {
 	applySegmentVisibility(&ctx)
-	return singlePaneDetail(p, ctx) + renderRightPreset(p, ctx, preset)
-}
-
-// singlePaneDetail returns the leading dim title segment for a lone pane, or ""
-// when split, prefix-held, or the title is noise.
-func singlePaneDetail(p *theme.Palette, ctx BarContext) string {
-	if ctx.Prefix || ctx.Split() {
-		return ""
-	}
-	d := paneTitleDetail(ctx)
-	if d == "" {
-		return ""
-	}
-	return fmt.Sprintf("#[fg=%s]%s #[default]", p.Dim.Hex(), d)
+	return renderRightPreset(p, ctx, preset)
 }
 
 func renderRightPreset(p *theme.Palette, ctx BarContext, preset Preset) string {

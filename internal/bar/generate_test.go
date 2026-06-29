@@ -94,16 +94,17 @@ func TestGenerateSharedOptions(t *testing.T) {
 			}
 
 			formatOpt, _ := findOpt(opts, "pane-border-format")
-			// New unified "<N> <name> <detail>" shape: pane_index (not raw
-			// pane_id), the @zmux_tab_id-guarded @zmux_label name, pane_title
-			// detail, command fallback for unmanaged panes.
-			for _, want := range []string{"#{>:#{window_panes},1}", "#{?pane_active", "#{pane_index}", "#{@zmux_tab_id}", "#{@zmux_label}", "#{pane_title}", "#{pane_current_command}"} {
+			// Unified "<N> <name> <detail>" shape: pane_index (not raw pane_id),
+			// the @zmux_tab_id-guarded @zmux_label name, pane_title detail, and
+			// command fallback for unmanaged panes. It is not gated on window_panes:
+			// a lone pane and split panes use the same header language.
+			for _, want := range []string{"#{?pane_active", "#{pane_index}", "#{@zmux_tab_id}", "#{@zmux_label}", "#{pane_title}", "#{pane_current_command}"} {
 				if !strings.Contains(formatOpt.Value, want) {
 					t.Errorf("pane-border-format missing %q in %q", want, formatOpt.Value)
 				}
 			}
-			// The renumbering-noise fields are gone.
-			for _, gone := range []string{"#{pane_id}", "A-S arrows", "#{pane_width}"} {
+			// The split-only gate and renumbering-noise fields are gone.
+			for _, gone := range []string{"#{>:#{window_panes},1}", "#{pane_id}", "A-S arrows", "#{pane_width}"} {
 				if strings.Contains(formatOpt.Value, gone) {
 					t.Errorf("pane-border-format should no longer contain %q in %q", gone, formatOpt.Value)
 				}

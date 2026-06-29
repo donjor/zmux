@@ -44,6 +44,7 @@ cd zmux
 ```
 
 The installer:
+
 1. Checks dependencies (Go, tmux >= 3.2)
 2. Builds the binary
 3. Installs to `~/.local/bin/zmux`
@@ -269,15 +270,14 @@ promote to full, hide to dock, or kill the pane. Failed or signalled foreground
 commands stay visible as dead panes, so Ctrl+C spam cannot silently delete the
 tab; clean exits close normally. Use `prefix+x` / `zmux tab kill` when you mean
 to close a stopped tab.
-Split windows render pane-border headers in one unified shape —
-`<index> <name> <detail>`: the pane index, the tab's label (or its command when
-the pane isn't zmux-managed), and the pane title. Active and inactive panes use
-the same fields (so the line doesn't reflow on focus change); the active pane is
-distinguished by a `●` marker plus split indicators and active-border color
-around the divider/bottom edge, while pane backgrounds stay transparent/default.
-Single-pane windows keep the border header blank, surfacing the pane title in
-the status bar instead. While the prefix is held over a split, the bar's hint
-line gains pane-layout keys (orient/move/even).
+Pane-border headers use one unified shape for both single-pane and split
+windows — `<index> <name> <detail>`: the pane index, the tab's label (or its
+command when the pane isn't zmux-managed), and the pane title. Active and
+inactive panes use the same fields (so the line doesn't reflow on focus change);
+the active pane is distinguished by a `●` marker plus split indicators and
+active-border color around the divider/bottom edge, while pane backgrounds stay
+transparent/default. While the prefix is held over a split, the bar's hint line
+gains pane-layout keys (orient/move/even).
 Auto-named tabs normally use tmux's command name (`pi`, `bash`, etc.). When
 multiple tabs in the same session share that name, zmux marks them as
 `name[cwd]` in the bar (for example `pi[zmux]`) with the cwd suffix dimmed.
@@ -361,6 +361,7 @@ ayu-dark, atom-one-dark, carbonfox, catppuccin-mocha, dracula, gruvbox-dark,
 kanagawa-dragon, material-darker, nord, rose-pine, tokyonight.
 
 **Theme resolution order:**
+
 1. `~/.zmux/themes/<name>` — your custom themes
 2. Bundled (embedded in binary)
 3. `~/.zmux/themes/iterm2/<name>` — downloaded set from `zmux init`
@@ -439,6 +440,7 @@ AI agent workflows. These let agents manage long-running runtimes without
 blocking their own shell or hiding process state.
 
 **Key principles:**
+
 - Use normal agent shell tools for bounded one-shot checks.
 - Never run servers/watchers/long-lived runtimes in the agent shell — use zmux.
 - Never use `&`, `nohup`, or `disown` — use a stable zmux tab.
@@ -447,6 +449,7 @@ blocking their own shell or hiding process state.
   `zmux_interactive_type` tool.
 
 **Example workflow:**
+
 ```bash
 zmux run 'npm test' -n test --session app/main          # waits for completion
 zmux run 'npm run dev' -n server -d --session app/main   # detach for runtimes
@@ -456,6 +459,7 @@ zmux send server C-c --session app/main                  # stop server
 ```
 
 Agent integration lives in this repo:
+
 - `skills/zmux/SKILL.md` is the canonical zmux skill. On the maintainer setup,
   `~/donjor/skills/skills/zmux` symlinks here, and `~/.claude/skills` points at
   that shared skill tree, so Claude does not need a separate repo-local link.

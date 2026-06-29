@@ -28,14 +28,7 @@ const barRenderArgs = "--session '#S'" +
 	" --group-size '#{session_group_size}'" +
 	" --pane-cmd '#{pane_current_command}'" +
 	" --dir '#{pane_current_path}'" +
-	" --panes '#{window_panes}'" +
-	// pane_title is attacker-controllable (any program sets it via an OSC title
-	// escape), and it lands inside the single-quoted #() shell arg. Strip single
-	// quotes via tmux's #{s///} BEFORE embedding: inside single quotes `'` is the
-	// only shell-special char, so removing it makes the arg injection-proof
-	// regardless of other content (codex diff review — this is a trust boundary,
-	// not the cosmetic edge --dir has). The render side filters hostname/cmd noise.
-	" --pane-title '#{s/'//:pane_title}'"
+	" --panes '#{window_panes}'"
 
 // TopBarFormatCmd returns the tmux #() command string for the top bar
 // status-format entry. Used by generate and by bar-render to
@@ -312,14 +305,15 @@ func sharedOptions(p *theme.Palette) []TmuxOption {
 }
 
 func paneBorderFormat(p *theme.Palette) string {
-	// Only a split window gets per-pane headers; a lone pane shows none.
-	// Active and inactive panes render the SAME shape — "<N> <name> <detail>" —
-	// so the line doesn't reflow on focus change. The old format swapped in
-	// pane_id + WxH only for the active pane, which read as the panes
+	// Every pane gets the same header shape — "<N> <name> <detail>" — so a
+	// single pane and a split window use one visual language instead of putting
+	// lone-pane detail directly in status-right. Active and inactive panes render
+	// the SAME fields, so the line doesn't reflow on focus change. The old format
+	// swapped in pane_id + WxH only for the active pane, which read as the panes
 	// renumbering every time focus moved.
 	//   N      = pane_index — stable per slot, not the raw %id.
 	//   name   = the tab's @zmux_label, but ONLY when the pane is zmux-managed
-	//            (@zmux_tab_id is pane-exact). An unmanaged raw split shows its
+	//            (@zmux_tab_id is pane-exact). An unmanaged raw pane shows its
 	//            command instead, so a window-level label can't leak onto it.
 	//   detail = pane_title (e.g. an agent's task line).
 	//
@@ -338,7 +332,7 @@ func paneBorderFormat(p *theme.Palette) string {
 		"#[fg=%s] ○ #{pane_index} #[fg=%s]%s #[fg=%s]#{pane_title} ",
 		p.Dim.Hex(), p.Muted.Hex(), name, p.Dim.Hex(),
 	)
-	return fmt.Sprintf("#{?#{>:#{window_panes},1},#{?pane_active,%s,%s},}", active, inactive)
+	return fmt.Sprintf("#{?pane_active,%s,%s}", active, inactive)
 }
 
 // defaultOptions: Session pill (ACCENT bg, INFO on prefix), prefix hints, clock.

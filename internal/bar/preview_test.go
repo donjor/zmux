@@ -1,7 +1,6 @@
 package bar
 
 import (
-	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -61,35 +60,6 @@ func TestDefaultPrefixHintsIncludeRename(t *testing.T) {
 		if strings.Contains(hints, gone) {
 			t.Errorf("non-split prefix hints should not include %q, got %q", gone, hints)
 		}
-	}
-}
-
-// Phase 1b: the single-pane "detail" filters pane_title noise (empty, the
-// hostname default, the running command) and truncates a chatty title.
-func TestPaneTitleDetailFiltersNoise(t *testing.T) {
-	host, _ := os.Hostname()
-	cases := []struct {
-		name string
-		ctx  BarContext
-		want string
-	}{
-		{"empty", BarContext{PaneTitle: ""}, ""},
-		{"whitespace", BarContext{PaneTitle: "  "}, ""},
-		{"equals command", BarContext{PaneTitle: "vim", PaneCmd: "vim"}, ""},
-		{"hostname default", BarContext{PaneTitle: host}, ""},
-		{"hostname prefix", BarContext{PaneTitle: host + ":~/x"}, ""},
-		{"real title", BarContext{PaneTitle: "fixing the bar"}, "fixing the bar"},
-	}
-	for _, c := range cases {
-		if got := paneTitleDetail(c.ctx); got != c.want {
-			t.Errorf("%s: paneTitleDetail = %q, want %q", c.name, got, c.want)
-		}
-	}
-
-	long := strings.Repeat("x", 50)
-	got := paneTitleDetail(BarContext{PaneTitle: long})
-	if r := []rune(got); len(r) != 32 || r[31] != '…' {
-		t.Errorf("long title should truncate to 32 runes ending in …, got %q (len %d)", got, len([]rune(got)))
 	}
 }
 

@@ -40,6 +40,10 @@ versioning is semver-ish until the first public release.
 
 ### Fixed
 
+- **Single-pane windows use the pane-header label surface** `panes` - the
+  `<index> <name> <detail>` pane-border header now renders for lone panes too,
+  so pane titles and tab labels no longer jump between status-right and the pane
+  header depending on whether a tab is split.
 - **`snapshot --pane` honours the shared tab resolver** `panes` - a `--pane`
   arg is now resolved through the same logical-tab lookup as `watch`/`send`/`run`
   and the captured pane is named from its pinned tab label (command as fallback)

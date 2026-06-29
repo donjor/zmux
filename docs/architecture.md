@@ -192,7 +192,7 @@ The bar is generated from a preset (powerline / blocks / minimal / etc.) and res
 5. `internal/bar/generate.go` — produces the `set -g status-{left,right}` lines emitted into the generated tmux conf.
 6. `internal/bar/preview.go` — visual preview used by the dashboard's Bar tab.
 
-The render pipeline reads from `time.Now()` for timestamps, `bar.Prober` for git branch/dirty/ahead-behind and language detection, `tmux.Runner` for session/window metadata, and the resolved palette from `internal/theme`. Git/language side-effects are behind the `Prober` seam; remaining direct `time.Now()` usage is the main non-injected input.
+The render pipeline reads from `time.Now()` for timestamps, `bar.Prober` for git branch/dirty/ahead-behind and language detection, `tmux.Runner` for session/window metadata, and the resolved palette from `internal/theme`. Git/language side-effects are behind the `Prober` seam; remaining direct `time.Now()` usage is the main non-injected input. Shared tmux options in `generate.go` also own pane-border headers: single-pane and split windows use the same `<index> <name> <detail>` format, while `status-right` stays reserved for volatile status segments.
 
 ### Workspace + session model
 
