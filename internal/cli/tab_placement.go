@@ -72,33 +72,75 @@ func resolveHideTab(app *apppkg.App, sessionFlag, paneFlag string, args []string
 
 func newTabShowCmd(app *apppkg.App) *cobra.Command {
 	var sessionFlag string
+	var paneFlag string
+	var notifyFlag bool
 
 	cmd := &cobra.Command{
-		Use:   "show <tab>",
+		Use:   "show [tab]",
 		Short: "Return a hidden tab from the dock to its origin session",
 		Long: `Show a hidden tab: its window moves back to the session it was hidden
 from (recorded at hide time) as a full tab, appended after the existing tabs.
+<tab> may be a name/label or the 1-based hidden index shown in the tab row.
 It never auto-joins into another tab — use zmux tab pane for that.`,
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			session, err := placementSession(app, sessionFlag)
-			if err != nil {
-				return err
-			}
-			t, err := resolvePlacementTab(app, session, args[0], false)
-			if err != nil {
-				return err
-			}
-			origin, err := tabs.ShowTab(app.Runner, t)
-			if err != nil {
-				return err
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "shown: %s → %s\n", tabs.DisplayName(t), origin)
-			return nil
+			msg, err := func() (string, error) {
+				t, err := resolveShowTab(app, sessionFlag, paneFlag, args)
+				if err != nil {
+					return "", err
+				}
+				origin, err := tabs.ShowTab(app.Runner, t)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf("shown: %s → %s", tabs.DisplayName(t), origin), nil
+			}()
+			return notifyOutcome(app, cmd, notifyFlag, msg, nil, err)
 		},
 	}
 	cmd.Flags().StringVarP(&sessionFlag, "session", "s", "", "session for tab-name targets (default: current)")
+	cmd.Flags().StringVar(&paneFlag, "pane", "", "target pane id (mouse/menu path)")
+	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (mouse/menu path)")
+	_ = cmd.Flags().MarkHidden("pane")
 	return cmd
+}
+
+func resolveShowTab(app *apppkg.App, sessionFlag, paneFlag string, args []string) (*tabs.LogicalTab, error) {
+	if paneFlag != "" {
+		if len(args) > 0 {
+			return nil, fmt.Errorf("--pane cannot be combined with a tab argument")
+		}
+		return logicalTabByPane(app.Runner, paneFlag)
+	}
+	if len(args) == 0 {
+		return nil, fmt.Errorf("tab name required")
+	}
+	session, err := placementSession(app, sessionFlag)
+	if err != nil {
+		return nil, err
+	}
+	name := args[0]
+	if n, ok := tabIndexArg(name); ok {
+		return hiddenTabAtIndex(app.Runner, session, n)
+	}
+	return resolvePlacementTab(app, session, name, false)
+}
+
+func hiddenTabAtIndex(r tmux.Runner, session string, index int) (*tabs.LogicalTab, error) {
+	all, err := tabs.ListLogicalTabs(r)
+	if err != nil {
+		return nil, fmt.Errorf("scan tabs: %w", err)
+	}
+	var hidden []tabs.LogicalTab
+	for i := range all {
+		if all[i].Placement == tabs.PlacementDock && all[i].OriginSession == session {
+			hidden = append(hidden, all[i])
+		}
+	}
+	if index < 1 || index > len(hidden) {
+		return nil, fmt.Errorf("no hidden tab at index %d in %s", index, session)
+	}
+	return &hidden[index-1], nil
 }
 
 func newTabPaneCmd(app *apppkg.App) *cobra.Command {
@@ -390,7 +432,7 @@ func paneDirection(right, left, up, down bool) (tmux.SplitDirection, error) {
 }
 
 // resolvePaneHost resolves the join destination: an explicit --into tab, or
-// the caller's current window mapped to its owning logical tab.
+// the caller's current pane mapped to its logical tab.
 func resolvePaneHost(app *apppkg.App, session, into string) (*tabs.LogicalTab, error) {
 	if into != "" {
 		// Host is name-only: index addressing is for the tab being joined, not

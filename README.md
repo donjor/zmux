@@ -44,6 +44,7 @@ cd zmux
 ```
 
 The installer:
+
 1. Checks dependencies (Go, tmux >= 3.2)
 2. Builds the binary
 3. Installs to `~/.local/bin/zmux`
@@ -139,7 +140,7 @@ zmux tab pane <tab|N> [--into host] Join a tab (by name or bar index N) as a pan
 zmux tab split                      Create a new tab and join it as a pane in one step (prefix+j)
 zmux tab full [tab] / [--pane <id>] Promote focused/named/clicked pane-of tab back to full
 zmux tab hide <tab> / [--pane <id>] Park a tab off the bar in the hidden dock
-zmux tab show <tab>                 Return a hidden tab to its origin session
+zmux tab show <tab|N>               Return hidden tab by name or shown dock index
 zmux tab kill <tab>                 Kill a tab
 zmux reap                           Adopt/flag/kill stale tabs by lifecycle policy
 zmux reap --dry-run                 Preview verdicts only — change nothing
@@ -225,47 +226,51 @@ Prefix: `Ctrl+Space` (configurable)
 
 ### tmux prefix
 
-| Key | Action |
-|-----|--------|
-| prefix + Space | Dashboard |
-| prefix + p | Command palette |
-| prefix + ! | Scratch shell popup ($SHELL, cwd from active pane) |
-| prefix + d | Detach |
-| prefix + ? | Help viewer (scroll, fuzzy filter, commands/keys scope) |
-| prefix + c | New tab |
-| prefix + n / N | Next / previous tab |
-| prefix + < / > | Move tab left / right |
-| prefix + x | Close tab (with confirm) |
-| prefix + J | Join a tab into this tab as a pane |
-| prefix + F | Promote focused pane-tab to full tab |
-| prefix + R | Respawn stopped/dead pane |
-| prefix + . | Label tab (blank clears label) |
-| prefix + , | Rename session |
-| prefix + C | New session in current workspace |
-| prefix + w | Workspace session picker |
-| prefix + [ / ] | Prev / next session in workspace |
-| prefix + Alt+1-9 | Switch to session N in workspace |
-| prefix + r | Reload config (zmux apply) |
-| prefix + v | Enter copy mode (vi keys) |
-| prefix + P | Paste buffer |
-| prefix + ← / → / ↑ / ↓ | Focus pane in direction (tmux default) |
-| prefix + Ctrl+← / → / ↑ / ↓ | Resize pane by one cell (tmux default) |
-| prefix + Alt+← / → / ↑ / ↓ | Resize pane by five cells (repeatable) |
-| prefix + Shift+← / → / ↑ / ↓ | Swap pane with the one in that direction (repeatable) |
-| prefix + = | Equalize / spread splits evenly |
-| prefix + s | Toggle split orientation (horizontal ↔ vertical) |
-| prefix + q | Show pane numbers/ids (tmux default) |
-| prefix + z | Toggle pane zoom (tmux default) |
-| prefix + o / ; | Next / previous pane (tmux default) |
-| prefix + % / " | Split pane right / below (tmux default) |
-| Alt+1-9 | Switch to tab (no prefix) |
-| Alt+w | Workspace switcher (no prefix) |
-| Alt+Shift+← / → / ↑ / ↓ | Focus pane in direction (no prefix) |
-| Alt+` | Tab switcher (no prefix) |
+| Key                          | Action                                                  |
+| ---------------------------- | ------------------------------------------------------- |
+| prefix + Space               | Dashboard                                               |
+| prefix + p                   | Command palette                                         |
+| prefix + !                   | Scratch shell popup ($SHELL, cwd from active pane)      |
+| prefix + d                   | Detach                                                  |
+| prefix + ?                   | Help viewer (scroll, fuzzy filter, commands/keys scope) |
+| prefix + c                   | New tab                                                 |
+| prefix + n / N               | Next / previous tab                                     |
+| prefix + < / >               | Move tab left / right                                   |
+| prefix + x                   | Close tab (with confirm)                                |
+| prefix + J                   | Join a tab into this tab as a pane                      |
+| prefix + F                   | Promote focused pane-tab to full tab                    |
+| prefix + h / H               | Hide focused tab / show hidden tab by # or name         |
+| prefix + R                   | Respawn stopped/dead pane                               |
+| prefix + .                   | Label tab (blank clears label)                          |
+| prefix + ,                   | Rename session                                          |
+| prefix + C                   | New session in current workspace                        |
+| prefix + w                   | Workspace session picker                                |
+| prefix + [ / ]               | Prev / next session in workspace                        |
+| prefix + Alt+1-9             | Switch to session N in workspace                        |
+| prefix + r                   | Reload config (zmux apply)                              |
+| prefix + v                   | Enter copy mode (vi keys)                               |
+| prefix + P                   | Paste buffer                                            |
+| prefix + ← / → / ↑ / ↓       | Focus pane in direction (tmux default)                  |
+| prefix + Ctrl+← / → / ↑ / ↓  | Resize pane by one cell (tmux default)                  |
+| prefix + Alt+← / → / ↑ / ↓   | Resize pane by five cells (repeatable)                  |
+| prefix + Shift+← / → / ↑ / ↓ | Swap pane with the one in that direction (repeatable)   |
+| prefix + =                   | Equalize / spread splits evenly                         |
+| prefix + s                   | Toggle split orientation (horizontal ↔ vertical)        |
+| prefix + q                   | Show pane numbers/ids (tmux default)                    |
+| prefix + z                   | Toggle pane zoom (tmux default)                         |
+| prefix + o / ;               | Next / previous pane (tmux default)                     |
+| prefix + % / "               | Split pane right / below (tmux default)                 |
+| Alt+1-9                      | Switch to tab (no prefix)                               |
+| Alt+w                        | Workspace switcher (no prefix)                          |
+| Alt+Shift+← / → / ↑ / ↓      | Focus pane in direction (no prefix)                     |
+| Alt+`                        | Tab switcher (no prefix)                                |
 
 Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
-borders resizes them. Right-clicking a joined pane opens a per-pane menu —
-promote to full, hide to dock, or kill the pane. Failed or signalled foreground
+borders resizes them. Right-clicking a managed pane or logical tab-row cell opens
+a target-aware menu — show/unhide, promote to full, hide to dock, or kill the
+tab where that action applies. Docked tabs render with index badges like
+`[1] logs~`, and `prefix+H` accepts that short index as well as the full name.
+Failed or signalled foreground
 commands stay visible as dead panes, so Ctrl+C spam cannot silently delete the
 tab; clean exits close normally. Use `prefix+x` / `zmux tab kill` when you mean
 to close a stopped tab.
@@ -304,18 +309,18 @@ bindings, so the pane keys do not collide with the terminal or WM setup.
 
 ### Picker (outside tmux)
 
-| Key | Action |
-|-----|--------|
-| ↑ / ↓ | Navigate workspaces and sessions (tree traversal) |
+| Key                | Action                                                     |
+| ------------------ | ---------------------------------------------------------- |
+| ↑ / ↓              | Navigate workspaces and sessions (tree traversal)          |
 | enter (top action) | Create tmp session (empty input) or workspace+main (typed) |
-| enter (workspace) | Drill into sessions, or create default session if empty |
-| enter (session) | Attach |
-| tab | Accept ghost autocompletion |
-| ctrl+x | Delete workspace or session under cursor (with confirm) |
-| ctrl+h | Toggle hide-empty workspaces |
-| 1-9 | Quick-select session by index |
-| esc | Clear query, or quit if empty |
-| ctrl+c | Quit |
+| enter (workspace)  | Drill into sessions, or create default session if empty    |
+| enter (session)    | Attach                                                     |
+| tab                | Accept ghost autocompletion                                |
+| ctrl+x             | Delete workspace or session under cursor (with confirm)    |
+| ctrl+h             | Toggle hide-empty workspaces                               |
+| 1-9                | Quick-select session by index                              |
+| esc                | Clear query, or quit if empty                              |
+| ctrl+c             | Quit                                                       |
 
 ## Configuration
 
@@ -361,6 +366,7 @@ ayu-dark, atom-one-dark, carbonfox, catppuccin-mocha, dracula, gruvbox-dark,
 kanagawa-dragon, material-darker, nord, rose-pine, tokyonight.
 
 **Theme resolution order:**
+
 1. `~/.zmux/themes/<name>` — your custom themes
 2. Bundled (embedded in binary)
 3. `~/.zmux/themes/iterm2/<name>` — downloaded set from `zmux init`
@@ -413,17 +419,17 @@ Place custom recipes in `~/.zmux/recipes/`. Bundled recipes include
 
 ## Status bar presets
 
-| Preset | Description |
-|--------|-------------|
-| default | Catppuccin-inspired rounded pills, icons, elevated surfaces |
-| minimal | Clean, barely decorated, content-first |
-| powerline | Angled separators, filled segments, directory chain |
-| blocks | Square bracket segments, monospace, dense |
-| rounded | Elevated pill segments, premium feel |
-| hacker | Matrix-inspired, monospace, dense info |
-| zen | Ultra-minimal, barely there |
-| starship | Colorful prompt-inspired, each segment its own color |
-| rpowerline | Rounded powerline — angled fills with rounded caps |
+| Preset     | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
+| default    | Catppuccin-inspired rounded pills, icons, elevated surfaces |
+| minimal    | Clean, barely decorated, content-first                      |
+| powerline  | Angled separators, filled segments, directory chain         |
+| blocks     | Square bracket segments, monospace, dense                   |
+| rounded    | Elevated pill segments, premium feel                        |
+| hacker     | Matrix-inspired, monospace, dense info                      |
+| zen        | Ultra-minimal, barely there                                 |
+| starship   | Colorful prompt-inspired, each segment its own color        |
+| rpowerline | Rounded powerline — angled fills with rounded caps          |
 
 All presets show dynamic segments: git branch/dirty/ahead-behind, language
 version, workspace with session position (e.g. `myapp 2/4`), directory,
@@ -439,6 +445,7 @@ AI agent workflows. These let agents manage long-running runtimes without
 blocking their own shell or hiding process state.
 
 **Key principles:**
+
 - Use normal agent shell tools for bounded one-shot checks.
 - Never run servers/watchers/long-lived runtimes in the agent shell — use zmux.
 - Never use `&`, `nohup`, or `disown` — use a stable zmux tab.
@@ -447,6 +454,7 @@ blocking their own shell or hiding process state.
   `zmux_interactive_type` tool.
 
 **Example workflow:**
+
 ```bash
 zmux run 'npm test' -n test --session app/main          # waits for completion
 zmux run 'npm run dev' -n server -d --session app/main   # detach for runtimes
@@ -456,6 +464,7 @@ zmux send server C-c --session app/main                  # stop server
 ```
 
 Agent integration lives in this repo:
+
 - `skills/zmux/SKILL.md` is the canonical zmux skill. On the maintainer setup,
   `~/donjor/skills/skills/zmux` symlinks here, and `~/.claude/skills` points at
   that shared skill tree, so Claude does not need a separate repo-local link.

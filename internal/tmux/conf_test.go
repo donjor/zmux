@@ -178,6 +178,8 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 		`set-option -w -t #{window_id} @zmux_label`,
 		`bind J command-prompt -p "join tab here:" "run-shell '/usr/local/bin/zmux tab pane --notify \"%%\"'"`,
 		`bind F run-shell "/usr/local/bin/zmux tab full --after --notify"`,
+		`bind h run-shell "/usr/local/bin/zmux tab hide --notify"`,
+		`bind H command-prompt -p "show hidden tab (#/name):" "run-shell '/usr/local/bin/zmux tab show --notify \"%%\"'"`,
 		`bind x confirm-before`,
 		`#{?@zmux_label,#{?#{==:#{@zmux_label},#W},#W,#{@zmux_label} [#W]},#W#{?@zmux_duplicate_name,[#{b:pane_current_path}],}}`,
 	}
@@ -196,15 +198,21 @@ func TestGenerateConfContainsMousePaneMenu(t *testing.T) {
 
 	checks := []string{
 		`bind -T root MouseDown3Pane display-menu`,
-		`-t "#{mouse_pane}"`,
-		`"Promote to full" f { select-pane -t "#{mouse_pane}" ; run-shell "/usr/local/bin/zmux tab full --pane \"#{mouse_pane}\" --after --notify" }`,
-		`"Hide to dock" h { select-pane -t "#{mouse_pane}" ; run-shell "/usr/local/bin/zmux tab hide --pane \"#{mouse_pane}\" --notify" }`,
-		`"Kill pane" x { select-pane -t "#{mouse_pane}" ; kill-pane }`,
+		`bind -T root MouseDown3Status if -F "#{==:#{mouse_status_range},pane}" { display-menu`,
+		`-t "{mouse}"`,
+		`"#{?#{&&:#{@zmux_tab_anchor},#{==:#{@zmux_hidden},}},Promote to full,-Promote to full}" f { select-pane -t "#{pane_id}" ; run-shell "/usr/local/bin/zmux tab full --pane \"#{pane_id}\" --after --notify" }`,
+		`"#{?#{&&:#{@zmux_tab_id},#{==:#{@zmux_hidden},}},Hide to dock,-Hide to dock}" h { select-pane -t "#{pane_id}" ; run-shell "/usr/local/bin/zmux tab hide --pane \"#{pane_id}\" --notify" }`,
+		`"#{?@zmux_hidden,Show / unhide,-Show / unhide}" u { run-shell "/usr/local/bin/zmux tab show --pane \"#{pane_id}\" --notify" }`,
+		`"#{?@zmux_tab_id,Kill tab,-Kill tab}" x { run-shell "/usr/local/bin/zmux tab kill --pane \"#{pane_id}\" --notify" }`,
 	}
 	for _, want := range checks {
 		if !strings.Contains(conf, want) {
 			t.Errorf("conf missing mouse pane menu fragment: %q", want)
 		}
+	}
+
+	if strings.Contains(conf, "#{mouse_pane}") {
+		t.Error("tmux 3.4 has no #{mouse_pane} format; use the {mouse} target token and pane_id formats")
 	}
 
 	if strings.Contains(conf, "MouseDrag1Border") {

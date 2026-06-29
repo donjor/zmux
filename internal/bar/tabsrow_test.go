@@ -68,7 +68,7 @@ func TestRenderTabsRowComposition(t *testing.T) {
 		SpinnerFrame(now),   // running glyph animates from the wall clock
 		"+tests",            // pane-of rider in the host cell
 		stateGlyphs["done"], // rider's own pane-canonical glyph
-		"(logs~",            // docked tab grouped in the hidden section
+		"(dock [1] logs~",   // docked tab grouped with a visible show-index badge
 		stateGlyphs["attention"],
 	} {
 		if !strings.Contains(flat, want) {
@@ -82,14 +82,20 @@ func TestRenderTabsRowComposition(t *testing.T) {
 	}
 }
 
-// TestRenderTabsRowHiddenGroupDimReset pins the docked-group fg reset: after
-// a docked tab's state glyph, the next docked name must re-dim instead of
-// inheriting the glyph color.
-func TestRenderTabsRowHiddenGroupDimReset(t *testing.T) {
+// TestRenderTabsRowHiddenGroupStyling pins the docked-group affordance: indexes
+// render as accent badges, and each docked name re-dims after the previous
+// tab's state glyph instead of inheriting that glyph color.
+func TestRenderTabsRowHiddenGroupStyling(t *testing.T) {
 	out := RenderTabsRow(testPalette(), Default, "dev", "dev", tabsRowFixture(), false, time.Unix(0, 0))
-	dim := testPalette().Dim.Hex()
-	if !strings.Contains(out, "#[fg="+dim+",nobold]brk~") {
-		t.Errorf("second docked tab must re-dim after prior glyph:\n%s", out)
+	p := testPalette()
+	for _, want := range []string{
+		"#[fg=" + p.Accent.Hex() + ",bold][1]",
+		"#[fg=" + p.Accent.Hex() + ",bold][2]",
+		"#[fg=" + p.Dim.Hex() + ",nobold] brk~",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("docked group missing %q:\n%s", want, out)
+		}
 	}
 }
 
@@ -101,6 +107,26 @@ func TestRenderTabsRowActiveWindowAccented(t *testing.T) {
 	}
 }
 
+func TestRenderTabsRowPaneRanges(t *testing.T) {
+	out := RenderTabsRow(testPalette(), Default, "dev", "dev", tabsRowFixture(), false, time.Unix(0, 0))
+	for _, want := range []string{
+		"#[range=pane|%2]", // managed full tab cell
+		"#[range=pane|%3]", // rider segment
+		"#[range=pane|%4]", // hidden entry
+		"#[range=pane|%7]", // second hidden entry
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("row missing pane range %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "#[range=pane|%1]") {
+		t.Errorf("raw unmanaged window must not receive zmux pane range:\n%s", out)
+	}
+	if starts, ends := strings.Count(out, "#[range=pane|"), strings.Count(out, "#[norange]"); starts != ends {
+		t.Errorf("unbalanced pane ranges: starts=%d ends=%d\n%s", starts, ends, out)
+	}
+}
+
 // TestRenderTabsRowGlyphSpacing pins the glyph gap: state glyphs sit one
 // space after the name they annotate, never jammed against it (QA finding
 // 2026-06-06: "work✓").
@@ -109,9 +135,9 @@ func TestRenderTabsRowGlyphSpacing(t *testing.T) {
 	flat := stripStyles(RenderTabsRow(testPalette(), Default, "dev", "dev", tabsRowFixture(), false, now))
 
 	for _, want := range []string{
-		"buddy " + SpinnerFrame(now),        // full-tab glyph spaced
-		"+tests " + stateGlyphs["done"],     // rider glyph spaced
-		"logs~ " + stateGlyphs["attention"], // docked glyph spaced
+		"buddy " + SpinnerFrame(now),            // full-tab glyph spaced
+		"+tests " + stateGlyphs["done"],         // rider glyph spaced
+		"[1] logs~ " + stateGlyphs["attention"], // docked glyph spaced after index badge
 	} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("row missing spaced glyph %q:\n%s", want, flat)
@@ -158,6 +184,9 @@ func TestRenderTabsRowAllPresetsClean(t *testing.T) {
 			if strings.Contains(out, reject) {
 				t.Errorf("%s: leaked %q:\n%s", preset, reject, out)
 			}
+		}
+		if starts, ends := strings.Count(out, "#[range=pane|"), strings.Count(out, "#[norange]"); starts != ends {
+			t.Errorf("%s: unbalanced pane ranges: starts=%d ends=%d\n%s", preset, starts, ends, out)
 		}
 		flat := stripStyles(out)
 		for _, want := range []string{"vim", "buddy", "+tests"} {

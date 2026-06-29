@@ -237,55 +237,90 @@ func newTabRefreshNamesCmd(app *apppkg.App) *cobra.Command {
 }
 
 func newTabKillCmd(app *apppkg.App) *cobra.Command {
-	return &cobra.Command{
-		Use:   "kill <tab-name>",
+	var paneFlag string
+	var notifyFlag bool
+
+	cmd := &cobra.Command{
+		Use:   "kill [tab-name]",
 		Short: "Kill a tab in the current session",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tabName := args[0]
-
-			current, err := app.Runner.DisplayMessage("", "#{session_name}")
-			if err != nil {
-				return fmt.Errorf("not inside tmux")
-			}
-			current = strings.TrimSpace(current)
-
-			// kill mutates (destroys a tab) — never reach across sessions by a
-			// bare name (report 039). Cross-session kill must be explicit.
-			rt, err := resolveTabTargetScoped(app, current, tabName, scopeSessionOnly)
-			if err != nil {
-				return err
-			}
-
-			// Pane-of and docked tabs kill as panes — the host window (or
-			// dock) survives, minus this tab. tmux reaps a dock window when
-			// its last pane dies, and the dock session when its last window
-			// does.
-			if rt.Tab != nil && rt.Tab.Placement != tabs.PlacementFull {
-				return app.Runner.KillPane(rt.Tab.PaneID)
-			}
-
-			// Full/legacy tabs kill their window. Guard: killing the last
-			// window kills the session in tmux — use `zmux session kill`
-			// instead for proper workspace cleanup. The guard follows the
-			// tab's own session (a unique label can resolve outside current).
-			session := current
-			if rt.Tab != nil {
-				session = rt.Tab.Session
-			}
-			if err := guardNotLastTab(app.Runner, session); err != nil {
-				return err
-			}
-
-			switch {
-			case rt.Tab != nil:
-				return app.Runner.KillWindowByID(rt.Tab.WindowID)
-			case rt.Win != nil:
-				return app.Runner.KillWindow(current, rt.Win.Index)
-			}
-			return fmt.Errorf("tab %q not found in session %q", tabName, current)
+			msg, err := func() (string, error) {
+				if paneFlag != "" {
+					if len(args) > 0 {
+						return "", fmt.Errorf("--pane cannot be combined with a tab argument")
+					}
+					t, err := logicalTabByPane(app.Runner, paneFlag)
+					if err != nil {
+						return "", err
+					}
+					return killLogicalTab(app, t)
+				}
+				if len(args) == 0 {
+					return "", fmt.Errorf("tab name required")
+				}
+				return killNamedTab(app, args[0])
+			}()
+			return notifyOutcome(app, cmd, notifyFlag, msg, nil, err)
 		},
 	}
+	cmd.Flags().StringVar(&paneFlag, "pane", "", "target pane id (mouse/menu path)")
+	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (mouse/menu path)")
+	_ = cmd.Flags().MarkHidden("pane")
+	return cmd
+}
+
+func killNamedTab(app *apppkg.App, tabName string) (string, error) {
+	current, err := app.Runner.DisplayMessage("", "#{session_name}")
+	if err != nil {
+		return "", fmt.Errorf("not inside tmux")
+	}
+	current = strings.TrimSpace(current)
+
+	// kill mutates (destroys a tab) — never reach across sessions by a
+	// bare name (report 039). Cross-session kill must be explicit.
+	rt, err := resolveTabTargetScoped(app, current, tabName, scopeSessionOnly)
+	if err != nil {
+		return "", err
+	}
+	if rt.Tab != nil {
+		return killLogicalTab(app, rt.Tab)
+	}
+
+	// Legacy/raw window fallback kills by window index. Guard: killing the last
+	// window kills the session in tmux — use `zmux session kill` instead for
+	// proper workspace cleanup.
+	if rt.Win != nil {
+		if err := guardNotLastTab(app.Runner, current); err != nil {
+			return "", err
+		}
+		if err := app.Runner.KillWindow(current, rt.Win.Index); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("killed: %s", tabName), nil
+	}
+	return "", fmt.Errorf("tab %q not found in session %q", tabName, current)
+}
+
+func killLogicalTab(app *apppkg.App, t *tabs.LogicalTab) (string, error) {
+	// Pane-of and docked tabs kill as panes — the host window (or dock)
+	// survives, minus this tab. tmux reaps a dock window when its last pane dies,
+	// and the dock session when its last window does.
+	if t.Placement != tabs.PlacementFull {
+		if err := app.Runner.KillPane(t.PaneID); err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("killed: %s", tabs.DisplayName(t)), nil
+	}
+
+	// Full tabs kill their window. Guard against killing a session's last window.
+	if err := guardNotLastTab(app.Runner, t.Session); err != nil {
+		return "", err
+	}
+	if err := app.Runner.KillWindowByID(t.WindowID); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("killed: %s", tabs.DisplayName(t)), nil
 }
 
 func guardNotLastTab(runner tmux.Runner, sessionName string) error {

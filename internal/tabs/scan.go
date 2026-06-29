@@ -56,6 +56,7 @@ func FromRows(rows []tmux.LogicalPaneRow) []LogicalTab {
 		}
 		if row.Session == DockSession {
 			t.Placement = PlacementDock
+			t.AnchorID = row.Anchor
 			if row.Hidden != "" {
 				t.OriginSession = row.Hidden
 			}

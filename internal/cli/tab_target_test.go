@@ -222,6 +222,35 @@ func TestTabKillFullTabKillsWindow(t *testing.T) {
 	}
 }
 
+func TestTabKillPaneFlagUsesLogicalTabSemanticsAndNotifies(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Windows["test-session"] = []tmux.Window{
+		{Index: 0, Name: "main", Active: true},
+		{Index: 1, Name: "tests"},
+	}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", "test-session", "@5", 1, "ztab_tests1", "tests"),
+	}
+
+	rootCmd.SetArgs([]string{"tab", "kill", "--pane", "%2", "--notify"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab kill --pane --notify failed: %v", err)
+	}
+
+	var killed, flashed bool
+	for _, c := range mock.Calls {
+		if c.Method == "KillWindowByID" && c.Args[0] == "@5" {
+			killed = true
+		}
+		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "killed: tests") {
+			flashed = true
+		}
+	}
+	if !killed || !flashed {
+		t.Fatalf("expected full tab kill-by-pane with notification: killed=%v flashed=%v calls=%#v", killed, flashed, mock.Calls)
+	}
+}
+
 func TestTabKillLastTabGuard(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Windows["test-session"] = []tmux.Window{

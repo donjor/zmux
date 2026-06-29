@@ -101,6 +101,68 @@ func TestTabShowReturnsDockedTab(t *testing.T) {
 	}
 }
 
+func TestTabShowNumericArgTargetsHiddenIndex(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	first := logicalRow("%3", tabs.DockSession, "@7", 0, "ztab_log001", "logs")
+	first.Hidden = "test-session"
+	second := logicalRow("%4", tabs.DockSession, "@8", 1, "ztab_dbg001", "debug")
+	second.Hidden = "test-session"
+	mock.LogicalRows = []tmux.LogicalPaneRow{first, second}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{session_name}": "test-session",
+		"session_group":   "\t1\t1\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "show", "2"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab show 2 failed: %v", err)
+	}
+
+	var movedSecond, movedFirst bool
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" && c.Args[0] == "@8" && c.Args[1] == "test-session:" {
+			movedSecond = true
+		}
+		if c.Method == "MoveWindow" && c.Args[0] == "@7" {
+			movedFirst = true
+		}
+	}
+	if !movedSecond || movedFirst {
+		t.Fatalf("expected hidden index 2 to show second tab only: movedSecond=%v movedFirst=%v calls=%#v", movedSecond, movedFirst, mock.Calls)
+	}
+}
+
+func TestTabShowPaneFlagTargetsDockedPaneAndNotifies(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	dock := logicalRow("%4", tabs.DockSession, "@7", 0, "ztab_log001", "logs")
+	dock.Hidden = "test-session"
+	mock.LogicalRows = []tmux.LogicalPaneRow{dock}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{session_name}": "test-session",
+		"session_group":   "\t1\t1\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "show", "--pane", "%4", "--notify"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab show --pane --notify failed: %v", err)
+	}
+
+	var moved, flashed bool
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" && c.Args[0] == "@7" && c.Args[1] == "test-session:" {
+			moved = true
+		}
+		if c.Method == "ShowMessage" && strings.Contains(c.Args[0], "shown: logs") {
+			flashed = true
+		}
+	}
+	if !moved || !flashed {
+		t.Fatalf("expected docked pane shown with notification: moved=%v flashed=%v calls=%#v", moved, flashed, mock.Calls)
+	}
+}
+
 func TestTabShowVisibleTabErrors(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session"}}

@@ -61,33 +61,30 @@ func EnsureDock(r tmux.Runner) (placeholder string, err error) {
 	return strings.TrimSpace(out), nil
 }
 
-// Hide parks a tab in the dock. Full tabs move their whole window (raw human
-// splits ride along); pane-of tabs break just their pane out into a fresh
-// dock window (S4 matrix). The origin session lands in @zmux_hidden — one
-// option doubling as hidden-flag and `tab show` default target.
+// Hide parks a pane-of tab in the dock. Full tabs are top-level workspace
+// units and are intentionally not hideable; join a tab as a pane first if it
+// should become collapsible under a parent. The origin session lands in
+// @zmux_hidden, while @zmux_tab_anchor preserves the parent for rejoin.
 func Hide(r tmux.Runner, t *LogicalTab) error {
-	if t.Placement == PlacementDock {
+	switch t.Placement {
+	case PlacementDock:
 		return fmt.Errorf("tab %q is already hidden", DisplayName(t))
+	case PlacementFull:
+		return fmt.Errorf("full tab %q cannot be hidden — join it as a pane first, or close it", DisplayName(t))
+	case PlacementPaneOf:
+		// hideable path below
 	}
 	placeholder, err := EnsureDock(r)
 	if err != nil {
 		return err
 	}
-	switch t.Placement {
-	case PlacementFull:
-		if err := r.MoveWindow(t.WindowID, DockSession+":"); err != nil {
-			return fmt.Errorf("hide tab %q: %w", DisplayName(t), err)
-		}
-	case PlacementPaneOf:
-		if _, err := r.BreakPane(tmux.BreakPaneOptions{
-			Source:   t.PaneID,
-			Target:   DockSession + ":",
-			Name:     DisplayName(t),
-			Detached: true,
-		}); err != nil {
-			return fmt.Errorf("hide tab %q: %w", DisplayName(t), err)
-		}
-	case PlacementDock: // unreachable — guarded above
+	if _, err := r.BreakPane(tmux.BreakPaneOptions{
+		Source:   t.PaneID,
+		Target:   DockSession + ":",
+		Name:     DisplayName(t),
+		Detached: true,
+	}); err != nil {
+		return fmt.Errorf("hide tab %q: %w", DisplayName(t), err)
 	}
 	if placeholder != "" {
 		// The fresh dock's placeholder shell dies once a real window is in.
@@ -98,9 +95,9 @@ func Hide(r tmux.Runner, t *LogicalTab) error {
 	})
 }
 
-// Show returns a docked tab to its origin session as a full appended window
-// and clears @zmux_hidden. It never auto-joins — rejoining as a pane is the
-// `tab pane` verb's job. Returns the session shown into.
+// Show rejoins a docked pane to its recorded parent and clears @zmux_hidden.
+// Promoting a hidden pane to a full tab is explicit (`tab full`), keeping the
+// default unhide path topology-preserving.
 func Show(r tmux.Runner, t *LogicalTab) (string, error) {
 	if t.Placement != PlacementDock {
 		return "", fmt.Errorf("tab %q is not hidden (placement: %s)", DisplayName(t), t.Placement)
@@ -112,13 +109,22 @@ func Show(r tmux.Runner, t *LogicalTab) (string, error) {
 	if !r.HasSession(origin) {
 		return "", fmt.Errorf("origin session %q is gone — cannot show tab %q there", origin, DisplayName(t))
 	}
-	if err := r.MoveWindow(t.WindowID, origin+":"); err != nil {
-		return "", fmt.Errorf("show tab %q: %w", DisplayName(t), err)
+	if t.AnchorID == "" {
+		return "", fmt.Errorf("hidden pane %q has no recorded parent — promote it with: zmux tab full %s", DisplayName(t), DisplayName(t))
 	}
-	err := r.ApplyOptions([]tmux.OptionWrite{
-		{Scope: tmux.ScopePane, Target: t.PaneID, Key: OptHidden, Unset: true},
-	})
-	return origin, err
+	all, err := ListLogicalTabs(r)
+	if err != nil {
+		return "", fmt.Errorf("scan tabs: %w", err)
+	}
+	host := ByID(all, t.AnchorID)
+	if host == nil || host.Placement == PlacementDock {
+		return "", fmt.Errorf("hidden pane %q parent is not visible — promote it with: zmux tab full %s", DisplayName(t), DisplayName(t))
+	}
+	if !host.InScope(origin) {
+		return "", fmt.Errorf("hidden pane %q parent %q is outside origin session %q", DisplayName(t), DisplayName(host), origin)
+	}
+	_, err = Join(r, t, host, JoinOptions{Direction: tmux.SplitRight})
+	return DisplayName(host), err
 }
 
 // DisplayName is a tab's addressable display name: label, else the live window

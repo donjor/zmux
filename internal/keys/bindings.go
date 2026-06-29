@@ -25,6 +25,8 @@ var (
 	LabelTab        = Binding{Action: "label.tab", Key: ".", Help: "Set stable tab label (blank clears)", Category: CatTabs, Context: Prefix}
 	TabJoinPane     = Binding{Action: "tab.pane", Key: "J", Help: "Join a tab into this tab as a pane", Category: CatTabs, Context: Prefix}
 	TabFull         = Binding{Action: "tab.full", Key: "F", Help: "Promote focused pane-tab to full tab", Category: CatTabs, Context: Prefix}
+	TabHide         = Binding{Action: "tab.hide", Key: "h", Help: "Hide focused tab to dock", Category: CatTabs, Context: Prefix}
+	TabShow         = Binding{Action: "tab.show", Key: "H", Help: "Show hidden tab by index/name", Category: CatTabs, Context: Prefix}
 
 	// Sessions (prefix).
 	RenameSession = Binding{Action: "rename", Key: ",", Help: "Rename session", Category: CatSessions, Context: Prefix}
@@ -105,7 +107,7 @@ var DashboardBindings = []Binding{
 // PrefixBindings lists the prefix-table bindings in help/doc render order.
 var PrefixBindings = []Binding{
 	Dashboard, Palette, ScratchShell, Help,
-	NewTab, TabSplit, TabNext, TabPrev, TabReorderLeft, TabReorderRight, TabKill, LabelTab, TabJoinPane, TabFull,
+	NewTab, TabSplit, TabNext, TabPrev, TabReorderLeft, TabReorderRight, TabKill, LabelTab, TabJoinPane, TabFull, TabHide, TabShow,
 	SessionPicker, SessionGoto, SessionPrev, SessionNext, RenameSession, NewSession,
 	PaneSwapLeft, PaneSwapRight, PaneSwapUp, PaneSwapDown, PaneEqualize, SplitOrient,
 	PaneRespawn, CopyModeKey, Paste, Reload,
