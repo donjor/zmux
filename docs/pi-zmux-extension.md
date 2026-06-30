@@ -62,8 +62,9 @@ Core tools:
   selected zmux binary/profile, project trust, and loaded pi-zmux config.
 - `zmux_reload` — run `zmux reload` for zmux's own config/key/theme changes.
 - `zmux_pi_reload` — use zmux/tmux to type Pi's built-in `/reload` into the
-  current Pi pane, then nudge the agent after reload. Prefer this after Pi
-  extension/skill changes before hard respawn.
+  current Pi pane, then nudge the agent after reload. It waits long enough for
+  the current response to finish and retries if Pi prints the active-response
+  warning. Prefer this after Pi extension/skill changes before hard respawn.
 - `zmux_run` — native `zmux run` for reviewable command-in-tab one-shots. It
   uses a longer wait budget than generic command execution and reports command
   exit status structurally instead of crashing the extension on non-zero exits.

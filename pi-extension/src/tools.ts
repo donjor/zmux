@@ -188,7 +188,9 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 		parameters: Type.Object({
 			paneId: Type.Optional(Type.String({ description: "Target tmux pane id; defaults to the current Pi pane" })),
 			continuationPrompt: Type.Optional(Type.String({ description: "Prompt to inject after reload so the agent resumes. Defaults to a generic reload-continuation nudge." })),
-			delayMs: Type.Optional(Type.Number({ description: "Delay before typing /reload; default 5000ms so the current assistant response can finish" })),
+			delayMs: Type.Optional(Type.Number({ description: "Delay before typing /reload; default 12000ms so the current assistant response can finish" })),
+			retryAttempts: Type.Optional(Type.Number({ description: "Total /reload attempts when Pi says the current response is still active; default 3" })),
+			retryDelayMs: Type.Optional(Type.Number({ description: "Delay between retry attempts after Pi prints the active-response warning; default 10000ms" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -197,6 +199,8 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 				paneId: params.paneId,
 				continuationPrompt: params.continuationPrompt,
 				delayMs: params.delayMs,
+				retryAttempts: params.retryAttempts,
+				retryDelayMs: params.retryDelayMs,
 			});
 			return content(result.text, result.details);
 		},

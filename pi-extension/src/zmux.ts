@@ -469,6 +469,8 @@ export async function schedulePiReload(params: {
 	cwd: string;
 	paneId?: string;
 	delayMs?: number;
+	retryAttempts?: number;
+	retryDelayMs?: number;
 	continuationPrompt?: string;
 }): Promise<{ text: string; details: Record<string, unknown> }> {
 	const pane = params.paneId ?? (await currentPane(params.cwd))?.ID;
@@ -478,23 +480,42 @@ export async function schedulePiReload(params: {
 		createdAt: new Date().toISOString(),
 		prompt,
 	});
-	const delayMs = params.delayMs ?? 5_000;
-	const script = buildPiReloadScript({ cwd: params.cwd, pane, delayMs });
+	const delayMs = params.delayMs ?? 12_000;
+	const retryAttempts = params.retryAttempts ?? 3;
+	const retryDelayMs = params.retryDelayMs ?? 10_000;
+	const script = buildPiReloadScript({ cwd: params.cwd, pane, delayMs, retryAttempts, retryDelayMs });
 	spawnDetached("bash", ["-lc", script], { cwd: params.cwd });
 	return {
 		text: `scheduled Pi /reload for ${pane}`,
-		details: { pane, delayMs, continuationPath, method: "tmux send-keys /reload Enter" },
+		details: { pane, delayMs, retryAttempts, retryDelayMs, continuationPath, method: "tmux send-keys /reload Enter with warning retry" },
 	};
 }
 
-export function buildPiReloadScript(params: { cwd: string; pane: string; delayMs: number }): string {
+export function buildPiReloadScript(params: { cwd: string; pane: string; delayMs: number; retryAttempts?: number; retryDelayMs?: number }): string {
 	const delay = Math.max(0, params.delayMs) / 1000;
-	const tmuxArgs = ["tmux", ...tmuxPrefix(), "send-keys", "-t", params.pane, "/reload", "Enter"];
+	const retryAttempts = Math.max(1, Math.floor(params.retryAttempts ?? 3));
+	const retryDelay = Math.max(0, params.retryDelayMs ?? 10_000) / 1000;
+	const warning = "Wait for the current response to finish before reloading.";
+	const tmuxBase = ["tmux", ...tmuxPrefix()];
+	const sendArgs = [...tmuxBase, "send-keys", "-t", params.pane, "/reload", "Enter"].map(shellQuote).join(" ");
+	const captureArgs = [...tmuxBase, "capture-pane", "-t", params.pane, "-p", "-S", "-", "-J"].map(shellQuote).join(" ");
 	return [
 		`cd ${shellQuote(params.cwd)}`,
+		`warning=${shellQuote(warning)}`,
+		`count_warning() { ${captureArgs} 2>/dev/null | grep -F -c -- "$warning" || true; }`,
+		`before=$(count_warning)`,
 		`sleep ${delay}`,
-		tmuxArgs.map(shellQuote).join(" "),
-	].join("; ");
+		`attempt=1`,
+		`while [ "$attempt" -le ${retryAttempts} ]; do`,
+		`  ${sendArgs}`,
+		`  sleep 2`,
+		`  after=$(count_warning)`,
+		`  if [ "$after" -le "$before" ]; then exit 0; fi`,
+		`  before="$after"`,
+		`  attempt=$((attempt + 1))`,
+		`  if [ "$attempt" -le ${retryAttempts} ]; then sleep ${retryDelay}; fi`,
+		`done`,
+	].join("\n");
 }
 
 export async function schedulePiRespawn(params: {

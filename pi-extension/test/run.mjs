@@ -168,10 +168,22 @@ try {
 
   delete process.env.PI_ZMUX_TMUX_SOCKET;
   process.env.PI_ZMUX_BIN = 'zzmux';
-  assert.equal(buildPiReloadScript({ cwd: '/repo', pane: '%42', delayMs: 750 }), "cd '/repo'; sleep 0.75; 'tmux' '-L' 'zzmux' 'send-keys' '-t' '%42' '/reload' 'Enter'");
+  const reloadZzmux = buildPiReloadScript({ cwd: '/repo', pane: '%42', delayMs: 750, retryAttempts: 2, retryDelayMs: 1500 });
+  assert.match(reloadZzmux, /^cd '\/repo'\n/);
+  assert.ok(reloadZzmux.includes("warning='Wait for the current response to finish before reloading.'"));
+  assert.ok(reloadZzmux.includes("'tmux' '-L' 'zzmux' 'capture-pane' '-t' '%42' '-p' '-S' '-' '-J'"));
+  assert.ok(reloadZzmux.includes("sleep 0.75"));
+  assert.ok(reloadZzmux.includes("while [ \"$attempt\" -le 2 ]; do"));
+  assert.ok(reloadZzmux.includes("'tmux' '-L' 'zzmux' 'send-keys' '-t' '%42' '/reload' 'Enter'"));
+  assert.ok(reloadZzmux.includes("sleep 1.5"));
+  assert.equal(spawnSync('bash', ['-n'], { input: reloadZzmux }).status, 0, 'reload retry script must parse as bash');
   assert.equal(buildTmuxRespawnScript({ cwd: '/repo', pane: '%42', command: 'pi -c', delayMs: 300 }), "cd '/repo'; sleep 0.3; 'tmux' '-L' 'zzmux' 'respawn-pane' '-k' '-t' '%42' '-c' '/repo' 'pi -c'");
   process.env.PI_ZMUX_TMUX_SOCKET = 'edge';
-  assert.equal(buildPiReloadScript({ cwd: '/repo', pane: '%42', delayMs: 0 }), "cd '/repo'; sleep 0; 'tmux' '-L' 'edge' 'send-keys' '-t' '%42' '/reload' 'Enter'");
+  const reloadEdge = buildPiReloadScript({ cwd: '/repo', pane: '%42', delayMs: 0 });
+  assert.ok(reloadEdge.includes("sleep 0"));
+  assert.ok(reloadEdge.includes("while [ \"$attempt\" -le 3 ]; do"));
+  assert.ok(reloadEdge.includes("'tmux' '-L' 'edge' 'send-keys' '-t' '%42' '/reload' 'Enter'"));
+  assert.equal(spawnSync('bash', ['-n'], { input: reloadEdge }).status, 0, 'default reload retry script must parse as bash');
   assert.equal(buildTmuxRespawnScript({ cwd: '/repo', pane: '%42', command: 'pi -c', delayMs: 0 }), "cd '/repo'; sleep 0; 'tmux' '-L' 'edge' 'respawn-pane' '-k' '-t' '%42' '-c' '/repo' 'pi -c'");
   delete process.env.PI_ZMUX_BIN;
   delete process.env.PI_ZMUX_TMUX_SOCKET;

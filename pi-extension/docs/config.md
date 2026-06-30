@@ -65,6 +65,7 @@ zmux_pi_reload({
 ```
 
 It uses zmux/tmux to type Pi's built-in `/reload` into the current Pi pane after
-a short delay, then nudges the agent after reload. `zmux_reload` is reserved for
-zmux's own config reload. Use `zmux_pi_respawn` only when soft Pi reload is
-unavailable or Pi is wedged.
+a default 12s delay, then retries when Pi prints "Wait for the current response
+to finish before reloading." `zmux_reload` is reserved for zmux's own config
+reload. Use `zmux_pi_respawn` only when soft Pi reload is unavailable or Pi is
+wedged.
