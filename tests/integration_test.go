@@ -155,9 +155,9 @@ func TestHelpCommand(t *testing.T) {
 		}
 	}
 
-	// Should contain keybindings section.
-	if !strings.Contains(stdout, "Keybindings") {
-		t.Errorf("expected help output to contain keybindings section")
+	// Should contain keybindings band. Kept in sync with help.BandLabel.
+	if !strings.Contains(stdout, "KEYBINDINGS") {
+		t.Errorf("expected help output to contain keybindings band")
 	}
 }
 

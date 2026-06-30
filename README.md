@@ -438,9 +438,10 @@ Preview them: `zmux bar` (live carousel inside tmux, static ANSI outside)
 
 ## Agent Integration
 
-zmux includes terminal commands (`run`, `watch`, `send`, `type`) designed for
-AI agent workflows. These let agents manage long-running runtimes without
-blocking their own shell or hiding process state.
+zmux includes terminal commands (`run`, `watch`, `send`, `type`) and Pi typed
+tools designed for AI agent workflows. These let agents manage reviewable terminal
+work without blocking their own shell, hiding process state, or hand-rolling temp
+script/sentinel glue.
 
 **Key principles:**
 
@@ -448,17 +449,19 @@ blocking their own shell or hiding process state.
 - Never run servers/watchers/long-lived runtimes in the agent shell — use zmux.
 - Never use `&`, `nohup`, or `disown` — use a stable zmux tab.
 - Read output with `zmux watch`, don't start duplicate processes to check state.
+- Use `zmux run`/Pi `zmux_run` for reviewable command-in-tab one-shots; don't add
+  your own done markers or wrapper scripts.
 - For sudo/interactive commands, use `zmux type admin 'sudo ...'` or Pi's typed
   `zmux_interactive_type` tool.
 
 **Example workflow:**
 
 ```bash
-zmux run 'npm test' -n test --session app/main          # waits for completion
-zmux run 'npm run dev' -n server -d --session app/main   # detach for runtimes
-zmux watch server --session app/main --until "listening" # wait for ready signal
-zmux watch server --session app/main -l 20               # peek at output
-zmux send server C-c --session app/main                  # stop server
+zmux run 'npm test' -n scratch -T 180 -s app/main       # reviewable one-shot, waits
+zmux run 'npm run dev' -n server -d -s app/main          # detach for runtimes
+zmux watch server -s app/main --until "listening"        # wait for ready signal
+zmux watch server -s app/main -l 20                      # peek at output
+zmux send server C-c -s app/main                         # stop server
 ```
 
 Agent integration lives in this repo:
@@ -478,8 +481,9 @@ Agent integration lives in this repo:
   at `skills/zmux/references/cli-catalog.md`.
   `./install.sh` does not mutate agent skill directories.
 - `pi-extension/` registers typed Pi tools and bash guardrails for deterministic
-  runtime, tab/pane/send, sidecar, interactive-command, reload, and
-  terminal-capability orchestration on current Pi. The shared skills repo loads
+  `run`, runtime, session, tab/pane/send, sidecar, log/snapshot,
+  interactive-command, reload, and terminal-capability orchestration on current
+  Pi. The shared skills repo loads
   it as a local Pi package (`../../donjor/zmux/pi-extension`); `./dev.sh zmux`
   removes a retired global `~/.pi/agent/extensions/pi-zmux` symlink if it would
   mask that settings-managed package and warns if global Pi settings still

@@ -10,8 +10,9 @@ process or terminal state that should **outlive a single command**, be **visible
 the user**, or need **interactive control**. For bounded one-shot reads, builds, and
 tests whose captured output is the whole artifact, your normal shell is fine.
 
-You are likely working inside a zmux-managed session. Drive zmux through its CLI —
-every example below is a shell command.
+You are likely working inside a zmux-managed session. In Pi, prefer the typed
+`zmux_*` tools for the same operations; in other harnesses, use the CLI examples
+below as shell commands.
 
 ## Never reach past zmux to raw tmux
 
@@ -32,7 +33,14 @@ tab-state glyph behavior → **`references/guard-and-tab-states.md`**.
 
 A tab also carries a lifecycle glyph in the bar (● needs-human / ◐ running / ✓ done /
 ✗ failed), mostly set automatically by `run`/`send`/`type` + a `Stop` hook. Set it by
-hand only to flag the human: `zmux tab state attention <tab> --msg 'sudo password'`.
+hand only to flag the human: `zmux tab state attention <tab> --msg 'sudo password'`
+(or Pi `zmux_tab_state`).
+
+Pi typed equivalents for common verbs: `zmux_run`, `zmux_runtime_ensure/logs/stop`,
+`zmux_interactive_type`, `zmux_sessions`, `zmux_session_run/kill`, `zmux_tabs`,
+`zmux_tab_state/label/move/place/kill/focus`, `zmux_log`, `zmux_snapshot`, and the
+pane/send/type tools. If the Pi bash guard says to use one, do that instead of
+bypassing into the CLI.
 
 ## Agent peer
 
@@ -50,6 +58,7 @@ zmux type codex-peer '<prompt with repo/file pointers>'
 zmux watch codex-peer --idle 3 -T 300
 ```
 
+In Pi, use `zmux_run`, `zmux_runtime_logs`, and `zmux_type` for that same loop.
 Do not create a separate peer adapter or manager. zmux owns the visible terminal
 mechanics; workflow skills layer above this doctrine.
 
@@ -71,7 +80,8 @@ zmux type worker-auth-cli '<brief: worktree path, scope, boundary>' -s worker-au
 zmux watch worker-auth-cli --idle 3 -T 600 -s worker-auth  # long, often async
 ```
 
-Use `zmux session run`, **never** `zmux new <ws> <worker-session>` for automated
+In Pi, use `zmux_session_run`, then `zmux_type` + `zmux_runtime_logs` with the worker
+session target. Use `zmux session run`, **never** `zmux new <ws> <worker-session>` for automated
 spawn — `new` attaches (steals the conductor's focus) and births a blank shell tab.
 The worktree is the sandbox; zmux owns the terminal + lifecycle, while *fan-out
 policy* (which worktrees, merge order, who tests) lives in the workflow skill above,
@@ -90,9 +100,10 @@ zmux tabs                            # tabs in the current session
 `session` is exactly what you pass as `-s`. (`zmux pane current --json` stays the
 pane-only primitive.)
 
-Outside tmux but `zmux ls` shows sessions? Drive them with `-s <session>` (accepted
-by `run`/`watch`/`send`/`type`/`tabs`/`log`/`tab state` + `tab` placements; the three
-forms and ambiguity rules → `references/cli-catalog.md`). **Never** run processes
+Outside tmux but `zmux ls` shows sessions? Drive them with `-s <session>` (Pi:
+`session`). It is accepted by `run`/`watch`/`send`/`type`/`tabs`/`log`/`tab state`
++ `tab` placements; the three forms and ambiguity rules → `references/cli-catalog.md`.
+**Never** run processes
 directly just because you're outside tmux, and **never** guess between attached
 sessions — list them with `zmux ls` first (`zmux where` is in-tmux only).
 
@@ -160,8 +171,9 @@ into named tabs; the unspoken other half is not leaving sprawl behind.
   the guard blocks it the same way.
 - unnamed tabs — always `-n`.
 - raw `tmux` for app-level actions (the guard blocks it).
-- your own `:::DONE:::` markers (`zmux run` handles sentinels) or `sleep N && watch`
-  (`run` already waits).
+- your own `:::DONE:::` markers or temp status scripts. `zmux run` and Pi's typed
+  interactive wrapper own their internal sentinels/status files; agents should not
+  add another layer. Also avoid `sleep N && watch` (`run` already waits).
 - a hand-rolled poll-loop / external watcher to await one job — `zmux run -n`
   already waits and `zmux watch` reads progress. And never `pgrep -f` / `pkill -f` a
   pattern that also matches your own command line: it self-matches (false "alive")
@@ -185,7 +197,7 @@ zmux run '<cmd>' -n <name> -s <session> # target a specific session
 
 `zmux run` **waits by default**: it streams output live, then returns the command's
 exit code. It injects its own completion sentinel internally — **do not add your own
-`echo ":::DONE:::"` markers**. If a tab with that name already exists, the command is
+`echo ":::DONE:::"` markers or wrapper scripts**. If a tab with that name already exists, the command is
 sent to it (reused, not recreated). `-d` creates the tab **without stealing your
 focus**. Use `-d` **only** for processes expected to run forever.
 
@@ -244,8 +256,8 @@ zmux type <tab> '<text>'     # type text + press Enter
 ### Common patterns
 
 ```bash
-# One-shot (anything that exits — fast or slow)
-zmux run 'go test ./...' -n test -T 180
+# Reviewable one-shot (anything that exits and should stay inspectable)
+zmux run 'go test ./...' -n scratch -T 180
 
 # Dev server (runs forever)
 zmux run 'npm run dev' -n server -d

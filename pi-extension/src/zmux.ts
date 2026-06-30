@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { writeReloadContinuation } from "./reload-continuation.js";
 import { writeRespawnContinuation } from "./respawn-continuation.js";
-import { runFile, spawnDetached, trimOutput } from "./shell.js";
+import { runFile, runFileStatus, spawnDetached, trimOutput, type CommandStatusResult } from "./shell.js";
 
 export interface CurrentPane {
 	Session?: string;
@@ -144,6 +144,229 @@ export async function reloadZmux(cwd: string): Promise<{ text: string; details: 
 	const result = await zmux(["reload"], { cwd, timeoutMs: 15_000 });
 	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
 	return { text: output || "reloaded zmux", details: { command: "zmux reload" } };
+}
+
+export type TabStateAction = "attention" | "running" | "done" | "failed" | "clear";
+export type TabPlacementAction = "pane" | "full" | "hide" | "show";
+export type TabPlacementDirection = "right" | "left" | "up" | "down";
+export type LogAction = "start" | "tail" | "status" | "stop";
+
+export interface ZmuxRunParams {
+	command: string;
+	cwd: string;
+	tab?: string;
+	session?: string;
+	timeoutSeconds?: number;
+	lines?: number;
+	detach?: boolean;
+	follow?: boolean;
+	keep?: boolean;
+	scope?: string;
+}
+
+export function buildZmuxRunArgs(params: ZmuxRunParams): string[] {
+	const args = ["run", "--command", params.command];
+	if (params.tab) args.push("-n", params.tab);
+	if (params.detach) args.push("-d");
+	if (params.follow) args.push("-f");
+	if (params.timeoutSeconds !== undefined) args.push("-T", String(params.timeoutSeconds));
+	if (params.lines !== undefined) args.push("--lines", String(params.lines));
+	if (params.keep) args.push("--keep");
+	if (params.scope) args.push("--scope", params.scope);
+	return withSession(args, params.session);
+}
+
+export function zmuxRunResultDetails(result: CommandStatusResult, output: string): Record<string, unknown> {
+	const details: Record<string, unknown> = {
+		zmuxExitCode: result.exitCode,
+		failed: result.failed,
+	};
+	if (result.signal) details.signal = result.signal;
+	if (result.timedOut) {
+		details.failureKind = "tool_timeout";
+		details.warning = result.message ?? "zmux run timed out at the Pi tool boundary";
+		return details;
+	}
+	const commandExit = /command exited with code (\d+)/u.exec(output);
+	if (commandExit) {
+		details.failureKind = "command_exit";
+		details.exitCode = Number(commandExit[1]);
+		details.warning = `command exited with ${commandExit[1]}`;
+		return details;
+	}
+	const zmuxTimeout = /timeout after (\d+)s/u.exec(output);
+	if (zmuxTimeout) {
+		details.failureKind = "zmux_timeout";
+		details.timeoutSeconds = Number(zmuxTimeout[1]);
+		details.warning = `zmux run timed out after ${zmuxTimeout[1]}s`;
+		return details;
+	}
+	if (result.failed) {
+		details.failureKind = "zmux_failure";
+		details.exitCode = result.exitCode;
+		details.warning = result.exitCode !== null ? `zmux exited with ${result.exitCode}` : (result.message ?? "zmux run failed");
+	} else {
+		details.exitCode = 0;
+	}
+	return details;
+}
+
+export async function runCommand(params: ZmuxRunParams): Promise<{ text: string; details: Record<string, unknown> }> {
+	const timeoutSeconds = params.timeoutSeconds ?? 120;
+	const timeoutMs = params.detach ? 15_000 : (timeoutSeconds + 5) * 1000;
+	const result = await runFileStatus(zmuxBin(), buildZmuxRunArgs({ ...params, timeoutSeconds }), { cwd: params.cwd, timeoutMs });
+	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+	const details: Record<string, unknown> = {
+		command: params.command,
+		tab: params.tab,
+		session: params.session,
+		cwd: params.cwd,
+		timeoutSeconds,
+		detach: params.detach ?? false,
+		follow: params.follow ?? false,
+		...zmuxRunResultDetails(result, output),
+	};
+	return { text: output || (result.failed ? `zmux run failed: ${details.warning}` : "zmux run completed"), details };
+}
+
+export function buildSessionListArgs(params: { workspace?: string; flat?: boolean } = {}): string[] {
+	const args = ["ls"];
+	if (params.flat) args.push("-s");
+	if (params.workspace) args.push(params.workspace);
+	return args;
+}
+
+export async function listSessions(cwd: string, params: { workspace?: string; flat?: boolean } = {}): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(buildSessionListArgs(params), { cwd, timeoutMs: 5_000 });
+	return { text: trimOutput(result.stdout), details: { ...params } };
+}
+
+export function buildSessionRunArgs(params: { sessionName: string; tab: string; command: string; workspace?: string; cwd?: string }): string[] {
+	const args = ["session", "run", params.sessionName, "-n", params.tab];
+	if (params.workspace) args.push("--workspace", params.workspace);
+	if (params.cwd) args.push("--cwd", params.cwd);
+	args.push("--", "bash", "-lc", params.command);
+	return args;
+}
+
+export async function sessionRun(params: { sessionName: string; tab: string; command: string; cwd: string; workspace?: string; commandCwd?: string }): Promise<{ text: string; details: Record<string, unknown> }> {
+	const args = buildSessionRunArgs({ sessionName: params.sessionName, tab: params.tab, command: params.command, workspace: params.workspace, cwd: params.commandCwd });
+	const result = await zmux(args, { cwd: params.cwd, timeoutMs: 10_000 });
+	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+	return { text: output || `created session ${params.sessionName} with tab ${params.tab}`, details: { ...params, args } };
+}
+
+export async function sessionKill(sessionName: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(["session", "kill", sessionName], { cwd, timeoutMs: 10_000 });
+	return { text: `killed session ${sessionName}`, details: { sessionName } };
+}
+
+export function buildTabStateArgs(params: { action: TabStateAction; tab?: string; target?: string; session?: string; source?: string; msg?: string; ifState?: string; byVisibility?: boolean }): string[] {
+	const args = ["tab", "state", params.action];
+	if (params.tab) args.push(params.tab);
+	if (params.target) args.push("--target", params.target);
+	if (params.source) args.push("--source", params.source);
+	if (params.msg) args.push("--msg", params.msg);
+	if (params.ifState) args.push("--if", params.ifState);
+	if (params.byVisibility) args.push("--by-visibility");
+	return withSession(args, params.session);
+}
+
+export async function setTabState(params: { action: TabStateAction; cwd: string; tab?: string; target?: string; session?: string; source?: string; msg?: string; ifState?: string; byVisibility?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(buildTabStateArgs(params), { cwd: params.cwd, timeoutMs: 5_000 });
+	return { text: `tab state ${params.action}${params.tab ? ` ${params.tab}` : ""}`, details: { ...params } };
+}
+
+export function buildTabLabelArgs(params: { label?: string; target?: string; clear?: boolean }): string[] {
+	const args = ["tab", "label"];
+	if (params.target) args.push("--target", params.target);
+	if (params.clear) args.push("--clear");
+	if (params.label !== undefined) args.push(params.label);
+	return args;
+}
+
+export async function labelTab(params: { cwd: string; label?: string; target?: string; clear?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(buildTabLabelArgs(params), { cwd: params.cwd, timeoutMs: 5_000 });
+	const output = trimOutput(result.stdout || result.stderr);
+	return { text: output || (params.clear ? "cleared tab label" : `set tab label ${params.label ?? ""}`), details: { ...params } };
+}
+
+export function buildTabMoveArgs(params: { tab: string; destination: string; force?: boolean }): string[] {
+	const args = ["tab", "move", params.tab, params.destination];
+	if (params.force) args.push("--force");
+	return args;
+}
+
+export async function moveTab(params: { cwd: string; tab: string; destination: string; force?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(buildTabMoveArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
+	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+	return { text: output || `moved tab ${params.tab} to ${params.destination}`, details: { ...params } };
+}
+
+export function buildLogArgs(params: { action: LogAction; tab?: string; session?: string; ansi?: boolean; maxBytes?: number; lines?: number }): string[] {
+	const args = ["log", params.action];
+	if (params.action === "status") return args;
+	if (params.tab) args.push(params.tab);
+	if (params.action === "start") {
+		if (params.ansi) args.push("--ansi");
+		if (params.maxBytes !== undefined) args.push("--max-bytes", String(params.maxBytes));
+	}
+	if (params.action === "tail" && params.lines !== undefined) args.push("-n", String(params.lines));
+	if (params.session) args.push("-s", params.session);
+	return args;
+}
+
+export async function logCommand(params: { action: LogAction; cwd: string; tab?: string; session?: string; ansi?: boolean; maxBytes?: number; lines?: number }): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(buildLogArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
+	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || `zmux log ${params.action}`, details: { ...params } };
+}
+
+export function buildSnapshotArgs(params: { noPng?: boolean; panes?: string[]; lines?: number; out?: string; json?: boolean }): string[] {
+	const args = ["snapshot"];
+	if (params.noPng) args.push("--no-png");
+	for (const pane of params.panes ?? []) args.push("--pane", pane);
+	if (params.lines !== undefined) args.push("--lines", String(params.lines));
+	if (params.out) args.push("--out", params.out);
+	if (params.json) args.push("--json");
+	return args;
+}
+
+export async function snapshot(params: { cwd: string; noPng?: boolean; panes?: string[]; lines?: number; out?: string; json?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(buildSnapshotArgs(params), { cwd: params.cwd, timeoutMs: 30_000 });
+	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || "snapshot captured", details: { ...params } };
+}
+
+export function buildTabPlacementArgs(params: { action: TabPlacementAction; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean }): string[] {
+	const args = ["tab", params.action];
+	if (params.tab) args.push(params.tab);
+	if (params.session) args.push("--session", params.session);
+	if (params.action === "pane") {
+		if (params.into) args.push("--into", params.into);
+		if (params.direction) args.push(`--${params.direction}`);
+		if (params.size) args.push("--size", params.size);
+		return args;
+	}
+	if (params.pane) args.push("--pane", params.pane);
+	if (params.action === "full" && params.after) args.push("--after");
+	return args;
+}
+
+export async function placeTab(params: { action: TabPlacementAction; cwd: string; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(buildTabPlacementArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
+	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || `tab ${params.action}`, details: { ...params } };
+}
+
+export async function terminalCurrent(cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(["terminal", "current", "--json"], { cwd, timeoutMs: 5_000 });
+	return { text: trimOutput(result.stdout), details: { terminal: safeJson(result.stdout) } };
+}
+
+function safeJson(value: string): unknown {
+	try {
+		return JSON.parse(value);
+	} catch {
+		return undefined;
+	}
 }
 
 export async function runtimeEnsure(params: {

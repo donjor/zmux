@@ -76,10 +76,11 @@ zmux ls -s                 # how many sessions exist
 Pin that session on the spawn and every follow-up — belt-and-suspenders for
 the writes, load-bearing for the reads:
 `zmux run '…' -n <peer> -d -s <session>`, `zmux watch <peer> -s <session>`,
-`zmux type <peer> -s <session> …`, `zmux tab state … <peer> -s <session>`. zmux
-prints `tab "<peer>" resolved to session "X", outside the current session "Y"`
-on the read path when a bare name crosses — seeing that means you skipped the
-pin.
+`zmux type <peer> -s <session> …`, `zmux tab state … <peer> -s <session>`. In Pi,
+use the equivalent `session` parameter on `zmux_run`, `zmux_runtime_logs`,
+`zmux_type`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
+"X", outside the current session "Y"` on the read path when a bare name crosses —
+seeing that means you skipped the pin.
 
 Reuse first — but verify identity:
 

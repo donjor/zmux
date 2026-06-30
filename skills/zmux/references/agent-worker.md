@@ -45,6 +45,8 @@ A worker is bound to a pair: **(zmux session, worktree path)**. Honor both:
     # named workspace (conductor outside tmux, or a dedicated workers ws):
     zmux session run worker-auth --workspace dev -n auth-worker -- codex -C ~/proj.auth -s workspace-write -a on-request
     ```
+  In Pi, use `zmux_session_run` for the spawn and the `session` parameter on
+  follow-up `zmux_type`, `zmux_runtime_logs`, `zmux_tab_state`, and related tools.
   **Never** spawn an automated worker with `zmux new <ws> <worker-session>`: `new`
   attaches (steals the conductor's focus) and births a blank shell tab beside the CLI —
   the report-009 failure this primitive exists to fix.

@@ -13,7 +13,23 @@ try {
 
   const { classifyBash, hasExplicitBypass, stripQuotedSegments } = await import(join(outDir, 'src/classify.js'));
   const { loadConfig } = await import(join(outDir, 'src/config.js'));
-  const { buildPaneOpenArgs, buildPiReloadScript, buildTmuxRespawnScript, detectUserInputPrompt } = await import(join(outDir, 'src/zmux.js'));
+  const {
+    buildLogArgs,
+    buildPaneOpenArgs,
+    buildPiReloadScript,
+    buildSessionListArgs,
+    buildSessionRunArgs,
+    buildSnapshotArgs,
+    buildTabLabelArgs,
+    buildTabMoveArgs,
+    buildTabPlacementArgs,
+    buildTabStateArgs,
+    buildTmuxRespawnScript,
+    buildZmuxRunArgs,
+    detectUserInputPrompt,
+    zmuxRunResultDetails,
+  } = await import(join(outDir, 'src/zmux.js'));
+  const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
   const { reloadContinuationPath, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
 
@@ -30,9 +46,20 @@ try {
     ['docker compose up', 'runtime'],
     ['make serve', 'runtime'],
     ['zmux tab kill admin', 'direct_zmux'],
+    ['zmux tab state failed worker --msg done', 'direct_zmux'],
+    ['zmux tab label worker', 'direct_zmux'],
+    ['zmux tab move worker other-session', 'direct_zmux'],
+    ['zmux tab pane worker --right', 'direct_zmux'],
     ['zmux tabs', 'direct_zmux'],
+    ['zmux ls -s', 'direct_zmux'],
     ['export CLAUDE_CODE_SESSION_ID=x\nexport PI_SESSION_FILE=/tmp/session.jsonl\nzmux tabs', 'direct_zmux'],
+    ['zmux session run peer -n agy-peer -- agy', 'direct_zmux'],
+    ['zmux session kill peer', 'direct_zmux'],
+    ['zmux run --command "npm test" -n tests', 'direct_zmux'],
     ['zmux watch server -l 20', 'direct_zmux'],
+    ['zmux log tail server -n 20', 'direct_zmux'],
+    ['zmux snapshot --no-png', 'direct_zmux'],
+    ['zmux terminal current --json', 'direct_zmux'],
     ['tmux send-keys -t %347 l l l l l Enter', 'direct_tmux'],
     ['tmux kill-pane -t %347', 'direct_tmux'],
     ['tmux display-message -p "#{pane_id}"', 'safe'],
@@ -87,6 +114,57 @@ try {
   assert.deepEqual(buildPaneOpenArgs({ name: 'logs', command: 'npm run dev', cwd: '/repo', direction: 'right', size: '40%' }), [
     'pane', 'open', 'logs', '--cwd', '/repo', '-r', '40%', '--', 'bash', '-lc', 'npm run dev',
   ]);
+  assert.deepEqual(buildZmuxRunArgs({ command: 'npm test', cwd: '/repo', tab: 'tests', timeoutSeconds: 45, lines: 80, session: 'zws/repo' }), [
+    'run', '--command', 'npm test', '-n', 'tests', '-T', '45', '--lines', '80', '-s', 'zws/repo',
+  ]);
+  assert.deepEqual(buildZmuxRunArgs({ command: 'npm run dev', cwd: '/repo', tab: 'server', detach: true, keep: true, scope: 'daemon' }), [
+    'run', '--command', 'npm run dev', '-n', 'server', '-d', '--keep', '--scope', 'daemon',
+  ]);
+  assert.deepEqual(buildSessionListArgs({ flat: true, workspace: 'donjor' }), ['ls', '-s', 'donjor']);
+  assert.deepEqual(buildSessionRunArgs({ sessionName: 'peer', tab: 'agy-peer', command: 'agy --model fast', workspace: 'zmux', cwd: '/repo' }), [
+    'session', 'run', 'peer', '-n', 'agy-peer', '--workspace', 'zmux', '--cwd', '/repo', '--', 'bash', '-lc', 'agy --model fast',
+  ]);
+  assert.deepEqual(buildTabStateArgs({ action: 'failed', tab: 'worker', msg: 'needs attention', byVisibility: true, session: 'zws/repo' }), [
+    'tab', 'state', 'failed', 'worker', '--msg', 'needs attention', '--by-visibility', '-s', 'zws/repo',
+  ]);
+  assert.deepEqual(buildTabLabelArgs({ label: 'api', target: '%42' }), ['tab', 'label', '--target', '%42', 'api']);
+  assert.deepEqual(buildTabMoveArgs({ tab: 'api', destination: 'repo/sidecar', force: true }), ['tab', 'move', 'api', 'repo/sidecar', '--force']);
+  assert.deepEqual(buildLogArgs({ action: 'tail', tab: 'server', session: 'zws/repo', lines: 40 }), ['log', 'tail', 'server', '-n', '40', '-s', 'zws/repo']);
+  assert.deepEqual(buildLogArgs({ action: 'status', tab: 'server', session: 'zws/repo', lines: 40 }), ['log', 'status']);
+  assert.deepEqual(buildSnapshotArgs({ noPng: true, panes: ['%1', '%2'], lines: 120, out: '/tmp/snap', json: true }), [
+    'snapshot', '--no-png', '--pane', '%1', '--pane', '%2', '--lines', '120', '--out', '/tmp/snap', '--json',
+  ]);
+  assert.deepEqual(buildTabPlacementArgs({ action: 'pane', tab: 'logs', into: 'pi', direction: 'right', size: '35%', session: 'zws/repo' }), [
+    'tab', 'pane', 'logs', '--session', 'zws/repo', '--into', 'pi', '--right', '--size', '35%',
+  ]);
+  assert.deepEqual(buildTabPlacementArgs({ action: 'show', pane: '%42', session: 'zws/repo', direction: 'right', size: '35%', after: true }), [
+    'tab', 'show', '--session', 'zws/repo', '--pane', '%42',
+  ]);
+
+  const nonZero = await runFileStatus(process.execPath, ['-e', 'process.exit(7)']);
+  assert.equal(nonZero.failed, true);
+  assert.equal(nonZero.exitCode, 7);
+  assert.deepEqual(zmuxRunResultDetails({ stdout: '', stderr: 'Error: command exited with code 7', failed: true, exitCode: 1 }, 'Error: command exited with code 7'), {
+    zmuxExitCode: 1,
+    failed: true,
+    failureKind: 'command_exit',
+    exitCode: 7,
+    warning: 'command exited with 7',
+  });
+  assert.deepEqual(zmuxRunResultDetails({ stdout: '', stderr: 'Error: timeout after 5s', failed: true, exitCode: 1 }, 'Error: timeout after 5s'), {
+    zmuxExitCode: 1,
+    failed: true,
+    failureKind: 'zmux_timeout',
+    timeoutSeconds: 5,
+    warning: 'zmux run timed out after 5s',
+  });
+  assert.deepEqual(zmuxRunResultDetails({ stdout: '', stderr: '', failed: true, exitCode: null, signal: 'SIGTERM', timedOut: true, message: 'tool timeout' }, ''), {
+    zmuxExitCode: null,
+    failed: true,
+    signal: 'SIGTERM',
+    failureKind: 'tool_timeout',
+    warning: 'tool timeout',
+  });
 
   delete process.env.PI_ZMUX_TMUX_SOCKET;
   process.env.PI_ZMUX_BIN = 'zzmux';

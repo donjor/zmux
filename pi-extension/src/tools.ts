@@ -10,11 +10,17 @@ import {
 	focusTab,
 	interactiveType,
 	killTab,
+	labelTab,
 	listPanes,
+	listSessions,
 	listTabs,
+	logCommand,
+	moveTab,
 	openPane,
+	placeTab,
 	reloadZmux,
 	resizePane,
+	runCommand,
 	runtimeEnsure,
 	runtimeLogs,
 	runtimeStop,
@@ -22,8 +28,17 @@ import {
 	schedulePiRespawn,
 	sendKeys,
 	sendPaneKeys,
+	sessionKill,
+	sessionRun,
+	setTabState,
+	snapshot,
+	terminalCurrent,
 	typePaneText,
 	typeText,
+	type TabPlacementAction,
+	type TabPlacementDirection,
+	type TabStateAction,
+	type LogAction,
 } from "./zmux.js";
 
 const MAX_RESULT_BYTES = 50 * 1024;
@@ -78,6 +93,50 @@ type PaneDirection = "right" | "left" | "down" | "up";
 function paneDirection(value?: string): PaneDirection | undefined {
 	if (value === undefined || value === "right" || value === "left" || value === "down" || value === "up") return value;
 	throw new Error(`direction must be one of: right, left, down, up (got ${value})`);
+}
+
+function tabStateAction(value: string): TabStateAction {
+	if (value === "attention" || value === "running" || value === "done" || value === "failed" || value === "clear") return value;
+	throw new Error(`state must be one of: attention, running, done, failed, clear (got ${value})`);
+}
+
+function tabPlacementAction(value: string): TabPlacementAction {
+	if (value === "pane" || value === "full" || value === "hide" || value === "show") return value;
+	throw new Error(`action must be one of: pane, full, hide, show (got ${value})`);
+}
+
+function tabPlacementDirection(value?: string): TabPlacementDirection | undefined {
+	if (value === undefined || value === "right" || value === "left" || value === "up" || value === "down") return value;
+	throw new Error(`direction must be one of: right, left, up, down (got ${value})`);
+}
+
+function logAction(value: string): LogAction {
+	if (value === "start" || value === "tail" || value === "status" || value === "stop") return value;
+	throw new Error(`action must be one of: start, tail, status, stop (got ${value})`);
+}
+
+function invalidOption(action: string, option: string): Error {
+	return new Error(`${option} is not valid for ${action}`);
+}
+
+function validateLogParams(action: LogAction, params: { tab?: string; session?: string; ansi?: boolean; maxBytes?: number; lines?: number }): void {
+	if (action !== "status" && !params.tab) throw new Error("tab is required for zmux_log start/tail/stop");
+	if (action === "status" && params.tab) throw invalidOption("zmux_log status", "tab");
+	if (action === "status" && params.session) throw invalidOption("zmux_log status", "session");
+	if (action !== "start" && params.ansi === true) throw invalidOption(`zmux_log ${action}`, "ansi");
+	if (action !== "start" && params.maxBytes !== undefined) throw invalidOption(`zmux_log ${action}`, "maxBytes");
+	if (action !== "tail" && params.lines !== undefined) throw invalidOption(`zmux_log ${action}`, "lines");
+}
+
+function validateTabPlacementParams(action: TabPlacementAction, params: { tab?: string; into?: string; direction?: string; size?: string; pane?: string; after?: boolean }): void {
+	if (params.tab && params.pane) throw new Error("tab and pane cannot be combined");
+	if (action === "pane" && !params.tab) throw new Error("tab is required for tab pane");
+	if (action === "show" && !params.tab && !params.pane) throw new Error("tab or pane is required for tab show");
+	if (action === "pane" && params.pane) throw invalidOption("tab pane", "pane");
+	if (action !== "pane" && params.into) throw invalidOption(`tab ${action}`, "into");
+	if (action !== "pane" && params.direction) throw invalidOption(`tab ${action}`, "direction");
+	if (action !== "pane" && params.size) throw invalidOption(`tab ${action}`, "size");
+	if (action !== "full" && params.after === true) throw invalidOption(`tab ${action}`, "after");
 }
 
 export function registerZmuxTools(pi: ExtensionAPI): void {
@@ -154,6 +213,257 @@ export function registerZmuxTools(pi: ExtensionAPI): void {
 		async execute(_id, params, _signal, _onUpdate, ctx) {
 			const tabs = await listTabs(ctx.cwd, params.session);
 			return content(tabs, { tabs, session: params.session });
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_run",
+		label: "zmux run",
+		description: "Run a reviewable command in a stable named zmux tab via native `zmux run`. Use for command-in-tab one-shots that a human may want to inspect or re-run; keep ordinary bounded checks in bash and persistent servers in zmux_runtime_ensure.",
+		promptSnippet: "Run a command in a named zmux tab",
+		promptGuidelines: [
+			"Use zmux_run for reviewable command-in-tab one-shots; use normal bash for bounded checks whose captured stdout is enough.",
+			"Use zmux_runtime_ensure for software that keeps running, and zmux_interactive_type for sudo/password/manual-input commands.",
+			"Do not add your own sentinels or wrapper scripts; native zmux run owns completion tracking.",
+		],
+		parameters: Type.Object({
+			command: Type.String({ description: "Command to run" }),
+			tab: Type.Optional(Type.String({ description: "Stable zmux tab name (`-n`). Defaults to zmux's command-derived name." })),
+			session: Type.Optional(Type.String({ description: "Optional zmux session target (`-s`)" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory for the zmux CLI process; defaults to Pi cwd" })),
+			timeoutSeconds: Type.Optional(Type.Number({ description: "Wait timeout seconds for non-detached runs; default 120" })),
+			lines: Type.Optional(Type.Number({ description: "Lines to capture while waiting/following; default is zmux's default" })),
+			detach: Type.Optional(Type.Boolean({ description: "Run detached (`-d`). For persistent servers prefer zmux_runtime_ensure." })),
+			follow: Type.Optional(Type.Boolean({ description: "Follow output (`-f`) until timeout/interruption. Usually prefer zmux_runtime_logs for later reads." })),
+			keep: Type.Optional(Type.Boolean({ description: "Exempt this tab from auto-reaping (`--keep`)" })),
+			scope: Type.Optional(Type.String({ description: "Lifecycle scope, e.g. task or daemon" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await runCommand({
+				command: params.command,
+				tab: params.tab,
+				session: params.session,
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+				timeoutSeconds: params.timeoutSeconds,
+				lines: params.lines,
+				detach: params.detach,
+				follow: params.follow,
+				keep: params.keep,
+				scope: params.scope,
+			});
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_sessions",
+		label: "zmux sessions",
+		description: "List zmux workspaces/sessions. Prefer this over shelling out to `zmux ls` in Pi.",
+		promptSnippet: "List zmux sessions/workspaces",
+		parameters: Type.Object({
+			workspace: Type.Optional(Type.String({ description: "Optional workspace to list sessions within" })),
+			flat: Type.Optional(Type.Boolean({ description: "Use `zmux ls -s` flat session listing" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await listSessions(resolveCwd(ctx.cwd, params.cwd), { workspace: params.workspace, flat: params.flat });
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_session_run",
+		label: "zmux session run",
+		description: "Create a detached zmux session and run a command as its first tab. Use for focus-safe peer/worker session birth instead of `zmux new`, which attaches and creates a blank shell tab.",
+		promptSnippet: "Create a detached zmux session with a first command tab",
+		parameters: Type.Object({
+			sessionName: Type.String({ description: "Session label/name to create" }),
+			tab: Type.String({ description: "First tab name" }),
+			command: Type.String({ description: "Command to run in the first tab" }),
+			workspace: Type.Optional(Type.String({ description: "Workspace to tag the session into" })),
+			commandCwd: Type.Optional(Type.String({ description: "Working directory for the command inside the new session (`--cwd`)" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory for invoking zmux; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await sessionRun({
+				sessionName: params.sessionName,
+				tab: params.tab,
+				command: params.command,
+				workspace: params.workspace,
+				commandCwd: params.commandCwd ? resolveCwd(ctx.cwd, params.commandCwd) : undefined,
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+			});
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_session_kill",
+		label: "zmux session kill",
+		description: "Kill a zmux session explicitly. Use for intentional worker/session cleanup after work is integrated.",
+		promptSnippet: "Kill a zmux session",
+		parameters: Type.Object({
+			sessionName: Type.String({ description: "Session to kill" }),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await sessionKill(params.sessionName, resolveCwd(ctx.cwd, params.cwd));
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_tab_state",
+		label: "zmux tab state",
+		description: "Set or clear a zmux tab lifecycle glyph (attention/running/done/failed/clear). Use for peer/worker handoffs and human-visible status instead of shelling out to `zmux tab state`.",
+		promptSnippet: "Set a zmux tab lifecycle state",
+		parameters: Type.Object({
+			state: Type.String({ description: "attention, running, done, failed, or clear" }),
+			tab: Type.Optional(Type.String({ description: "Tab name target; omitted means current pane" })),
+			target: Type.Optional(Type.String({ description: "Raw pane/window/tab target; overrides tab" })),
+			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),
+			source: Type.Optional(Type.String({ description: "State source label" })),
+			message: Type.Optional(Type.String({ description: "Display-only message for attention/failed states" })),
+			ifState: Type.Optional(Type.String({ description: "For clear: only clear if current state matches" })),
+			byVisibility: Type.Optional(Type.Boolean({ description: "For done: store attention instead when pane is not visible" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await setTabState({
+				action: tabStateAction(params.state),
+				tab: params.tab,
+				target: params.target,
+				session: params.session,
+				source: params.source,
+				msg: params.message,
+				ifState: params.ifState,
+				byVisibility: params.byVisibility,
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+			});
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_tab_label",
+		label: "zmux tab label",
+		description: "Set or clear a stable zmux label for the current/targeted tab. Use for intentional tab identity, not routine output state.",
+		promptSnippet: "Set or clear a zmux tab label",
+		parameters: Type.Object({
+			label: Type.Optional(Type.String({ description: "Label to set; empty or clear=true clears" })),
+			target: Type.Optional(Type.String({ description: "Target tmux window/pane; defaults to current" })),
+			clear: Type.Optional(Type.Boolean({ description: "Clear the label" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await labelTab({ label: params.label, target: params.target, clear: params.clear, cwd: resolveCwd(ctx.cwd, params.cwd) });
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_tab_move",
+		label: "zmux tab move",
+		description: "Move a full zmux tab to another session. Use mainly to recover tabs spawned in the wrong session or intentional session cleanup.",
+		promptSnippet: "Move a zmux tab to another session",
+		parameters: Type.Object({
+			tab: Type.String({ description: "Tab to move" }),
+			destination: Type.String({ description: "Destination session target" }),
+			force: Type.Optional(Type.Boolean({ description: "Allow cross-workspace move" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await moveTab({ tab: params.tab, destination: params.destination, force: params.force, cwd: resolveCwd(ctx.cwd, params.cwd) });
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_log",
+		label: "zmux log",
+		description: "Manage persistent bounded output recording for a zmux tab (`start`, `tail`, `status`, `stop`). Use for logs that should survive detach or pane-buffer truncation; use zmux_runtime_logs for quick live-buffer reads.",
+		promptSnippet: "Start/tail/status/stop zmux tab output recording",
+		parameters: Type.Object({
+			action: Type.String({ description: "start, tail, status, or stop" }),
+			tab: Type.Optional(Type.String({ description: "Tab target for start/tail/stop" })),
+			session: Type.Optional(Type.String({ description: "Optional session target for tab actions (`-s`)" })),
+			ansi: Type.Optional(Type.Boolean({ description: "Keep ANSI escapes when starting a log" })),
+			maxBytes: Type.Optional(Type.Number({ description: "Maximum bytes for a bounded log" })),
+			lines: Type.Optional(Type.Number({ description: "Lines for tail" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const action = logAction(params.action);
+			validateLogParams(action, params);
+			const result = await logCommand({ action, tab: params.tab, session: params.session, ansi: params.ansi, maxBytes: params.maxBytes, lines: params.lines, cwd: resolveCwd(ctx.cwd, params.cwd) });
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_snapshot",
+		label: "zmux snapshot",
+		description: "Capture terminal/TUI evidence with `zmux snapshot` (text/ANSI plus optional PNG). Use when terminal visual state matters; output usually points to artifact files rather than inlining everything.",
+		promptSnippet: "Capture a zmux terminal snapshot evidence bundle",
+		parameters: Type.Object({
+			noPng: Type.Optional(Type.Boolean({ description: "Capture text/ANSI only" })),
+			panes: Type.Optional(Type.Array(Type.String(), { description: "Specific pane ids to capture" })),
+			lines: Type.Optional(Type.Number({ description: "Scrollback lines to capture" })),
+			out: Type.Optional(Type.String({ description: "Output directory" })),
+			json: Type.Optional(Type.Boolean({ description: "Print JSON result" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await snapshot({ noPng: params.noPng, panes: params.panes, lines: params.lines, out: params.out, json: params.json, cwd: resolveCwd(ctx.cwd, params.cwd) });
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_tab_place",
+		label: "zmux tab place",
+		description: "Move logical tabs between full, pane, hidden, and shown placements. Use instead of shelling out to `zmux tab pane/full/hide/show` when managing tab layout from Pi.",
+		promptSnippet: "Place a zmux logical tab as pane/full/hidden/shown",
+		parameters: Type.Object({
+			action: Type.String({ description: "pane, full, hide, or show" }),
+			tab: Type.Optional(Type.String({ description: "Tab name/index target; required for pane and show, optional for full/hide current-pane flows" })),
+			session: Type.Optional(Type.String({ description: "Session for tab-name targets" })),
+			into: Type.Optional(Type.String({ description: "Host tab for pane action" })),
+			direction: Type.Optional(Type.String({ description: "Pane direction: right, left, up, or down" })),
+			size: Type.Optional(Type.String({ description: "Pane size, e.g. 40% or 80" })),
+			pane: Type.Optional(Type.String({ description: "Raw pane id for mouse/menu-style targets" })),
+			after: Type.Optional(Type.Boolean({ description: "For full: insert after old host" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const action = tabPlacementAction(params.action);
+			validateTabPlacementParams(action, params);
+			const result = await placeTab({
+				action,
+				tab: params.tab,
+				session: params.session,
+				into: params.into,
+				direction: tabPlacementDirection(params.direction),
+				size: params.size,
+				pane: params.pane,
+				after: params.after,
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+			});
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_terminal_current",
+		label: "zmux terminal current",
+		description: "Resolve the visible desktop terminal target as JSON. Use for terminal/screenshot diagnostics; do not run disruptive terminal refreshes unless asked.",
+		promptSnippet: "Resolve current zmux terminal target",
+		parameters: Type.Object({
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await terminalCurrent(resolveCwd(ctx.cwd, params.cwd));
+			return content(result.text, result.details);
 		},
 	});
 

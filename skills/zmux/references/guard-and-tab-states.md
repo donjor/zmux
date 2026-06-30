@@ -58,8 +58,9 @@ Pairs with **tab hygiene** in `SKILL.md`: spawn into the roster, reuse by purpos
 Claude's `hooks/zmux-guard.mjs` (symlinked into `~/.claude/hooks/`) **blocks** raw
 tmux calls and prints the mapping back to you — so a slip self-corrects instead of
 silently targeting the wrong window. Pi's `pi-extension/` enforces the same doctrine
-through typed tools (`zmux_runtime_ensure`, `zmux_interactive_type`, tab/pane tools)
-and a `bash` tool-call guard. Both guard surfaces enforce the rest of this skill's
+through typed tools (`zmux_run`, `zmux_runtime_ensure`, `zmux_interactive_type`,
+session/tab/pane/log/snapshot tools) and a `bash` tool-call guard. Both guard
+surfaces enforce the rest of this skill's
 hygiene: a dev server / background job (`npm run dev`, `&`, `nohup`, or any
 harness-native hidden-background option the adapter can see) is **blocked** toward a
 visible named zmux runtime, and an interactive/remote command (`sudo`, `ssh`, a REPL)
@@ -68,7 +69,9 @@ in `zmux-guard.mjs` because it is a tool param, not a shell token.
 
 **Exemptions** — genuinely need the raw command (zmux development, socket inspection,
 a one-off)? Any of: prefix `ZMUX_ALLOW=1`, append `# zmux: allow`, use an explicit
-`-L <socket>`, or run from the zmux repo.
+`-L <socket>`, or run from the zmux repo. Pi has its own one-shot bypass spelling
+(`PI_ZMUX_ALLOW=1` / `# pi-zmux: allow`) for its bash guard; prefer the typed tool
+redirect when one exists.
 
 ## Tab lifecycle states
 
