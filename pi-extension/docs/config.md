@@ -66,6 +66,8 @@ zmux_pi_reload({
 
 It uses zmux/tmux to type Pi's built-in `/reload` into the current Pi pane after
 a default 12s delay, then retries when Pi prints "Wait for the current response
-to finish before reloading." `zmux_reload` is reserved for zmux's own config
-reload. Use `zmux_pi_respawn` only when soft Pi reload is unavailable or Pi is
-wedged.
+to finish before reloading." If the continuation prompt only says to wait for the
+user's next instruction, pi-zmux treats reload completion as a status notification
+instead of injecting a follow-up turn. `zmux_reload` is reserved for zmux's own
+config reload. Use `zmux_pi_respawn` only when soft Pi reload is unavailable or Pi
+is wedged.

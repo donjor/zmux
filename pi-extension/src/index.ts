@@ -1,7 +1,7 @@
 import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { classifyBash, hasExplicitBypass, shouldBlock } from "./classify.js";
 import { loadConfig } from "./config.js";
-import { takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
+import { shouldTriggerContinuation, takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
 import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
 import { registerZmuxTools } from "./tools.js";
 import { currentPane, listTabs, reloadZmux, zmux } from "./zmux.js";
@@ -47,7 +47,8 @@ function sendContinuation(
 	pi: ExtensionAPI,
 	kind: "reload" | "respawn",
 	continuation: ReloadContinuation | RespawnContinuation,
-): void {
+): boolean {
+	if (!shouldTriggerContinuation(continuation.prompt)) return false;
 	pi.sendMessage({
 		customType: `pi-zmux-${kind}-continuation`,
 		content: continuation.prompt,
@@ -58,6 +59,7 @@ function sendContinuation(
 			...("handoffPath" in continuation ? { handoffPath: continuation.handoffPath } : {}),
 		},
 	}, { deliverAs: "followUp", triggerTurn: true });
+	return true;
 }
 
 export default function (pi: ExtensionAPI): void {
@@ -72,15 +74,15 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		const reloadContinuation = takeReloadContinuation(ctx.cwd);
 		if (reloadContinuation) {
-			ctx.ui.notify("pi-zmux · reload continuation ready", "info");
-			sendContinuation(pi, "reload", reloadContinuation);
+			const sent = sendContinuation(pi, "reload", reloadContinuation);
+			ctx.ui.notify(sent ? "pi-zmux · reload continuation ready" : "pi-zmux · reload complete; waiting for user", "info");
 			return;
 		}
 
 		const respawnContinuation = takeRespawnContinuation(ctx.cwd);
 		if (!respawnContinuation) return;
-		ctx.ui.notify("pi-zmux · respawn continuation ready", "info");
-		sendContinuation(pi, "respawn", respawnContinuation);
+		const sent = sendContinuation(pi, "respawn", respawnContinuation);
+		ctx.ui.notify(sent ? "pi-zmux · respawn continuation ready" : "pi-zmux · respawn complete; waiting for user", "info");
 	});
 
 	pi.on("tool_call", async (event, ctx) => {

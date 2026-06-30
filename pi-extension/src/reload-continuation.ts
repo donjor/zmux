@@ -10,6 +10,10 @@ export function reloadContinuationPath(cwd: string): string {
 	return join(cwd, ".dump", "pi-zmux", "reload-continuation.json");
 }
 
+export function shouldTriggerContinuation(prompt: string): boolean {
+	return !/\bwait\s+for\s+(?:the\s+)?user(?:'s)?\s+next\s+instruction\b/iu.test(prompt);
+}
+
 export function writeReloadContinuation(cwd: string, continuation: ReloadContinuation): string {
 	const target = reloadContinuationPath(cwd);
 	mkdirSync(dirname(target), { recursive: true });

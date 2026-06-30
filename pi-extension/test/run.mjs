@@ -30,7 +30,7 @@ try {
     zmuxRunResultDetails,
   } = await import(join(outDir, 'src/zmux.js'));
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
-  const { reloadContinuationPath, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
+  const { reloadContinuationPath, shouldTriggerContinuation, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
 
   const cfg = { policy: { mode: 'enforce', blockBackgroundJobs: true, redirectInteractive: true }, runtimes: {} };
@@ -106,6 +106,9 @@ try {
   assert.equal(hasExplicitBypass('PI_ZMUX_ALLOW=1 zmux tabs'), true);
   assert.equal(hasExplicitBypass('zmux tabs # pi-zmux: allow'), true);
   assert.equal(hasExplicitBypass('zmux tabs'), false);
+  assert.equal(shouldTriggerContinuation('Reload complete. Continue with verification.'), true);
+  assert.equal(shouldTriggerContinuation("Reload complete. Wait for the user's next instruction."), false);
+  assert.equal(shouldTriggerContinuation('reload complete; wait for user next instruction'), false);
   assert.equal(detectUserInputPrompt('[sudo] password for user:')?.kind, 'sudo_password');
   assert.equal(detectUserInputPrompt('Enter passphrase for key ~/.ssh/id_ed25519:')?.kind, 'password');
   assert.equal(detectUserInputPrompt('Are you sure you want to continue connecting (yes/no/[fingerprint])?')?.kind, 'ssh_confirm');
