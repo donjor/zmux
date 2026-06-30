@@ -54,6 +54,16 @@ npm test
 `pi-extension/node_modules` and `package-lock.json` are local dev artifacts and
 are ignored by the repo.
 
+Source layout:
+
+- `src/index.ts` — extension entrypoint: context injection, reload/respawn continuations, bash guard, `/zmux` command.
+- `src/classify.ts` — Pi bash classifier, kept in parity with the shared guard corpus.
+- `src/config.ts` — trusted project config loading and runtime merge behavior.
+- `src/zmux/` — focused low-level zmux/tmux wrappers (`context`, `sessions`, `tabs`, `panes`, `runtimes`, Pi lifecycle, interactive waiting) plus shared command helpers.
+- `src/zmux.ts` — compatibility facade re-exporting the wrapper modules.
+- `src/tools/` — focused Pi tool registration groups (`core`, `tabs`, `panes`, `runtimes`) plus shared validation/render helpers.
+- `src/tools.ts` — compatibility facade exporting `registerZmuxTools`.
+
 ## Tools
 
 Core tools:

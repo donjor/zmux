@@ -188,29 +188,38 @@ Return the 3 strongest points, 3 weakest points, and missing risks.
 Avoid pasting long files unless the CLI cannot access them. The peer's
 exploration should render in the visible tab.
 
-Before every send:
+Before every send, read the visible composer:
 
 ```bash
-zmux watch codex-peer
+zmux watch codex-peer -s <session>
 ```
 
-Then:
+Then submit through `type`:
 
 ```bash
-zmux type codex-peer '<prompt>'
+zmux type codex-peer '<prompt>' -s <session>
 ```
 
-`zmux type` sends text and Enter separately. Do not hand-glue Enter onto pasted
-text with raw sends.
+`zmux type` delivers text and a submit key, but terminal delivery is not proof the
+peer CLI accepted the prompt. For large multi-line pastes, verify submission in
+*Submission Hygiene* before any long wait. Do not immediately add a separate raw
+`Enter`; use an extra `Enter` only after a recapture proves the prompt is still in
+the composer.
 
 ## Wait
 
 ```bash
-zmux watch codex-peer --idle 3 -T 300
+zmux watch codex-peer -s <session> --idle 3 -T 300
 ```
 
 Exit 0 means the screen was quiet for 3 seconds. Stable does not mean done; it
 means there is a screen to classify.
+
+Prefer `--idle` + classify for peer turns. If you use `watch --until`, the regex
+must match future peer output, not a word in your own echoed prompt. `VERDICT`
+self-matches if your prompt says "Give VERDICT"; use a discriminating answer
+shape such as `VERDICT: (APPROVE|REVISE)` only when that exact text is absent from
+the prompt echo.
 
 Non-zero means timeout, interrupt, or command error. If a capture printed, use
 it. If the screen is still active, wait again with a larger ceiling.
@@ -296,21 +305,37 @@ Never automate password entry.
 
 ## Submission Hygiene
 
-After every large `type`, re-capture:
+Treat submission as a verified step. `typed to %pane` / `sent to %pane` means the
+keystrokes reached tmux; it does **not** mean the peer CLI submitted the prompt.
+Large bracketed pastes can race the follow-up submit key and leave the prompt
+sitting in the composer.
+
+After every large or multi-line `type`, re-capture before waiting on the answer:
 
 ```bash
-zmux watch codex-peer --idle 3 -T 30
+zmux watch codex-peer -s <session> --idle 1 -T 30
 ```
 
-If the prompt remains in the input box, send Enter:
+Classify the fresh screen:
+
+| capture shows | submit state | action |
+| --- | --- | --- |
+| composer cleared, fresh `Working`/spinner, or new assistant text after the prompt | submitted | now wait/classify normally |
+| full prompt still sitting in the composer | not submitted | send one `Enter`, then recapture |
+| only old scrollback `Working`/assistant text from a prior turn | unknown | recapture or inspect live tab; do not count as submitted |
+| human partial input | hands off | stop and wait/ask |
+
+Retry only after the recapture proves the prompt is still in the input box:
 
 ```bash
-zmux send codex-peer Enter
+zmux send codex-peer -s <session> Enter
+zmux watch codex-peer -s <session> --idle 1 -T 30
 ```
 
-If the CLI says to queue while busy, use its queue affordance if known. For
-Codex this has historically been `Tab`, but verify from the screen before using
-it.
+Do not start `watch --until` or mark the peer `running` until submission is
+verified. If the CLI says to queue while busy, use its queue affordance if known;
+for Codex this has historically been `Tab`, but verify from the screen before
+using it.
 
 ## Topic Changes
 
