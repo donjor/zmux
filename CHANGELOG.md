@@ -10,6 +10,7 @@ versioning is semver-ish until the first public release.
 
 ### Added
 
+- **Pi zmux typed surface parity** `agents` `pi` - `pi-extension/` now exposes typed tools for reviewable `zmux run` one-shots, workspace/session listing and worker-safe `session run`, tab state/label/move/placement, persistent `zmux log`, terminal snapshots, and terminal-current inspection. The Pi bash guard redirects direct `zmux`/raw `tmux` slips to those tools, while `zmux_run` preserves native `zmux run` wait/sentinel behavior and reports command exits structurally.
 - **Workspace session lifecycle commands** `workspace` `session` - `zmux fork <new-session-label> [--dir]` copies the current workspace session's tab names/order into a clean managed session without replaying commands, cloning panes, or coupling to Worktrunk. `zmux open ... --pin-view` creates a persistent grouped viewport over the target session, keeps root workspace membership canonical, excludes the view from ephemeral clone GC, and surfaces it as a distinct `· view` row.
 - **Current Pi zmux extension overhaul** `agents` - `pi-extension/` now targets
   current Pi (`0.80.x`), loads as the settings-managed local package, exposes
@@ -41,6 +42,7 @@ versioning is semver-ish until the first public release.
 
 ### Fixed
 
+- **Pi reload scheduling no longer races the active turn** `agents` `pi` - `zmux_pi_reload` now waits longer by default, retries when Pi prints the active-response warning, and suppresses wait-only continuation prompts so a successful reload does not trigger a spurious assistant reply.
 - **Dashboard workspace/session lifecycle errors stay visible** `dashboard` `workspace` - Workspaces-tab create, rename, move, and kill flows now route validation, tmux, and store failures through visible status errors instead of silently refreshing. Dashboard-created sessions share the same managed-session path as CLI-created sessions, and pinned view rows are blocked from root rename/move mutations.
 - **Single-pane windows use the pane-header label surface** `panes` - the
   `<index> <name> <detail>` pane-border header now renders for lone panes too,
