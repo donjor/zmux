@@ -113,6 +113,9 @@ zmux new <ws> <session>             Create workspace (if needed) + local session
 zmux new <ws> <s1> <s2> <s3>        Variadic — create workspace + multiple sessions
 zmux open <ws> [session]            Open workspace/local session (aliases: attach, a)
 zmux open <ws>/<session>            Same target grammar as command flags
+zmux open <ws> [session] --pin-view Create a persistent grouped viewport over the session
+zmux fork <new-session-label> [--dir <path>]
+                                     Copy current session's tab names/order into a new local session
 
 zmux run <recipe>                   Open the recipe form with defaults
 zmux run <recipe> -y                Run defaults without prompting

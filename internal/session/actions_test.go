@@ -414,6 +414,55 @@ func TestSwitchViewDoesNotGCStillAttachedClone(t *testing.T) {
 	}
 }
 
+func TestSwitchViewDoesNotGCPinnedClone(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.DisplayMessageResult = "foo-b"
+	m.Sessions = []tmux.Session{
+		{Name: "target", Attached: false},
+		{Name: "foo-b", Group: "foo", Clone: true, PinnedView: true, Attached: false},
+	}
+
+	if _, err := SwitchView(m, "target"); err != nil {
+		t.Fatalf("SwitchView() error: %v", err)
+	}
+	if callIndex(m, "KillSession", "foo-b") >= 0 {
+		t.Error("must not kill a pinned clone")
+	}
+}
+
+func TestAttachPinnedViewCreatesPersistentGroupedViewport(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.InsideTmux = true
+	m.DisplayMessageResult = "other"
+	m.Sessions = []tmux.Session{{Name: "target", Attached: true, Managed: true, Workspace: "dev", SessionLabel: "main", SessionID: "s_1"}}
+
+	actual, err := AttachPinnedView(m, "target")
+	if err != nil {
+		t.Fatalf("AttachPinnedView() error: %v", err)
+	}
+	if actual != "target-b" {
+		t.Fatalf("AttachPinnedView() = %q; want target-b", actual)
+	}
+	if callIndex(m, "NewGroupedSession", "target", "target-b") < 0 {
+		t.Error("expected grouped viewport creation")
+	}
+	if callIndex(m, "SetSessionOption", "target-b", optionPinnedView, "1") < 0 {
+		t.Error("expected pinned-view marker")
+	}
+	if callIndex(m, "SetSessionOption", "target-b", optionViewRoot, "target") < 0 {
+		t.Error("expected view-root marker")
+	}
+	if callIndex(m, "SetSessionOption", "target-b", optionWorkspace, "dev") < 0 || callIndex(m, "SetSessionOption", "target-b", optionSessionLabel, "main") < 0 || callIndex(m, "SetSessionOption", "target-b", optionSessionID, "s_1") < 0 {
+		t.Error("expected pinned view to copy root workspace metadata")
+	}
+	if callIndex(m, "SetSessionOption", "target-b", "destroy-unattached", "on") >= 0 {
+		t.Error("pinned views must not be destroy-unattached")
+	}
+	if callIndex(m, "SwitchClient", "target-b") < 0 {
+		t.Error("expected switch to pinned viewport")
+	}
+}
+
 func TestSwitchViewSwitchesToStandaloneCloneNamedTarget(t *testing.T) {
 	// Target is a standalone session named "foo-b" (no @zmux_clone marker).
 	// SwitchView must switch to it literally, not strip to "foo".

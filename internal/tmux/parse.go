@@ -9,7 +9,7 @@ import (
 
 // parseSessions parses tab-delimited list-sessions output into []Session.
 // Expected format per line:
-// name\twindows\tattached\tactivity\tdir\tcreated\tlast_attached\tgroup[\tmanaged\tworkspace\tlabel\tid]
+// name\twindows\tattached\tactivity\tdir\tcreated\tlast_attached\tgroup[\tmanaged\tworkspace\tlabel\tid\tclone\tpinned_view\tview_root]
 func parseSessions(output string) ([]Session, error) {
 	if output == "" {
 		return nil, nil
@@ -24,7 +24,7 @@ func parseSessions(output string) ([]Session, error) {
 			continue
 		}
 
-		fields := strings.SplitN(line, "\t", 13)
+		fields := strings.SplitN(line, "\t", 15)
 		if len(fields) < 5 {
 			return nil, fmt.Errorf("expected at least 5 tab-delimited fields, got %d: %q", len(fields), line)
 		}
@@ -81,6 +81,12 @@ func parseSessions(output string) ([]Session, error) {
 		}
 		if len(fields) > 12 {
 			s.Clone = fields[12] == "1" || fields[12] == "true"
+		}
+		if len(fields) > 13 {
+			s.PinnedView = fields[13] == "1" || fields[13] == "true"
+		}
+		if len(fields) > 14 {
+			s.ViewRoot = fields[14]
 		}
 
 		sessions = append(sessions, s)

@@ -92,6 +92,22 @@ func TestParseSessionsInvalidWindowCount(t *testing.T) {
 	}
 }
 
+func TestParseSessionsPinnedViewMetadata(t *testing.T) {
+	input := "zws_dev__main__clone_b\t1\t0\t1700000000\t/repo\t1700000000\t0\tzws_dev__main\t1\tdev\tmain\ts_1\t1\t1\tzws_dev__main"
+
+	sessions, err := parseSessions(input)
+	if err != nil {
+		t.Fatalf("parseSessions: unexpected error: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(sessions))
+	}
+	s := sessions[0]
+	if !s.Clone || !s.PinnedView || s.ViewRoot != "zws_dev__main" {
+		t.Fatalf("clone/pin/root = %v/%v/%q", s.Clone, s.PinnedView, s.ViewRoot)
+	}
+}
+
 func TestParseWindows(t *testing.T) {
 	input := "1\teditor\t1\t/home/user/dev\n" +
 		"2\tshell\t0\t/home/user\n" +

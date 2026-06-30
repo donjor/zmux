@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -287,6 +288,19 @@ func TestSessionsTabCreateWorkspace(t *testing.T) {
 	}
 }
 
+func TestSessionsTabCreateWorkspaceSurfacesDuplicateError(t *testing.T) {
+	tab, _, _ := newTestSessionsTab(t)
+
+	msg := tab.createWorkspace("dev")()
+	status, ok := msg.(dashboard.SetStatusIntent)
+	if !ok {
+		t.Fatalf("expected SetStatusIntent, got %T", msg)
+	}
+	if !status.IsError || !strings.Contains(status.Text, "create workspace failed") {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+}
+
 // TestSessionsTabCreateOnNoContextRowMakesWorkspace covers the empty/sessionless
 // path: on a no-context row (the "no workspaces yet" placeholder, an external
 // entry, a pseudo workspace) there is nothing to nest a session under, so c
@@ -451,6 +465,32 @@ func TestSessionsTabRenameSessionJumpsToNewID(t *testing.T) {
 	}
 }
 
+func TestSessionsTabRejectsPinnedViewRename(t *testing.T) {
+	tab, mock, _ := newTestSessionsTab(t)
+	addPinnedViewToMock(mock, "dev", "dev-b")
+	tab = simulateActivate(tab)
+
+	devIdx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	tab.tree.Cursor = devIdx
+	tab, _ = sendKey(tab, "enter")
+
+	sIdx := findRowIndexByID(tab, outline.SessionID("dev-b"))
+	if sIdx < 0 {
+		t.Fatal("pinned view row not found")
+	}
+	tab.tree.Cursor = sIdx
+
+	tab, cmd := sendKey(tab, "r")
+	if tab.mode == sessionsModeRename {
+		t.Fatal("pinned view should not enter rename mode")
+	}
+	msg := cmd()
+	status, ok := msg.(dashboard.SetStatusIntent)
+	if !ok || !status.IsError || !strings.Contains(status.Text, "Pinned views cannot be renamed") {
+		t.Fatalf("expected pinned-view rename error, got %T %+v", msg, msg)
+	}
+}
+
 func prepareMockForRename(mock *tmux.MockRunner, oldName, newName, label string) {
 	for i := range mock.Sessions {
 		if mock.Sessions[i].Name == oldName {
@@ -464,6 +504,11 @@ func prepareMockForRename(mock *tmux.MockRunner, oldName, newName, label string)
 		mock.Windows[newName] = wins
 		delete(mock.Windows, oldName)
 	}
+}
+
+func addPinnedViewToMock(mock *tmux.MockRunner, root, view string) {
+	mock.Sessions = append(mock.Sessions, tmux.Session{Name: view, Windows: 3, Group: root, Clone: true, PinnedView: true, ViewRoot: root})
+	mock.Windows[view] = []tmux.Window{{Index: 1, Name: "editor", Active: true}}
 }
 
 // ── Kill session (single confirm) ──
@@ -491,6 +536,20 @@ func TestSessionsTabKillSession(t *testing.T) {
 
 	if !mockCalled(mock, "KillSession") {
 		t.Error("expected KillSession to be called")
+	}
+}
+
+func TestSessionsTabKillSessionSurfacesError(t *testing.T) {
+	tab, mock, _ := newTestSessionsTab(t)
+	mock.Err = errors.New("boom")
+
+	msg := tab.killSession("dev")()
+	status, ok := msg.(dashboard.SetStatusIntent)
+	if !ok {
+		t.Fatalf("expected SetStatusIntent, got %T", msg)
+	}
+	if !status.IsError || !strings.Contains(status.Text, "kill session failed") {
+		t.Fatalf("unexpected status: %+v", status)
 	}
 }
 
@@ -577,6 +636,54 @@ func TestSessionsTabMoveSession(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected dev-2 to be in api workspace, got %v", apiWS.Sessions)
+	}
+}
+
+func TestSessionsTabMoveSessionSurfacesDuplicateLabelError(t *testing.T) {
+	tab, _, store := newTestSessionsTab(t)
+	if err := store.AddSession("api", "dev"); err != nil {
+		t.Fatalf("seed duplicate dest label: %v", err)
+	}
+
+	msg := tab.moveSessionTo("dev", "api")()
+	status, ok := msg.(dashboard.SetStatusIntent)
+	if !ok {
+		t.Fatalf("expected SetStatusIntent, got %T", msg)
+	}
+	if !status.IsError || !strings.Contains(status.Text, "move session failed") {
+		t.Fatalf("unexpected status: %+v", status)
+	}
+}
+
+func TestSessionsTabRejectsPinnedViewMove(t *testing.T) {
+	tab, mock, _ := newTestSessionsTab(t)
+	addPinnedViewToMock(mock, "dev", "dev-b")
+	tab = simulateActivate(tab)
+
+	devIdx := findRowIndexByID(tab, outline.WorkspaceID("dev"))
+	tab.tree.Cursor = devIdx
+	tab, _ = sendKey(tab, "enter")
+
+	sIdx := findRowIndexByID(tab, outline.SessionID("dev-b"))
+	if sIdx < 0 {
+		t.Fatal("pinned view row not found")
+	}
+	tab.tree.Cursor = sIdx
+
+	tab, cmd := sendKey(tab, "m")
+	if tab.mode == sessionsModeMove {
+		t.Fatal("pinned view should not enter move mode")
+	}
+	msg := cmd()
+	status, ok := msg.(dashboard.SetStatusIntent)
+	if !ok || !status.IsError || !strings.Contains(status.Text, "Pinned views cannot be moved") {
+		t.Fatalf("expected pinned-view move error, got %T %+v", msg, msg)
+	}
+
+	msg = tab.moveSessionTo("dev-b", "api")()
+	status, ok = msg.(dashboard.SetStatusIntent)
+	if !ok || !status.IsError || !strings.Contains(status.Text, "pinned views cannot be moved") {
+		t.Fatalf("expected direct move pinned-view error, got %T %+v", msg, msg)
 	}
 }
 

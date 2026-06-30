@@ -12,7 +12,9 @@ type Session struct {
 	LastAttached time.Time
 	Dir          string
 	Group        string // session group name (empty if ungrouped)
-	Clone        bool   // zmux-created ephemeral group clone (@zmux_clone); safe to GC
+	Clone        bool   // zmux-created grouped viewport (@zmux_clone); ephemeral unless PinnedView is true
+	PinnedView   bool   // user-pinned grouped viewport (@zmux_pinned_view)
+	ViewRoot     string // root session for a pinned grouped viewport (@zmux_view_root)
 	Managed      bool
 	Workspace    string
 	SessionLabel string

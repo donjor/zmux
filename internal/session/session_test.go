@@ -234,6 +234,42 @@ func TestListSessionsCollapsesGrouped(t *testing.T) {
 	}
 }
 
+func TestListSessionsIncludesPinnedGroupedViews(t *testing.T) {
+	now := time.Now()
+	m := tmux.NewMockRunner()
+	m.Sessions = []tmux.Session{
+		{Name: "zmux", Windows: 2, Attached: true, Activity: now, Dir: "/home/user/zmux", Group: "zmux", SessionLabel: "main"},
+		{Name: "zmux-b", Windows: 2, Attached: false, Activity: now, Dir: "/home/user/zmux", Group: "zmux", Clone: true, PinnedView: true, ViewRoot: "zmux", SessionLabel: "main"},
+	}
+
+	sessions, err := ListSessions(m)
+	if err != nil {
+		t.Fatalf("ListSessions() error: %v", err)
+	}
+	if len(sessions) != 2 {
+		t.Fatalf("expected root plus pinned view, got %d: %#v", len(sessions), sessions)
+	}
+	var pinned *SessionInfo
+	for i := range sessions {
+		if sessions[i].Name == "zmux-b" {
+			pinned = &sessions[i]
+		}
+	}
+	if pinned == nil {
+		t.Fatal("expected pinned grouped view in session list")
+	}
+	if !pinned.PinnedView || pinned.ViewRoot != "zmux" {
+		t.Fatalf("pinned metadata = pinned:%v root:%q", pinned.PinnedView, pinned.ViewRoot)
+	}
+	if got := LocalDisplayName(*pinned); got != "main · view b" {
+		t.Fatalf("display label = %q; want main · view b", got)
+	}
+	pinned.Workspace = "dev"
+	if got := QualifiedDisplayName(*pinned); got != "dev/main · view b" {
+		t.Fatalf("qualified display label = %q; want dev/main · view b", got)
+	}
+}
+
 func TestListSessionsUngroupedSuffixNotCollapsed(t *testing.T) {
 	now := time.Now()
 	m := tmux.NewMockRunner()

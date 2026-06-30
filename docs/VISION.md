@@ -391,6 +391,8 @@ persisted as versioned TOML v2 in `~/.zmux/workspaces.toml`.
 - `zmux open <workspace>` attaches to the workspace's last-active session.
 - `zmux open <workspace> <session>` attaches to a specific session in a workspace.
 - `zmux open <workspace> [session]` is the explicit form for scripts.
+- `zmux open <workspace> [session] --pin-view` creates a persistent grouped viewport over the same logical session.
+- `zmux fork <new-session-label>` branches from the current workspace session by copying tab names/order into a new local session.
 - The picker is **workspace-primary**: a single flat list of workspaces with
   their sessions expanded inline (when selected, or when search matches).
 - The dashboard "Workspaces" tab groups by workspace.
@@ -420,6 +422,8 @@ zmux new <ws> <s1> <s2> ...     Variadic — create workspace + multiple session
 zmux run <recipe>               Open recipe form / run recipe defaults with -y
 zmux recipe list                List recipes
 zmux open <ws> [session]        Explicit attach (alias: a, attach)
+zmux open <ws> [session] --pin-view  Persistent grouped viewport
+zmux fork <new-session-label>   Copy current session tab names/order into a new local session
 zmux kill <name>                Smart kill — workspace-first, then session
 zmux ls                         List workspaces (workspace-primary default)
 zmux ls <ws>                    List sessions within a workspace
@@ -508,6 +512,8 @@ zmux new                        — create tmp-N session (no workspace)
 zmux new <ws>                   — create workspace + 'main' session, attach
 zmux new <ws> <session...>      — variadic: create workspace + sessions
 zmux open <ws> [session]        — open workspace session (aliases: attach, a)
+zmux open <ws> [session] --pin-view — persistent grouped viewport
+zmux fork <new-session-label>   — copy current session tab names/order into a new local session
 zmux run <recipe>               — recipe form with cwd/workspace/session defaults
 zmux run <recipe> -y            — run recipe defaults without prompting
 zmux recipe list                — list bundled and user recipes

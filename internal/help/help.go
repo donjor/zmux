@@ -101,6 +101,8 @@ func commandSections() []Section {
 			{"zmux new <ws> <session...>", "Create workspace + named sessions"},
 			{"zmux new", "Create tmp-N session (no workspace)"},
 			{"zmux open <ws> [session]", "Open workspace session (aliases: attach, a)"},
+			{"zmux open <ws> [session] --pin-view", "Create persistent grouped viewport"},
+			{"zmux fork <new-session-label>", "Fork current session tabs into a new local session"},
 			{"zmux kill <name>", "Smart kill — workspace-first (alias: k)"},
 			{"zmux ls", "List workspaces (workspace-primary)"},
 			{"zmux ls <ws>", "List sessions within a workspace"},

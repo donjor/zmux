@@ -28,6 +28,9 @@ type SessionInfo struct {
 	Workspace       string
 	Label           string
 	SessionID       string
+	Clone           bool
+	PinnedView      bool
+	ViewRoot        string
 }
 
 var tmpPattern = regexp.MustCompile(`^tmp-(\d+)$`)
@@ -110,14 +113,14 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 		root := RootName(s.Name)
 		isGroupedCopy := s.Group != "" && root != s.Name && nameSet[root]
 
-		if isGroupedCopy {
+		if isGroupedCopy && !s.PinnedView {
 			// Merge into root: count attached clients.
 			if ri, ok := roots[s.Group]; ok {
 				if s.Attached {
 					ri.AttachedClients++
 				}
 			}
-			continue // don't add grouped copy to the list
+			continue // don't add ephemeral grouped copies to the list
 		}
 
 		info := SessionInfo{
@@ -135,6 +138,12 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 			Workspace:       s.Workspace,
 			Label:           s.SessionLabel,
 			SessionID:       s.SessionID,
+			Clone:           s.Clone,
+			PinnedView:      s.PinnedView,
+			ViewRoot:        s.ViewRoot,
+		}
+		if info.PinnedView && info.ViewRoot == "" {
+			info.ViewRoot = root
 		}
 		if s.Attached {
 			info.AttachedClients = 1

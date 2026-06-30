@@ -98,6 +98,30 @@ func TestBuildDashboardStyle(t *testing.T) {
 	}
 }
 
+func TestBuildLabelsPinnedGroupedViewports(t *testing.T) {
+	tree := outline.NewTree()
+	workspaces := []workspaceview.WorkspaceViewModel{
+		wsModel("dev", false,
+			session.SessionInfo{Name: "zws_dev__main", Label: "main"},
+			session.SessionInfo{Name: "zws_dev__main__clone_b", Label: "main", PinnedView: true, ViewRoot: "zws_dev__main"},
+		),
+	}
+	p := workspaceoutline.Policy{
+		WorkspaceLabel: func(w *workspaceview.WorkspaceViewModel) string { return w.Name },
+		Expanded:       func(string, *workspaceview.WorkspaceViewModel) bool { return true },
+		Sessions:       func(w *workspaceview.WorkspaceViewModel) []session.SessionInfo { return w.LiveSessions },
+	}
+
+	rows := workspaceoutline.Build(workspaces, nil, tree, p)
+	pinned := findRow(rows, outline.SessionID("zws_dev__main__clone_b"))
+	if pinned == nil {
+		t.Fatal("expected pinned view row")
+	}
+	if pinned.Label != "main · view b" {
+		t.Fatalf("pinned view label = %q; want main · view b", pinned.Label)
+	}
+}
+
 // TestBuildPickerStyle covers the flat-picker policy: a top-action row,
 // focus-based expansion, and no chevron state recorded on headers.
 func TestBuildPickerStyle(t *testing.T) {

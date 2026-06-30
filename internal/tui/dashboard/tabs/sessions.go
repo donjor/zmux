@@ -322,7 +322,12 @@ func (t *SessionsTab) killWorkspace(name string) tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		_ = killWorkspaceMutation(runner, wsStore, name, sessNames)
+		if err := killWorkspaceMutation(runner, wsStore, name, sessNames); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("kill workspace failed: %v", err),
+				IsError: true,
+			}
+		}
 		return sessionsMutationDoneMsg{reqID: reqID}
 	}
 }
@@ -333,7 +338,12 @@ func (t *SessionsTab) killSession(name string) tea.Cmd {
 	wsStore := t.wsStore
 	reqID := t.reqID
 	return func() tea.Msg {
-		_ = killSessionMutation(runner, wsStore, name)
+		if err := killSessionMutation(runner, wsStore, name); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("kill session failed: %v", err),
+				IsError: true,
+			}
+		}
 		return sessionsMutationDoneMsg{reqID: reqID}
 	}
 }
@@ -379,8 +389,17 @@ func (t *SessionsTab) createWorkspace(name string) tea.Cmd {
 	reqID := t.reqID
 	t.pendingJumpTo = outline.WorkspaceID(name)
 	return func() tea.Msg {
-		if wsStore != nil {
-			_ = wsStore.CreateWorkspace(name, "")
+		if wsStore == nil {
+			return dashboard.SetStatusIntent{
+				Text:    "create workspace failed: workspace store unavailable",
+				IsError: true,
+			}
+		}
+		if err := wsStore.CreateWorkspace(name, ""); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("create workspace failed: %v", err),
+				IsError: true,
+			}
 		}
 		return sessionsMutationDoneMsg{reqID: reqID}
 	}
@@ -409,12 +428,33 @@ func (t *SessionsTab) createSessionInWorkspace(wsName, label string) tea.Cmd {
 
 // moveSessionTo commits an inline move and queues a jump-to on the moved row.
 func (t *SessionsTab) moveSessionTo(sessionName, destWorkspace string) tea.Cmd {
+	runner := t.runner
 	wsStore := t.wsStore
 	reqID := t.reqID
 	t.pendingJumpTo = outline.SessionID(sessionName)
 	return func() tea.Msg {
-		if wsStore != nil {
-			_ = wsStore.MoveSession(session.RootName(sessionName), destWorkspace)
+		if pinned, err := isPinnedViewSession(runner, sessionName); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("move session failed: %v", err),
+				IsError: true,
+			}
+		} else if pinned {
+			return dashboard.SetStatusIntent{
+				Text:    "move session failed: pinned views cannot be moved; move the root session",
+				IsError: true,
+			}
+		}
+		if wsStore == nil {
+			return dashboard.SetStatusIntent{
+				Text:    "move session failed: workspace store unavailable",
+				IsError: true,
+			}
+		}
+		if err := wsStore.MoveSession(session.RootName(sessionName), destWorkspace); err != nil {
+			return dashboard.SetStatusIntent{
+				Text:    fmt.Sprintf("move session failed: %v", err),
+				IsError: true,
+			}
 		}
 		return sessionsMutationDoneMsg{reqID: reqID}
 	}

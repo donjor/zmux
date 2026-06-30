@@ -36,12 +36,20 @@ func renameWorkspaceMutation(wsStore *workspace.Store, oldName, newName string) 
 // report happened — tmux renamed, store didn't, and nothing was visible
 // to the user.
 func renameSessionMutation(runner tmux.Runner, wsStore *workspace.Store, oldName, newName string) error {
+	if pinned, err := isPinnedViewSession(runner, oldName); err != nil {
+		return err
+	} else if pinned {
+		return fmt.Errorf("pinned view %q cannot be renamed; rename the root session", oldName)
+	}
 	targetName := renamedSessionTarget(wsStore, oldName, newName)
 	var wsName string
 	var rec workspace.WorkspaceSession
 	if wsStore != nil {
 		if foundWS, oldRec, ok := wsStore.SessionRecordFor(session.RootName(oldName)); ok {
 			wsName = foundWS
+			if existing, exists := wsStore.SessionRecord(foundWS, newName); exists && existing.ID != oldRec.ID {
+				return fmt.Errorf("workspace metadata: session label %q already exists in workspace %q", newName, foundWS)
+			}
 			nextRec, err := workspace.NewSessionRecord(foundWS, newName)
 			if err != nil {
 				return err
@@ -77,6 +85,22 @@ func renamedSessionTarget(wsStore *workspace.Store, oldName, newName string) str
 		}
 	}
 	return newName
+}
+
+func isPinnedViewSession(runner tmux.Runner, name string) (bool, error) {
+	if runner == nil {
+		return false, nil
+	}
+	sessions, err := runner.ListSessions()
+	if err != nil {
+		return false, fmt.Errorf("list sessions: %w", err)
+	}
+	for _, s := range sessions {
+		if s.Name == name {
+			return s.PinnedView, nil
+		}
+	}
+	return false, nil
 }
 
 // createSessionMutation creates a canonically-named managed session in the
@@ -120,7 +144,7 @@ func killWorkspaceMutation(runner tmux.Runner, wsStore *workspace.Store, name st
 		_ = session.Kill(runner, n)
 	}
 	if wsStore != nil {
-		_ = wsStore.DeleteWorkspace(name)
+		return wsStore.DeleteWorkspace(name)
 	}
 	return nil
 }

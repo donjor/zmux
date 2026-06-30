@@ -110,6 +110,9 @@ func (s *Store) MoveSession(key, destWorkspace string) error {
 	var rec WorkspaceSession
 	if ws, foundRec, found := st.SessionFor(key); found {
 		rec = foundRec
+		if ws.Name == destWorkspace {
+			return nil
+		}
 		ws.Sessions = removeSessionRecord(ws.Sessions, rec.ID)
 		if ws.LastActiveSessionID == rec.ID {
 			if len(ws.Sessions) > 0 {
@@ -145,7 +148,10 @@ func (s *Store) MoveSession(key, destWorkspace string) error {
 			return err
 		}
 	}
-	destWS.Sessions = append(destWS.Sessions, rec)
+	if existing, _, found := findSessionRecord(destWS.Sessions, rec.Label); found && existing.ID != rec.ID {
+		return fmt.Errorf("session label %q already exists in workspace %q", rec.Label, destWorkspace)
+	}
+	destWS.Sessions = appendSessionRecordUnique(destWS.Sessions, rec)
 	destWS.UpdatedAt = time.Now()
 	destWS.populateDerived()
 
@@ -165,6 +171,12 @@ func (s *Store) RenameSession(oldKey, newLabel string) error {
 	ws, rec, found := st.SessionFor(oldKey)
 	if !found {
 		return nil // not tracked
+	}
+	if rec.Label == newLabel {
+		return nil
+	}
+	if existing, _, found := findSessionRecord(ws.Sessions, newLabel); found && existing.ID != rec.ID {
+		return fmt.Errorf("session label %q already exists in workspace %q", newLabel, ws.Name)
 	}
 	newRec, err := NewSessionRecord(ws.Name, newLabel)
 	if err != nil {

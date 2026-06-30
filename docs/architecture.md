@@ -200,9 +200,9 @@ The render pipeline reads from `time.Now()` for timestamps, `bar.Prober` for git
 
 The durable store is v3: each workspace session has a stable ID, a local label, and a generated raw tmux name such as `zws_<workspace>__<label>`. Zmux stamps the live tmux session with `@zmux_managed`, `@zmux_workspace`, `@zmux_session_label`, and `@zmux_session_id`; tmux options are authoritative for live metadata, while raw names are debug/interop output. Migrated v1/v2 records can temporarily retain `legacy_tmux_name` so the next reconcile can rename the live old tmux session to its generated raw name, stamp metadata, and clear the hint.
 
-`internal/session` owns the per-session model and the `RootName()` helper that resolves clone names (`dev-b` for legacy sessions, `__clone_b` for managed sessions). `internal/recipe` owns declarative launch plans and bundled recipes.
+`internal/session` owns the per-session model and the `RootName()` helper that resolves clone names (`dev-b` for legacy sessions, `__clone_b` for managed sessions). Automatic independent-view clones remain ephemeral, but `zmux open ... --pin-view` stamps grouped viewports with `@zmux_pinned_view` + `@zmux_view_root`; these are kept out of clone GC and surfaced as separate view rows while root workspace membership stays canonical. `internal/recipe` owns declarative launch plans and bundled recipes.
 
-`internal/workspace/create.go` exposes `CreateManagedSession` — the single create path shared by `zmux new` and the dashboard, so both produce identically-stamped, addressable `zws_<workspace>__<label>` sessions (and clean up the live tmux session on any post-create failure) instead of the dashboard's old raw-label sessions that the picker and bar could not resolve.
+`internal/workspace/create.go` exposes `CreateManagedSession` — the single create path shared by `zmux new`, `zmux fork`, and the dashboard, so all three produce identically-stamped, addressable `zws_<workspace>__<label>` sessions (and clean up the live tmux session on any post-create failure) instead of the dashboard's old raw-label sessions that the picker and bar could not resolve. `internal/workspace/fork.go` copies the current source session's tab names/order into a clean managed session; it deliberately does not replay commands, clone panes, or couple to Worktrunk.
 
 User-facing command targets use `workspace/session`. `internal/cli/session_target.go`
 resolves explicit `workspace/session` targets, current-workspace or cwd-local
@@ -335,7 +335,8 @@ zmux
 ├── apply             — regenerate tmux.conf and apply everything
 ├── refresh           — apply config and refresh the current tmux client
 ├── new               — create a workspace plus local session labels
-├── open              — open a workspace/session (aliases: attach, a)
+├── open              — open a workspace/session (aliases: attach, a; --pin-view for persistent grouped viewports)
+├── fork              — fork the current workspace session's tab names/order into a new local session
 ├── kill              — smart workspace/session kill
 ├── ls                — list workspaces or local session labels
 ├── tabs              — list tabs in current or targeted workspace/session

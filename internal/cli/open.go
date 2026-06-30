@@ -6,12 +6,14 @@ import (
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
 func newOpenCmd(app *apppkg.App) *cobra.Command {
 	var openHijackFlag bool
+	var openPinViewFlag bool
 
 	cmd := &cobra.Command{
 		Use:     "open <workspace> [session]",
@@ -24,9 +26,12 @@ func newOpenCmd(app *apppkg.App) *cobra.Command {
 
 If the target session is already attached elsewhere, a clone
 (independent viewport) is created automatically. Use --hijack
-to take over instead.`,
+to take over instead, or --pin-view to create a persistent grouped viewport.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if openHijackFlag && openPinViewFlag {
+				return fmt.Errorf("--hijack and --pin-view cannot be used together")
+			}
 			wsName, requestedLabel, err := parseWorkspaceSessionArgs(args)
 			if err != nil {
 				return err
@@ -41,7 +46,7 @@ to take over instead.`,
 			if ws == nil {
 				// Not a workspace — try as a session name (backward compat for `zmux attach <session>`).
 				if app.Runner.HasSession(wsName) {
-					return attachSession(app, openHijackFlag, wsName)
+					return attachSession(app, openHijackFlag, openPinViewFlag, wsName)
 				}
 				return fmt.Errorf("workspace %q not found\n  Use: zmux new %s  (create it)", wsName, wsName)
 			}
@@ -71,10 +76,11 @@ to take over instead.`,
 			// Update last active.
 			_ = app.WorkspaceStore.SetLastActive(wsName, targetSession.ID)
 
-			return attachSession(app, openHijackFlag, targetName)
+			return attachSession(app, openHijackFlag, openPinViewFlag, targetName)
 		},
 	}
 	cmd.Flags().BoolVar(&openHijackFlag, "hijack", false, "take over session from other client")
+	cmd.Flags().BoolVar(&openPinViewFlag, "pin-view", false, "create a persistent grouped viewport instead of sharing the root view")
 	return cmd
 }
 
@@ -129,8 +135,14 @@ func workspaceSessionName(app *apppkg.App, requested, workspace string) string {
 	return rec.TmuxName
 }
 
-// attachSession handles the attach logic: normal attach, auto-clone, or hijack.
-func attachSession(app *apppkg.App, hijack bool, name string) error {
+// attachSession handles the attach logic: normal attach, auto-clone, pinned view, or hijack.
+func attachSession(app *apppkg.App, hijack, pinView bool, name string) error {
+	if pinView {
+		return attachOwnedSessionWith(app, name, func(r tmux.Runner, target string) error {
+			_, err := session.AttachPinnedView(r, target)
+			return err
+		})
+	}
 	if hijack {
 		return attachOwnedSessionWith(app, name, session.AttachHijack)
 	}

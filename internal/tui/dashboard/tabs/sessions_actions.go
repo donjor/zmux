@@ -286,6 +286,11 @@ func (t *SessionsTab) handleRenameRequest(row *outline.Row) (dashboard.Tab, tea.
 		if s == nil {
 			return t, nil
 		}
+		if s.PinnedView {
+			return t, func() tea.Msg {
+				return dashboard.SetStatusIntent{Text: "Pinned views cannot be renamed; rename the root session", IsError: true}
+			}
+		}
 		t.rename = &renameState{kind: "session", oldName: s.Name}
 		t.mode = sessionsModeRename
 		t.renameInput.SetValue(s.Name)
@@ -361,6 +366,11 @@ func (t *SessionsTab) handleMoveRequest(row *outline.Row) (dashboard.Tab, tea.Cm
 	s, _ := outline.RowData[session.SessionInfo](row)
 	if s == nil {
 		return t, nil
+	}
+	if s.PinnedView {
+		return t, func() tea.Msg {
+			return dashboard.SetStatusIntent{Text: "Pinned views cannot be moved; move the root session", IsError: true}
+		}
 	}
 	parent := row.ParentID
 	originName := ""

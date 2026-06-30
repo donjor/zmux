@@ -92,6 +92,41 @@ func AttachHijack(runner tmux.Runner, name string) error {
 	return runner.AttachSessionDetach(name)
 }
 
+// AttachPinnedView creates a persistent grouped viewport over name and attaches
+// or switches the current client to that viewport. Unlike the automatic
+// SwitchView clones, pinned views are not destroy-unattached and are surfaced in
+// workspace UIs until explicitly killed.
+func AttachPinnedView(runner tmux.Runner, name string) (string, error) {
+	prev, _ := runner.DisplayMessage("", "#{session_name}")
+	sessions, _ := runner.ListSessions()
+
+	root := name
+	if isZmuxClone(sessions, name) {
+		root = RootName(name)
+	}
+
+	clone := nextGroupName(runner, root)
+	if err := runner.NewGroupedSession(root, clone); err != nil {
+		return "", err
+	}
+	markClone(runner, clone)
+	copyRootSessionMetadata(runner, clone, sessions, root)
+	if err := markPinnedView(runner, clone, root); err != nil {
+		_ = runner.KillSession(clone)
+		return "", err
+	}
+
+	if runner.IsInsideTmux() {
+		if err := runner.SwitchClient(clone); err != nil {
+			_ = runner.KillSession(clone)
+			return "", err
+		}
+		gcLeftClone(runner, prev)
+		return clone, nil
+	}
+	return clone, runner.AttachSession(clone)
+}
+
 // nextGroupName finds the next available grouped session suffix: name-b, name-c, etc.
 func nextGroupName(runner tmux.Runner, base string) string {
 	sessions, err := runner.ListSessions()
@@ -205,12 +240,51 @@ func SwitchView(runner tmux.Runner, target string) (string, error) {
 // makes a clone safe to garbage-collect: tmux's own session_group is also set
 // on sessions a user grouped by hand (tmux new-session -t foo -s foo-b), so the
 // group alone is not proof zmux owns the session.
-const optionClone = "@zmux_clone"
+const (
+	optionClone        = "@zmux_clone"
+	optionPinnedView   = "@zmux_pinned_view"
+	optionViewRoot     = "@zmux_view_root"
+	optionManaged      = "@zmux_managed"
+	optionWorkspace    = "@zmux_workspace"
+	optionSessionLabel = "@zmux_session_label"
+	optionSessionID    = "@zmux_session_id"
+)
 
 // markClone stamps the zmux-clone provenance marker on a freshly created clone.
 func markClone(runner tmux.Runner, name string) {
 	if err := runner.SetSessionOption(name, optionClone, "1"); err != nil {
 		debug.Log("switchview: mark clone %s: %v", name, err)
+	}
+}
+
+func markPinnedView(runner tmux.Runner, name, root string) error {
+	if err := runner.SetSessionOption(name, optionPinnedView, "1"); err != nil {
+		return err
+	}
+	if err := runner.SetSessionOption(name, optionViewRoot, root); err != nil {
+		return err
+	}
+	return nil
+}
+
+func copyRootSessionMetadata(runner tmux.Runner, clone string, sessions []tmux.Session, root string) {
+	for _, s := range sessions {
+		if s.Name != root {
+			continue
+		}
+		if s.Managed {
+			_ = runner.SetSessionOption(clone, optionManaged, "1")
+		}
+		if s.Workspace != "" {
+			_ = runner.SetSessionOption(clone, optionWorkspace, s.Workspace)
+		}
+		if s.SessionLabel != "" {
+			_ = runner.SetSessionOption(clone, optionSessionLabel, s.SessionLabel)
+		}
+		if s.SessionID != "" {
+			_ = runner.SetSessionOption(clone, optionSessionID, s.SessionID)
+		}
+		return
 	}
 }
 
@@ -249,7 +323,7 @@ func gcLeftClone(runner tmux.Runner, prev string) {
 		if s.Name != prev {
 			continue
 		}
-		if !s.Clone || s.Attached {
+		if !s.Clone || s.PinnedView || s.Attached {
 			return
 		}
 		if kerr := runner.KillSession(prev); kerr != nil {

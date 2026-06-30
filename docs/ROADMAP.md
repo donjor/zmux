@@ -59,21 +59,22 @@ entry/creation/management surface (`internal/tui/workspaceoutline` +
 
 ### Workspace & session lifecycle
 
-- [ ] **Dashboard Workspaces tab supports full CRUD**
-  - Creating, renaming, and deleting workspaces from the dashboard should match
-    the CLI and picker behavior.
-  - Keep validation and conflict errors visible in-place.
+- [x] **Dashboard Workspaces tab supports full CRUD**
+  - Creating, renaming, and deleting workspaces from the dashboard now route
+    through the same managed-session/store paths as the CLI and picker.
+  - Validation, conflict, tmux, and store errors stay visible in-place.
 
-- [ ] **`zmux fork <session>` promotes session branching**
-  - Scratch extraction exists for tabs, but session-level branching still needs
-    a first-class command.
-  - Implement the already-decided shape with conservative naming and attach
-    behavior.
+- [x] **`zmux fork <new-session-label>` promotes session branching**
+  - Copies the current workspace session's tab names/order into a clean managed
+    session, with optional `--dir`; no command replay, pane cloning, or
+    Worktrunk coupling.
+  - Uses generated raw session names plus local labels, matching `zmux new`.
 
-- [ ] **Workspace members can include grouped sessions**
-  - Multi-monitor workflows need several viewports over the same logical
-    session without corrupting workspace membership.
-  - Build on the existing session-group clone model and keep labels rooted.
+- [x] **Workspace members can include grouped sessions**
+  - `zmux open ... --pin-view` creates a persistent grouped viewport over the
+    target session without corrupting canonical root workspace membership.
+  - Pinned grouped viewports are marked in tmux metadata, excluded from clone GC,
+    and surfaced as distinct view rows while labels stay rooted.
 
 ### Bar & status customization
 

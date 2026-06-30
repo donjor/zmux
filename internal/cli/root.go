@@ -138,6 +138,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		barRenderCmd,
 		newBarSpinnerCmd(a),
 		completionCmd,
+		newForkCmd(a),
 		newGuardCmd(a),
 		newHelpCmd(a),
 		newInitCmd(a, version),

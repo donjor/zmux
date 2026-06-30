@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/donjor/zmux/internal/tmux"
@@ -95,6 +96,55 @@ func TestRenameSessionMutationCallsRunnerThenStore(t *testing.T) {
 	// Store should have the new mapping.
 	if name, _ := store.WorkspaceFor("new"); name != "ws" {
 		t.Errorf("expected new session mapped to ws, got %q", name)
+	}
+}
+
+func TestRenameSessionMutationRejectsDuplicateBeforeTmuxRename(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	fs := newSessionsMemFS("/home/user")
+	store := workspace.NewStore(fs)
+	if err := store.CreateWorkspace("ws", ""); err != nil {
+		t.Fatalf("create ws: %v", err)
+	}
+	if err := store.AddSession("ws", "old"); err != nil {
+		t.Fatalf("add old: %v", err)
+	}
+	if err := store.AddSession("ws", "taken"); err != nil {
+		t.Fatalf("add taken: %v", err)
+	}
+
+	if err := renameSessionMutation(mock, store, "old", "taken"); err == nil {
+		t.Fatal("expected duplicate label error")
+	}
+	if mockHasCall(mock, "RenameSession", "old", workspace.RawSessionName("ws", "taken")) {
+		t.Fatalf("tmux rename should not run after duplicate-label validation failure: %v", mock.Calls)
+	}
+}
+
+func TestRenameSessionMutationRejectsPinnedViewBeforeTmuxRename(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	mock.Sessions = []tmux.Session{
+		{Name: "old", Group: "old"},
+		{Name: "old-b", Group: "old", Clone: true, PinnedView: true},
+	}
+	fs := newSessionsMemFS("/home/user")
+	store := workspace.NewStore(fs)
+	if err := store.CreateWorkspace("ws", ""); err != nil {
+		t.Fatalf("create ws: %v", err)
+	}
+	if err := store.AddSession("ws", "old"); err != nil {
+		t.Fatalf("add old: %v", err)
+	}
+
+	err := renameSessionMutation(mock, store, "old-b", "new")
+	if err == nil || !strings.Contains(err.Error(), "pinned view") {
+		t.Fatalf("expected pinned-view error, got %v", err)
+	}
+	if mockHasCall(mock, "RenameSession") {
+		t.Fatalf("tmux rename should not run for a pinned view: %v", mock.Calls)
+	}
+	if _, rec, ok := store.SessionRecordFor("old"); !ok || rec.Label != "old" {
+		t.Fatalf("root session metadata should remain unchanged, ok=%v rec=%+v", ok, rec)
 	}
 }
 

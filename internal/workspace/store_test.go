@@ -413,6 +413,59 @@ func TestRenameSession(t *testing.T) {
 	}
 }
 
+func TestRenameSessionRejectsDuplicateLabel(t *testing.T) {
+	store, _ := newTestStore()
+	_ = store.AddSession("myapp", "main")
+	_ = store.AddSession("myapp", "dev")
+
+	if err := store.RenameSession("dev", "main"); err == nil {
+		t.Fatal("expected duplicate label error")
+	}
+
+	sessions := store.SessionLabelsIn("myapp")
+	want := []string{"main", "dev"}
+	if len(sessions) != len(want) {
+		t.Fatalf("SessionsIn = %v; want %v", sessions, want)
+	}
+	for i := range want {
+		if sessions[i] != want[i] {
+			t.Fatalf("SessionsIn = %v; want %v", sessions, want)
+		}
+	}
+}
+
+func TestMoveSessionRejectsDuplicateDestinationLabel(t *testing.T) {
+	store, _ := newTestStore()
+	_ = store.AddSession("alpha", "main")
+	_ = store.AddSession("beta", "main")
+
+	if err := store.MoveSession("zws_alpha__main", "beta"); err == nil {
+		t.Fatal("expected duplicate label error")
+	}
+
+	if got := store.SessionLabelsIn("alpha"); len(got) != 1 || got[0] != "main" {
+		t.Fatalf("alpha sessions = %v; want [main]", got)
+	}
+	if got := store.SessionLabelsIn("beta"); len(got) != 1 || got[0] != "main" {
+		t.Fatalf("beta sessions = %v; want [main]", got)
+	}
+}
+
+func TestSessionForPrefersRawIdentityOverDuplicateLocalLabel(t *testing.T) {
+	st := &StateV3{Workspaces: map[string]*Workspace{
+		"alpha": {Name: "alpha", Sessions: []WorkspaceSession{{ID: "alpha-dev", Label: "dev", TmuxName: "dev"}}},
+		"beta":  {Name: "beta", Sessions: []WorkspaceSession{{ID: "beta-dev", Label: "dev", TmuxName: "zws_beta__dev"}}},
+	}}
+
+	ws, rec, ok := st.SessionFor("dev")
+	if !ok {
+		t.Fatal("expected raw dev session to resolve")
+	}
+	if ws.Name != "alpha" || rec.ID != "alpha-dev" {
+		t.Fatalf("SessionFor(dev) = %s/%s; want alpha/alpha-dev", ws.Name, rec.ID)
+	}
+}
+
 // ── WorkspaceFor with grouped sessions ──
 
 func TestWorkspaceForGroupedSession(t *testing.T) {

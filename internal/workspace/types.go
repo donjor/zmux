@@ -101,7 +101,17 @@ func (st *StateV3) SessionFor(name string) (*Workspace, WorkspaceSession, bool) 
 			continue
 		}
 		for _, sess := range ws.Sessions {
-			if sess.TmuxName == name || sess.Label == name || sess.ID == name || sess.LegacyTmuxName == name {
+			if sess.TmuxName == name || sess.ID == name || sess.LegacyTmuxName == name {
+				return ws, sess, true
+			}
+		}
+	}
+	for _, ws := range st.Workspaces {
+		if ws == nil {
+			continue
+		}
+		for _, sess := range ws.Sessions {
+			if sess.Label == name {
 				return ws, sess, true
 			}
 		}
