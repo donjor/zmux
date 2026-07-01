@@ -21,6 +21,7 @@ const (
 // clock; human/pre-existing tabs get a long, visible ramp.
 const (
 	DefaultAgentTTL     = time.Hour
+	DefaultPeerParkTTL  = 30 * time.Minute
 	DefaultHumanFlagAge = 4 * time.Hour
 	DefaultHumanKillAge = 24 * time.Hour
 )
@@ -91,6 +92,7 @@ type ReapContext struct {
 	AgentTTL     time.Duration
 	HumanFlagAge time.Duration
 	HumanKillAge time.Duration
+	PeerParkTTL  time.Duration
 	IsLive       func(tmux.LogicalPaneRow) bool
 }
 
@@ -103,6 +105,9 @@ func (c ReapContext) withDefaults() ReapContext {
 	}
 	if c.HumanKillAge == 0 {
 		c.HumanKillAge = DefaultHumanKillAge
+	}
+	if c.PeerParkTTL == 0 {
+		c.PeerParkTTL = DefaultPeerParkTTL
 	}
 	if c.IsLive == nil {
 		c.IsLive = PaneIsLive
@@ -148,6 +153,9 @@ func classifyReap(r tmux.LogicalPaneRow, ctx ReapContext, sessionWindows int) Re
 
 	// Hard never-touch guards (order matters: cheapest/safest first).
 	if r.Keep == "1" {
+		if r.Scope == ScopePeer {
+			return keep("peer explicit --keep (never reap)")
+		}
 		return keep("--keep")
 	}
 	switch r.Scope {
@@ -157,8 +165,6 @@ func classifyReap(r tmux.LogicalPaneRow, ctx ReapContext, sessionWindows int) Re
 		return keep("agent-shell")
 	case ScopeWorker:
 		return keep("worker (orchestrate-owned)")
-	case ScopePeer:
-		return keep("peer (peer-skill owned)")
 	}
 	if r.PaneID != "" && r.PaneID == ctx.CallerPaneID {
 		return keep("calling pane")
@@ -192,6 +198,10 @@ func classifyReap(r tmux.LogicalPaneRow, ctx ReapContext, sessionWindows int) Re
 	// "now - epoch", a false eternity. (codex review, plan 038)
 	noSignal := act.IsZero()
 	idleFor := ctx.Now.Sub(act)
+
+	if r.Scope == ScopePeer {
+		return classifyPeerReap(r, ctx, d, keep, live, noSignal)
+	}
 
 	// Agent-created task tabs: short clock, killed directly when idle past ttl.
 	if r.Origin == OriginAgent && r.Scope == ScopeTask {
@@ -237,6 +247,42 @@ func classifyReap(r tmux.LogicalPaneRow, ctx ReapContext, sessionWindows int) Re
 
 // lastActivity is the most recent observable activity: tmux window_activity or
 // the last zmux-mediated input, whichever is later.
+func classifyPeerReap(r tmux.LogicalPaneRow, ctx ReapContext, d ReapDecision, keep func(string) ReapDecision, live, noSignal bool) ReapDecision {
+	if keepUntil, ok := ParseUnix(r.KeepUntil); ok && ctx.Now.Before(keepUntil) {
+		return keep("peer kept until " + keepUntil.Format(time.RFC3339))
+	}
+
+	switch r.TurnState {
+	case TurnRunning:
+		return keep("peer turn running")
+	case TurnWaiting, TurnAttention:
+		return keep("peer waiting for host")
+	case TurnConsumed, TurnParked:
+		parkUntil, ok := ParseUnix(r.ParkUntil)
+		if !ok {
+			var turnAt time.Time
+			turnAt, ok = ParseUnix(r.TurnAt)
+			if ok {
+				parkUntil = turnAt.Add(ctx.PeerParkTTL)
+			}
+		}
+		if !ok {
+			return keep("peer parked without expiry")
+		}
+		if ctx.Now.Before(parkUntil) {
+			return keep("peer parked until " + parkUntil.Format(time.RFC3339))
+		}
+		if live || noSignal {
+			return keep("peer parked expired but live process")
+		}
+		d.Action = ReapKill
+		d.Reason = "peer parked past inspection ttl"
+		return d
+	default:
+		return keep("peer scope active/unknown")
+	}
+}
+
 func lastActivity(r tmux.LogicalPaneRow) time.Time {
 	last := r.WindowActivity
 	if in, ok := ParseUnix(r.LastInputAt); ok && in.After(last) {
@@ -368,6 +414,10 @@ func confirmKill(r tmux.Runner, row tmux.LogicalPaneRow, ctx ReapContext) bool {
 		{OptTTL, func(v string) { row.TTL = v }},
 		{OptKeep, func(v string) { row.Keep = v }},
 		{OptStaleAt, func(v string) { row.StaleAt = v }},
+		{OptTurnState, func(v string) { row.TurnState = v }},
+		{OptTurnAt, func(v string) { row.TurnAt = v }},
+		{OptKeepUntil, func(v string) { row.KeepUntil = v }},
+		{OptParkUntil, func(v string) { row.ParkUntil = v }},
 	} {
 		v, err := r.ShowPaneOption(row.PaneID, f.key)
 		if err != nil {

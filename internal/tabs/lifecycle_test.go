@@ -147,6 +147,107 @@ func TestSetKeep(t *testing.T) {
 	}
 }
 
+func TestStampPeerWritesMetadataWithoutBooleanKeep(t *testing.T) {
+	m := tmux.NewMockRunner()
+	if err := StampPeer(m, "%1", PeerMetadata{
+		Role:     "claude",
+		HostTab:  "ztab_host",
+		HostPane: "%9",
+		Topic:    "  mega plan review with a deliberately verbose topic that should be shortened before it lands in tmux options  ",
+	}, time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, ok := writeFor(m, OptScope); !ok || v != ScopePeer {
+		t.Fatalf("scope = %q (found=%v), want peer", v, ok)
+	}
+	if v, _, ok := writeFor(m, OptOrigin); !ok || v != OriginAgent {
+		t.Fatalf("origin = %q (found=%v), want agent", v, ok)
+	}
+	if v, _, ok := writeFor(m, OptPeerRole); !ok || v != "claude" {
+		t.Fatalf("peer role = %q (found=%v), want claude", v, ok)
+	}
+	if v, _, ok := writeFor(m, OptPeerHostTab); !ok || v != "ztab_host" {
+		t.Fatalf("peer host tab = %q (found=%v), want ztab_host", v, ok)
+	}
+	if v, _, ok := writeFor(m, OptPeerHostPane); !ok || v != "%9" {
+		t.Fatalf("peer host pane = %q (found=%v), want %%9", v, ok)
+	}
+	if v, _, ok := writeFor(m, OptPeerTopic); !ok || len(v) > 80 || v == "" {
+		t.Fatalf("peer topic = %q (found=%v), want non-empty <=80 chars", v, ok)
+	}
+	if _, unset, ok := writeFor(m, OptKeep); !ok || !unset {
+		t.Fatalf("StampPeer must clear stale @zmux_keep; found=%v unset=%v", ok, unset)
+	}
+	for _, key := range []string{OptPeerTurns, OptPeerLastTurn} {
+		if _, unset, ok := writeFor(m, key); !ok || !unset {
+			t.Fatalf("%s should reset when a new peer topic is stamped; found=%v unset=%v", key, ok, unset)
+		}
+	}
+}
+
+func TestStampPeerResetClearsRetentionButPreservesBlankMetadata(t *testing.T) {
+	m := tmux.NewMockRunner()
+	m.PaneOptions = map[string]string{"%1\x00" + OptBorn: "500"}
+	if err := StampPeer(m, "%1", PeerMetadata{}, time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{OptKeep, OptKeepUntil, OptParkUntil, OptStaleAt} {
+		if _, unset, ok := writeFor(m, key); !ok || !unset {
+			t.Fatalf("%s should be cleared on peer start/reuse; found=%v unset=%v", key, ok, unset)
+		}
+	}
+	for _, key := range []string{OptPeerRole, OptPeerHostTab, OptPeerHostPane, OptPeerTopic} {
+		if _, _, ok := writeFor(m, key); ok {
+			t.Fatalf("%s should be preserved when peer start omits that metadata", key)
+		}
+	}
+	if _, _, ok := writeFor(m, OptBorn); ok {
+		t.Fatal("peer reset should not re-stamp born on an already-born pane")
+	}
+}
+
+func TestSetTurnAndPeerRetentionOptions(t *testing.T) {
+	m := tmux.NewMockRunner()
+	if err := SetTurnState(m, "%1", TurnWaiting, time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, ok := writeFor(m, OptTurnState); !ok || v != TurnWaiting {
+		t.Fatalf("turn state = %q (found=%v), want waiting", v, ok)
+	}
+	if v, _, ok := writeFor(m, OptTurnAt); !ok || v != "1000" {
+		t.Fatalf("turn at = %q (found=%v), want 1000", v, ok)
+	}
+	if v, _, ok := writeFor(m, OptPeerLastTurn); !ok || v != "1000" {
+		t.Fatalf("peer last turn = %q (found=%v), want 1000", v, ok)
+	}
+	if _, _, ok := writeFor(m, OptPeerTurns); ok {
+		t.Fatal("waiting should not increment peer turn count")
+	}
+
+	mRun := tmux.NewMockRunner()
+	mRun.PaneOptions = map[string]string{"%1\x00" + OptPeerTurns: "2"}
+	if err := SetTurnState(mRun, "%1", TurnRunning, time.Unix(1001, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, ok := writeFor(mRun, OptPeerTurns); !ok || v != "3" {
+		t.Fatalf("running peer turn count = %q (found=%v), want 3", v, ok)
+	}
+
+	m2 := tmux.NewMockRunner()
+	if err := SetPeerParkUntil(m2, "%1", time.Unix(1100, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, ok := writeFor(m2, OptParkUntil); !ok || v != "1100" {
+		t.Fatalf("park until = %q (found=%v), want 1100", v, ok)
+	}
+	if err := SetPeerKeepUntil(m2, "%1", time.Unix(1200, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, ok := writeFor(m2, OptKeepUntil); !ok || v != "1200" {
+		t.Fatalf("keep until = %q (found=%v), want 1200", v, ok)
+	}
+}
+
 func TestParseUnixAndTTL(t *testing.T) {
 	if ts, ok := ParseUnix("1000"); !ok || !ts.Equal(time.Unix(1000, 0)) {
 		t.Fatalf("ParseUnix(1000) = %v,%v", ts, ok)

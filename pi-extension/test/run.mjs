@@ -22,6 +22,7 @@ try {
     buildSnapshotArgs,
     buildTabLabelArgs,
     buildTabMoveArgs,
+    buildTabPeerArgs,
     buildTabPlacementArgs,
     buildTabStateArgs,
     buildTmuxRespawnScript,
@@ -129,6 +130,9 @@ try {
   ]);
   assert.deepEqual(buildTabStateArgs({ action: 'failed', tab: 'worker', msg: 'needs attention', byVisibility: true, session: 'zws/repo' }), [
     'tab', 'state', 'failed', 'worker', '--msg', 'needs attention', '--by-visibility', '-s', 'zws/repo',
+  ]);
+  assert.deepEqual(buildTabPeerArgs({ action: 'running', tab: 'claude-peer', role: 'claude', hostTab: 'ztab_host', hostPane: '%9', topic: 'plan review', ttl: '30m', source: 'peer', msg: 'ready', session: 'zws/repo' }), [
+    'tab', 'peer', 'running', 'claude-peer', '--role', 'claude', '--host-tab', 'ztab_host', '--host-pane', '%9', '--topic', 'plan review', '--ttl', '30m', '--source', 'peer', '--msg', 'ready', '-s', 'zws/repo',
   ]);
   assert.deepEqual(buildTabLabelArgs({ label: 'api', target: '%42' }), ['tab', 'label', '--target', '%42', 'api']);
   assert.deepEqual(buildTabMoveArgs({ tab: 'api', destination: 'repo/sidecar', force: true }), ['tab', 'move', 'api', 'repo/sidecar', '--force']);

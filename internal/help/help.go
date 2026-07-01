@@ -129,6 +129,7 @@ func commandSections() []Section {
 			{"zmux tab move <tab> <dest>", "Move tab to another session"},
 			{"zmux tab label [label]", "Set/clear stable tab label"},
 			{"zmux tab state <state> [tab]", "Set/clear tab lifecycle glyph"},
+			{"zmux tab peer <action> [tab]", "Update prompt-scoped peer lifecycle"},
 			{"zmux tab pane <tab>", "Join a tab into the current tab as a pane"},
 			{"zmux tab full [tab]", "Promote visible/hidden pane-tab to full tab"},
 			{"zmux tab hide [tab]", "Hide a joined pane under its parent tab"},

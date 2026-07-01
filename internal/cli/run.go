@@ -117,6 +117,9 @@ Examples:
 			}
 
 			command := strings.Join(args, " ")
+			if !tabs.ValidScope(runScope) {
+				return fmt.Errorf("unknown lifecycle scope %q (want task|daemon|shell|peer|worker|agent-shell)", runScope)
+			}
 
 			// Determine target session.
 			sessionName, err := resolveSessionTarget(app, runSessionFlag)
@@ -214,7 +217,7 @@ Examples:
 				// Roster nudge (plan 038): a fresh ad-hoc named tab is the
 				// sprawl slip. Non-blocking, create-only; --keep / --scope daemon
 				// and peer/worker names opt out (they're deliberate roster tabs).
-				if !isRosterTabName(name) && !runKeep && runScope != tabs.ScopeDaemon {
+				if !isRosterTabName(name) && !runKeep && runScope != tabs.ScopeDaemon && runScope != tabs.ScopePeer && runScope != tabs.ScopeWorker {
 					fmt.Fprintf(os.Stderr, "tip: %q is an ad-hoc tab — reuse 'scratch' (one-offs) or 'dev' (runtime) to avoid sprawl (zmux skill: tab roster)\n", name)
 				}
 			}
@@ -298,7 +301,7 @@ Examples:
 	cmd.Flags().StringVar(&runTabMode, "tab-mode", "", "recipe tab mode: run, ready, or empty")
 	cmd.Flags().DurationVar(&runTTL, "ttl", 0, "auto-reap this tab after it's idle this long (e.g. 30m, 2h)")
 	cmd.Flags().BoolVar(&runKeep, "keep", false, "never auto-reap this tab")
-	cmd.Flags().StringVar(&runScope, "scope", "", "lifecycle scope: task (default), daemon, shell — daemon is never auto-reaped")
+	cmd.Flags().StringVar(&runScope, "scope", "", "lifecycle scope: task (default), daemon, shell, peer, worker, agent-shell")
 	cmd.Flags().StringVar(&runOrigin, "origin", "", "lifecycle origin override: agent|human (default inferred)")
 	_ = cmd.Flags().MarkHidden("origin")
 	return cmd

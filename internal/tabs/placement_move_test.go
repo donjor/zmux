@@ -64,6 +64,47 @@ func TestJoinMovesPaneAndAnchors(t *testing.T) {
 	}
 }
 
+func assertNoPeerMetadataWrites(t *testing.T, mock *tmux.MockRunner) {
+	t.Helper()
+	peerKeys := map[string]bool{
+		OptTurnState: true, OptTurnAt: true, OptPeerRole: true, OptPeerHostTab: true,
+		OptPeerHostPane: true, OptPeerTopic: true, OptPeerTurns: true, OptPeerLastTurn: true,
+		OptKeepUntil: true, OptParkUntil: true,
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "ApplyOptions" && peerKeys[c.Args[2]] {
+			t.Fatalf("placement operation touched peer metadata %s: %#v", c.Args[2], c.Args)
+		}
+	}
+}
+
+func TestPlacementMovesPreservePeerMetadataOptions(t *testing.T) {
+	joinMock := tmux.NewMockRunner()
+	joinMock.DisplayMessageFunc = displayByTarget(map[[2]string]string{
+		{"@2", snapFmt}:           "L2\t0\t1\t%2\n",
+		{"@2", "#{window_panes}"}: "2\n",
+	})
+	peer := fullTab("claude-peer", "%1", "dev", "@1", 1)
+	host := fullTab("work", "%2", "dev", "@2", 1)
+	if _, err := Join(joinMock, peer, host, JoinOptions{}); err != nil {
+		t.Fatalf("Join peer tab: %v", err)
+	}
+	assertNoPeerMetadataWrites(t, joinMock)
+
+	promoteMock := tmux.NewMockRunner()
+	promoteMock.BreakPaneWindowID = "@7"
+	promoteMock.DisplayMessageFunc = displayByTarget(map[[2]string]string{
+		{"@2", snapFmt}:           "HL\t0\t2\t%2\n",
+		{"@2", "#{window_panes}"}: "1\n",
+	})
+	rider := fullTab("claude-peer", "%3", "dev", "@2", 2)
+	rider.Placement = PlacementPaneOf
+	if _, _, err := Promote(promoteMock, rider, false); err != nil {
+		t.Fatalf("Promote peer tab: %v", err)
+	}
+	assertNoPeerMetadataWrites(t, promoteMock)
+}
+
 func TestJoinDockedTabClearsHidden(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	mock.DisplayMessageFunc = displayByTarget(map[[2]string]string{

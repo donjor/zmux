@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // zmux-tab-state-stop — Stop hook (tab attention states, plan 026 P1).
 //
-// When a Claude turn ends inside a zmux tab, mark that tab `done` — or
-// `attention` if its window isn't currently visible (--by-visibility; the
+// When a Claude turn ends inside a zmux tab, prefer peer lifecycle metadata if
+// the pane is a prompt-scoped peer; otherwise mark the primary agent tab `done`
+// — or `attention` if its window isn't currently visible (--by-visibility; the
 // zmux service decides by window membership). The human sees a glyph in the
 // bar from any tab instead of polling agent tabs for idleness.
 //
@@ -15,6 +16,10 @@
 
 import { execFileSync } from 'node:child_process'
 
+export function peerStopCommandArgs() {
+  return ['tab', 'peer', 'waiting', '--source', 'claude-stop']
+}
+
 export function stopCommandArgs() {
   return ['tab', 'state', 'done', '--source', 'claude-stop', '--quiet', '--by-visibility']
 }
@@ -25,6 +30,16 @@ export function shouldRun(env) {
 
 function main() {
   if (!shouldRun(process.env)) return
+  try {
+    execFileSync('zmux', peerStopCommandArgs(), {
+      timeout: 1500,
+      stdio: ['ignore', 'ignore', 'ignore'],
+    })
+    return
+  } catch {
+    // Non-peer panes reject `tab peer waiting`; fall back to the normal agent
+    // tab done/attention glyph path below.
+  }
   try {
     execFileSync('zmux', stopCommandArgs(), {
       timeout: 1500,

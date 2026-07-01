@@ -8,6 +8,7 @@ import {
 	moveTab,
 	placeTab,
 	sendKeys,
+	setTabPeer,
 	setTabState,
 	snapshot,
 	terminalCurrent,
@@ -23,6 +24,22 @@ import {
 	validateLogParams,
 	validateTabPlacementParams,
 } from "./shared.js";
+
+function tabPeerAction(value: string): "start" | "running" | "waiting" | "attention" | "consumed" | "park" | "keep" | "clear-keep" {
+	switch (value) {
+		case "start":
+		case "running":
+		case "waiting":
+		case "attention":
+		case "consumed":
+		case "park":
+		case "keep":
+		case "clear-keep":
+			return value;
+		default:
+			throw new Error(`peer action must be one of: start, running, waiting, attention, consumed, park, keep, clear-keep (got ${value})`);
+	}
+}
 
 export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -51,6 +68,44 @@ export function registerTabTools(pi: ExtensionAPI): void {
 				msg: params.message,
 				ifState: params.ifState,
 				byVisibility: params.byVisibility,
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+			});
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_tab_peer",
+		label: "zmux tab peer",
+		description: "Record semantic peer/agent-turn lifecycle metadata (start/running, waiting, consumed, park, timestamped keep). Prefer this over manual glyph-only state for prompt-scoped peer tabs.",
+		promptSnippet: "Set peer lifecycle metadata",
+		parameters: Type.Object({
+			action: Type.String({ description: "start, running, waiting, attention, consumed, park, keep, or clear-keep" }),
+			tab: Type.Optional(Type.String({ description: "Tab name target; omitted means current pane" })),
+			target: Type.Optional(Type.String({ description: "Raw pane/window/tab target; overrides tab" })),
+			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),
+			role: Type.Optional(Type.String({ description: "Peer role/CLI label, e.g. claude or codex" })),
+			hostTab: Type.Optional(Type.String({ description: "Stable host logical tab id" })),
+			hostPane: Type.Optional(Type.String({ description: "Host pane id" })),
+			topic: Type.Optional(Type.String({ description: "Sanitized display topic/title; do not include full prompts" })),
+			ttl: Type.Optional(Type.String({ description: "Retention TTL for park/keep, e.g. 30m or 2h. keep requires this." })),
+			source: Type.Optional(Type.String({ description: "Lifecycle source label" })),
+			message: Type.Optional(Type.String({ description: "Optional glyph message for waiting/attention" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await setTabPeer({
+				action: tabPeerAction(params.action),
+				tab: params.tab,
+				target: params.target,
+				session: params.session,
+				role: params.role,
+				hostTab: params.hostTab,
+				hostPane: params.hostPane,
+				topic: params.topic,
+				ttl: params.ttl,
+				source: params.source,
+				msg: params.message,
 				cwd: resolveCwd(ctx.cwd, params.cwd),
 			});
 			return content(result.text, result.details);

@@ -10,12 +10,22 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-import { stopCommandArgs, shouldRun } from './zmux-tab-state-stop.mjs'
+import { peerStopCommandArgs, stopCommandArgs, shouldRun } from './zmux-tab-state-stop.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const hookPath = join(here, 'zmux-tab-state-stop.mjs')
 
-test('command is the quiet visibility-aware done write', () => {
+test('peer command records hook-driven waiting state', () => {
+  assert.deepEqual(peerStopCommandArgs(), [
+    'tab',
+    'peer',
+    'waiting',
+    '--source',
+    'claude-stop',
+  ])
+})
+
+test('fallback command is the quiet visibility-aware done write', () => {
   assert.deepEqual(stopCommandArgs(), [
     'tab',
     'state',

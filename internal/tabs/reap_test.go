@@ -29,7 +29,44 @@ func TestClassifyReap(t *testing.T) {
 		{"daemon", func(r *tmux.LogicalPaneRow) { r.Scope = ScopeDaemon }, 2, ReapKeep},
 		{"agent-shell", func(r *tmux.LogicalPaneRow) { r.Scope = ScopeAgentShell }, 2, ReapKeep},
 		{"worker", func(r *tmux.LogicalPaneRow) { r.Scope = ScopeWorker }, 2, ReapKeep},
-		{"peer", func(r *tmux.LogicalPaneRow) { r.Scope = ScopePeer }, 2, ReapKeep},
+		{"peer unknown state", func(r *tmux.LogicalPaneRow) { r.Scope = ScopePeer; r.Born = ago(time.Hour) }, 2, ReapKeep},
+		{"peer running", func(r *tmux.LogicalPaneRow) { r.Scope = ScopePeer; r.Born = ago(time.Hour); r.TurnState = TurnRunning }, 2, ReapKeep},
+		{"peer waiting", func(r *tmux.LogicalPaneRow) { r.Scope = ScopePeer; r.Born = ago(time.Hour); r.TurnState = TurnWaiting }, 2, ReapKeep},
+		{"peer parked within ttl", func(r *tmux.LogicalPaneRow) {
+			r.Scope = ScopePeer
+			r.Born = ago(time.Hour)
+			r.TurnState = TurnParked
+			r.ParkUntil = strconv.FormatInt(now.Add(5*time.Minute).Unix(), 10)
+			r.WindowActivity = now.Add(-time.Hour)
+		}, 2, ReapKeep},
+		{"peer parked expired idle -> kill", func(r *tmux.LogicalPaneRow) {
+			r.Scope = ScopePeer
+			r.Born = ago(time.Hour)
+			r.TurnState = TurnParked
+			r.ParkUntil = ago(time.Minute)
+			r.WindowActivity = now.Add(-time.Hour)
+		}, 2, ReapKill},
+		{"peer parked expired live -> keep", func(r *tmux.LogicalPaneRow) {
+			r.Scope = ScopePeer
+			r.Born = ago(time.Hour)
+			r.TurnState = TurnParked
+			r.ParkUntil = ago(time.Minute)
+			r.Command = "claude"
+		}, 2, ReapKeep},
+		{"peer keep-until future", func(r *tmux.LogicalPaneRow) {
+			r.Scope = ScopePeer
+			r.Born = ago(time.Hour)
+			r.TurnState = TurnParked
+			r.KeepUntil = strconv.FormatInt(now.Add(time.Hour).Unix(), 10)
+			r.WindowActivity = now.Add(-time.Hour)
+		}, 2, ReapKeep},
+		{"peer consumed turnAt default ttl expired -> kill", func(r *tmux.LogicalPaneRow) {
+			r.Scope = ScopePeer
+			r.Born = ago(2 * time.Hour)
+			r.TurnState = TurnConsumed
+			r.TurnAt = ago(time.Hour)
+			r.WindowActivity = now.Add(-time.Hour)
+		}, 2, ReapKill},
 		{"calling pane", func(r *tmux.LogicalPaneRow) { r.PaneID = "%caller" }, 2, ReapKeep},
 		{"hidden", func(r *tmux.LogicalPaneRow) { r.Hidden = "work" }, 2, ReapKeep},
 		{"last window", func(r *tmux.LogicalPaneRow) { r.Origin = OriginHuman; r.Born = ago(48 * time.Hour) }, 1, ReapKeep},
@@ -146,6 +183,17 @@ func killWorthyOpts(m *tmux.MockRunner, paneID string, bornUnix string) {
 	m.PaneOptions[paneID+"\x00"+OptBorn] = bornUnix
 }
 
+func peerParkedOpts(m *tmux.MockRunner, paneID string, bornUnix, parkUntil string) {
+	if m.PaneOptions == nil {
+		m.PaneOptions = map[string]string{}
+	}
+	m.PaneOptions[paneID+"\x00"+OptBorn] = bornUnix
+	m.PaneOptions[paneID+"\x00"+OptOrigin] = OriginAgent
+	m.PaneOptions[paneID+"\x00"+OptScope] = ScopePeer
+	m.PaneOptions[paneID+"\x00"+OptTurnState] = TurnParked
+	m.PaneOptions[paneID+"\x00"+OptParkUntil] = parkUntil
+}
+
 func countCalls(m *tmux.MockRunner, method string) int {
 	n := 0
 	for _, c := range m.Calls {
@@ -154,6 +202,32 @@ func countCalls(m *tmux.MockRunner, method string) int {
 		}
 	}
 	return n
+}
+
+func TestApplyReapKillsExpiredParkedPeer(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	born := strconv.FormatInt(now.Add(-2*time.Hour).Unix(), 10)
+	parkUntil := strconv.FormatInt(now.Add(-time.Hour).Unix(), 10)
+	peer := tmux.LogicalPaneRow{
+		PaneID: "%1", WindowID: "@1", Session: "work", WindowPanes: 1,
+		Command: "bash", Origin: OriginAgent, Scope: ScopePeer, Born: born,
+		TurnState: TurnParked, ParkUntil: parkUntil,
+		WindowActivity: now.Add(-2 * time.Hour),
+	}
+	keeper := tmux.LogicalPaneRow{PaneID: "%2", WindowID: "@2", Session: "work", WindowPanes: 1, Scope: ScopeDaemon}
+	m := &tmux.MockRunner{LogicalRows: []tmux.LogicalPaneRow{peer, keeper}}
+	peerParkedOpts(m, "%1", born, parkUntil)
+
+	stats, err := ApplyReap(m, ReapContext{Now: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Killed != 1 {
+		t.Fatalf("killed = %d, want 1", stats.Killed)
+	}
+	if got := countCalls(m, "KillWindowByID"); got != 1 {
+		t.Fatalf("KillWindowByID calls = %d, want 1", got)
+	}
 }
 
 func TestApplyReapKillBudgetReservesLastWindow(t *testing.T) {

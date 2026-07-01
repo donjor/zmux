@@ -2,6 +2,7 @@ package tabs
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/donjor/zmux/internal/tmux"
@@ -70,6 +71,102 @@ func SetKeep(r tmux.Runner, paneID string, keep bool) error {
 		return r.ApplyOptions([]tmux.OptionWrite{{Scope: tmux.ScopePane, Target: paneID, Key: OptKeep, Unset: true}})
 	}
 	return r.ApplyOptions([]tmux.OptionWrite{{Scope: tmux.ScopePane, Target: paneID, Key: OptKeep, Value: "1"}})
+}
+
+// PeerMetadata is sanitized, tmux-visible metadata for a prompt-scoped peer.
+// Do not put full prompts or sensitive task text here.
+type PeerMetadata struct {
+	Role     string
+	HostTab  string
+	HostPane string
+	Topic    string
+}
+
+// StampPeer marks a pane as an agent-owned prompt peer and writes the minimal
+// metadata consumed by diagnostics/reaper policy. It deliberately does NOT set
+// @zmux_keep=1; prompt-scoped peer retention should be timestamped via
+// SetPeerKeepUntil/SetPeerParkUntil.
+func StampPeer(r tmux.Runner, paneID string, meta PeerMetadata, now time.Time) error {
+	if err := StampBirth(r, paneID, OriginAgent, ScopePeer, now); err != nil {
+		return err
+	}
+	writes := []tmux.OptionWrite{
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptOrigin, Value: OriginAgent},
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptScope, Value: ScopePeer},
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptKeep, Unset: true},
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptKeepUntil, Unset: true},
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptParkUntil, Unset: true},
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptStaleAt, Unset: true},
+	}
+	writes = appendPeerMetadataWrite(writes, paneID, OptPeerRole, strings.TrimSpace(meta.Role))
+	writes = appendPeerMetadataWrite(writes, paneID, OptPeerHostTab, strings.TrimSpace(meta.HostTab))
+	writes = appendPeerMetadataWrite(writes, paneID, OptPeerHostPane, strings.TrimSpace(meta.HostPane))
+	if topic := sanitizePeerTopic(meta.Topic); topic != "" {
+		writes = appendPeerMetadataWrite(writes, paneID, OptPeerTopic, topic)
+		writes = append(writes,
+			tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerTurns, Unset: true},
+			tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerLastTurn, Unset: true},
+		)
+	}
+	return r.ApplyOptions(writes)
+}
+
+func appendPeerMetadataWrite(writes []tmux.OptionWrite, paneID, key, value string) []tmux.OptionWrite {
+	if value == "" {
+		return writes
+	}
+	return append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: key, Value: value})
+}
+
+func sanitizePeerTopic(s string) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > 80 {
+		s = strings.TrimSpace(s[:80])
+	}
+	return s
+}
+
+func SetTurnState(r tmux.Runner, paneID, state string, now time.Time) error {
+	switch state {
+	case TurnRunning, TurnWaiting, TurnAttention, TurnConsumed, TurnParked:
+	default:
+		return nil
+	}
+	writes := []tmux.OptionWrite{
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptTurnState, Value: state},
+		{Scope: tmux.ScopePane, Target: paneID, Key: OptTurnAt, Value: strconv.FormatInt(now.Unix(), 10)},
+	}
+	if state == TurnRunning {
+		writes = append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerTurns, Value: strconv.Itoa(nextPeerTurn(r, paneID))})
+	}
+	if state == TurnRunning || state == TurnWaiting || state == TurnAttention {
+		writes = append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerLastTurn, Value: strconv.FormatInt(now.Unix(), 10)})
+	}
+	return r.ApplyOptions(writes)
+}
+
+func nextPeerTurn(r tmux.Runner, paneID string) int {
+	cur, err := r.ShowPaneOption(paneID, OptPeerTurns)
+	if err != nil {
+		return 1
+	}
+	n, err := strconv.Atoi(cur)
+	if err != nil || n < 0 {
+		return 1
+	}
+	return n + 1
+}
+
+func SetPeerKeepUntil(r tmux.Runner, paneID string, until time.Time) error {
+	return r.ApplyOptions([]tmux.OptionWrite{{Scope: tmux.ScopePane, Target: paneID, Key: OptKeepUntil, Value: strconv.FormatInt(until.Unix(), 10)}})
+}
+
+func ClearPeerKeepUntil(r tmux.Runner, paneID string) error {
+	return r.ApplyOptions([]tmux.OptionWrite{{Scope: tmux.ScopePane, Target: paneID, Key: OptKeepUntil, Unset: true}})
+}
+
+func SetPeerParkUntil(r tmux.Runner, paneID string, until time.Time) error {
+	return r.ApplyOptions([]tmux.OptionWrite{{Scope: tmux.ScopePane, Target: paneID, Key: OptParkUntil, Value: strconv.FormatInt(until.Unix(), 10)}})
 }
 
 // SetStaleAt records the first-flag time for a tab — the reaper's "warned in an

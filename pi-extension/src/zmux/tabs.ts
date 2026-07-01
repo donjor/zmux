@@ -17,6 +17,7 @@ export async function typeText(tab: string, text: string, cwd: string, session?:
 }
 
 export type TabStateAction = "attention" | "running" | "done" | "failed" | "clear";
+export type TabPeerAction = "start" | "running" | "waiting" | "attention" | "consumed" | "park" | "keep" | "clear-keep";
 export type TabPlacementAction = "pane" | "full" | "hide" | "show";
 export type TabPlacementDirection = "right" | "left" | "up" | "down";
 export type LogAction = "start" | "tail" | "status" | "stop";
@@ -35,6 +36,25 @@ export function buildTabStateArgs(params: { action: TabStateAction; tab?: string
 export async function setTabState(params: { action: TabStateAction; cwd: string; tab?: string; target?: string; session?: string; source?: string; msg?: string; ifState?: string; byVisibility?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
 	await zmux(buildTabStateArgs(params), { cwd: params.cwd, timeoutMs: 5_000 });
 	return { text: `tab state ${params.action}${params.tab ? ` ${params.tab}` : ""}`, details: { ...params } };
+}
+
+export function buildTabPeerArgs(params: { action: TabPeerAction; tab?: string; target?: string; session?: string; role?: string; hostTab?: string; hostPane?: string; topic?: string; ttl?: string; source?: string; msg?: string }): string[] {
+	const args = ["tab", "peer", params.action];
+	if (params.tab) args.push(params.tab);
+	if (params.target) args.push("--target", params.target);
+	if (params.role) args.push("--role", params.role);
+	if (params.hostTab) args.push("--host-tab", params.hostTab);
+	if (params.hostPane) args.push("--host-pane", params.hostPane);
+	if (params.topic) args.push("--topic", params.topic);
+	if (params.ttl) args.push("--ttl", params.ttl);
+	if (params.source) args.push("--source", params.source);
+	if (params.msg) args.push("--msg", params.msg);
+	return withSession(args, params.session);
+}
+
+export async function setTabPeer(params: { action: TabPeerAction; cwd: string; tab?: string; target?: string; session?: string; role?: string; hostTab?: string; hostPane?: string; topic?: string; ttl?: string; source?: string; msg?: string }): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(buildTabPeerArgs(params), { cwd: params.cwd, timeoutMs: 5_000 });
+	return { text: `tab peer ${params.action}${params.tab ? ` ${params.tab}` : ""}`, details: { ...params } };
 }
 
 export function buildTabLabelArgs(params: { label?: string; target?: string; clear?: boolean }): string[] {

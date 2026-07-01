@@ -127,6 +127,9 @@ func printReapPlan(ds []tabs.ReapDecision) {
 			fmt.Printf("ADOPT  %-18s %s\n", reapLabel(d), d.Reason)
 		default:
 			keep++
+			if d.Scope == tabs.ScopePeer || d.Scope == tabs.ScopeTask {
+				fmt.Printf("KEEP   %-18s %s\n", reapLabel(d), d.Reason)
+			}
 		}
 	}
 	fmt.Fprintf(os.Stderr, "\n%d kill · %d flag · %d adopt · %d keep (dry-run: nothing changed)\n",

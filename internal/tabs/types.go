@@ -36,6 +36,45 @@ const (
 	OptLastInputAt = "@zmux_last_input_at" // unix seconds; zmux-mediated input (run/send/type)
 )
 
+// Peer/agent-turn lifecycle options (pane-canonical). These are policy metadata,
+// not the human-facing glyph mirror in tabstate. Keep values sanitized: no full
+// prompts or sensitive task text in tmux-visible options.
+const (
+	OptTurnState    = "@zmux_turn_state"     // running | waiting | attention | consumed | parked
+	OptTurnAt       = "@zmux_turn_at"        // unix seconds for the latest turn-state transition
+	OptPeerRole     = "@zmux_peer_role"      // claude | codex | pi | agy | unknown
+	OptPeerHostTab  = "@zmux_peer_host_tab"  // stable host logical tab id, when known
+	OptPeerHostPane = "@zmux_peer_host_pane" // host pane id, when known
+	OptPeerTopic    = "@zmux_peer_topic"     // sanitized display topic/title
+	OptPeerTurns    = "@zmux_peer_turns"     // diagnostic turn count for the current topic
+	OptPeerLastTurn = "@zmux_peer_last_turn" // unix seconds for latest peer turn transition
+	OptKeepUntil    = "@zmux_keep_until"     // unix seconds; timestamped retention
+	OptParkUntil    = "@zmux_park_until"     // unix seconds; parked-peer inspection TTL
+)
+
+const (
+	TurnRunning   = "running"
+	TurnWaiting   = "waiting"
+	TurnAttention = "attention"
+	TurnConsumed  = "consumed"
+	TurnParked    = "parked"
+)
+
+var validScopes = map[string]bool{
+	ScopeAgentShell: true,
+	ScopeTask:       true,
+	ScopeDaemon:     true,
+	ScopePeer:       true,
+	ScopeWorker:     true,
+	ScopeShell:      true,
+}
+
+// ValidScope reports whether scope is a known lifecycle scope. Empty is valid
+// for callers that want the command-specific default.
+func ValidScope(scope string) bool {
+	return scope == "" || validScopes[scope]
+}
+
 // Origin values — who created the tab. Default conservative (human/preexisting);
 // only an explicit signal marks a tab agent-created.
 const (
@@ -49,7 +88,7 @@ const (
 	ScopeAgentShell = "agent-shell" // a long-lived agent CLI shell; never auto-killed
 	ScopeTask       = "task"        // an ad-hoc run; reapable when stale
 	ScopeDaemon     = "daemon"      // a long-running server; never auto-killed
-	ScopePeer       = "peer"        // a review peer; peer-skill teardown owns it
+	ScopePeer       = "peer"        // a prompt-scoped review peer; reaped after park/ttl when safe
 	ScopeWorker     = "worker"      // an orchestrate worker session; orchestrate owns it
 	ScopeShell      = "shell"       // a plain interactive shell
 )
