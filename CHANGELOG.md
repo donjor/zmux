@@ -5,8 +5,10 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
+> Release tag: pending | Compare: `v0.11.0...HEAD`
 
-> Release tag: pending | Topics: `panes`, `tabs`, `agents` | Compare: `v0.10.0...HEAD`
+## [0.11.0] - 2026-07-01
+> Release tag: `v0.11.0` | Topics: `agents`, `tabs`, `panes`, `workspace`, `session` | Compare: `v0.10.0...v0.11.0`
 
 ### Added
 
