@@ -17,6 +17,7 @@ const directZmuxPatterns: Array<{ re: RegExp; reason: string; tool: string }> = 
 	{ re: /(^|[;&|\n]\s*)zmux\s+ls\b/u, reason: "session listing has a typed tool", tool: "zmux_sessions" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+where\b/u, reason: "context inspection has a typed tool", tool: "zmux_current" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+state\b/u, reason: "tab lifecycle state has a typed tool", tool: "zmux_tab_state" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+status\b/u, reason: "tab lifecycle/command status has a typed tool", tool: "zmux_tab_status" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+peer\b/u, reason: "peer lifecycle metadata has a typed tool", tool: "zmux_tab_peer" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+label\b/u, reason: "tab labelling has a typed tool", tool: "zmux_tab_label" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+move\b/u, reason: "tab moving has a typed tool", tool: "zmux_tab_move" },

@@ -1,10 +1,25 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/donjor/zmux/internal/tabs"
+	"github.com/donjor/zmux/internal/tmux"
 )
+
+func TestTabPeerStartMissingTabErrors(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+
+	root.SetArgs([]string{"tab", "peer", "start", "missing", "-s", "test-session", "--role", "claude"})
+	root.SilenceUsage = true
+	root.SilenceErrors = true
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no tab") {
+		t.Fatalf("expected missing-tab error, got %v", err)
+	}
+}
 
 func TestTabPeerStartWritesMetadataAndRunningGlyph(t *testing.T) {
 	root, mock := withMockApp(t)

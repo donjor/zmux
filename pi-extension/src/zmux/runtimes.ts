@@ -1,4 +1,5 @@
 import { trimOutput } from "../shell.js";
+import { tabStatus } from "./tabs.js";
 import { withSession, zmux } from "./shared.js";
 
 export async function runtimeEnsure(params: {
@@ -51,11 +52,10 @@ export async function runtimeEnsure(params: {
 	}
 
 	try {
-		const logs = await runtimeLogs(params.tab, params.cwd, 80, params.session);
-		output.push("", "latest logs:", logs.text);
-		details.logs = logs.details;
+		const status = await tabStatus({ tab: params.tab, cwd: params.cwd, session: params.session });
+		details.status = status.details.status;
 	} catch {
-		// Ignore log capture failures; ensure already did the important work.
+		// Older/stale binaries may not expose status; ensure already did the important work.
 	}
 
 	return { text: trimOutput(output.join("\n")), details };

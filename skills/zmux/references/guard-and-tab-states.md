@@ -77,7 +77,8 @@ redirect when one exists.
 
 `zmux tab state <attention|running|done|failed|clear> [tab]` marks a tab's lifecycle;
 the bar renders a colored glyph (● needs-human / ◐ running / ✓ done / ✗ failed)
-visible from any tab.
+visible from any tab. `zmux tab status <tab> --json` is the read side: it reports
+human glyph state plus command lifecycle and peer turn metadata for agents/tools.
 
 Mostly automatic:
 
@@ -88,7 +89,7 @@ Mostly automatic:
 - A `Stop` hook (`hooks/zmux-tab-state-stop.mjs`, symlinked like the guard) marks the
   agent's own tab done/attention when a turn ends — no transcript parsing, just "the
   turn ended".
-- Prompt-scoped peers use `zmux tab peer <start|running|waiting|attention|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; waiting/answer-ready renders done (`✓`), while true human intervention uses attention (`●`).
+- Prompt-scoped peers use `zmux tab peer <start|running|waiting|attention|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; waiting/answer-ready renders done (`✓`), while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi `zmux_tab_status`; screen capture is the fallback/output layer.
 
 Set `attention` **manually** when handing the human a prompt they must act on (sudo,
 permission prompt). For peer tabs, prefer `zmux tab peer attention ...` so the turn state stays in sync:

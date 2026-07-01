@@ -35,7 +35,15 @@ A wait timeout that mentions the shell lifecycle result usually means the target
 
 The first time `run`, `send`, or `type` reaches a tab by name, zmux pins that stable label. The tab stays reachable even if tmux auto-renames the window to `node`, `vite`, etc. `watch` resolves labels but is read-only and never pins; if a tab drifted before it was pinned, inspect `zmux tabs`, then address its current name with `send`/`type` or label it explicitly.
 
-## Read tab output
+## Read tab state and output
+
+Use `tab status` for lifecycle/command/peer state:
+
+```bash
+zmux tab status <tab> --json                  # machine-readable state
+```
+
+Use `watch` for output:
 
 ```bash
 zmux watch <tab>                              # last 50 lines
@@ -45,7 +53,7 @@ zmux watch <tab> --idle 3 -T 300              # wait until screen is quiet
 zmux watch <tab> --until 'ready|listening' -T 60   # wait for new matching output
 ```
 
-`watch --until` snapshots the buffer at start and matches only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt.
+`watch --until` snapshots the buffer at start and matches only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt. Do not use `watch` as lifecycle truth when `tab status` can answer state.
 
 For persistent bounded recording that survives detach, use `zmux log`:
 

@@ -18,6 +18,7 @@ func TestTabStatusJSONReportsLifecycle(t *testing.T) {
 	mock.PaneOptions = map[string]string{
 		"%3\x00@zmux_state":            "done",
 		"%3\x00" + tabs.OptCmdState:    tabs.CmdDone,
+		"%3\x00" + tabs.OptCmdSeq:      "42",
 		"%3\x00" + tabs.OptCmdLastExit: "0",
 		"%3\x00" + tabs.OptCmdText:     "make build",
 		"%3\x00" + tabs.OptScope:       tabs.ScopeTask,
@@ -33,8 +34,21 @@ func TestTabStatusJSONReportsLifecycle(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
-	if got.Tab != "build" || got.PaneID != "%3" || got.State != "done" || got.CmdState != tabs.CmdDone || got.LastExit != "0" || got.Command != "make build" {
+	if got.Tab != "build" || got.PaneID != "%3" || got.State != "done" || got.CmdState != tabs.CmdDone || got.CmdSeq != "42" || got.LastExit != "0" || got.Command != "make build" {
 		t.Fatalf("unexpected status: %+v", got)
+	}
+}
+
+func TestTabStatusMissingTabErrors(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+
+	root.SetArgs([]string{"tab", "status", "missing", "-s", "test-session", "--json"})
+	root.SilenceUsage = true
+	root.SilenceErrors = true
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no tab") {
+		t.Fatalf("expected missing-tab error, got %v", err)
 	}
 }
 
@@ -47,6 +61,7 @@ func TestTabStatusTextReportsPeerWaitingDone(t *testing.T) {
 	mock.PaneOptions = map[string]string{
 		"%4\x00@zmux_state":          "done",
 		"%4\x00" + tabs.OptTurnState: tabs.TurnWaiting,
+		"%4\x00" + tabs.OptTurnAt:    "1782860400",
 		"%4\x00" + tabs.OptPeerRole:  "claude",
 	}
 
@@ -56,7 +71,7 @@ func TestTabStatusTextReportsPeerWaitingDone(t *testing.T) {
 			t.Fatalf("execute: %v", err)
 		}
 	})
-	for _, want := range []string{"tab: claude-peer", "state: done", "turn-state: waiting"} {
+	for _, want := range []string{"tab: claude-peer", "state: done", "turn-state: waiting (at 1782860400)"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output:\n%s", want, out)
 		}

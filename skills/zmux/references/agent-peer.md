@@ -1,9 +1,9 @@
 # Agent Peer Doctrine
 
 Drive an official agent CLI (`codex`, `claude`, `pi`, `agy`, etc.) in a zmux tab as a
-visible peer. Type prompts, wait for the screen to settle, read the answer, and
-reply if needed. The whole exchange stays in a real terminal the user can watch
-and take over.
+visible peer. Type prompts, read lifecycle state from zmux when the peer is
+instrumented, then read the answer from the terminal. The whole exchange stays
+in a real terminal the user can watch and take over.
 
 This is generic zmux doctrine. It covers terminal mechanics and etiquette only.
 It does not define when a personal workflow should ask for a peer, what review
@@ -17,8 +17,9 @@ Use zmux for:
 
 - spawning or reusing a real CLI in a named tab;
 - typing prompts and commands;
-- waiting for quiet screens with `watch --idle`;
-- classifying what the visible screen shows;
+- reading lifecycle/turn state with `tab status` when the peer is instrumented;
+- using `watch --idle` only for startup/submission hygiene, output settle, or uninstrumented fallback;
+- classifying what the visible screen shows when status is unavailable or says human attention may be needed;
 - recording semantic peer lifecycle (`start`, `running`, `waiting`, `consumed`, `park`, timestamped `keep`);
 - writing human-visible glyph state only as the peer lifecycle helper's presentation layer;
 - moving the peer between full tab, pane, and hidden dock placements;
@@ -76,9 +77,9 @@ zmux ls -s                 # how many sessions exist
 
 Pin that session on the spawn and every follow-up — belt-and-suspenders for
 the writes, load-bearing for the reads:
-`zmux run '…' -n <peer> -d -s <session> --scope peer`, `zmux watch <peer> -s <session>`,
-`zmux type <peer> -s <session> …`, `zmux tab peer … <peer> -s <session>`. In Pi,
-use the equivalent `session` parameter on `zmux_run`, `zmux_runtime_logs`,
+`zmux run '…' -n <peer> -d -s <session> --scope peer`, `zmux tab status <peer> -s <session> --json`,
+`zmux watch <peer> -s <session>`, `zmux type <peer> -s <session> …`, `zmux tab peer … <peer> -s <session>`. In Pi,
+use the equivalent `session` parameter on `zmux_run`, `zmux_tab_status`, `zmux_runtime_logs`,
 `zmux_type`, `zmux_tab_peer`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
 "X", outside the current session "Y"` on the read path when a bare name crosses —
 seeing that means you skipped the pin.
@@ -105,7 +106,8 @@ pane list above. If it already contains the peer you need, route through that ro
 ```bash
 zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n <tabName> -d -s <session> --scope peer
 zmux tab peer start <tabName> -s <session> --role codex --topic '<sanitized topic>'
-zmux watch <tabName> -s <session> --idle 3 -T 30
+zmux tab status <tabName> -s <session> --json
+zmux watch <tabName> -s <session>   # output/startup inspection, not lifecycle truth
 ```
 
 The raw `paneID` is diagnostic; do not target it for the peer loop. `run -n
@@ -118,7 +120,8 @@ Spawn detached with the max-permission profile:
 ```bash
 zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session> --scope peer
 zmux tab peer start codex-peer -s <session> --role codex --topic '<sanitized topic>'
-zmux watch codex-peer -s <session> --idle 3 -T 30
+zmux tab status codex-peer -s <session> --json
+zmux watch codex-peer -s <session>   # inspect startup/interstitials if needed
 ```
 
 Do not start peers in OS read-only/workspace-write sandbox modes. The prompt is the
@@ -209,48 +212,38 @@ peer CLI accepted the prompt. For large multi-line pastes, verify submission in
 `Enter`; use an extra `Enter` only after a recapture proves the prompt is still in
 the composer.
 
-## Wait
+## State
+
+For instrumented peers, lifecycle metadata is the primary turn-state signal:
 
 ```bash
-zmux watch codex-peer -s <session> --idle 3 -T 300
+zmux tab status codex-peer -s <session> --json
 ```
 
-Exit 0 means the screen was quiet for 3 seconds. Stable does not mean done; it
-means there is a screen to classify.
+Treat a fresh peer turn as ready when status shows one of:
 
-Prefer `--idle` + classify for peer turns. If you use `watch --until`, the regex
-must match future peer output, not a word in your own echoed prompt. `VERDICT`
-self-matches if your prompt says "Give VERDICT"; use a discriminating answer
-shape such as `VERDICT: (APPROVE|REVISE)` only when that exact text is absent from
-the prompt echo.
+- `turnState=waiting` / glyph `done` — answer ready; read output with `watch` or passive logs.
+- `turnState=attention` / glyph `attention` — permission prompt, peer question, or human action needed; inspect the screen and apply policy.
+- `turnState=running` / glyph `running` — the peer is still working; keep doing other in-scope work and check status again later.
 
-Non-zero means timeout, interrupt, or command error. If a capture printed, use
-it. If the screen is still active, wait again with a larger ceiling.
+Freshness matters. When status carries `turnAt`, record the value after you mark/send `running` and require a later `turnAt` before trusting `waiting`; otherwise an old ready state from a prior prompt can self-match.
 
-Use rough ceilings:
+`watch --idle` is not the primary completion signal for instrumented peers. Use it for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use `watch --until`, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT".
 
-| ask | ceiling |
-| --- | --- |
-| quick question | 120s |
-| review / critique | 300s |
-| large plan or diff | 600s |
+For long peer turns, status checks are beats, not proof of correctness. A `waiting` state means "the peer thinks the turn ended"; still read the answer and judge it.
 
-For long waits, run the watch as an async task and keep working. Treat task
-completion as "beat ready", not "turn done"; classification decides the next
-action.
-
-## Classify
+## Classify fallback/output
 
 | capture shows | state | action |
 | --- | --- | --- |
 | answer plus fresh empty input box | done | read, synthesize, or quote |
-| numbered options / approval prompt | permission prompt | apply permission policy |
+| numbered options / approval prompt | permission prompt | apply permission policy and usually set `tab peer attention` |
 | free-form question to the driver | asking you | answer like a colleague |
-| submitted prompt with no answer/input | still working | wait again |
+| submitted prompt with no answer/input | still working | check status again; for uninstrumented peers, wait/recapture |
 | partial input you did not send | human typing | hands off |
 | startup/update/auth screen | interstitial | decline consequential actions or ask user |
 
-You judge from the screen. Do not ask zmux for CLI-specific done detection.
+Screen classification is the fallback and the output-reading layer. It is not a replacement for `tab status` when lifecycle metadata is available.
 
 ## Peer lifecycle state
 
@@ -268,7 +261,7 @@ Use the semantic peer lifecycle surface; it writes the policy metadata and the h
 
 Write lifecycle once per transition. Do not spam writes on every capture. Prompt-scoped peers should **not** get `@zmux_keep=1` by default; use `park`/`keep --ttl` so the reaper can clean expired peers.
 
-`tab state` remains **set-only, human-facing**: it drives glyphs a person sees in the zmux dashboard/status bar. It is not a full status API. The peer lifecycle metadata is the machine-readable policy layer; screen classification is still the fallback for CLIs without a usable Stop/hook signal.
+`tab state` remains **set-only, human-facing**: it drives glyphs a person sees in the zmux dashboard/status bar. `tab status` is the read API. The peer lifecycle metadata is the machine-readable policy layer; screen classification is still the fallback for CLIs without a usable Stop/hook signal.
 
 ## Placement
 

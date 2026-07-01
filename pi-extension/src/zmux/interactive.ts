@@ -1,9 +1,7 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { focusTab } from "./context.js";
 import { runtimeLogs } from "./runtimes.js";
-import { delay, shellQuote, withSession, zmux } from "./shared.js";
+import { tabStatus } from "./tabs.js";
+import { delay, withSession, zmux } from "./shared.js";
 
 export interface InteractiveTypeOptions {
 	waitFor?: string;
@@ -14,9 +12,37 @@ export interface InteractiveTypeOptions {
 	session?: string;
 }
 
+export interface CommandStatus {
+	cmdState?: unknown;
+	cmdSeq?: unknown;
+	lastExit?: unknown;
+	state?: unknown;
+	command?: unknown;
+}
+
+async function readTabCommandStatus(tab: string, cwd: string, session?: string): Promise<CommandStatus | undefined> {
+	const result = await tabStatus({ tab, cwd, session });
+	const status = result.details.status;
+	if (!status || typeof status !== "object") return undefined;
+	return status as CommandStatus;
+}
+
+async function readBaselineCommandStatus(tab: string, cwd: string, session?: string): Promise<CommandStatus | undefined> {
+	let lastError: unknown;
+	for (let attempt = 0; attempt < 2; attempt++) {
+		try {
+			return await readTabCommandStatus(tab, cwd, session);
+		} catch (error) {
+			lastError = error;
+			if (attempt === 0) await delay(250);
+		}
+	}
+	throw new Error(`could not read baseline tab status for ${tab}: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
+}
+
 async function tabExists(tab: string, cwd: string, session?: string): Promise<boolean> {
 	try {
-		await runtimeLogs(tab, cwd, 1, session);
+		await readTabCommandStatus(tab, cwd, session);
 		return true;
 	} catch {
 		return false;
@@ -27,59 +53,6 @@ async function ensureInteractiveShellTab(tab: string, cwd: string, focus: boolea
 	await zmux(withSession(["run", "exec bash -l", "-n", tab, "-d"], session), { cwd, timeoutMs: 10_000 });
 	if (focus) await focusTab(tab, cwd);
 	await delay(300);
-}
-
-interface WaitScript {
-	dir: string;
-	runPath: string;
-	statusPath: string;
-}
-
-async function writeWaitScript(command: string): Promise<WaitScript> {
-	const dir = await mkdtemp(join(tmpdir(), "pi-zmux-"));
-	const cmdPath = join(dir, "cmd.sh");
-	const runPath = join(dir, "run.sh");
-	const statusPath = join(dir, "status");
-	const statusTmpPath = join(dir, "status.tmp");
-	await writeFile(cmdPath, `${command}\n`, { mode: 0o700 });
-	const script = `#!/usr/bin/env bash
-status=${shellQuote(statusPath)}
-status_tmp=${shellQuote(statusTmpPath)}
-cmd=${shellQuote(cmdPath)}
-ec=0
-write_status() {
-  local code="$1"
-  printf '%s\n' "$code" > "$status_tmp"
-  mv "$status_tmp" "$status"
-}
-cleanup() {
-  local code=$?
-  write_status "$code"
-  rm -f "$cmd" "$0" "$status_tmp"
-}
-trap cleanup EXIT
-bash "$cmd"
-ec=$?
-exit "$ec"
-`;
-	await writeFile(runPath, script, { mode: 0o700 });
-	await chmod(cmdPath, 0o700);
-	await chmod(runPath, 0o700);
-	return { dir, runPath, statusPath };
-}
-
-async function cleanupWaitScript(script: WaitScript): Promise<void> {
-	await rm(script.dir, { recursive: true, force: true });
-}
-
-async function readExitCode(statusPath: string): Promise<number | undefined> {
-	try {
-		const value = (await readFile(statusPath, "utf8")).trim();
-		if (!/^\d+$/u.test(value)) return undefined;
-		return Number(value);
-	} catch {
-		return undefined;
-	}
 }
 
 function outputAfterBaseline(latest: string, baseline: string): string {
@@ -95,15 +68,6 @@ function outputAfterBaseline(latest: string, baseline: string): string {
 		if (beforeSuffix === latestPrefix) return latestLines.slice(count).join("\n");
 	}
 	return latest;
-}
-
-function stripRunnerCommand(output: string, runPath?: string): string {
-	if (!runPath) return output.trimEnd();
-	return output
-		.split("\n")
-		.filter((line) => !line.includes(runPath))
-		.join("\n")
-		.trimEnd();
 }
 
 export interface UserInputPrompt {
@@ -133,6 +97,42 @@ export function detectUserInputPrompt(output: string): UserInputPrompt | undefin
 	return undefined;
 }
 
+function parseNumber(value: unknown): number | undefined {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value !== "string") return undefined;
+	const trimmed = value.trim();
+	if (!/^\d+$/u.test(trimmed)) return undefined;
+	return Number(trimmed);
+}
+
+function commandSeq(status?: CommandStatus): number | undefined {
+	return parseNumber(status?.cmdSeq);
+}
+
+function commandState(status?: CommandStatus): string {
+	return typeof status?.cmdState === "string" ? status.cmdState : "";
+}
+
+function commandExitCode(status?: CommandStatus): number {
+	const parsed = parseNumber(status?.lastExit);
+	if (parsed !== undefined) return parsed;
+	return commandState(status) === "failed" ? 1 : 0;
+}
+
+export function settledFreshCommandStatus(status: CommandStatus | undefined, baselineSeq: number | undefined): { fresh: boolean; settled: boolean; state: string; exitCode?: number; cmdSeq?: number } {
+	const seq = commandSeq(status);
+	const fresh = seq !== undefined && (baselineSeq === undefined ? seq >= 1 : seq > baselineSeq);
+	const state = commandState(status);
+	const settled = fresh && (state === "done" || state === "failed");
+	return {
+		fresh,
+		settled,
+		state,
+		...(settled ? { exitCode: commandExitCode(status) } : {}),
+		...(seq !== undefined ? { cmdSeq: seq } : {}),
+	};
+}
+
 async function pollTab(
 	tab: string,
 	cwd: string,
@@ -156,30 +156,41 @@ async function pollTab(
 	throw new Error(`timeout after ${timeoutSeconds}s${latest ? `\n${latest}` : ""}`);
 }
 
-async function pollWaitScript(
+async function pollCommandStatus(
 	tab: string,
 	cwd: string,
 	lines: number,
 	timeoutSeconds: number,
-	script: WaitScript,
-	baseline: string,
+	baselineSeq: number | undefined,
+	baselineOutput: string,
 	detectUserInput: boolean,
 	session?: string,
-): Promise<{ output: string; exitCode: number }> {
+): Promise<{ output: string; exitCode: number; status: CommandStatus }> {
 	const deadline = Date.now() + timeoutSeconds * 1000;
 	let latest = "";
+	let lastStatus: CommandStatus | undefined;
+	let sawFreshCommand = false;
 	while (Date.now() <= deadline) {
 		latest = (await runtimeLogs(tab, cwd, lines, session)).text;
-		const exitCode = await readExitCode(script.statusPath);
-		if (exitCode !== undefined) return { output: latest, exitCode };
+		lastStatus = await readTabCommandStatus(tab, cwd, session);
+		const status = lastStatus;
+		const outcome = settledFreshCommandStatus(status, baselineSeq);
+		if (outcome.fresh) {
+			sawFreshCommand = true;
+			if (outcome.settled) {
+				return { output: latest, exitCode: outcome.exitCode ?? 0, status: status ?? {} };
+			}
+		}
 		if (detectUserInput) {
-			const scoped = outputAfterBaseline(latest, baseline);
+			const scoped = outputAfterBaseline(latest, baselineOutput);
 			const prompt = detectUserInputPrompt(scoped);
 			if (prompt) throw new UserInputRequiredError(latest, prompt);
 		}
 		await delay(500);
 	}
-	throw new Error(`timeout after ${timeoutSeconds}s${latest ? `\n${latest}` : ""}`);
+	const state = commandState(lastStatus);
+	const reason = sawFreshCommand ? `command still ${state || "unsettled"}` : "no fresh command lifecycle; run `zmux setup shell` and open a fresh tab";
+	throw new Error(`timeout after ${timeoutSeconds}s (${reason})${latest ? `\n${latest}` : ""}`);
 }
 
 export async function interactiveType(
@@ -198,23 +209,29 @@ export async function interactiveType(
 
 	const timeoutSeconds = options.timeoutSeconds ?? 90;
 	const lines = options.lines ?? 160;
-	const output = [`typed command into ${tab}${focus ? " and focused it" : " without changing focus"}; user may need to respond there`];
+	const typedMessage = `typed command into ${tab}${focus ? " and focused it" : " without changing focus"}; user may need to respond there`;
+	const output: string[] = [];
 	const details: Record<string, unknown> = { tab, command, waitForExit: options.waitForExit ?? false, focus, session };
 	if (options.waitForExit) {
 		const baseline = await runtimeLogs(tab, cwd, lines, session).then((logs) => logs.text).catch(() => "");
-		const script = await writeWaitScript(command);
+		let typed = false;
 		try {
-			await zmux(withSession(["type", tab, `bash ${shellQuote(script.runPath)}`], session), { cwd, timeoutMs: 5_000 });
-			const result = await pollWaitScript(tab, cwd, lines, timeoutSeconds, script, baseline, !focus, session);
-			const scoped = stripRunnerCommand(outputAfterBaseline(result.output, baseline), script.runPath);
+			const baselineSeq = commandSeq(await readBaselineCommandStatus(tab, cwd, session));
+			await zmux(withSession(["type", tab, command], session), { cwd, timeoutMs: 5_000 });
+			typed = true;
+			output.push(typedMessage);
+			const result = await pollCommandStatus(tab, cwd, lines, timeoutSeconds, baselineSeq, baseline, !focus, session);
+			const scoped = outputAfterBaseline(result.output, baseline).trimEnd();
 			if (scoped) output.push("", scoped);
 			details.completed = true;
 			details.exitCode = result.exitCode;
+			details.cmdSeq = commandSeq(result.status);
+			details.cmdState = commandState(result.status);
+			if (result.status.command) details.observedCommand = result.status.command;
 			if (result.exitCode !== 0) details.warning = `command exited with ${result.exitCode}`;
-			await cleanupWaitScript(script);
 		} catch (error) {
 			if (error instanceof UserInputRequiredError) {
-				const scoped = stripRunnerCommand(outputAfterBaseline(error.output, baseline), script.runPath);
+				const scoped = outputAfterBaseline(error.output, baseline).trimEnd();
 				output.push("", `user input required in ${tab}: ${error.prompt.line}`);
 				output.push("Ask the user before focusing this tab, or ask them to switch there manually.");
 				details.completed = false;
@@ -223,14 +240,15 @@ export async function interactiveType(
 				details.prompt = error.prompt.line;
 				details.output = scoped;
 			} else {
-				output.push("", `wait timed out or failed: ${error instanceof Error ? error.message : String(error)}`);
+				output.push(typed ? "" : `did not type command into ${tab}`);
+				output.push(`wait timed out or failed: ${error instanceof Error ? error.message : String(error)}`);
 				details.completed = false;
-				await cleanupWaitScript(script);
 			}
 		}
 	} else if (options.waitFor) {
 		const baseline = await runtimeLogs(tab, cwd, lines, session).then((logs) => logs.text).catch(() => "");
 		await zmux(withSession(["type", tab, command], session), { cwd, timeoutMs: 5_000 });
+		output.push(typedMessage);
 		const waitPattern = new RegExp(options.waitFor);
 		try {
 			const result = await pollTab(tab, cwd, lines, timeoutSeconds, (text) => waitPattern.test(outputAfterBaseline(text, baseline)), {
@@ -248,6 +266,7 @@ export async function interactiveType(
 		}
 	} else {
 		await zmux(withSession(["type", tab, command], session), { cwd, timeoutMs: 5_000 });
+		output.push(typedMessage);
 	}
 	return { text: output.join("\n"), details };
 }

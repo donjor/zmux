@@ -66,6 +66,7 @@ zmux tabs [session]              # list tabs — riders nested under hosts, hidd
 zmux tab move <tab> <dest-session>  # move a tab to another session in the workspace
 zmux tab label '<label>'         # set a stable zmux label for the current tab
 zmux tab label ''                # clear the label
+zmux tab status <tab> --json     # read glyph, command, and peer lifecycle state
 zmux tab kill <tab>              # kill a tab in the current session
 ```
 
@@ -152,7 +153,7 @@ as evidence.
 Persistent, background recording of a tab's output stream to a **bounded** file. It
 keeps recording with no client attached (tmux `pipe-pane`) and self-truncates so
 disk never runs away — use it to walk away and read the stream back later. Contrast
-`zmux watch` (reads the live buffer only) and `zmux snapshot` (one-shot screen state).
+`zmux watch` (reads the live buffer only) and `zmux snapshot` (one-shot screen state). For lifecycle/command/peer state, prefer `zmux tab status --json` over reading screen output.
 
 ```bash
 zmux log start <tab>                  # begin recording to a bounded file (background)

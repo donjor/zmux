@@ -29,6 +29,7 @@ try {
     buildTmuxRespawnScript,
     buildZmuxRunArgs,
     detectUserInputPrompt,
+    settledFreshCommandStatus,
     zmuxRunResultDetails,
   } = await import(join(outDir, 'src/zmux.js'));
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
@@ -49,6 +50,7 @@ try {
     ['make serve', 'runtime'],
     ['zmux tab kill admin', 'direct_zmux'],
     ['zmux tab state failed worker --msg done', 'direct_zmux'],
+    ['zmux tab status claude-peer --json', 'direct_zmux'],
     ['zmux tab label worker', 'direct_zmux'],
     ['zmux tab move worker other-session', 'direct_zmux'],
     ['zmux tab pane worker --right', 'direct_zmux'],
@@ -115,6 +117,9 @@ try {
   assert.equal(detectUserInputPrompt('Enter passphrase for key ~/.ssh/id_ed25519:')?.kind, 'password');
   assert.equal(detectUserInputPrompt('Are you sure you want to continue connecting (yes/no/[fingerprint])?')?.kind, 'ssh_confirm');
   assert.equal(detectUserInputPrompt('Status: inactive'), undefined);
+  assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '7', cmdState: 'done', lastExit: '0' }, 7), { fresh: false, settled: false, state: 'done', cmdSeq: 7 });
+  assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '8', cmdState: 'running' }, 7), { fresh: true, settled: false, state: 'running', cmdSeq: 8 });
+  assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '8', cmdState: 'failed', lastExit: '2' }, 7), { fresh: true, settled: true, state: 'failed', exitCode: 2, cmdSeq: 8 });
 
   assert.deepEqual(buildPaneOpenArgs({ name: 'logs', command: 'npm run dev', cwd: '/repo', direction: 'right', size: '40%' }), [
     'pane', 'open', 'logs', '--cwd', '/repo', '-r', '40%', '--', 'bash', '-lc', 'npm run dev',

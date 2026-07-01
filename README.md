@@ -451,7 +451,7 @@ state substrate once the shell block is installed.
 - Use normal agent shell tools for bounded one-shot checks.
 - Never run servers/watchers/long-lived runtimes in the agent shell — use zmux.
 - Never use `&`, `nohup`, or `disown` — use a stable zmux tab.
-- Read output with `zmux watch`, don't start duplicate processes to check state.
+- Read lifecycle/command/peer state with `zmux tab status --json`; read output with `zmux watch`/logs.
 - Use `zmux run`/Pi `zmux_run` for reviewable command-in-tab one-shots; don't add
   your own done markers or wrapper scripts.
 - For sudo/interactive commands, use `zmux type admin 'sudo ...'` or Pi's typed
@@ -477,8 +477,8 @@ Agent integration lives in this repo:
   after the mirror refresh if you need the new skill text in an existing session.
   It also owns the generic agent-peer and agent-worker doctrine for driving real
   CLIs in visible zmux tabs: read-only review loops, write-capable workers bound
-  to isolated worktrees, spawn profiles, the `type` -> `watch --idle` loop,
-  capture classification, and etiquette. The doctrine lives at
+  to isolated worktrees, spawn profiles, the `type` -> `tab status` state loop,
+  output classification/fallbacks, and etiquette. The doctrine lives at
   `skills/zmux/references/agent-peer.md` and
   `skills/zmux/references/agent-worker.md`; the exhaustive command catalog lives
   at `skills/zmux/references/cli-catalog.md`.

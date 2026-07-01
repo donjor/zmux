@@ -176,6 +176,9 @@ func resolveTabStateTarget(app *apppkg.App, svc *tabstate.Service, a tabStateArg
 	if err != nil {
 		return tabstate.Target{}, err
 	}
+	if !rt.found() {
+		return tabstate.Target{}, fmt.Errorf("no tab %q in session %q", spec, sessionName)
+	}
 	return rt.stateTarget(svc)
 }
 

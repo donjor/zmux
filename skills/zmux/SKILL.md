@@ -96,7 +96,7 @@ In Pi, use typed tools instead of shelling out for common zmux operations:
 - `zmux_runtime_ensure` / `zmux_runtime_logs` / `zmux_runtime_stop` — persistent runtimes.
 - `zmux_interactive_type` — sudo, SSH, REPLs, database shells, manual input.
 - `zmux_tabs`, `zmux_sessions`, `zmux_session_run`, `zmux_session_kill` — tab/session control.
-- `zmux_tab_*`, `zmux_pane_*`, `zmux_log`, `zmux_snapshot`, `zmux_terminal_current` — layout, lifecycle, logging, evidence.
+- `zmux_tab_status` / `zmux_tab_*`, `zmux_pane_*`, `zmux_log`, `zmux_snapshot`, `zmux_terminal_current` — status, layout, lifecycle, logging, evidence.
 - `zmux_pi_reload` after Pi extension/skill/prompt/theme changes; `zmux_reload` only for zmux config/key/theme changes; `zmux_pi_respawn` only as hard fallback.
 
 If the Pi bash guard says to use a typed tool, do that instead of bypassing into
@@ -124,16 +124,19 @@ CLI (`codex`, `claude`, `pi`, `agy`, etc.), drive that CLI in a visible zmux tab
 This skill owns terminal mechanics only; workflow skills decide when a peer is
 needed. Read `references/agent-peer.md` before running the loop.
 
-Minimal shape:
+Minimal status-first shape:
 
 ```bash
-zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session>
-zmux watch codex-peer -s <session> --idle 3 -T 30
+zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session> --scope peer
+zmux tab peer start codex-peer -s <session> --role codex --topic '<sanitized topic>'
+zmux tab status codex-peer -s <session> --json
 zmux type codex-peer '<prompt with repo/file pointers>' -s <session>
-zmux watch codex-peer -s <session> --idle 3 -T 300
+zmux tab peer running codex-peer -s <session>
+zmux tab status codex-peer -s <session> --json   # wait for fresh turnState=waiting|attention when instrumented
+zmux watch codex-peer -s <session>               # read output after state says ready, or as fallback
 ```
 
-In Pi, use `zmux_run`, `zmux_runtime_logs`, `zmux_type`, `zmux_tab_peer`, and `zmux_tab_state` with
+In Pi, use `zmux_run`, `zmux_type`, `zmux_tab_peer`, `zmux_tab_status`, `zmux_runtime_logs`, and `zmux_tab_state` with
 the `session` parameter.
 
 ## Agent worker
@@ -154,6 +157,6 @@ shell tab.
 - raw tmux for app-level actions.
 - your own terminal sentinels, done markers, wrapper scripts, or `sleep && watch`; zmux-managed shells own command lifecycle glyphs and `watch`/log tools own observation.
 - hand-rolled poll loops or `pgrep -f` / `pkill -f` self-matching patterns to await one job.
-- guessing process state — read it with `zmux watch`, `zmux log`, or typed Pi log tools.
+- guessing process state — read lifecycle/command/peer state with `zmux tab status` / Pi `zmux_tab_status`; use `zmux watch`, `zmux log`, or typed Pi log tools for output only.
 - `zmux refresh` / `zmux terminal refresh` from an agent session unless the user asked or disruption is acceptable.
 - `zmux init` inside tmux — it intentionally refuses.

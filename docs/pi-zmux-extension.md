@@ -81,8 +81,8 @@ Core tools:
 - `zmux_sessions` / `zmux_session_run` / `zmux_session_kill` — list sessions,
   create a detached command-backed session without focus steal, and clean one up.
 - `zmux_tabs` / `zmux_tab_kill` / `zmux_tab_focus` / `zmux_tab_label` /
-  `zmux_tab_move` / `zmux_tab_state` / `zmux_tab_place` — list, intentionally
-  remove/focus/label/move, mark lifecycle state, or switch logical tab placement
+  `zmux_tab_move` / `zmux_tab_state` / `zmux_tab_status` / `zmux_tab_place` — list, intentionally
+  remove/focus/label/move, mark or read lifecycle/command/peer state, or switch logical tab placement
   (`pane`/`full`/`hide`/`show`). Ask before focusing in agent sessions.
 - `zmux_send_keys` / `zmux_type` — send raw keys or type text into existing tabs.
 - `zmux_pane_list` / `zmux_pane_open` / `zmux_pane_focus` /
@@ -91,13 +91,13 @@ Core tools:
 - `zmux_pane_send_keys` / `zmux_pane_type` — lower-level pane-id input for
   sidecars when no logical tab name exists.
 - `zmux_runtime_ensure` / `zmux_runtime_logs` / `zmux_runtime_stop` — manage
-  persistent software-under-development runtimes in stable named tabs.
+  persistent software-under-development runtimes in stable named tabs. Ensure/start returns state/readiness; call logs explicitly when you need output.
 - `zmux_log` — start/tail/status/stop bounded persistent tab logging.
 - `zmux_snapshot` — capture terminal/TUI evidence bundles.
 - `zmux_terminal_current` — resolve the visible desktop terminal target as JSON.
 - `zmux_interactive_type` — type sudo/password/manual-input commands into a
   shared visible tab such as `admin`. One-shot sudo/manual commands can wait for
-  completion using the status-file wrapper.
+  completion using zmux shell lifecycle status (`cmdSeq`, `cmdState`, `lastExit`).
 - `zmux_pi_respawn` — hard fallback: respawn the current Pi pane with `pi -c`.
   This kills the current pane process and discards unsent input; use only when
   soft Pi reload is unavailable or Pi is wedged.
@@ -121,7 +121,7 @@ Policy mode is configurable:
 - `enforce` — block known runtime/interactive/background/raw-tmux slips.
 
 The default is `enforce` for clear matches. The Pi-only `direct_zmux` redirects
-cover typed workflow surfaces including `zmux run`, `zmux ls`, tab state/label/
+cover typed workflow surfaces including `zmux run`, `zmux ls`, tab state/status/label/
 move/placement, sessions, logging, snapshots, and terminal-current inspection.
 Override with `PI_ZMUX_POLICY` or a trusted project config. For a one-off emergency
 escape hatch when a typed tool is broken, add either `PI_ZMUX_ALLOW=1` or
@@ -181,9 +181,9 @@ zmux_interactive_type({
 })
 ```
 
-When `waitForExit` is enabled, the extension owns the temporary wrapper script
-that records the exit code to a status file; agents should not write their own
-scripts or terminal sentinels. No `__PI_ZMUX_*` sentinels are printed into the
+When `waitForExit` is enabled, the extension reads a baseline `cmdSeq`, types the command,
+and waits until a fresh command lifecycle settles to `done` or `failed`. Agents should not write
+their own scripts, status files, or terminal sentinels. No `__PI_ZMUX_*` sentinels are printed into the
 terminal. With `focus: false`, it also detects common
 password/manual-input prompts and returns early with `needsUserInput` details
 instead of silently waiting for timeout. Pass `focus: true` or call

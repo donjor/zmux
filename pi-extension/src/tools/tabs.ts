@@ -116,8 +116,8 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_tab_status",
 		label: "zmux tab status",
-		description: "Read lifecycle and command status for a zmux tab as JSON. Use for inspection; do not set glyphs with this tool.",
-		promptSnippet: "Read zmux tab lifecycle/command status",
+		description: "Read lifecycle, command, and peer turn status for a zmux tab as JSON. Use this for status/freshness checks; do not set glyphs with this tool.",
+		promptSnippet: "Read zmux tab lifecycle/command/peer status",
 		parameters: Type.Object({
 			tab: Type.String({ description: "Tab name target" }),
 			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),

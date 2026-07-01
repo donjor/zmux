@@ -22,9 +22,11 @@ type tabStatusOutput struct {
 	Origin    string `json:"origin,omitempty"`
 	Command   string `json:"command,omitempty"`
 	CmdState  string `json:"cmdState,omitempty"`
+	CmdSeq    string `json:"cmdSeq,omitempty"`
 	LastExit  string `json:"lastExit,omitempty"`
 	RunID     string `json:"runId,omitempty"`
 	TurnState string `json:"turnState,omitempty"`
+	TurnAt    string `json:"turnAt,omitempty"`
 	PeerRole  string `json:"peerRole,omitempty"`
 	PeerTopic string `json:"peerTopic,omitempty"`
 }
@@ -57,6 +59,9 @@ func newTabStatusCmd(app *apppkg.App) *cobra.Command {
 			rt, err := resolveTabTarget(app, sessionName, args[0])
 			if err != nil {
 				return err
+			}
+			if !rt.found() {
+				return fmt.Errorf("no tab %q in session %q", args[0], sessionName)
 			}
 			target := rt.Target
 			if target == "" {
@@ -104,9 +109,11 @@ func buildTabStatus(app *apppkg.App, label, target string, rt resolvedTab) (tabS
 	status.Scope, _ = app.Runner.ShowPaneOption(pane, tabs.OptScope)
 	status.Origin, _ = app.Runner.ShowPaneOption(pane, tabs.OptOrigin)
 	status.CmdState, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdState)
+	status.CmdSeq, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdSeq)
 	status.LastExit, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdLastExit)
 	status.RunID, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdRunID)
 	status.TurnState, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnState)
+	status.TurnAt, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnAt)
 	status.PeerRole, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerRole)
 	status.PeerTopic, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerTopic)
 	if cmd, _ := app.Runner.ShowPaneOption(pane, tabs.OptCmdText); cmd != "" {
@@ -133,8 +140,15 @@ func printTabStatus(status tabStatusOutput) {
 	}
 	if status.CmdState != "" {
 		line := "command-state: " + status.CmdState
+		var details []string
+		if status.CmdSeq != "" {
+			details = append(details, "seq "+status.CmdSeq)
+		}
 		if status.LastExit != "" {
-			line += " (exit " + status.LastExit + ")"
+			details = append(details, "exit "+status.LastExit)
+		}
+		if len(details) > 0 {
+			line += " (" + strings.Join(details, ", ") + ")"
 		}
 		fmt.Println(line)
 	}
@@ -145,6 +159,10 @@ func printTabStatus(status tabStatusOutput) {
 		fmt.Printf("scope: %s\n", status.Scope)
 	}
 	if status.TurnState != "" {
-		fmt.Printf("turn-state: %s\n", status.TurnState)
+		line := "turn-state: " + status.TurnState
+		if status.TurnAt != "" {
+			line += " (at " + status.TurnAt + ")"
+		}
+		fmt.Println(line)
 	}
 }

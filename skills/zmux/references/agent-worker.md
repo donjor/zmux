@@ -12,10 +12,12 @@ skills build on this; they must not duplicate the tab-driving mechanics.
 
 ## Relationship to agent-peer
 
-The **driving loop is identical** to `agent-peer.md` — Spawn, Wait (`watch --idle`),
-Classify, Tab State, Placement, Submission Hygiene, Topic Changes, Clean Quotes all
-apply unchanged. **Read `agent-peer.md` for the loop.** This doc covers only what a
-worker *inverts or adds*:
+The **terminal loop builds on** `agent-peer.md` — Spawn, status-first state reads,
+output/fallback classification, Tab State, Placement, Submission Hygiene, Topic Changes,
+and Clean Quotes all apply. **Read `agent-peer.md` for the loop.** For workers, conductors
+read `zmux tab status --json` / Pi `zmux_tab_status` for `done|failed|attention` across
+worker sessions; `watch --idle` is only the uninstrumented/output fallback. This doc covers
+only what a worker *inverts or adds*:
 
 | dimension | peer (agent-peer.md) | worker (this doc) |
 | --- | --- | --- |
@@ -46,7 +48,7 @@ A worker is bound to a pair: **(zmux session, worktree path)**. Honor both:
     zmux session run worker-auth --workspace dev -n auth-worker -- codex -C ~/proj.auth -s workspace-write -a on-request
     ```
   In Pi, use `zmux_session_run` for the spawn and the `session` parameter on
-  follow-up `zmux_type`, `zmux_runtime_logs`, `zmux_tab_state`, and related tools.
+  follow-up `zmux_type`, `zmux_tab_status`, `zmux_runtime_logs`, `zmux_tab_state`, and related tools.
   **Never** spawn an automated worker with `zmux new <ws> <worker-session>`: `new`
   attaches (steals the conductor's focus) and births a blank shell tab beside the CLI —
   the report-009 failure this primitive exists to fix.
@@ -132,8 +134,8 @@ blanket "approve everything" flag is **not** worker mode. Three differences:
 
 1. **Scoped, not blanket** — the worktree bounds writes; out-of-worktree + network/install/
    auth still surface.
-2. **Visible + addressable** — runs in a named session with lifecycle glyphs; a human can
-   `zmux watch` / attach / take over / kill it. A yolo run in a raw shell is none of those.
+2. **Visible + addressable** — runs in a named session with lifecycle glyphs/status; a human can
+   `zmux tab status` / `zmux watch` / attach / take over / kill it. A yolo run in a raw shell is none of those.
 3. **Surfacing discipline** — a worker raises its hand on consequential/ambiguous actions
    instead of barreling through.
 
@@ -144,7 +146,7 @@ worktree; it is not the worker default.
 
 A worker runs **long, unattended**. It must know when to stop and raise its hand vs push on.
 
-**Surface** (set `zmux tab state attention <tab> --msg '<why>'`, then wait) on:
+**Surface** (set `zmux tab state attention <tab> --msg '<why>'`, then let the conductor read status) on:
 
 - ambiguity in the brief it can't resolve from the worktree;
 - a permission prompt for a consequential action (per posture above);
@@ -154,7 +156,8 @@ A worker runs **long, unattended**. It must know when to stop and raise its hand
 **Proceed** on everything else within the brief and the worktree — commit progress freely
 (small, frequent commits are the recovery seam if the session dies; the worktree's git
 history survives a lost tab). Mark `zmux tab state done <tab>` when the brief is complete,
-`failed` if it gave up. Note: a worker that is *confidently wrong* will report `done`, not
+`failed` if it gave up; the conductor reads that with `zmux tab status --json`, not by waiting
+for the screen to settle. Note: a worker that is *confidently wrong* will report `done`, not
 `attention` — `done` means "I think I finished," not "this is correct." Verification is the
 caller's job, never trust a worker's own `done` as proof.
 

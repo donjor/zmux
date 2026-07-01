@@ -5,7 +5,23 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.11.0...HEAD`
+> Release tag: pending | Compare: `v0.11.1...HEAD`
+
+## [0.11.1] - 2026-07-01
+> Release tag: `v0.11.1` | Topics: `agents`, `pi`, `tabs`, `skills` | Compare: `v0.11.0...v0.11.1`
+
+### Added
+
+- **Status-first agent lifecycle surface** `agents` `tabs` - `zmux tab status --json` now exposes `cmdSeq` for fresh command completion and `turnAt` for peer-turn freshness, giving agents a structured state surface instead of relying on terminal settle loops.
+
+### Changed
+
+- **Pi interactive commands use lifecycle status** `agents` `pi` - `zmux_interactive_type` no longer creates temp wrapper/status files for command completion; it reads a baseline `cmdSeq`, types the command, and waits for a fresh `done`/`failed` command state while preserving sudo/password/SSH prompt detection. `zmux_runtime_ensure` now returns ensure/readiness state without unconditionally tailing logs.
+- **Agent peer/worker doctrine is status-first** `agents` `skills` - `skills/zmux` now teaches `tab status` / Pi `zmux_tab_status` as the state source, with `watch`, logs, and snapshots reserved for output, evidence, startup/submission hygiene, and uninstrumented fallback.
+
+### Fixed
+
+- **Missing tab lifecycle reads fail closed** `agents` `tabs` - `tab status`, `tab state`, and `tab peer` now error on missing tab-name targets instead of falling through to a raw tmux target that could affect the current pane.
 
 ## [0.11.0] - 2026-07-01
 > Release tag: `v0.11.0` | Topics: `agents`, `tabs`, `panes`, `workspace`, `session` | Compare: `v0.10.0...v0.11.0`

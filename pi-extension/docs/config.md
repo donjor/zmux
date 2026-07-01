@@ -40,11 +40,11 @@ PI_ZMUX_BIN=zzmux pi -e ./pi-extension
 If a low-level pane operation needs raw tmux, `PI_ZMUX_BIN=zzmux` implies
 `tmux -L zzmux`. Override with `PI_ZMUX_TMUX_SOCKET=<socket>` for custom profiles.
 
-Interactive one-shot commands can be waited on generically with a tool-owned
-temporary wrapper script and status file, without printing sentinel markers into
-the terminal. Agents should not create their own temp scripts or done markers for
-this. With `focus: false`, common password/manual-input prompts return early with
-`needsUserInput` so the agent can ask before switching focus:
+Interactive one-shot commands can be waited on generically through zmux shell
+lifecycle status (`cmdSeq`, `cmdState`, `lastExit`), without printing sentinel
+markers or creating ad-hoc temp status files. Agents should not create their own
+temp scripts or done markers for this. With `focus: false`, common password/manual-input
+prompts return early with `needsUserInput` so the agent can ask before switching focus:
 
 ```text
 zmux_interactive_type({
