@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
-	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/recipe"
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
@@ -21,8 +19,6 @@ import (
 	"github.com/donjor/zmux/internal/tui/recipeup"
 	"github.com/spf13/cobra"
 )
-
-const zmuxSentinelPrefix = ":::AGENT_DONE"
 
 // isRosterTabName reports whether name is a canonical roster tab — the shared
 // roster the zmux skill teaches (dev/scratch/agent-shells, plus peer/worker
@@ -142,23 +138,16 @@ Examples:
 				}
 			}
 
-			// Unless detached or following, wrap command with sentinel for
-			// completion detection. The nonce scopes the sentinel to this
-			// invocation — a reused tab can still show a previous run's
-			// sentinel on screen, which must never satisfy this wait.
+			// Completion and glyph state are owned by shell lifecycle hooks in
+			// the target pane. A blocking run stages a nonce in pane metadata;
+			// shell-event start/end consumes it and writes a silent
+			// @zmux_run_result. No stdout sentinel or tab-state epilogue is
+			// appended in the normal path.
 			shouldWait := !runDetach && !runFollow
-			var actualCommand, nonce string
+			actualCommand := command
+			nonce := ""
 			if shouldWait {
 				nonce = runNonce()
-				actualCommand = fmt.Sprintf("%s; echo \"%s:%s:$?:::\"", command, zmuxSentinelPrefix, nonce)
-			} else {
-				// Detached/followed runs: nobody waits on a sentinel, but the
-				// running glyph must still stop when the command does. An exit
-				// epilogue writes done/failed from inside the pane (state-exit
-				// maps $? → state). SelfBin keeps the write on this profile's
-				// socket — a bare `zmux` in the pane's PATH would hit the live
-				// binary from a zzmux pane.
-				actualCommand = fmt.Sprintf("%s; %s tab state-exit $?", command, config.SelfBin(app.Profile))
 			}
 
 			// Simple single-line commands are typed verbatim at the prompt so
@@ -193,15 +182,22 @@ Examples:
 				// Delivering input clears stale done|failed first (ratified
 				// clear table: typing-by-proxy = user input) — same as send/type.
 				rt.clearStale(app)
+				waitPane := ""
+				if shouldWait {
+					waitPane = runWaitPaneID(app, rt)
+					if waitPane == "" {
+						return fmt.Errorf("cannot resolve pane for lifecycle wait on %s:%s", sessionName, name)
+					}
+					if err := stageRunID(app, waitPane, nonce); err != nil {
+						return err
+					}
+				}
 				if err := app.Runner.SendKeys(rt.Target, sendCmd, "Enter"); err != nil {
 					return fmt.Errorf("send to %s: %w", rt.Target, err)
 				}
-				// run-start sets running (ratified clear table) — targets the
-				// reused tab's pane, never the caller's $TMUX_PANE.
-				rt.markState(app, tabstate.StateRunning, "run", "")
 				fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
 				if shouldWait {
-					return waitForSentinel(app, rt.Target, nonce, runTimeout, runFollowLines)
+					return waitForRunResult(app, rt.Target, waitPane, nonce, runTimeout, runFollowLines)
 				}
 				if runFollow {
 					return followOutput(app, rt.Target, runFollowLines)
@@ -241,12 +237,16 @@ Examples:
 				target = paneID
 			}
 
-			// Stamp identity at birth on explicitly-named tabs: pane-scoped
-			// id + pane-canonical label (window mirror rides along), so a
-			// later `run -n <name>` finds the logical tab wherever it lives.
-			// Set before the command runs, while the window name still matches.
-			if runWindowName != "" && paneID != "" {
-				if _, err := tabs.Stamp(app.Runner, paneID, paneID, name, tablabel.SourcePane); err != nil {
+			// Stamp identity at birth on all run-created panes so shell
+			// lifecycle hooks have a managed pane to update. Only an explicit
+			// -n becomes a stable pane label; command-derived names remain
+			// incidental and can auto-rename without becoming an address pin.
+			if paneID != "" {
+				label, labelSource := "", ""
+				if runWindowName != "" {
+					label, labelSource = name, tablabel.SourcePane
+				}
+				if _, err := tabs.Stamp(app.Runner, paneID, paneID, label, labelSource); err != nil {
 					return fmt.Errorf("stamp tab: %w", err)
 				}
 				// Lifecycle birth stamp (plan 038): records origin/scope/born so
@@ -269,15 +269,24 @@ Examples:
 				_ = tabs.TouchInput(app.Runner, paneID, time.Now())
 			}
 
+			waitPane := ""
+			if shouldWait {
+				waitPane = target
+				if paneID != "" {
+					waitPane = paneID
+				}
+				if err := stageRunID(app, waitPane, nonce); err != nil {
+					return err
+				}
+			}
 			if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
 				return fmt.Errorf("send to %s: %w", target, err)
 			}
-			markTabState(app, target, tabstate.StateRunning, "run", "")
 
 			fmt.Fprintf(os.Stderr, "running in %s:%s\n", sessionName, name)
 
 			if shouldWait {
-				return waitForSentinel(app, target, nonce, runTimeout, runFollowLines)
+				return waitForRunResult(app, target, waitPane, nonce, runTimeout, runFollowLines)
 			}
 			if runFollow {
 				return followOutput(app, target, runFollowLines)
@@ -349,10 +358,10 @@ func runRecipeFromRun(app *apppkg.App, cmd *cobra.Command, name string, items []
 	return recipeup.RunRecipe(app, name, items, opts)
 }
 
-// runNonce returns a random hex token scoping a sentinel to one invocation —
-// crypto/rand so concurrent runs can never mint the same nonce (a clock-based
-// nonce theoretically could). Clock fallback only if the system RNG is
-// unreadable, which Go treats as effectively impossible.
+// runNonce returns a random hex token scoping a command result to one
+// invocation. crypto/rand so concurrent runs can never mint the same nonce (a
+// clock-based nonce theoretically could). Clock fallback only if the system RNG
+// is unreadable, which Go treats as effectively impossible.
 func runNonce() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -395,12 +404,12 @@ func writeCommandScript(command string, timeoutSec int) (string, func(), error) 
 		return "", nil, err
 	}
 
-	// Echo the command so the terminal shows what's being run,
-	// then execute it, then self-delete the script.
+	// Echo the command so the terminal shows what's being run, then execute it,
+	// preserving the command's exit status even when the script self-deletes.
 	// Use printf to avoid echo interpreting escape sequences.
 	escaped := strings.ReplaceAll(command, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
-	script := fmt.Sprintf("#!/usr/bin/env bash\nprintf '\\033[2m$ %%s\\033[0m\\n' %q\n%s\nrm -f %q\n", escaped, command, f.Name())
+	script := fmt.Sprintf("#!/usr/bin/env bash\nprintf '\\033[2m$ %%s\\033[0m\\n' %q\n__zmux_cmd_cleanup() { __zmux_status=$?; rm -f %q; exit $__zmux_status; }\ntrap __zmux_cmd_cleanup EXIT\n%s\n", escaped, f.Name(), command)
 	if _, err := f.WriteString(script); err != nil {
 		f.Close()
 		os.Remove(f.Name())
@@ -421,22 +430,62 @@ func writeCommandScript(command string, timeoutSec int) (string, func(), error) 
 	return f.Name(), cleanup, nil
 }
 
-// waitForSentinel watches a tab for this run's AGENT_DONE sentinel and returns
-// the exit code. Matching is scoped by the per-invocation nonce — a reused tab
-// can still show a previous run's sentinel (or one recalled from shell
-// history), which must never satisfy this wait.
-func waitForSentinel(app *apppkg.App, target, nonce string, timeoutSec, followLines int) error {
-	sentinelRe := regexp.MustCompile(zmuxSentinelPrefix + ":" + regexp.QuoteMeta(nonce) + `:(\d+):::`)
+func runWaitPaneID(app *apppkg.App, rt resolvedTab) string {
+	if rt.Tab != nil {
+		return rt.Tab.PaneID
+	}
+	if rt.stateOK {
+		return rt.state.PaneID
+	}
+	svc := tabstate.New(app.Runner, os.Getenv)
+	t, err := rt.stateTarget(svc)
+	if err != nil {
+		return ""
+	}
+	return t.PaneID
+}
 
+func stageRunID(app *apppkg.App, paneID, nonce string) error {
+	if paneID == "" || nonce == "" {
+		return fmt.Errorf("cannot stage empty run id")
+	}
+	if err := app.Runner.SetPaneOption(paneID, tabs.OptNextRunID, nonce); err != nil {
+		return fmt.Errorf("stage run result channel: %w", err)
+	}
+	_ = app.Runner.UnsetPaneOption(paneID, tabs.OptRunResult)
+	return nil
+}
+
+// waitForRunResult watches pane output while waiting for the shell lifecycle
+// hook to publish @zmux_run_result=<nonce>:<exit>. Completion is metadata, not
+// terminal text, so stdout stays free of AGENT_DONE-style sentinels.
+var runLifecycleStartGrace = 5 * time.Second
+
+func waitForRunResult(app *apppkg.App, target, paneID, nonce string, timeoutSec, followLines int) error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
 	defer signal.Stop(sig)
 
-	deadline := time.Now().Add(time.Duration(timeoutSec) * time.Second)
+	timeout := time.Duration(timeoutSec) * time.Second
+	deadline := time.Now().Add(timeout)
+	startDeadline := time.Now().Add(runLifecycleStartDeadline(timeout))
+	started := false
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
 
 	seen := map[string]bool{}
+	printNew := func(output string) {
+		for _, line := range strings.Split(output, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" {
+				continue
+			}
+			if !seen[trimmed] {
+				seen[trimmed] = true
+				fmt.Println(line)
+			}
+		}
+	}
 
 	for {
 		select {
@@ -444,48 +493,65 @@ func waitForSentinel(app *apppkg.App, target, nonce string, timeoutSec, followLi
 			return fmt.Errorf("interrupted")
 
 		case <-ticker.C:
-			if time.Now().After(deadline) {
-				output, _ := app.Runner.CapturePane(target, followLines)
-				if output != "" {
-					fmt.Print(output)
-				}
-				return fmt.Errorf("timeout after %ds", timeoutSec)
-			}
-
 			output, err := app.Runner.CapturePane(target, followLines)
-			if err != nil {
-				continue
+			if err == nil {
+				printNew(output)
 			}
-
-			lines := strings.Split(output, "\n")
-
-			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				if trimmed == "" {
-					continue
+			if exitCode, ok := runResultExit(app, paneID, nonce); ok {
+				_ = app.Runner.UnsetPaneOption(paneID, tabs.OptRunResult)
+				if exitCode != 0 {
+					return fmt.Errorf("command exited with code %d", exitCode)
 				}
-				if !seen[trimmed] {
-					seen[trimmed] = true
-
-					// Check for sentinel — don't print it. Sentinel exit is the
-					// only place that may write done/failed: a timeout means
-					// the result is unknown, so the tab stays `running` rather
-					// than fabricating completion.
-					if m := sentinelRe.FindStringSubmatch(trimmed); m != nil {
-						exitCode, _ := strconv.Atoi(m[1])
-						if exitCode != 0 {
-							markTabState(app, target, tabstate.StateFailed, "run", fmt.Sprintf("exit %d", exitCode))
-							return fmt.Errorf("command exited with code %d", exitCode)
-						}
-						markTabState(app, target, tabstate.StateDone, "run", "")
-						return nil
+				return nil
+			}
+			if !started && runLifecycleStarted(app, paneID, nonce) {
+				started = true
+			}
+			if !started && time.Now().After(startDeadline) {
+				_ = app.Runner.UnsetPaneOption(paneID, tabs.OptNextRunID)
+				return fmt.Errorf("timeout after %ds waiting for shell lifecycle to start in the target pane (run `zmux setup shell` and open a fresh tab, or use --detach/--follow for REPLs/TUIs/non-interactive shells)", int(runLifecycleStartDeadline(timeout).Seconds()))
+			}
+			if time.Now().After(deadline) {
+				if err != nil {
+					if output, _ := app.Runner.CapturePane(target, followLines); output != "" {
+						fmt.Print(output)
 					}
-
-					fmt.Println(line)
 				}
+				return fmt.Errorf("timeout after %ds waiting for shell lifecycle result (run `zmux setup shell` for the target shell, or inspect output with `zmux watch`)", timeoutSec)
 			}
 		}
 	}
+}
+
+func runLifecycleStartDeadline(timeout time.Duration) time.Duration {
+	if timeout <= 0 || timeout > runLifecycleStartGrace {
+		return runLifecycleStartGrace
+	}
+	return timeout
+}
+
+func runLifecycleStarted(app *apppkg.App, paneID, nonce string) bool {
+	next, err := app.Runner.ShowPaneOption(paneID, tabs.OptNextRunID)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(next) != nonce
+}
+
+func runResultExit(app *apppkg.App, paneID, nonce string) (int, bool) {
+	value, err := app.Runner.ShowPaneOption(paneID, tabs.OptRunResult)
+	if err != nil || value == "" {
+		return 0, false
+	}
+	prefix := nonce + ":"
+	if !strings.HasPrefix(strings.TrimSpace(value), prefix) {
+		return 0, false
+	}
+	exitCode, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(value, prefix)))
+	if err != nil {
+		return 0, false
+	}
+	return exitCode, true
 }
 
 // followOutput tails the output of a tmux pane, printing new content as it appears.

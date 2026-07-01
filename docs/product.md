@@ -47,5 +47,5 @@ binary.
 - It does not hide long-running processes in background shell jobs.
 - It does not provide a full remote/session persistence product yet; those are
   forward roadmap areas.
-- It does not make the archived bash prototype the supported path; new behavior
-  belongs in the Go implementation.
+- The archived bash prototype is not the supported path; new behavior belongs
+  in the Go implementation.

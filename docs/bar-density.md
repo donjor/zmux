@@ -46,7 +46,7 @@ shipped:
    only (process/git, preset-dependent), so directory changes cannot move the
    logical tabs row. This is the single biggest tab-survival win — it freed
    ~40–68 cells of bottom-left width, plus the later cwd-overlay cleanup.
-3. **Segment toggles** — hide any of workspace / git / lang / clock / directory /
+3. **Segment toggles** — hide workspace / git / lang / clock / directory /
    process / group. Fewer segments → narrower sides → more tab room.
 4. **Glyph vocabulary (preset)** — nerd-font pills/separators (powerline,
    rounded) pack more signal per cell but cost a nerd font; plain presets
@@ -76,5 +76,5 @@ smaller terminal is wanted.
 Density: the levers above already exist but are scattered across config keys. The
 actionable follow-up — _not_ part of this feasibility item — is a single
 **compact mode** that bundles a sensible dense default (e.g. two-line + de-dup +
-trimmed segments + a compact preset) behind one switch, so "make the bar denser"
-is one decision instead of six. Captured here for a future roadmap promotion.
+trimmed segments + a compact preset) behind one switch, so bar density is one
+decision instead of six. Captured here for a future roadmap promotion.

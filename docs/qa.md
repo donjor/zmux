@@ -75,3 +75,8 @@ unit tests cannot cover: top bar, session tab, and popup polish.
 `checklists/capture-tail-logging.toml` verifies tail-style output logging
 (`zmux log start/stop/status/tail`) over tmux pipe-pane: detached recording,
 truncation, plain-vs-ANSI, and the TUI boundary.
+
+`checklists/natural-shell-lifecycle.toml` verifies plan 046's root-shell
+lifecycle behavior on `zzmux`: raw typed commands publish running/done metadata,
+`zmux run` no longer prints completion sentinels, and failed commands report the
+recorded exit code through `tab status`.

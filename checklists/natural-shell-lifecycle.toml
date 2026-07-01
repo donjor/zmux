@@ -1,0 +1,75 @@
+# QA walkthrough for plan 046: natural shell lifecycle glyphs.
+#
+# Targets the isolated zzmux edge profile — live zmux is untouched.
+# Setup: `./dev.sh zzmux`, then in another terminal `zzmux new qa-shell` and WATCH it.
+# Drive from here: `./qa natural-shell-lifecycle` (picker) or `./qa run natural-shell-lifecycle`.
+
+[checklist]
+name = "Natural shell lifecycle (046)"
+doc = "Normal commands typed into a fresh zzmux-managed shell should publish running → done/failed glyph and command metadata without zmux-run sentinels. Keep a 'zzmux new qa-shell' terminal visible for the glyph expectations."
+
+[checklist.vars]
+bin = "zzmux"
+s = "qa-shell"
+tab = "natural"
+
+[[step]]
+id = "session"
+name = "qa-shell session exists"
+cmd = "{bin} ls"
+expect = "session 'qa-shell' is listed (in another terminal: zzmux new qa-shell)"
+check = "(?m)\\bqa-shell\\b"
+
+[[step]]
+id = "raw-tab"
+name = "Create a fresh shell tab without zmux run"
+cmd = "tmux -L zzmux new-window -d -t {s} -n {tab}"
+expect = "a fresh tab named 'natural' appears in the visible qa-shell session"
+needs = ["session"]
+
+[[step]]
+id = "manual-running"
+name = "Raw typed command sets running"
+cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" 'sleep 3; echo natural-ok' Enter; sleep 1; printf 'state='; tmux -L zzmux show-options -p -t \"$pane\" -v @zmux_state; printf 'cmd='; tmux -L zzmux show-options -p -t \"$pane\" -v @zmux_cmd_state"
+expect = "the visible tab shows a running spinner while the command sleeps; printed state/cmd are running"
+check = "state=running[[:space:]]+cmd=running"
+needs = ["raw-tab"]
+
+[[step]]
+id = "manual-done"
+name = "Raw typed command sets done and last exit"
+cmd = "sleep 4; pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); {bin} watch {tab} -s {s} -l 20; {bin} tab status {tab} -s {s} --json"
+expect = "output includes natural-ok, status JSON reports state=done, cmdState=done, lastExit=0, and the visible glyph is ✓"
+check = "(?s)natural-ok.*\\\"cmdState\\\": \\\"done\\\""
+needs = ["manual-running"]
+
+[[step]]
+id = "manual-failed"
+name = "Raw typed failure sets failed and last exit"
+cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" \"sh -c 'exit 3'\" Enter; sleep 1; {bin} tab status {tab} -s {s} --json"
+expect = "status JSON reports state=failed, cmdState=failed, lastExit=3, and the visible glyph is ✗"
+check = "(?s)\\\"state\\\": \\\"failed\\\".*\\\"cmdState\\\": \\\"failed\\\".*\\\"lastExit\\\": \\\"3\\\""
+needs = ["manual-done"]
+
+[[step]]
+id = "run-no-sentinel"
+name = "zmux run uses the same lifecycle channel"
+cmd = "{bin} run 'echo run-ok' -n run-natural -s {s} -T 15"
+expect = "prints run-ok, returns success, and no :::AGENT_DONE marker appears"
+check = "run-ok"
+needs = ["session"]
+
+[[step]]
+id = "failure-status"
+name = "Failure records failed state and exit code"
+cmd = "set +e; {bin} run \"sh -c 'exit 7'\" -n run-fail -s {s} -T 15 >/tmp/zmux-qa-run-fail.out 2>&1; rc=$?; cat /tmp/zmux-qa-run-fail.out; {bin} tab status run-fail -s {s} --json; exit 0"
+expect = "run reports command exited with code 7; status JSON reports failed/cmdState failed/lastExit 7"
+check = "(?s)command exited with code 7.*\\\"cmdState\\\": \\\"failed\\\".*\\\"lastExit\\\": \\\"7\\\""
+needs = ["session"]
+
+[[step]]
+id = "cleanup"
+name = "Kill the qa-shell session"
+cmd = "{bin} kill {s}"
+expect = "the watching terminal detaches; session gone"
+needs = ["session"]

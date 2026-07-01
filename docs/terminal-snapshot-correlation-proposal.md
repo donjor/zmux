@@ -10,6 +10,8 @@ Audience: zmux implementation agent
 > PNG into `~/.zmux/snapshots/<timestamp>/` (`internal/snapshot`, exposed via the
 > `zmux` skill). The PNG covers only the current terminal; off-current-window
 > `--pane` targets get text/ANSI plus a warning, never a mismatched screenshot.
+> `--pane` accepts raw `%pane` ids or logical-tab labels through the shared tab
+> resolver, and label targets name artifacts from the resolved tab display name.
 > `zmux terminals` plural listing remains unbuilt; it is not needed by snapshot.
 > The bundle path is zmux-native (`~/.zmux/snapshots`). The implemented title
 > marker is `zmux:v1;...`, and its human suffix uses managed `workspace/session`
@@ -181,11 +183,12 @@ optional PNG of the current terminal in one bundle:
 ```bash
 zmux snapshot                          # all panes in current window: text + ANSI + PNG
 zmux snapshot --no-png                 # text + ANSI only
-zmux snapshot --pane %5 --pane %6      # specific panes (PNG only if both are current-window)
+zmux snapshot --pane %5 --pane sim     # specific pane ids or logical-tab labels
 zmux snapshot --lines 400 --out /tmp/run1 --json
 ```
 
-Bundle shape (flat; per-pane files named by running command):
+Bundle shape (flat; per-pane files named by resolved tab label when available,
+otherwise running command):
 
 ```text
 snapshot/
@@ -211,7 +214,8 @@ Rules:
 
 1. Build the set of visible workspaces from monitor `activeWorkspace.name`.
 2. Consider only visible clients for screenshotable targets.
-3. Filter terminal clients by class/title: `ghostty`, `kitty`, `alacritty`, `wezterm`, `terminal`, `foot`, `xterm`.
+3. Filter terminal clients by class/title: `ghostty`, `kitty`, `alacritty`,
+   `wezterm`, `terminal`, `foot`, `xterm`.
 4. Prefer clients whose title starts with or contains the zmux title marker.
 5. Correlate against tmux client/session/window data:
    - `tmux list-clients -F ...`
@@ -219,15 +223,18 @@ Rules:
    - `tmux list-panes -a -F ...`
 6. Assign confidence:
    - `high`: title includes zmux session/window and workspace is visible;
-   - `medium`: visible terminal title/class likely matches but tty/session correlation is incomplete;
+   - `medium`: visible terminal title/class likely matches but tty/session
+     correlation is incomplete;
    - `low`: fallback largest visible terminal.
 7. Never return hidden workspace geometry as screenshotable.
 
-Important: `grim -g` is geometry-based and only captures visible monitor contents. Hidden-workspace matches must be reported as not screenshotable.
+Important: `grim -g` is geometry-based and only captures visible monitor
+contents. Hidden-workspace matches must be reported as not screenshotable.
 
 ## Consumer example: pi-clean-ui
 
-Today `pi-clean-ui` does its own Hyprland selection. With zmux support it could do:
+Today `pi-clean-ui` does its own Hyprland selection. With zmux support it could
+do:
 
 ```bash
 target=$(zmux terminal current --json)
@@ -241,10 +248,14 @@ Or if `zmux snapshot` exists later, clean-ui can delegate completely.
 
 ## Acceptance criteria
 
-- `zmux terminals --json` lists visible terminal candidates with geometry, workspace, title/class, and best-effort tmux context.
-- `zmux terminal current --json` returns a usable geometry for the current visible zmux terminal window on Hyprland/Ghostty.
-- Hidden-workspace matches do not produce screenshotable geometry without an explicit warning/error.
-- Stable terminal title configuration is documented and tested enough that Hyprland clients show zmux session/window identity.
+- `zmux terminals --json` lists visible terminal candidates with geometry,
+  workspace, title/class, and best-effort tmux context.
+- `zmux terminal current --json` returns usable geometry for the current visible
+  zmux terminal window on Hyprland/Ghostty.
+- Hidden-workspace matches do not produce screenshotable geometry without an
+  explicit warning/error.
+- Stable terminal title configuration is documented and tested enough that
+  Hyprland clients show zmux session/window identity.
 - Output is valid JSON and stable enough for `pi-clean-ui` to consume.
 - Existing zmux tests pass.
 
@@ -261,8 +272,13 @@ Then compare with:
 
 ```bash
 hyprctl clients -j | jq '.[] | {address,class,title,workspace,at,size}'
-tmux list-clients -F '#{client_tty} #{client_session} #{client_width}x#{client_height}'
-tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_id} #{pane_width}x#{pane_height} active=#{pane_active} title=#{pane_title} current=#{pane_current_command} path=#{pane_current_path}'
+tmux list-clients -F \
+  '#{client_tty} #{client_session} #{client_width}x#{client_height}'
+pane_fmt='#{session_name}:#{window_index}.#{pane_index} #{pane_id} '
+pane_fmt+='#{pane_width}x#{pane_height} active=#{pane_active} '
+pane_fmt+='title=#{pane_title} current=#{pane_current_command} '
+pane_fmt+='path=#{pane_current_path}'
+tmux list-panes -a -F "$pane_fmt"
 ```
 
 Screenshot smoke:
@@ -273,7 +289,8 @@ grim -g "$geom" /tmp/zmux-current-terminal.png
 xdg-open /tmp/zmux-current-terminal.png
 ```
 
-Expected: PNG shows the same terminal window/session that `zmux terminal current --json` reported.
+Expected: PNG shows the same terminal window/session that
+`zmux terminal current --json` reported.
 
 Automated/unit-ish:
 
@@ -286,18 +303,24 @@ Automated/unit-ish:
 
 ## Open questions
 
-- Can tmux reliably expose enough client tty/window information for grouped sessions with multiple clients?
+- Can tmux reliably expose enough client tty/window information for grouped
+  sessions with multiple clients?
 - How should zmux handle terminals that override or ignore tmux-set titles?
-- Should the first implementation be hidden behind `zmux terminal ...` or placed under existing `zmux pane ...` namespace?
-- Should `zmux snapshot` use `grim` directly, or should zmux only return geometry and let callers choose screenshot tools?
+- Should the first implementation be hidden behind `zmux terminal ...` or placed
+  under existing `zmux pane ...` namespace?
+- Should `zmux snapshot` use `grim` directly, or should zmux only return geometry
+  and let callers choose screenshot tools?
 
 ## Recommendation
 
 Implement in phases:
 
 1. ~~stable terminal title string~~ *(shipped)*;
-2. `zmux terminals --json` with Hyprland/Ghostty support *(dropped — not needed by snapshot)*;
+2. `zmux terminals --json` with Hyprland/Ghostty support *(dropped — not needed
+   by snapshot)*;
 3. ~~`zmux terminal current --json` target selection~~ *(shipped)*;
 4. ~~`zmux snapshot` for full text/ANSI/PNG bundles~~ *(shipped — see §4 above)*.
 
-This gives `pi-clean-ui` and future agent-vision workflows a reliable target selector without forcing every extension to replicate wm/tmux correlation heuristics.
+This gives `pi-clean-ui` and future agent-vision workflows a reliable target
+selector without forcing every extension to replicate wm/tmux correlation
+heuristics.

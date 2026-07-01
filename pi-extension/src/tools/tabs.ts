@@ -11,6 +11,7 @@ import {
 	setTabPeer,
 	setTabState,
 	snapshot,
+	tabStatus,
 	terminalCurrent,
 	typeText,
 } from "../zmux.js";
@@ -108,6 +109,22 @@ export function registerTabTools(pi: ExtensionAPI): void {
 				msg: params.message,
 				cwd: resolveCwd(ctx.cwd, params.cwd),
 			});
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_tab_status",
+		label: "zmux tab status",
+		description: "Read lifecycle and command status for a zmux tab as JSON. Use for inspection; do not set glyphs with this tool.",
+		promptSnippet: "Read zmux tab lifecycle/command status",
+		parameters: Type.Object({
+			tab: Type.String({ description: "Tab name target" }),
+			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await tabStatus({ tab: params.tab, session: params.session, cwd: resolveCwd(ctx.cwd, params.cwd) });
 			return content(result.text, result.details);
 		},
 	});

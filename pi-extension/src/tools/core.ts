@@ -102,7 +102,7 @@ export function registerCoreTools(pi: ExtensionAPI): void {
 		promptGuidelines: [
 			"Use zmux_run for reviewable command-in-tab one-shots; use normal bash for bounded checks whose captured stdout is enough.",
 			"Use zmux_runtime_ensure for software that keeps running, and zmux_interactive_type for sudo/password/manual-input commands.",
-			"Do not add your own sentinels or wrapper scripts; native zmux run owns completion tracking.",
+			"Do not add your own sentinels or wrapper scripts; zmux-managed shell lifecycle owns command state, and watch/log tools own output inspection.",
 		],
 		parameters: Type.Object({
 			command: Type.String({ description: "Command to run" }),

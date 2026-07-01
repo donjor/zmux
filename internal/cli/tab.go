@@ -25,6 +25,7 @@ func newTabCmd(app *apppkg.App) *cobra.Command {
 	cmd.AddCommand(newTabRefreshNamesCmd(app))
 	cmd.AddCommand(newTabKillCmd(app))
 	cmd.AddCommand(newTabStateCmd(app))
+	cmd.AddCommand(newTabStatusCmd(app))
 	cmd.AddCommand(newTabStateExitCmd(app))
 	cmd.AddCommand(newTabPeerCmd(app))
 	cmd.AddCommand(newTabHideCmd(app))

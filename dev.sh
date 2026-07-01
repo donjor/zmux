@@ -2,8 +2,9 @@
 # dev.sh — build + install a zmux binary for local testing.
 #
 # Usage: ./dev.sh [zmux|zzmux]   (default: zmux)
-#   zmux   build + install the live binary, refresh shared agent integrations
-#   zzmux  build + install an identical edge binary (binary only), so you can
+#   zmux   build + install the live binary, refresh shell + agent integrations
+#   zzmux  build + install an identical edge binary, refresh shell integration
+#          safely with live `zmux` as the default autostart target, so you can
 #          test changes without overwriting the zmux you're currently running
 #
 # Local config:
@@ -16,6 +17,7 @@
 #   ZMUX_BIN_DIR                 binary install dir (default: ~/.local/bin)
 #   ZMUX_SKILLS_ROOT             shared skills repo root
 #   ZMUX_SKIP_AGENT_INTEGRATIONS set to 1 to skip skill/mirror/extension updates
+#   ZMUX_SKIP_SHELL_SETUP        set to 1 to skip `setup shell --yes`
 
 set -euo pipefail
 
@@ -38,6 +40,7 @@ restore_preexisting_vars() {
 			ZMUX_DEV_LOCAL) ZMUX_DEV_LOCAL="$ORIGINAL_ZMUX_DEV_LOCAL" ;;
 			ZMUX_INSTALL_BIN_DIR) ZMUX_INSTALL_BIN_DIR="$ORIGINAL_ZMUX_INSTALL_BIN_DIR" ;;
 			ZMUX_SKIP_AGENT_INTEGRATIONS) ZMUX_SKIP_AGENT_INTEGRATIONS="$ORIGINAL_ZMUX_SKIP_AGENT_INTEGRATIONS" ;;
+			ZMUX_SKIP_SHELL_SETUP) ZMUX_SKIP_SHELL_SETUP="$ORIGINAL_ZMUX_SKIP_SHELL_SETUP" ;;
 			ZMUX_SKILLS_ROOT) ZMUX_SKILLS_ROOT="$ORIGINAL_ZMUX_SKILLS_ROOT" ;;
 		esac
 		export "$name"
@@ -53,6 +56,7 @@ load_env_file() {
 			ZMUX_DEV_LOCAL \
 			ZMUX_INSTALL_BIN_DIR \
 			ZMUX_SKIP_AGENT_INTEGRATIONS \
+			ZMUX_SKIP_SHELL_SETUP \
 			ZMUX_SKILLS_ROOT
 	)"
 
@@ -70,6 +74,7 @@ ORIGINAL_ZMUX_BIN_DIR="${ZMUX_BIN_DIR-}"
 ORIGINAL_ZMUX_DEV_LOCAL="${ZMUX_DEV_LOCAL-}"
 ORIGINAL_ZMUX_INSTALL_BIN_DIR="${ZMUX_INSTALL_BIN_DIR-}"
 ORIGINAL_ZMUX_SKIP_AGENT_INTEGRATIONS="${ZMUX_SKIP_AGENT_INTEGRATIONS-}"
+ORIGINAL_ZMUX_SKIP_SHELL_SETUP="${ZMUX_SKIP_SHELL_SETUP-}"
 ORIGINAL_ZMUX_SKILLS_ROOT="${ZMUX_SKILLS_ROOT-}"
 
 if [ -f "$ZMUX_ROOT/.env" ]; then
@@ -123,6 +128,24 @@ rm -f "$BIN_DIR/$TARGET" 2>/dev/null || true
 cp "$TARGET" "$BIN_DIR/$TARGET"
 printf "${green}ok${reset}  ${dim}%s/%s${reset}\n" "$BIN_DIR" "$TARGET"
 run_local_hook zmux_dev_after_install "$TARGET" "$ZMUX_ROOT" "$BIN_DIR"
+
+if [ "${ZMUX_SKIP_SHELL_SETUP:-0}" != "1" ]; then
+	printf "${dim}updating shell integration...${reset} "
+	# Even when testing the edge `zzmux` binary, keep normal terminal autostart on
+	# live `zmux`. zzmux sessions set ZMUX_BIN=zzmux in tmux env, so lifecycle
+	# hooks still target the edge profile inside zzmux.
+	if setup_output=$("$BIN_DIR/$TARGET" setup shell --yes --bin zmux 2>&1); then
+		printf "${green}ok${reset}\n"
+		if [ -n "$setup_output" ]; then
+			printf "%s\n" "$setup_output"
+		fi
+	else
+		printf "${yellow}skip${reset}\n"
+		printf "%s\n" "$setup_output"
+	fi
+else
+	printf "${dim}skipping shell integration; ZMUX_SKIP_SHELL_SETUP=1${reset}\n"
+fi
 
 # Agent integration links only for the live binary. The skill is brand-agnostic;
 # edge testing does not relink shared Claude/Codex/Pi state.

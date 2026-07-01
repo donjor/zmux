@@ -170,8 +170,8 @@ func TestTabStateFlagValidation(t *testing.T) {
 	}
 }
 
-// state-exit is the run epilogue: exit code → done/failed, resolved from the
-// calling pane, always silent.
+// state-exit is the legacy compatibility shim: exit code → done/failed,
+// resolved from the calling pane, always silent.
 func TestTabStateExitMapsCodeToState(t *testing.T) {
 	cases := []struct {
 		code      string

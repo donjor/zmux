@@ -29,9 +29,14 @@ zmux/
 ├── docs/                 # this directory (architecture, vision, keybindings, etc.)
 ├── themes/iterm2/        # downloaded theme cache (gitignored; not an embed source)
 ├── tests/                # integration tests (build tag: `integration`)
-├── skills/zmux/          # Agent skill: terminal orchestration + agent peer/worker doctrine
+├── skills/zmux/          # Agent skill, Claude hooks, and peer/worker doctrine
 ├── pi-extension/         # Pi agent TypeScript extension (separate build)
 ├── legacy/v0/            # archived bash+gum prototype — see legacy/v0/README.md
+├── .github/workflows/ci.yml # CI: lint, build, race tests, integration, vuln scan
+├── .config/wt.toml       # Worktrunk pre-merge gate
+├── .golangci.yml         # golangci-lint/gofumpt config used by make lint + CI
+├── cliff.toml            # git-cliff draft config for curated CHANGELOG updates
+├── .env.example          # optional maintainer env overrides for dev/install scripts
 ├── Makefile              # build / test / lint / install
 ├── install.sh            # end-user installer (build + install + shell integration)
 ├── dev.sh                # MAINTAINER convenience (build + install + agent symlinks)
@@ -54,7 +59,13 @@ zmux/
 | `tests/`                        | Active    | Integration tests, run with `go test -tags integration`                                    |
 | `.qa/`                          | Generated | QA scorecards + cached `cmd/qa` binary; gitignored                                         |
 | `skills/zmux/`                  | Active    | Optional agent integration: terminal orchestration plus generic agent peer/worker doctrine |
+| `skills/zmux/hooks/`            | Active    | Claude hooks for zmux context priming, raw-tmux/background guards, and tab-state glyphs    |
 | `pi-extension/`                 | Active    | Optional Pi agent integration (TypeScript)                                                 |
+| `.github/workflows/ci.yml`      | Active    | GitHub CI: lint, build, race-tested unit suite, integration tests, and govulncheck         |
+| `.config/wt.toml`               | Active    | Worktrunk pre-merge verification gate (`make lint` + `make test-race`)                    |
+| `.golangci.yml`                 | Active    | Linter/formatter policy for `make lint` and CI                                             |
+| `cliff.toml`                    | Active    | git-cliff draft config; `CHANGELOG.md` remains hand-curated                               |
+| `.env.example`                  | Active    | Optional maintainer overrides consumed by dev/install scripts                              |
 | `legacy/v0/`                    | Archived  | Old bash prototype — preserved, unsupported                                                |
 
 ---
@@ -240,11 +251,12 @@ pane-scoped) feed the classifier; `internal/cli/reap.go` exposes the `zmux reap`
 command and a throttled lazy sweep (`MaybeReap`) wired into `ls`/`tabs`/`run`
 and the `client-attached`/`session-created` hooks baked by `internal/tmux/conf.go`.
 Origin inheritance is seeded by `zmux tab mark-agent` (`tabs.MarkAgentShell`),
-which the zmux skill's session-start hook calls to tag an agent's own shell
-`scope=agent-shell` — tabs that shell spawns then inherit `origin=agent` and the
-short agent TTL, while the shell itself is never reaped. For driving and
-grounding the reaper's time-gated behaviour, see
-[agent-grounding.md](agent-grounding.md).
+which the zmux skill's session-start hook (`skills/zmux/hooks/zmux-context.mjs`)
+calls to tag an agent's own shell `scope=agent-shell` — tabs that shell spawns
+then inherit `origin=agent` and the short agent TTL, while the shell itself is
+never reaped. The sibling hooks enforce raw-tmux/background-job guardrails and
+mark completed Claude turns with tab-state glyphs. For driving and grounding the
+reaper's time-gated behaviour, see [agent-grounding.md](agent-grounding.md).
 
 ### QA walkthrough runner
 
@@ -413,6 +425,7 @@ A few rules worth re-stating here because they're easy to miss:
 - **Don't run `zmux init` inside tmux.** It refuses; this is intentional, not a bug.
 - **Explicit DI, no package-global `app`** — `app.App` (in `internal/app`) is built once in `main` (`app.New()`) and threaded through `NewRootCmd(app)`. Each command is a `newXCmd(app)` constructor capturing it; flag state is constructor-local.
 - **Session-group clones** collapse to root in `ListSessions()` and `WorkspaceFor()`. Managed sessions use `__clone_b`-style raw clone names so local labels ending in `-b` are not misread as clones.
+- **Merge and CI gates are explicit files.** `.config/wt.toml` mirrors the local merge gate (`make lint` + `make test-race`); `.github/workflows/ci.yml` adds build, race tests, integration tests, and govulncheck; `.golangci.yml` owns formatter/linter policy.
 
 ---
 

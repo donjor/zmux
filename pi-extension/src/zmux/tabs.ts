@@ -57,6 +57,22 @@ export async function setTabPeer(params: { action: TabPeerAction; cwd: string; t
 	return { text: `tab peer ${params.action}${params.tab ? ` ${params.tab}` : ""}`, details: { ...params } };
 }
 
+export function buildTabStatusArgs(params: { tab: string; session?: string }): string[] {
+	return withSession(["tab", "status", params.tab, "--json"], params.session);
+}
+
+export async function tabStatus(params: { cwd: string; tab: string; session?: string }): Promise<{ text: string; details: Record<string, unknown> }> {
+	const result = await zmux(buildTabStatusArgs(params), { cwd: params.cwd, timeoutMs: 5_000 });
+	const output = trimOutput(result.stdout || result.stderr);
+	let details: Record<string, unknown> = { ...params };
+	try {
+		details = { ...params, status: safeJson(output) };
+	} catch {
+		// Keep text output when an older binary lacks JSON or returns plain errors.
+	}
+	return { text: output || `tab status ${params.tab}`, details };
+}
+
 export function buildTabLabelArgs(params: { label?: string; target?: string; clear?: boolean }): string[] {
 	const args = ["tab", "label"];
 	if (params.target) args.push("--target", params.target);

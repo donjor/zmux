@@ -36,15 +36,17 @@ Drive it freely; you cannot break the active session.
 Then drive it **headless** (no attached client needed for most things):
 
 ```sh
-zzmux session run dbg -n shell --workspace boop -- bash   # detached session + first tab
-zzmux run 'echo hi' -n work -s dbg -d                      # add a tab
-zzmux ls -s                                                # inspect
+# detached session + first tab
+zzmux session run dbg -n shell --workspace boop -- bash
+zzmux run 'echo hi' -n work -s dbg -d   # add a tab
+zzmux ls -s                             # inspect
 zzmux tabs dbg
-zzmux reap --dry-run                                       # classify
-zzmux session kill zws_boop__dbg                           # tear down when done
+zzmux reap --dry-run                    # classify
+zzmux session kill zws_boop__dbg        # tear down when done
 ```
 
 Notes that bite:
+
 - Real session names are profile-mangled (`zws_<ws>__<session>`), e.g.
   `dbg` → `zws_boop__dbg`. Raw `tmux -L zzmux -t dbg` will NOT resolve a zmux
   label — address by the full tmux name, or via `zmux` verbs. For raw reads use
@@ -66,11 +68,14 @@ zzmux reap --dry-run --now <unix-seconds>  # classify at that instant, change no
 
 This is the same `Now`-injection the library tests use, exposed on the binary
 for live grounding. Real `window_activity` can't be backdated, so inject a
-**future** Now (e.g. `born + 100000`) to make a real pane read as aged. Worked
+**future** Now (e.g. `born + 100000`) to treat a real pane as aged. Worked
 example — drive the full human flag→kill timeline end to end:
 
 ```sh
-born=$(tmux -L zzmux list-panes -a -F '#{window_name} #{@zmux_born}' | awk '$1=="oldtab"{print $2}')
+born=$(
+  tmux -L zzmux list-panes -a -F '#{window_name} #{@zmux_born}' |
+    awk '$1=="oldtab"{print $2}'
+)
 T1=$((born + 100000)); T2=$((T1 + 3600))
 zzmux reap --now "$T1"   # +27.8h → flags (marks stale_at)
 zzmux reap --now "$T2"   # +28.8h → kills the flagged tab, spares the last window
@@ -80,6 +85,7 @@ zzmux reap --now "$T2"   # +28.8h → kills the flagged tab, spares the last win
 
 A handful of behaviors need a **real attached client** and cannot be driven
 headless:
+
 - the `visible-in-attached-client` keep-guard (`SessionAttached > 0`),
 - tmux `client-attached` / `session-created` hooks firing naturally,
 - truecolor / visual rendering, dashboard/popup UI.
@@ -90,9 +96,11 @@ socket:
 1. **Agent asks** for an attached zzmux instance, naming the workspace/session
    it needs (e.g. "attach `zzmux open boop dbg` in a terminal").
 2. **Human spawns** it in a real terminal:
+
    ```sh
    zzmux open <ws> [session]   # aliases: attach, a   — attaches a real client
    ```
+
    (or bare `zzmux` for the dashboard). That's the human's whole job here.
 3. **Agent drives** the same profile headless (`zzmux run/send/type/watch/reap`,
    raw `tmux -L zzmux` reads) — the attached client now makes `SessionAttached`,
@@ -106,6 +114,7 @@ agent's to drive.
 
 After the agent has grounded every objective check on zzmux, the residual human
 track in a plan's `notes/QA.md` should be only:
+
 - **subjective feel** — wording, polish, "is this the experience we wanted",
 - **the live multi-hour wall-clock proof** where injected time isn't enough,
 - **destructive activation on the real `zmux` profile** — the human's gate;

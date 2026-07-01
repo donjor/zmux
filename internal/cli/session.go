@@ -7,11 +7,9 @@ import (
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
-	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
-	"github.com/donjor/zmux/internal/tabstate"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/workspace"
 	"github.com/spf13/cobra"
@@ -110,14 +108,11 @@ session is tagged into the workspace but never made the default attach target.`,
 				_ = tabs.StampBirth(app.Runner, paneID, tabs.OriginAgent, tabs.ScopeWorker, time.Now())
 			}
 
-			// Detached run: nobody waits on a sentinel, but the running glyph
-			// must still clear when the command exits. An exit epilogue writes
-			// done/failed from inside the pane (state-exit maps $? → state);
-			// SelfBin keeps that write on this profile's socket.
-			actualCommand := fmt.Sprintf("%s; %s tab state-exit $?", command, config.SelfBin(app.Profile))
-			sendCmd := actualCommand
-			if !isSimpleCommand(actualCommand) {
-				scriptPath, cleanup, werr := writeCommandScript(actualCommand, 0)
+			// Command lifecycle glyphs are owned by the target shell's
+			// shell-event hooks; session run only delivers the command.
+			sendCmd := command
+			if !isSimpleCommand(command) {
+				scriptPath, cleanup, werr := writeCommandScript(command, 0)
 				if werr != nil {
 					return fmt.Errorf("write command script: %w", werr)
 				}
@@ -129,7 +124,6 @@ session is tagged into the workspace but never made the default attach target.`,
 			if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
 				return fmt.Errorf("send to %s: %w", target, err)
 			}
-			markTabState(app, target, tabstate.StateRunning, "run", "")
 
 			fmt.Fprintf(os.Stderr, "created session %s/%s, running in %s:%s\n", wsName, sessionLabel, rec.TmuxName, tabName)
 			return nil

@@ -132,9 +132,9 @@ func runTabPeerAction(app *apppkg.App, svc *tabstate.Service, tgt tabstate.Targe
 		}
 		msg := o.msg
 		if msg == "" {
-			msg = "peer waiting"
+			msg = "peer answer ready"
 		}
-		return svc.Set(tgt, tabstate.StateAttention, source, msg)
+		return svc.Set(tgt, tabstate.StateDone, source, msg)
 	case "attention":
 		if err := requirePeerScope(app, tgt.PaneID); err != nil {
 			return err

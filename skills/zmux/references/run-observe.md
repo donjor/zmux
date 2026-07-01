@@ -25,11 +25,11 @@ zmux run '<cmd>' -n <name> -f           # follow output live (Ctrl+C stops follo
 zmux run '<cmd>' -n <name> -s <session> # target a specific session
 ```
 
-`zmux run` waits by default, streams output, then returns the command exit code. It injects its own completion sentinel internally — do not add your own `echo ":::DONE:::"` markers, wrapper scripts, or `sleep && watch` layer.
+`zmux run` waits by default, streams output, then returns the command exit code via zmux's shell-lifecycle run-result channel. It does not print completion sentinels — do not add your own `echo ":::DONE:::"` markers, wrapper scripts, or `sleep && watch` layer.
 
 If a tab with that name already exists, the command is sent to it and the tab is reused. `-d` creates or reuses the tab without stealing focus; use it only for commands expected to keep running.
 
-A long run reported as `failed, exit 1` at about the harness timeout may mean the wrapper timed out while the tab kept running. Verify with `zmux watch <tab>` or `zmux log tail <tab>` before relaunching.
+A wait timeout that mentions the shell lifecycle result usually means the target shell does not have the `zmux setup shell` block loaded, or the command is still running. Verify with `zmux watch <tab>` or `zmux log tail <tab>` before relaunching.
 
 ### Stable names
 

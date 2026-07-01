@@ -33,7 +33,7 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
 - `internal/tmux` - tmux boundary; use `tmux.Runner`, never direct tmux exec.
 - `internal/tui/` - focused Bubble Tea UI packages; no flat root TUI package.
 - `checklists/` - committed QA walkthrough TOML specs.
-- `skills/zmux/` - shipped agent skill and peer/worker terminal doctrine.
+- `skills/zmux/` - shipped agent skill, Claude hooks, and peer/worker terminal doctrine.
 - `pi-extension/` - Pi TypeScript extension and tests.
 - `legacy/v0/` - archived bash prototype; do not extend it.
 
@@ -56,6 +56,8 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
 - `zzmux` is the isolated edge profile: its own socket, config, state dir, and
   generated tmux conf. Use it for live testing without touching the active
   `zmux` profile.
+- Worktrunk's pre-merge gate lives in `.config/wt.toml` and mirrors CI/pre-push:
+  `make lint` plus `make test-race`. Use `wt merge` so the gate runs.
 - Long-running or interactive processes belong in zmux tabs, not the agent
   shell. Use `zmux run -n`, `zmux watch`, `zmux send`, and `zmux type`.
 

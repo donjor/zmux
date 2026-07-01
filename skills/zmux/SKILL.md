@@ -54,7 +54,7 @@ work stays together:
 
 - `dev` — project runtime: server, service, main process, REPL.
 - `scratch` — reviewable one-offs, manual takeover, things to inspect/re-run.
-- `<agent>-peer` — a review peer; `worker-*` — orchestrated worker sessions.
+- `<agent>-peer` — a review peer with semantic `tab peer` lifecycle; `worker-*` — orchestrated worker sessions.
 - `claude` / `codex` / `pi` / `agy` — long-lived primary agent shells, not task tabs.
 
 Do **not** mint `eval-2`, `test-run`, `build-x`, or feature-named tabs. Bounded
@@ -133,7 +133,7 @@ zmux type codex-peer '<prompt with repo/file pointers>' -s <session>
 zmux watch codex-peer -s <session> --idle 3 -T 300
 ```
 
-In Pi, use `zmux_run`, `zmux_runtime_logs`, `zmux_type`, and `zmux_tab_state` with
+In Pi, use `zmux_run`, `zmux_runtime_logs`, `zmux_type`, `zmux_tab_peer`, and `zmux_tab_state` with
 the `session` parameter.
 
 ## Agent worker
@@ -152,7 +152,7 @@ shell tab.
 - `&`, `nohup`, `disown`, or harness-native hidden-background options — use `zmux run -d` / Pi `zmux_runtime_ensure`.
 - unnamed tabs — always give reviewable work a stable purpose name.
 - raw tmux for app-level actions.
-- your own terminal sentinels, done markers, wrapper scripts, or `sleep && watch`; zmux/Pi tools own completion tracking.
+- your own terminal sentinels, done markers, wrapper scripts, or `sleep && watch`; zmux-managed shells own command lifecycle glyphs and `watch`/log tools own observation.
 - hand-rolled poll loops or `pgrep -f` / `pkill -f` self-matching patterns to await one job.
 - guessing process state — read it with `zmux watch`, `zmux log`, or typed Pi log tools.
 - `zmux refresh` / `zmux terminal refresh` from an agent session unless the user asked or disruption is acceptable.

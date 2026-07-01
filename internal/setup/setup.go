@@ -15,6 +15,7 @@ package setup
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/donjor/zmux/internal/config"
@@ -40,7 +41,7 @@ const (
 type Edit struct {
 	// File is the absolute path to edit.
 	File string
-	// Label is a short human description (e.g. "shell auto-start (.zshrc)").
+	// Label is a short human description (e.g. "shell integration (.zshrc)").
 	Label string
 	// Block is the managed content (without markers). Required for ActionAdd.
 	Block string
@@ -108,6 +109,11 @@ func applyEdit(fs config.FS, e Edit, opts ApplyOptions) (Result, error) {
 	if opts.Backup && existing != "" {
 		if err := fs.WriteFile(e.File+".bak", []byte(existing), 0o644); err != nil {
 			return Result{}, fmt.Errorf("backup %s: %w", e.File, err)
+		}
+	}
+	if dir := filepath.Dir(e.File); dir != "." && dir != "" {
+		if err := fs.MkdirAll(dir, 0o755); err != nil {
+			return Result{}, fmt.Errorf("create parent %s: %w", dir, err)
 		}
 	}
 	if err := fs.WriteFile(e.File, []byte(next), 0o644); err != nil {

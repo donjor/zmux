@@ -2,10 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -214,39 +215,39 @@ func TestRunDerivesNameFromCommand(t *testing.T) {
 	}
 }
 
-// sentinelCaptureFunc simulates the command completing in the tab: it scrapes
-// the nonce off the sentinel the run command actually sent, and returns a
-// capture containing that sentinel with the given exit code.
-func sentinelCaptureFunc(mock *tmux.MockRunner, exitCode int) func(string, int) (string, error) {
-	re := regexp.MustCompile(`:::AGENT_DONE:([0-9a-f]+):\$\?:::`)
+// runResultCaptureFunc simulates the shell lifecycle hook completing the
+// command: once run has staged @zmux_next_run_id, the capture path publishes a
+// matching silent @zmux_run_result pane option.
+func runResultCaptureFunc(mock *tmux.MockRunner, exitCode int) func(string, int) (string, error) {
 	return func(string, int) (string, error) {
+		if mock.PaneOptions == nil {
+			mock.PaneOptions = map[string]string{}
+		}
 		for _, c := range mock.Calls {
-			if c.Method != "SendKeys" {
-				continue
-			}
-			if m := re.FindStringSubmatch(strings.Join(c.Args, " ")); m != nil {
-				return fmt.Sprintf("building...\ndone\n:::AGENT_DONE:%s:%d:::\n", m[1], exitCode), nil
+			if c.Method == "SetPaneOption" && len(c.Args) >= 3 && c.Args[1] == tabs.OptNextRunID {
+				mock.PaneOptions[c.Args[0]+"\x00"+tabs.OptRunResult] = fmt.Sprintf("%s:%d", c.Args[2], exitCode)
+				return "building...\ndone\n", nil
 			}
 		}
 		return "command not sent yet\n", nil
 	}
 }
 
-func TestRunWaitDetectsSentinel(t *testing.T) {
+func TestRunWaitDetectsRunResult(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
-	mock.CapturePaneFunc = sentinelCaptureFunc(mock, 0)
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 0)
 
 	rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "-T", "5"})
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("run --wait should succeed when sentinel found: %v", err)
+		t.Fatalf("run --wait should succeed when run result is published: %v", err)
 	}
 }
 
 func TestRunWaitDetectsNonZeroExit(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
-	mock.CapturePaneFunc = sentinelCaptureFunc(mock, 1)
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 1)
 
 	rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "-T", "5"})
 	err := rootCmd.Execute()
@@ -255,18 +256,18 @@ func TestRunWaitDetectsNonZeroExit(t *testing.T) {
 	}
 }
 
-// A reused tab can still show a previous run's sentinel on screen (or one
-// recalled from shell history). The per-invocation nonce must keep the wait
-// from matching it — the only acceptable outcome here is a timeout.
-func TestRunWaitIgnoresStaleSentinel(t *testing.T) {
+// A reused tab can still carry a previous run result. The per-invocation nonce
+// must keep the wait from matching it — the only acceptable outcome here is a timeout.
+func TestRunWaitIgnoresStaleRunResult(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
-	mock.CapturedPaneContent = "old output\n:::AGENT_DONE:deadbeef42:0:::\n:::AGENT_DONE 0:::\n"
+	mock.CapturedPaneContent = "old output\n"
+	mock.PaneOptions = map[string]string{"test-session:build\x00" + tabs.OptRunResult: "deadbeef42:0"}
 
 	rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "-T", "1"})
 	err := rootCmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "timeout") {
-		t.Errorf("expected timeout (stale sentinel must not satisfy the wait), got %v", err)
+		t.Errorf("expected timeout (stale run result must not satisfy the wait), got %v", err)
 	}
 }
 
@@ -275,7 +276,7 @@ func TestRunWaitIgnoresStaleSentinel(t *testing.T) {
 func TestRunWaitCaptureRespectsLines(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
-	mock.CapturedPaneContent = bigCapture(10) // sentinel never appears → timeout
+	mock.CapturedPaneContent = bigCapture(10) // run result never appears → timeout
 
 	out := captureStdout(t, func() {
 		rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "--lines", "3", "-T", "1"})
@@ -326,10 +327,9 @@ func TestRunSimpleCommandSendsLiteral(t *testing.T) {
 	for _, c := range mock.Calls {
 		if c.Method == "SendKeys" {
 			sent := c.Args[1]
-			// Literal command at the prompt (Up-arrow re-runs it) — the
-			// detached state-exit epilogue rides the same line, like the
-			// wait-mode sentinel does. No temp-script indirection.
-			if !strings.HasPrefix(sent, "bun run dev; ") {
+			// Literal command at the prompt (Up-arrow re-runs it). Lifecycle
+			// is owned by shell hooks, so no sentinel/epilogue is appended.
+			if sent != "bun run dev" {
 				t.Errorf("expected literal command at the prompt, got %q", sent)
 			}
 			if strings.HasPrefix(sent, "bash /") {
@@ -367,7 +367,6 @@ func TestIsSimpleCommand(t *testing.T) {
 		"npm test",
 		"ls",
 		`go test ./... -run "TestFoo"`,
-		`npm test; echo ":::AGENT_DONE:1a2b3c4d:$?:::"`, // wait-mode sentinel suffix stays simple
 	}
 	for _, c := range simple {
 		if !isSimpleCommand(c) {
@@ -392,9 +391,9 @@ func TestIsSimpleCommand(t *testing.T) {
 }
 
 // stateWrites extracts the sequence of @zmux_state values written to pane
-// options — the lifecycle trail run/send/type leave behind. State writes are
-// batched: the mock records one ApplyOptions entry per write as
-// [scope target key value unset=bool].
+// options. Run itself should no longer write running/done/failed in the normal
+// path; shell-event owns that lifecycle. State writes remain relevant for
+// stale-state clears and shell-event tests.
 func stateWrites(mock *tmux.MockRunner) []string {
 	var out []string
 	for _, c := range mock.Calls {
@@ -405,8 +404,8 @@ func stateWrites(mock *tmux.MockRunner) []string {
 	return out
 }
 
-// runStateDisplayFunc routes the session lookup and target resolution that
-// run's state writes perform; CapturePaneFunc handles the sentinel side.
+// runStateDisplayFunc routes the session lookup and target resolution used by
+// run's stale-state clear and wait-pane resolution.
 func runStateDisplayFunc(paneID, window string) func(target, format string) (string, error) {
 	return func(target, format string) (string, error) {
 		switch {
@@ -421,10 +420,10 @@ func runStateDisplayFunc(paneID, window string) func(target, format string) (str
 	}
 }
 
-func TestRunWaitWritesRunningThenDone(t *testing.T) {
+func TestRunWaitStagesRunIDButDoesNotWriteGlyphState(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
-	mock.CapturePaneFunc = sentinelCaptureFunc(mock, 0)
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 0)
 	mock.DisplayMessageFunc = runStateDisplayFunc("%9", "test-session:5")
 
 	rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "-T", "5"})
@@ -432,16 +431,24 @@ func TestRunWaitWritesRunningThenDone(t *testing.T) {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	got := stateWrites(mock)
-	if len(got) != 2 || got[0] != "running" || got[1] != "done" {
-		t.Fatalf("want [running done], got %v", got)
+	if got := stateWrites(mock); len(got) != 0 {
+		t.Fatalf("run must not write glyph lifecycle state directly, got %v", got)
+	}
+	staged := false
+	for _, c := range mock.Calls {
+		if c.Method == "SetPaneOption" && c.Args[1] == tabs.OptNextRunID {
+			staged = true
+		}
+	}
+	if !staged {
+		t.Fatal("blocking run must stage a pane-option run id")
 	}
 }
 
-func TestRunWaitWritesFailedWithExitMsg(t *testing.T) {
+func TestRunWaitPropagatesFailedRunResultWithoutWritingGlyph(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
-	mock.CapturePaneFunc = sentinelCaptureFunc(mock, 2)
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 2)
 	mock.DisplayMessageFunc = runStateDisplayFunc("%9", "test-session:5")
 
 	rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "-T", "5"})
@@ -451,25 +458,50 @@ func TestRunWaitWritesFailedWithExitMsg(t *testing.T) {
 		t.Fatal("non-zero exit must propagate as an error")
 	}
 
-	got := stateWrites(mock)
-	if len(got) != 2 || got[1] != "failed" {
-		t.Fatalf("want [running failed], got %v", got)
-	}
-	msgFound := false
-	for _, c := range mock.Calls {
-		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[2] == "@zmux_state_msg" && c.Args[3] == "exit 2" {
-			msgFound = true
-		}
-	}
-	if !msgFound {
-		t.Fatal("failed state must carry msg 'exit 2'")
+	if got := stateWrites(mock); len(got) != 0 {
+		t.Fatalf("run must not write failed glyph directly, got %v", got)
 	}
 }
 
-func TestRunTimeoutLeavesRunning(t *testing.T) {
+func TestRunFastFailsWhenLifecycleNeverStarts(t *testing.T) {
+	oldGrace := runLifecycleStartGrace
+	runLifecycleStartGrace = 10 * time.Millisecond
+	t.Cleanup(func() { runLifecycleStartGrace = oldGrace })
+
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
-	mock.CapturedPaneContent = "still building...\n" // sentinel never appears
+	mock.CapturePaneFunc = func(string, int) (string, error) {
+		if mock.PaneOptions == nil {
+			mock.PaneOptions = map[string]string{}
+		}
+		for _, c := range mock.Calls {
+			if c.Method == "SetPaneOption" && c.Args[1] == tabs.OptNextRunID {
+				mock.PaneOptions[c.Args[0]+"\x00"+tabs.OptNextRunID] = c.Args[2]
+			}
+		}
+		return "already printed output\n", nil
+	}
+	mock.DisplayMessageFunc = runStateDisplayFunc("%9", "test-session:5")
+
+	rootCmd.SetArgs([]string{"run", "echo ok", "-n", "plain", "-s", "test-session", "-T", "5"})
+	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "waiting for shell lifecycle to start") {
+		t.Fatalf("expected lifecycle-start nudge, got %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "UnsetPaneOption" && c.Args[1] == tabs.OptNextRunID {
+			return
+		}
+	}
+	t.Fatal("fast-fail should clear the staged run id")
+}
+
+func TestRunTimeoutDoesNotFabricateState(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.CapturedPaneContent = "still building...\n"
 	mock.DisplayMessageFunc = runStateDisplayFunc("%9", "test-session:5")
 
 	rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "-T", "1"})
@@ -479,16 +511,12 @@ func TestRunTimeoutLeavesRunning(t *testing.T) {
 		t.Fatal("timeout must error")
 	}
 
-	got := stateWrites(mock)
-	if len(got) != 1 || got[0] != "running" {
-		t.Fatalf("timeout must not fabricate done/failed — want [running], got %v", got)
+	if got := stateWrites(mock); len(got) != 0 {
+		t.Fatalf("timeout must not fabricate glyph state, got %v", got)
 	}
 }
 
-// Detached runs get the state-exit epilogue: nobody waits on a sentinel,
-// so the pane itself reports done/failed when the command exits — otherwise
-// the running glyph (spinner) never stops.
-func TestRunDetachedAppendsExitEpilogue(t *testing.T) {
+func TestRunDetachedDoesNotAppendExitEpilogue(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
 	mock.DisplayMessageFunc = runStateDisplayFunc("%9", "test-session:5")
@@ -502,12 +530,8 @@ func TestRunDetachedAppendsExitEpilogue(t *testing.T) {
 		if c.Method != "SendKeys" {
 			continue
 		}
-		sent := c.Args[1]
-		if !strings.HasPrefix(sent, "sleep 300; ") || !strings.HasSuffix(sent, " tab state-exit $?") {
-			t.Fatalf("detached run must append the state-exit epilogue: %q", sent)
-		}
-		if strings.Contains(sent, zmuxSentinelPrefix) {
-			t.Fatalf("detached run must not carry a wait sentinel: %q", sent)
+		if sent := c.Args[1]; sent != "sleep 300" {
+			t.Fatalf("detached run must send the command without lifecycle epilogue: %q", sent)
 		}
 		return
 	}

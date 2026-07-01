@@ -187,14 +187,13 @@ func argOrEmpty(args []string, i int) string {
 }
 
 // newTabStateExitCmd maps an exit code to a state write: 0 → done, anything
-// else → failed with "exit N". Hidden — `zmux run` appends it as a command
-// epilogue (`; <bin> tab state-exit $?`) on detached/followed runs so the
-// running glyph stops when the command does, without anyone waiting. Always
-// silent: it executes at the user's prompt and must never noise it.
+// else → failed with "exit N". Hidden compatibility shim for older hooks or
+// external scripts; normal command lifecycle is now owned by shell-event hooks.
+// Always silent: it executes at the user's prompt and must never noise it.
 func newTabStateExitCmd(app *apppkg.App) *cobra.Command {
 	return &cobra.Command{
 		Use:    "state-exit <code>",
-		Short:  "Write done/failed from an exit code (run epilogue)",
+		Short:  "Write done/failed from an exit code (compat shim)",
 		Args:   cobra.ExactArgs(1),
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -213,10 +212,9 @@ func newTabStateExitCmd(app *apppkg.App) *cobra.Command {
 }
 
 // markTabState best-effort sets a lifecycle state on a tmux target spec.
-// State writes piggyback on run epilogues and sentinel exits and must never
-// fail the command that triggered them — a dead pane or detached server just
-// skips the glyph. Resolves the spec at write time, so a pane that moved
-// placement mid-run still mirrors to the right window.
+// Lifecycle hook writes must never fail the command that triggered them — a
+// dead pane or detached server just skips the glyph. Resolves the spec at write
+// time, so a pane that moved placement mid-run still mirrors to the right window.
 func markTabState(app *apppkg.App, target string, st tabstate.State, source, msg string) {
 	svc := tabstate.New(app.Runner, os.Getenv)
 	t, err := svc.Resolve(target)

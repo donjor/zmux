@@ -163,18 +163,6 @@ func (rt resolvedTab) stateTarget(svc *tabstate.Service) (tabstate.Target, error
 	return svc.Resolve(rt.Target)
 }
 
-// markState best-effort sets a lifecycle state on the resolved tab. State
-// writes piggyback on run/send/type and must never fail the command that
-// triggered them — a dead pane or detached server just skips the glyph.
-func (rt resolvedTab) markState(app *apppkg.App, st tabstate.State, source, msg string) {
-	svc := tabstate.New(app.Runner, os.Getenv)
-	t, err := rt.stateTarget(svc)
-	if err != nil {
-		return
-	}
-	_ = svc.Set(t, st, source, msg)
-}
-
 // clearStale clears done|failed before new input reaches the tab — the
 // ratified rule: user input (typing-by-proxy included) acknowledges a
 // finished state. attention/running are never cleared here.

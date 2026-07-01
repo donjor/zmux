@@ -48,7 +48,7 @@ The installer:
 1. Checks dependencies (Go, tmux >= 3.2)
 2. Builds the binary
 3. Installs to `~/.local/bin/zmux`
-4. Optionally adds shell integration (auto-start on terminal open)
+4. Optionally adds shell integration (auto-start plus command lifecycle glyphs)
 5. Offers to run the `zmux init` setup wizard
 
 ### Updating
@@ -139,6 +139,7 @@ zmux where --json                   Same, as JSON (for tooling)
 zmux tab move <tab> <dest>          Move tab to another session
 zmux tab label [label]              Set/clear stable label for current tab
 zmux tab state <state> [tab]        Set lifecycle glyph: attention/running/done/failed/clear
+zmux tab status <tab> [--json]      Show lifecycle/command status for tooling
 zmux tab pane <tab|N> [--into host] Join a tab (by name or bar index N) as a pane beside another
 zmux tab split                      Create a new tab and join it as a pane in one step (prefix+j)
 zmux tab full [tab] / [--pane <id>] Promote focused/named/clicked pane-of tab back to full
@@ -441,7 +442,9 @@ Preview them: `zmux bar` (live carousel inside tmux, static ANSI outside)
 zmux includes terminal commands (`run`, `watch`, `send`, `type`) and Pi typed
 tools designed for AI agent workflows. These let agents manage reviewable terminal
 work without blocking their own shell, hiding process state, or hand-rolling temp
-script/sentinel glue.
+script/sentinel glue. Command lifecycle glyphs are owned by the `zmux setup shell`
+integration, so normal typed foreground commands and `zmux run` share the same
+state substrate once the shell block is installed.
 
 **Key principles:**
 

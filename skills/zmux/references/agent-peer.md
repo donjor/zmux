@@ -19,14 +19,15 @@ Use zmux for:
 - typing prompts and commands;
 - waiting for quiet screens with `watch --idle`;
 - classifying what the visible screen shows;
-- writing tab lifecycle state (`running`, `done`, `attention`, `clear`);
+- recording semantic peer lifecycle (`start`, `running`, `waiting`, `consumed`, `park`, timestamped `keep`);
+- writing human-visible glyph state only as the peer lifecycle helper's presentation layer;
 - moving the peer between full tab, pane, and hidden dock placements;
 - reading passive CLI logs only when exact quotes are needed.
 
 Do not add:
 
 - SDK adapters;
-- hook injection into the peer CLI;
+- ad-hoc hook injection into the peer CLI (use official Stop/hook surfaces when the CLI already exposes them);
 - config edits to the peer CLI;
 - per-CLI output parsers;
 - an orchestrator or manager above zmux;
@@ -75,10 +76,10 @@ zmux ls -s                 # how many sessions exist
 
 Pin that session on the spawn and every follow-up — belt-and-suspenders for
 the writes, load-bearing for the reads:
-`zmux run '…' -n <peer> -d -s <session>`, `zmux watch <peer> -s <session>`,
-`zmux type <peer> -s <session> …`, `zmux tab state … <peer> -s <session>`. In Pi,
+`zmux run '…' -n <peer> -d -s <session> --scope peer`, `zmux watch <peer> -s <session>`,
+`zmux type <peer> -s <session> …`, `zmux tab peer … <peer> -s <session>`. In Pi,
 use the equivalent `session` parameter on `zmux_run`, `zmux_runtime_logs`,
-`zmux_type`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
+`zmux_type`, `zmux_tab_peer`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
 "X", outside the current session "Y"` on the read path when a bare name crosses —
 seeing that means you skipped the pin.
 
@@ -102,7 +103,8 @@ pane list above. If it already contains the peer you need, route through that ro
 `tabName` with the normal resolver:
 
 ```bash
-zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n <tabName> -d -s <session>
+zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n <tabName> -d -s <session> --scope peer
+zmux tab peer start <tabName> -s <session> --role codex --topic '<sanitized topic>'
 zmux watch <tabName> -s <session> --idle 3 -T 30
 ```
 
@@ -114,7 +116,8 @@ it is the same roster reuse check before creating another visible peer tab.
 Spawn detached with the max-permission profile:
 
 ```bash
-zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session>
+zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session> --scope peer
+zmux tab peer start codex-peer -s <session> --role codex --topic '<sanitized topic>'
 zmux watch codex-peer -s <session> --idle 3 -T 30
 ```
 
@@ -249,24 +252,23 @@ action.
 
 You judge from the screen. Do not ask zmux for CLI-specific done detection.
 
-## Tab State
+## Peer lifecycle state
 
-The driver owns lifecycle glyphs for long-lived peer tabs:
+Use the semantic peer lifecycle surface; it writes the policy metadata and the human-facing glyph where appropriate:
 
 | transition | command |
 | --- | --- |
-| prompt sent | `zmux tab state running codex-peer` |
-| capture classifies done | `zmux tab state done codex-peer` |
-| permission prompt / question / human needed | `zmux tab state attention codex-peer --msg '<why>'` |
-| answer consumed and parked | `zmux tab state clear codex-peer` |
+| peer spawned/reused | `zmux tab peer start codex-peer --role codex --topic '<sanitized topic>'` |
+| prompt accepted / turn running | `zmux tab peer running codex-peer` |
+| peer Stop/hook says turn ended | `zmux tab peer waiting codex-peer --source codex-stop` |
+| permission prompt / question / human needed | `zmux tab peer attention codex-peer --msg '<why>'` |
+| answer consumed | `zmux tab peer consumed codex-peer` |
+| answer consumed but keep tab inspectable briefly | `zmux tab peer park codex-peer --ttl 30m` |
+| explicit next checkpoint keep | `zmux tab peer keep codex-peer --ttl 2h` |
 
-Write state once per transition. Do not spam state writes on every capture.
+Write lifecycle once per transition. Do not spam writes on every capture. Prompt-scoped peers should **not** get `@zmux_keep=1` by default; use `park`/`keep --ttl` so the reaper can clean expired peers.
 
-`tab state` is **set-only, human-facing**: it drives the glyphs a person sees in the zmux
-dashboard / status bar (◐ running · ✓ done · ● attention · ✗ failed). It is **not** a status
-API you can read back — `zmux tabs` lists tabs + process, not glyphs (no `--json`, no get-form).
-An agent reads another tab's progress by `watch`-ing it and classifying the screen (see
-*Classify*), never by scraping `zmux tabs`.
+`tab state` remains **set-only, human-facing**: it drives glyphs a person sees in the zmux dashboard/status bar. It is not a full status API. The peer lifecycle metadata is the machine-readable policy layer; screen classification is still the fallback for CLIs without a usable Stop/hook signal.
 
 ## Placement
 
@@ -282,7 +284,7 @@ zmux tab show codex-peer
 ```
 
 Hide instead of quitting when context should persist. Placement does not change
-how `watch`, `type`, `send`, or `tab state` target the peer.
+how `watch`, `type`, `send`, or `tab peer` target the peer.
 
 ## Permission Policy
 
@@ -348,8 +350,7 @@ zmux type codex-peer '/new'
 
 Pause briefly before the next prompt; session reset can race input.
 
-Quit only when the peer session is genuinely done. The shell and tab survive a
-CLI exit, so a future peer can be spawned in the same named tab.
+Quit only when the peer session is genuinely done. After the answer is consumed, prefer `zmux tab peer park <peer> --ttl 30m`; use `keep --ttl` only for a named next checkpoint. The shell and tab may survive a CLI exit, so a future peer can be spawned in the same named tab until the parked tab expires and reaps.
 
 ## Clean Quotes
 

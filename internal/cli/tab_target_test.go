@@ -54,8 +54,9 @@ func TestSendReachesDockedTabByLabel(t *testing.T) {
 	}
 }
 
-// run reuse on a logical tab: input AND the running state-write both land on
-// the resolved pane — no duplicate target resolution, no window-name guess.
+// run reuse on a logical tab: input lands on the resolved pane — no duplicate
+// target resolution, no window-name guess. Glyph lifecycle is shell-owned, so
+// detached run does not write running state itself.
 func TestRunReusesLogicalTabPane(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
@@ -68,7 +69,7 @@ func TestRunReusesLogicalTabPane(t *testing.T) {
 		t.Fatalf("run command failed: %v", err)
 	}
 
-	var sentToPane, stateOnPane bool
+	var sentToPane bool
 	for _, c := range mock.Calls {
 		if c.Method == "NewWindow" {
 			t.Error("should reuse the logical tab, not create a window")
@@ -76,13 +77,12 @@ func TestRunReusesLogicalTabPane(t *testing.T) {
 		if c.Method == "SendKeys" && c.Args[0] == "%3" {
 			sentToPane = true
 		}
-		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" &&
-			c.Args[2] == "@zmux_state" && c.Args[3] == "running" {
-			stateOnPane = true
+		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" && c.Args[2] == "@zmux_state" && c.Args[3] == "running" {
+			t.Errorf("detached run must not write running state directly: %v", c.Args)
 		}
 	}
-	if !sentToPane || !stateOnPane {
-		t.Errorf("expected input+state on the tab's pane: sent=%v state=%v", sentToPane, stateOnPane)
+	if !sentToPane {
+		t.Errorf("expected input on the tab's pane: sent=%v", sentToPane)
 	}
 }
 

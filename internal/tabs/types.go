@@ -52,12 +52,34 @@ const (
 	OptParkUntil    = "@zmux_park_until"     // unix seconds; parked-peer inspection TTL
 )
 
+// Command lifecycle options (pane-canonical). These are written by shell
+// integration for the pane's root interactive shell. They are the structured
+// completion channel that normal shell use, zmux run, and Pi tools consume;
+// stdout sentinels should not be part of the lifecycle contract.
+const (
+	OptCmdSeq        = "@zmux_cmd_seq"         // monotonically increasing root-shell command sequence
+	OptCmdState      = "@zmux_cmd_state"       // running | done | failed
+	OptCmdStartedAt  = "@zmux_cmd_started_at"  // unix seconds for command start
+	OptCmdFinishedAt = "@zmux_cmd_finished_at" // unix seconds for command end
+	OptCmdLastExit   = "@zmux_last_exit"       // last root-shell command exit code
+	OptCmdRunID      = "@zmux_cmd_run_id"      // run nonce consumed by the running command
+	OptNextRunID     = "@zmux_next_run_id"     // run nonce staged by zmux run before input
+	OptRunResult     = "@zmux_run_result"      // <run-id>:<exit>, written at command end
+	OptCmdText       = "@zmux_cmd_text"        // sanitized short command label for diagnostics
+)
+
 const (
 	TurnRunning   = "running"
 	TurnWaiting   = "waiting"
 	TurnAttention = "attention"
 	TurnConsumed  = "consumed"
 	TurnParked    = "parked"
+)
+
+const (
+	CmdRunning = "running"
+	CmdDone    = "done"
+	CmdFailed  = "failed"
 )
 
 var validScopes = map[string]bool{

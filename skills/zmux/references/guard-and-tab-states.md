@@ -81,16 +81,19 @@ visible from any tab.
 
 Mostly automatic:
 
-- `zmux run` sets running → done/failed on exit.
-- `zmux send`/`type` clear a stale done/failed.
+- In root interactive shells with the `zmux setup shell` block installed, normal foreground commands set running → done/failed through shell lifecycle hooks (`shell-event start/end`). This covers commands a human typed manually and commands delivered by `zmux run`/`send`/`type`.
+- `zmux run` only stages a silent run id for callers waiting on an exit code; it does not append visible sentinels or own glyph state.
+- `zmux send`/`type` clear a stale done/failed before sending input.
 - Focusing a tab clears attention.
 - A `Stop` hook (`hooks/zmux-tab-state-stop.mjs`, symlinked like the guard) marks the
   agent's own tab done/attention when a turn ends — no transcript parsing, just "the
   turn ended".
+- Prompt-scoped peers use `zmux tab peer <start|running|waiting|attention|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; waiting/answer-ready renders done (`✓`), while true human intervention uses attention (`●`).
 
 Set `attention` **manually** when handing the human a prompt they must act on (sudo,
-permission prompt):
+permission prompt). For peer tabs, prefer `zmux tab peer attention ...` so the turn state stays in sync:
 
 ```bash
 zmux tab state attention admin --msg 'sudo password'
+zmux tab peer attention claude-peer --msg 'permission prompt'
 ```

@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // memFS is an in-memory config.FS for verifying Apply behavior.
@@ -26,13 +27,40 @@ func (m *memFS) WriteFile(path string, data []byte, _ os.FileMode) error {
 	return nil
 }
 func (m *memFS) MkdirAll(string, os.FileMode) error { return nil }
-func (m *memFS) Stat(string) (os.FileInfo, error)   { return nil, os.ErrNotExist }
-func (m *memFS) UserHomeDir() (string, error)       { return "/home/u", nil }
-func (m *memFS) Glob(string) ([]string, error)      { return nil, nil }
+func (m *memFS) Stat(path string) (os.FileInfo, error) {
+	if _, ok := m.files[path]; ok {
+		return fakeFileInfo{}, nil
+	}
+	return nil, os.ErrNotExist
+}
+func (m *memFS) UserHomeDir() (string, error)  { return "/home/u", nil }
+func (m *memFS) Glob(string) ([]string, error) { return nil, nil }
+
+type fakeFileInfo struct{}
+
+func (fakeFileInfo) Name() string       { return "" }
+func (fakeFileInfo) Size() int64        { return 0 }
+func (fakeFileInfo) Mode() os.FileMode  { return 0 }
+func (fakeFileInfo) ModTime() time.Time { return time.Time{} }
+func (fakeFileInfo) IsDir() bool        { return false }
+func (fakeFileInfo) Sys() any           { return nil }
 
 func TestPlanShellIntegration_UnsupportedShell(t *testing.T) {
 	if _, ok := PlanShellIntegration(ShellInput{Shell: Unknown, Home: "/home/u"}); ok {
 		t.Fatal("expected unsupported shell to yield ok=false")
+	}
+}
+
+func TestPlanShellIntegration_BashIncludesLoginBridge(t *testing.T) {
+	p, ok := PlanShellIntegration(ShellInput{Shell: Bash, Home: "/home/u", BashProfile: "/home/u/.profile"})
+	if !ok || len(p.Edits) != 2 {
+		t.Fatalf("expected bash rc + login bridge edits, got ok=%v edits=%d", ok, len(p.Edits))
+	}
+	if p.Edits[0].File != "/home/u/.bashrc" || p.Edits[1].File != "/home/u/.profile" {
+		t.Fatalf("unexpected bash files: %#v", p.Edits)
+	}
+	if !strings.Contains(p.Edits[1].Block, ". \"$HOME/.bashrc\"") {
+		t.Fatalf("bash login bridge must source .bashrc: %s", p.Edits[1].Block)
 	}
 }
 
@@ -134,5 +162,31 @@ func TestUpsertBlock_ReplaceInPlace(t *testing.T) {
 	}
 	if strings.Count(updated, markerBegin) != 1 {
 		t.Errorf("expected exactly one managed block, got: %q", updated)
+	}
+}
+
+func TestPlanShellIntegration_IncludesLifecycleHooks(t *testing.T) {
+	cases := []struct {
+		shell Shell
+		want  []string
+	}{
+		{Bash, []string{"shell-event start", "shell-event end", "PROMPT_COMMAND", "DEBUG", "ZMUX_SHELL_ROOT", "${TMUX%%,*}", "basename", "__zmux_prompt_ready"}},
+		{Zsh, []string{"preexec_functions=(__zmux_preexec", "precmd_functions=(__zmux_precmd", "shell-event start", "shell-event end", "ZMUX_SHELL_ROOT", "${TMUX%%,*}", "basename"}},
+		{Fish, []string{"fish_preexec", "fish_postexec", "shell-event start", "shell-event end", "set -l __zmux_ec $status", "ZMUX_SHELL_ROOT", "string split -m1", "basename"}},
+	}
+	for _, tc := range cases {
+		plan, ok := PlanShellIntegration(ShellInput{Shell: tc.shell, Home: "/home/u", Bin: "zzmux"})
+		if !ok || len(plan.Edits) == 0 {
+			t.Fatalf("%s: expected edits", tc.shell)
+		}
+		block := plan.Edits[0].Block
+		if !strings.Contains(block, "zzmux") {
+			t.Fatalf("%s: profile binary missing from block: %s", tc.shell, block)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(block, want) {
+				t.Fatalf("%s: missing %q in block:\n%s", tc.shell, want, block)
+			}
+		}
 	}
 }

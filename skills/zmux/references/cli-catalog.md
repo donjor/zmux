@@ -47,7 +47,7 @@ target. Contrast `zmux new` (attaches by design) — see the worker doctrine in
 ### Session targeting (`-s`)
 
 `-s <session>` is accepted by `run`, `watch`, `send`, `type`, `tabs`, `log`,
-`tab state`, and the `tab pane/full/hide/show` placements. (`open` takes the
+`tab state`, `tab status`, and the `tab pane/full/hide/show` placements. (`open` takes the
 workspace/session positionally; `zmux pane` uses `--target`.) It accepts three
 forms:
 

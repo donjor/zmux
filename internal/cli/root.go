@@ -160,6 +160,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newSendCmd(a),
 		newSessionCmd(a),
 		newSetupCmd(a),
+		newShellEventCmd(a),
 		newSnapshotCmd(a),
 		newStatusCmd(a),
 		newTabCmd(a),

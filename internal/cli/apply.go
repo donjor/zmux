@@ -65,7 +65,8 @@ func runApply(app *apppkg.App, skipSource bool) error {
 		}
 	}
 
-	// Step 3: Set workspace env var for native tmux format access.
+	// Step 3: Set tmux environment vars for native formats and shell hooks.
+	_ = app.Runner.SetEnvironment("ZMUX_BIN", zmuxBin)
 	// Use the endpoint-aware IsInsideTmux only — a raw $TMUX check would let a
 	// zzmux run nested in the live default tmux act on the wrong server.
 	if app.Runner.IsInsideTmux() {

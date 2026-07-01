@@ -6,22 +6,6 @@
 
 ## Now
 
-The pane/tab foundation and agent-addressability close-out shipped; see the
-changelog for shipped details. `snapshot --pane` and bare `tab pane` now honour
-the shared tab resolver, `CurrentHost` is pane-canonical so the join host
-matches what `zmux where` reports, `pane list --joined` plus peer/worker
-doctrine let agents reuse an active joined pane, a one-key `tab split`
-creates-and-joins in one motion, and right-click pane/status-row menus expose
-join-back/promote/hide/kill per pane. Follow-up UX also made hidden panes
-parent-scoped (`󰏤[N] name~`) and stopped hiding full tabs. That clears the Now
-bucket; the next focus is **Remote & nested zmux** (below).
-
-One residual is deferred to _Later → Pane direct-manipulation_ (header
-drag-swap) — the right-click menu shipped, but tmux 3.4 cannot separate a
-header drag from the native resize-border drag.
-
-## Next
-
 ### Remote & nested zmux
 
 Make zmux feel native across SSH and nested layers. Builds on the unified local
@@ -44,6 +28,8 @@ entry/creation/management surface (`internal/tui/workspaceoutline` +
   - Connecting into a host that also runs zmux needs predictable key handling
     and visual cues for outer vs inner layers.
   - Favor a small compatibility contract over broad terminal-emulator tricks.
+
+## Next
 
 ### Session persistence
 
@@ -135,11 +121,11 @@ entry/creation/management surface (`internal/tui/workspaceoutline` +
 
 ### Run & watch reliability
 
-- [ ] **Sentinel-free completion via optional shell integration**
-  - A shell hook could report exit status without adding a visible sentinel to
-    command history.
-  - Keep the printed sentinel as the zero-setup fallback unless the hook proves
-    reliable across supported shells.
+- [x] **Sentinel-free completion via shell integration**
+  - zmux-managed root shells report command start/end through `shell-event` hooks,
+    giving normal typed commands and `zmux run` the same lifecycle glyph path.
+  - `zmux run` waits on a silent pane-option run-result channel instead of printing
+    completion sentinels into command output/history.
 
 ### Distribution & packaging
 

@@ -40,7 +40,7 @@ func TestTabPeerStartWritesMetadataAndRunningGlyph(t *testing.T) {
 	}
 }
 
-func TestTabPeerWaitingMarksAttention(t *testing.T) {
+func TestTabPeerWaitingMarksDone(t *testing.T) {
 	root, mock := withMockApp(t)
 	mock.DisplayMessageResult = "%3\tdev:2\n"
 	mock.PaneOptions = map[string]string{"%3\x00" + tabs.OptScope: tabs.ScopePeer}
@@ -62,7 +62,7 @@ func TestTabPeerWaitingMarksAttention(t *testing.T) {
 			}
 		}
 	}
-	if turn != tabs.TurnWaiting || glyph != "attention" || source != "claude-stop" {
-		t.Fatalf("turn/glyph/source = %q/%q/%q, want waiting/attention/claude-stop", turn, glyph, source)
+	if turn != tabs.TurnWaiting || glyph != "done" || source != "claude-stop" {
+		t.Fatalf("turn/glyph/source = %q/%q/%q, want waiting/done/claude-stop", turn, glyph, source)
 	}
 }
