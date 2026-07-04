@@ -40,7 +40,7 @@ const (
 // not the human-facing glyph mirror in tabstate. Keep values sanitized: no full
 // prompts or sensitive task text in tmux-visible options.
 const (
-	OptTurnState    = "@zmux_turn_state"     // running | waiting | attention | consumed | parked
+	OptTurnState    = "@zmux_turn_state"     // running | ready(waiting legacy) | attention | failed | consumed | parked
 	OptTurnAt       = "@zmux_turn_at"        // unix seconds for the latest turn-state transition
 	OptPeerRole     = "@zmux_peer_role"      // claude | codex | pi | agy | unknown
 	OptPeerHostTab  = "@zmux_peer_host_tab"  // stable host logical tab id, when known
@@ -70,8 +70,10 @@ const (
 
 const (
 	TurnRunning   = "running"
-	TurnWaiting   = "waiting"
+	TurnReady     = "ready"
+	TurnWaiting   = "waiting" // legacy alias for ready
 	TurnAttention = "attention"
+	TurnFailed    = "failed"
 	TurnConsumed  = "consumed"
 	TurnParked    = "parked"
 )

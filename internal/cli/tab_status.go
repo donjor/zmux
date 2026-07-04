@@ -11,24 +11,27 @@ import (
 )
 
 type tabStatusOutput struct {
-	Tab       string `json:"tab"`
-	Target    string `json:"target"`
-	Session   string `json:"session,omitempty"`
-	PaneID    string `json:"paneId,omitempty"`
-	State     string `json:"state,omitempty"`
-	Message   string `json:"message,omitempty"`
-	Source    string `json:"source,omitempty"`
-	Scope     string `json:"scope,omitempty"`
-	Origin    string `json:"origin,omitempty"`
-	Command   string `json:"command,omitempty"`
-	CmdState  string `json:"cmdState,omitempty"`
-	CmdSeq    string `json:"cmdSeq,omitempty"`
-	LastExit  string `json:"lastExit,omitempty"`
-	RunID     string `json:"runId,omitempty"`
-	TurnState string `json:"turnState,omitempty"`
-	TurnAt    string `json:"turnAt,omitempty"`
-	PeerRole  string `json:"peerRole,omitempty"`
-	PeerTopic string `json:"peerTopic,omitempty"`
+	Tab            string `json:"tab"`
+	Target         string `json:"target"`
+	Session        string `json:"session,omitempty"`
+	PaneID         string `json:"paneId,omitempty"`
+	State          string `json:"state,omitempty"`
+	Message        string `json:"message,omitempty"`
+	Source         string `json:"source,omitempty"`
+	ResolvedState  string `json:"resolvedState,omitempty"`
+	ResolvedSource string `json:"resolvedSource,omitempty"`
+	StateReason    string `json:"stateReason,omitempty"`
+	Scope          string `json:"scope,omitempty"`
+	Origin         string `json:"origin,omitempty"`
+	Command        string `json:"command,omitempty"`
+	CmdState       string `json:"cmdState,omitempty"`
+	CmdSeq         string `json:"cmdSeq,omitempty"`
+	LastExit       string `json:"lastExit,omitempty"`
+	RunID          string `json:"runId,omitempty"`
+	TurnState      string `json:"turnState,omitempty"`
+	TurnAt         string `json:"turnAt,omitempty"`
+	PeerRole       string `json:"peerRole,omitempty"`
+	PeerTopic      string `json:"peerTopic,omitempty"`
 }
 
 func newTabStatusCmd(app *apppkg.App) *cobra.Command {
@@ -119,7 +122,31 @@ func buildTabStatus(app *apppkg.App, label, target string, rt resolvedTab) (tabS
 	if cmd, _ := app.Runner.ShowPaneOption(pane, tabs.OptCmdText); cmd != "" {
 		status.Command = cmd
 	}
+	res := tabs.ResolveDisplayState(tabs.DisplaySignals{
+		ManualState:        status.State,
+		ManualSource:       status.Source,
+		CommandState:       status.CmdState,
+		CommandSource:      "shell",
+		CommandInteractive: isInteractiveVenueStatus(status.Scope, status.Command),
+		CommandExit:        status.LastExit,
+		TurnState:          status.TurnState,
+		TurnSource:         status.Source,
+	})
+	if res.Set {
+		status.ResolvedState = string(res.State)
+		status.ResolvedSource = res.Source
+	}
+	status.StateReason = res.Reason
 	return status, nil
+}
+
+func isInteractiveVenueStatus(scope, command string) bool {
+	switch strings.TrimSpace(scope) {
+	case tabs.ScopeAgentShell, tabs.ScopePeer, tabs.ScopeWorker, tabs.ScopeDaemon:
+		return true
+	default:
+		return isInteractiveVenueCommand(command)
+	}
 }
 
 func printTabStatus(status tabStatusOutput) {

@@ -49,6 +49,9 @@ func runShellEventStart(app *apppkg.App, pane, command string) error {
 	if err := ensureManagedShellPane(app, target.PaneID); err != nil {
 		return nil // shell hooks fail open: unmanaged/dead panes simply don't publish state
 	}
+	if isIgnoredLifecycleCommand(command) {
+		return nil
+	}
 	now := time.Now()
 	seq := nextCommandSeq(app.Runner, target.PaneID)
 	runID, _ := app.Runner.ShowPaneOption(target.PaneID, tabs.OptNextRunID)
@@ -74,7 +77,16 @@ func runShellEventStart(app *apppkg.App, pane, command string) error {
 	if err := app.Runner.ApplyOptions(writes); err != nil {
 		return nil
 	}
-	_ = tabstate.New(app.Runner, os.Getenv).Set(target, tabstate.StateRunning, "shell", "")
+	svc := tabstate.New(app.Runner, os.Getenv)
+	interactive := isDaemonVenuePane(app, target.PaneID) || isInteractiveVenueCommand(command)
+	sig := tabs.DisplaySignals{CommandState: tabs.CmdRunning, CommandSource: "shell", CommandInteractive: interactive}
+	sig.ManualState, sig.ManualSource = currentAttentionSignal(app, target.PaneID)
+	res := tabs.ResolveDisplayState(sig)
+	if !res.Set {
+		clearShellOwnedDisplayState(app, svc, target)
+		return nil
+	}
+	_ = svc.Set(target, res.State, res.Source, res.Message)
 	return nil
 }
 
@@ -88,13 +100,11 @@ func runShellEventEnd(app *apppkg.App, pane string, exitCode int) error {
 	}
 	now := time.Now()
 	state := tabs.CmdDone
-	glyph := tabstate.StateDone
-	msg := ""
 	if exitCode != 0 {
 		state = tabs.CmdFailed
-		glyph = tabstate.StateFailed
-		msg = fmt.Sprintf("exit %d", exitCode)
 	}
+	command, _ := app.Runner.ShowPaneOption(target.PaneID, tabs.OptCmdText)
+	interactive := isDaemonVenuePane(app, target.PaneID) || isInteractiveVenueCommand(command)
 	runID, _ := app.Runner.ShowPaneOption(target.PaneID, tabs.OptCmdRunID)
 	writes := []tmux.OptionWrite{
 		{Scope: tmux.ScopePane, Target: target.PaneID, Key: tabs.OptCmdState, Value: state},
@@ -108,7 +118,15 @@ func runShellEventEnd(app *apppkg.App, pane string, exitCode int) error {
 	if err := app.Runner.ApplyOptions(writes); err != nil {
 		return nil
 	}
-	_ = tabstate.New(app.Runner, os.Getenv).Set(target, glyph, "shell", msg)
+	svc := tabstate.New(app.Runner, os.Getenv)
+	sig := tabs.DisplaySignals{CommandState: state, CommandSource: "shell", CommandInteractive: interactive, CommandExit: strconv.Itoa(exitCode)}
+	sig.ManualState, sig.ManualSource = currentAttentionSignal(app, target.PaneID)
+	res := tabs.ResolveDisplayState(sig)
+	if !res.Set {
+		clearShellOwnedDisplayState(app, svc, target)
+		return nil
+	}
+	_ = svc.Set(target, res.State, res.Source, res.Message)
 	return nil
 }
 
@@ -169,4 +187,74 @@ func sanitizeCommandText(command string) string {
 		command = strings.TrimSpace(command[:160])
 	}
 	return command
+}
+
+func clearShellOwnedDisplayState(app *apppkg.App, svc *tabstate.Service, target tabstate.Target) {
+	source, _ := app.Runner.ShowPaneOption(target.PaneID, tabstate.OptSource)
+	switch strings.TrimSpace(source) {
+	case "", "shell", "run", "state-exit", "claude-stop", "codex-stop", "pi-agent", "turn":
+		_ = svc.Clear(target)
+	}
+}
+
+func currentAttentionSignal(app *apppkg.App, paneID string) (string, string) {
+	state, _ := app.Runner.ShowPaneOption(paneID, tabstate.OptState)
+	if strings.TrimSpace(state) != string(tabstate.StateAttention) {
+		return "", ""
+	}
+	source, _ := app.Runner.ShowPaneOption(paneID, tabstate.OptSource)
+	return strings.TrimSpace(state), strings.TrimSpace(source)
+}
+
+func isDaemonVenuePane(app *apppkg.App, paneID string) bool {
+	scope, _ := app.Runner.ShowPaneOption(paneID, tabs.OptScope)
+	return strings.TrimSpace(scope) == tabs.ScopeDaemon
+}
+
+func isIgnoredLifecycleCommand(command string) bool {
+	cmd := sanitizeCommandText(command)
+	return cmd == "" || cmd == "builtin exit \"$@\"" || cmd == "unset i" || cmd == "unset i | unset i"
+}
+
+func isInteractiveVenueCommand(command string) bool {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return false
+	}
+	for len(fields) > 0 {
+		word := trimShellWord(fields[0])
+		switch {
+		case strings.Contains(word, "=") && !strings.HasPrefix(word, "="):
+			fields = fields[1:]
+			continue
+		case word == "command" || word == "exec" || word == "env" || word == "noglob":
+			fields = fields[1:]
+			continue
+		case word == "sudo" && len(fields) > 1:
+			fields = fields[1:]
+			continue
+		}
+		break
+	}
+	if len(fields) == 0 {
+		return false
+	}
+	cmd := trimShellWord(fields[0])
+	base := cmd
+	if i := strings.LastIndex(base, "/"); i >= 0 {
+		base = base[i+1:]
+	}
+	switch base {
+	case "pi", "claude", "codex", "agy", "ssh", "nvim", "vim", "less", "man", "top", "htop", "btop", "tmux":
+		return true
+	case "bash", "zsh", "fish", "sh", "nu":
+		return len(fields) == 1 || fields[1] == "-i" || fields[1] == "--login" || fields[1] == "-l"
+	case "python", "python3", "node", "deno", "bun", "irb", "ruby", "php", "psql", "sqlite3", "mysql", "redis-cli":
+		return len(fields) == 1 || fields[1] == "-i" || fields[1] == "--interactive"
+	}
+	return false
+}
+
+func trimShellWord(s string) string {
+	return strings.Trim(s, "'\"")
 }

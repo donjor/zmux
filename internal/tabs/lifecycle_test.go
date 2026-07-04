@@ -211,8 +211,8 @@ func TestSetTurnAndPeerRetentionOptions(t *testing.T) {
 	if err := SetTurnState(m, "%1", TurnWaiting, time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
-	if v, _, ok := writeFor(m, OptTurnState); !ok || v != TurnWaiting {
-		t.Fatalf("turn state = %q (found=%v), want waiting", v, ok)
+	if v, _, ok := writeFor(m, OptTurnState); !ok || v != TurnReady {
+		t.Fatalf("turn state = %q (found=%v), want ready", v, ok)
 	}
 	if v, _, ok := writeFor(m, OptTurnAt); !ok || v != "1000" {
 		t.Fatalf("turn at = %q (found=%v), want 1000", v, ok)
@@ -221,7 +221,7 @@ func TestSetTurnAndPeerRetentionOptions(t *testing.T) {
 		t.Fatalf("peer last turn = %q (found=%v), want 1000", v, ok)
 	}
 	if _, _, ok := writeFor(m, OptPeerTurns); ok {
-		t.Fatal("waiting should not increment peer turn count")
+		t.Fatal("ready should not increment peer turn count")
 	}
 
 	mRun := tmux.NewMockRunner()

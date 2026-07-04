@@ -252,11 +252,15 @@ func classifyPeerReap(r tmux.LogicalPaneRow, ctx ReapContext, d ReapDecision, ke
 		return keep("peer kept until " + keepUntil.Format(time.RFC3339))
 	}
 
-	switch r.TurnState {
+	switch NormalizeTurnState(r.TurnState) {
 	case TurnRunning:
 		return keep("peer turn running")
-	case TurnWaiting, TurnAttention:
-		return keep("peer waiting for host")
+	case TurnReady:
+		return keep("peer ready for host")
+	case TurnAttention:
+		return keep("peer needs host attention")
+	case TurnFailed:
+		return keep("peer turn failed; awaiting host")
 	case TurnConsumed, TurnParked:
 		parkUntil, ok := ParseUnix(r.ParkUntil)
 		if !ok {

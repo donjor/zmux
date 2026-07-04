@@ -134,8 +134,8 @@ try {
   assert.deepEqual(buildSessionRunArgs({ sessionName: 'peer', tab: 'agy-peer', command: 'agy --model fast', workspace: 'zmux', cwd: '/repo' }), [
     'session', 'run', 'peer', '-n', 'agy-peer', '--workspace', 'zmux', '--cwd', '/repo', '--', 'bash', '-lc', 'agy --model fast',
   ]);
-  assert.deepEqual(buildTabStateArgs({ action: 'failed', tab: 'worker', msg: 'needs attention', byVisibility: true, session: 'zws/repo' }), [
-    'tab', 'state', 'failed', 'worker', '--msg', 'needs attention', '--by-visibility', '-s', 'zws/repo',
+  assert.deepEqual(buildTabStateArgs({ action: 'ready', tab: 'worker', msg: 'checkpoint ready', session: 'zws/repo' }), [
+    'tab', 'state', 'ready', 'worker', '--msg', 'checkpoint ready', '-s', 'zws/repo',
   ]);
   assert.deepEqual(buildTabPeerArgs({ action: 'running', tab: 'claude-peer', role: 'claude', hostTab: 'ztab_host', hostPane: '%9', topic: 'plan review', ttl: '30m', source: 'peer', msg: 'ready', session: 'zws/repo' }), [
     'tab', 'peer', 'running', 'claude-peer', '--role', 'claude', '--host-tab', 'ztab_host', '--host-pane', '%9', '--topic', 'plan review', '--ttl', '30m', '--source', 'peer', '--msg', 'ready', '-s', 'zws/repo',

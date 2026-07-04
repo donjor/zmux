@@ -163,14 +163,14 @@ func (rt resolvedTab) stateTarget(svc *tabstate.Service) (tabstate.Target, error
 	return svc.Resolve(rt.Target)
 }
 
-// clearStale clears done|failed before new input reaches the tab — the
+// clearStale clears ready/done/failed before new input reaches the tab — the
 // ratified rule: user input (typing-by-proxy included) acknowledges a
-// finished state. attention/running are never cleared here.
+// finished/answer-ready state. attention/running are never cleared here.
 func (rt resolvedTab) clearStale(app *apppkg.App) {
 	svc := tabstate.New(app.Runner, os.Getenv)
 	t, err := rt.stateTarget(svc)
 	if err != nil {
 		return
 	}
-	_, _ = svc.ClearIf(t, tabstate.StateDone, tabstate.StateFailed)
+	_, _ = svc.ClearIf(t, tabstate.StateReady, tabstate.StateDone, tabstate.StateFailed)
 }

@@ -76,7 +76,7 @@ func TestParseLogicalRowsLifecycleFields(t *testing.T) {
 		"1", "node", "/h", "t",
 		"ztab_x", "scratch", "pane", "", "", "",
 		"agent", "1780700000", "task", "3600", "1", "1780701000", "1780702000",
-		"waiting", "1780702100", "claude", "ztab_host", "%1", "plan review", "3", "1780702200", "1780703000", "1780704000", "4242",
+		"ready", "1780702100", "claude", "ztab_host", "%1", "plan review", "3", "1780702200", "1780703000", "1780704000", "4242",
 	}, "\t")
 	rows := parseLogicalRows(line)
 	if len(rows) != 1 {
@@ -85,7 +85,7 @@ func TestParseLogicalRowsLifecycleFields(t *testing.T) {
 	r := rows[0]
 	if r.Origin != "agent" || r.Born != "1780700000" || r.Scope != "task" ||
 		r.TTL != "3600" || r.Keep != "1" || r.StaleAt != "1780701000" ||
-		r.LastInputAt != "1780702000" || r.TurnState != "waiting" || r.TurnAt != "1780702100" ||
+		r.LastInputAt != "1780702000" || r.TurnState != "ready" || r.TurnAt != "1780702100" ||
 		r.PeerRole != "claude" || r.PeerHostTab != "ztab_host" || r.PeerHostPane != "%1" ||
 		r.PeerTopic != "plan review" || r.PeerTurns != "3" || r.PeerLastTurn != "1780702200" ||
 		r.KeepUntil != "1780703000" || r.ParkUntil != "1780704000" || r.PanePID != 4242 {

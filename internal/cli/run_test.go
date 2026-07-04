@@ -539,7 +539,7 @@ func TestRunDetachedDoesNotAppendExitEpilogue(t *testing.T) {
 }
 
 // run reuse is typing-by-proxy too (ratified clear table): a stale
-// done|failed from the previous run must be cleared BEFORE the new command
+// ready/done/failed from the previous run must be cleared BEFORE the new command
 // is delivered, same as send/type — not merely overwritten by running after.
 func TestRunReuseClearsStaleStateBeforeInput(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
@@ -578,7 +578,7 @@ func TestRunReuseClearsStaleStateBeforeInput(t *testing.T) {
 	}
 }
 
-func TestSendClearsDoneBeforeInput(t *testing.T) {
+func TestSendClearsReadyBeforeInput(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.DisplayMessageFunc = func(target, format string) (string, error) {
 		switch {
@@ -587,7 +587,7 @@ func TestSendClearsDoneBeforeInput(t *testing.T) {
 		case strings.Contains(format, "#{pane_id}"):
 			return "%4\ttest-session:2\n", nil
 		case strings.Contains(format, "@zmux_state"):
-			return "done\n", nil
+			return "ready\n", nil
 		}
 		return "", nil
 	}
@@ -607,6 +607,6 @@ func TestSendClearsDoneBeforeInput(t *testing.T) {
 		}
 	}
 	if !clearedBeforeSend {
-		t.Fatal("send must clear done before delivering input")
+		t.Fatal("send must clear ready before delivering input")
 	}
 }

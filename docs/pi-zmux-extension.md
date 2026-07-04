@@ -56,7 +56,7 @@ are ignored by the repo.
 
 Source layout:
 
-- `src/index.ts` — extension entrypoint: context injection, reload/respawn continuations, bash guard, `/zmux` command.
+- `src/index.ts` — extension entrypoint: context injection, Pi agent lifecycle reporting, reload/respawn continuations, bash guard, `/zmux` command.
 - `src/classify.ts` — Pi bash classifier, kept in parity with the shared guard corpus.
 - `src/config.ts` — trusted project config loading and runtime merge behavior.
 - `src/zmux/` — focused low-level zmux/tmux wrappers (`context`, `sessions`, `tabs`, `panes`, `runtimes`, Pi lifecycle, interactive waiting) plus shared command helpers.
@@ -82,8 +82,9 @@ Core tools:
   create a detached command-backed session without focus steal, and clean one up.
 - `zmux_tabs` / `zmux_tab_kill` / `zmux_tab_focus` / `zmux_tab_label` /
   `zmux_tab_move` / `zmux_tab_state` / `zmux_tab_status` / `zmux_tab_place` — list, intentionally
-  remove/focus/label/move, mark or read lifecycle/command/peer state, or switch logical tab placement
-  (`pane`/`full`/`hide`/`show`). Ask before focusing in agent sessions.
+  remove/focus/label/move, mark or read lifecycle/command/turn state, or switch logical tab placement
+  (`pane`/`full`/`hide`/`show`). `zmux_tab_state` accepts `attention`, `failed`, `running`, `ready`, `done`, and `clear`.
+  Ask before focusing in agent sessions.
 - `zmux_send_keys` / `zmux_type` — send raw keys or type text into existing tabs.
 - `zmux_pane_list` / `zmux_pane_open` / `zmux_pane_focus` /
   `zmux_pane_close` / `zmux_pane_resize` — inspect and manage panes through zmux
@@ -101,6 +102,16 @@ Core tools:
 - `zmux_pi_respawn` — hard fallback: respawn the current Pi pane with `pi -c`.
   This kills the current pane process and discards unsent input; use only when
   soft Pi reload is unavailable or Pi is wedged.
+
+## Pi lifecycle reporting
+
+The extension reports Pi's own prompt-level lifecycle to zmux without scraping the terminal:
+
+- `agent_start` writes the current pane display state as `running` with source `pi-agent`;
+- `agent_end` writes `ready` (`↩`) with source `pi-agent`, meaning the user's move / answer ready;
+- `session_shutdown` clears a stale `running` state best-effort.
+
+All lifecycle writes fail open and quiet when Pi is outside zmux, the pane cannot be resolved, or the local zmux binary is stale. Persistent Pi process liveness is not a running signal; only an active agent turn should animate the spinner.
 
 ## Bash guardrails
 

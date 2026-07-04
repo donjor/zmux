@@ -27,7 +27,7 @@ func newTabPeerCmd(app *apppkg.App) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "peer <start|running|waiting|attention|consumed|park|keep|clear-keep> [target]",
+		Use:   "peer <start|running|ready|waiting|attention|failed|consumed|park|keep|clear-keep> [target]",
 		Short: "Record peer/agent-turn lifecycle metadata",
 		Long: `Record semantic peer lifecycle metadata on a tab.
 
@@ -38,7 +38,7 @@ should use timestamped keep/park metadata here instead of @zmux_keep=1.
 Typical flow:
   zmux tab peer start claude-peer --role claude --host-tab ztab_... --topic 'plan review'
   zmux tab peer running claude-peer
-  zmux tab peer waiting claude-peer --source claude-stop
+  zmux tab peer ready claude-peer --source claude-stop
   zmux tab peer consumed claude-peer
   zmux tab peer park claude-peer --ttl 30m`,
 		Args: cobra.RangeArgs(1, 2),
@@ -97,15 +97,45 @@ type tabPeerOptions struct {
 	msg      string
 }
 
-func requirePeerScope(app *apppkg.App, paneID string) error {
+func requireTurnScope(app *apppkg.App, paneID string) error {
 	scope, err := app.Runner.ShowPaneOption(paneID, tabs.OptScope)
 	if err != nil {
 		return err
 	}
-	if scope != tabs.ScopePeer {
-		return fmt.Errorf("pane %s is not a peer tab (scope=%q); run `zmux tab peer start` first", paneID, scope)
+	switch scope {
+	case tabs.ScopePeer, tabs.ScopeWorker, tabs.ScopeAgentShell:
+		return nil
+	default:
+		return fmt.Errorf("pane %s is not a peer/worker/agent turn tab (scope=%q); run `zmux tab peer start` or launch with --scope peer|worker|agent-shell first", paneID, scope)
 	}
-	return nil
+}
+
+func setResolvedTurnDisplay(app *apppkg.App, svc *tabstate.Service, tgt tabstate.Target, turnState, source, msg string) error {
+	sig := tabs.DisplaySignals{TurnState: turnState, TurnSource: source}
+	if turnState != tabs.TurnAttention {
+		sig.ManualState, sig.ManualSource = currentAttentionSignal(app, tgt.PaneID)
+	}
+	res := tabs.ResolveDisplayState(sig)
+	if !res.Set {
+		return svc.Clear(tgt)
+	}
+	if msg != "" {
+		res.Message = msg
+	}
+	return svc.Set(tgt, res.State, res.Source, res.Message)
+}
+
+func ensureTurnLifecyclePane(app *apppkg.App, paneID string, o tabPeerOptions, now time.Time) error {
+	scope, err := app.Runner.ShowPaneOption(paneID, tabs.OptScope)
+	if err != nil {
+		return err
+	}
+	switch scope {
+	case tabs.ScopePeer, tabs.ScopeWorker, tabs.ScopeAgentShell:
+		return nil
+	default:
+		return tabs.StampPeer(app.Runner, paneID, tabs.PeerMetadata{Role: o.role, HostTab: o.hostTab, HostPane: o.hostPane, Topic: o.topic}, now)
+	}
 }
 
 func runTabPeerAction(app *apppkg.App, svc *tabstate.Service, tgt tabstate.Target, action string, o tabPeerOptions) error {
@@ -115,36 +145,52 @@ func runTabPeerAction(app *apppkg.App, svc *tabstate.Service, tgt tabstate.Targe
 		source = "peer"
 	}
 	switch action {
-	case "start", "running":
+	case "start":
 		if err := tabs.StampPeer(app.Runner, tgt.PaneID, tabs.PeerMetadata{Role: o.role, HostTab: o.hostTab, HostPane: o.hostPane, Topic: o.topic}, now); err != nil {
 			return err
 		}
 		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnRunning, now); err != nil {
 			return err
 		}
-		return svc.Set(tgt, tabstate.StateRunning, source, o.msg)
-	case "waiting":
-		if err := requirePeerScope(app, tgt.PaneID); err != nil {
+		return setResolvedTurnDisplay(app, svc, tgt, tabs.TurnRunning, source, o.msg)
+	case "running":
+		if err := ensureTurnLifecyclePane(app, tgt.PaneID, o, now); err != nil {
 			return err
 		}
-		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnWaiting, now); err != nil {
+		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnRunning, now); err != nil {
+			return err
+		}
+		return setResolvedTurnDisplay(app, svc, tgt, tabs.TurnRunning, source, o.msg)
+	case "ready", "waiting":
+		if err := requireTurnScope(app, tgt.PaneID); err != nil {
+			return err
+		}
+		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnReady, now); err != nil {
 			return err
 		}
 		msg := o.msg
 		if msg == "" {
 			msg = "peer answer ready"
 		}
-		return svc.Set(tgt, tabstate.StateDone, source, msg)
+		return setResolvedTurnDisplay(app, svc, tgt, tabs.TurnReady, source, msg)
 	case "attention":
-		if err := requirePeerScope(app, tgt.PaneID); err != nil {
+		if err := requireTurnScope(app, tgt.PaneID); err != nil {
 			return err
 		}
 		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnAttention, now); err != nil {
 			return err
 		}
-		return svc.Set(tgt, tabstate.StateAttention, source, o.msg)
+		return setResolvedTurnDisplay(app, svc, tgt, tabs.TurnAttention, source, o.msg)
+	case "failed":
+		if err := requireTurnScope(app, tgt.PaneID); err != nil {
+			return err
+		}
+		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnFailed, now); err != nil {
+			return err
+		}
+		return setResolvedTurnDisplay(app, svc, tgt, tabs.TurnFailed, source, o.msg)
 	case "consumed":
-		if err := requirePeerScope(app, tgt.PaneID); err != nil {
+		if err := requireTurnScope(app, tgt.PaneID); err != nil {
 			return err
 		}
 		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnConsumed, now); err != nil {
@@ -152,7 +198,7 @@ func runTabPeerAction(app *apppkg.App, svc *tabstate.Service, tgt tabstate.Targe
 		}
 		return svc.Clear(tgt)
 	case "park", "parked":
-		if err := requirePeerScope(app, tgt.PaneID); err != nil {
+		if err := requireTurnScope(app, tgt.PaneID); err != nil {
 			return err
 		}
 		if err := tabs.SetTurnState(app.Runner, tgt.PaneID, tabs.TurnParked, now); err != nil {
@@ -167,7 +213,7 @@ func runTabPeerAction(app *apppkg.App, svc *tabstate.Service, tgt tabstate.Targe
 		}
 		return svc.Clear(tgt)
 	case "keep":
-		if err := requirePeerScope(app, tgt.PaneID); err != nil {
+		if err := requireTurnScope(app, tgt.PaneID); err != nil {
 			return err
 		}
 		if o.ttl <= 0 {
@@ -175,7 +221,7 @@ func runTabPeerAction(app *apppkg.App, svc *tabstate.Service, tgt tabstate.Targe
 		}
 		return tabs.SetPeerKeepUntil(app.Runner, tgt.PaneID, now.Add(o.ttl))
 	case "clear-keep":
-		if err := requirePeerScope(app, tgt.PaneID); err != nil {
+		if err := requireTurnScope(app, tgt.PaneID); err != nil {
 			return err
 		}
 		return tabs.ClearPeerKeepUntil(app.Runner, tgt.PaneID)

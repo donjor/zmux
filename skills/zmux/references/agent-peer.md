@@ -20,7 +20,7 @@ Use zmux for:
 - reading lifecycle/turn state with `tab status` when the peer is instrumented;
 - using `watch --idle` only for startup/submission hygiene, output settle, or uninstrumented fallback;
 - classifying what the visible screen shows when status is unavailable or says human attention may be needed;
-- recording semantic peer lifecycle (`start`, `running`, `waiting`, `consumed`, `park`, timestamped `keep`);
+- recording semantic peer lifecycle (`start`, `running`, `ready`, `attention`, `failed`, `consumed`, `park`, timestamped `keep`);
 - writing human-visible glyph state only as the peer lifecycle helper's presentation layer;
 - moving the peer between full tab, pane, and hidden dock placements;
 - reading passive CLI logs only when exact quotes are needed.
@@ -222,21 +222,22 @@ zmux tab status codex-peer -s <session> --json
 
 Treat a fresh peer turn as ready when status shows one of:
 
-- `turnState=waiting` / glyph `done` — answer ready; read output with `watch` or passive logs.
+- `turnState=ready` / glyph `ready` (`↩`) — answer ready; read output with `watch` or passive logs.
 - `turnState=attention` / glyph `attention` — permission prompt, peer question, or human action needed; inspect the screen and apply policy.
+- `turnState=failed` / glyph `failed` — peer turn errored; inspect the screen before trusting anything.
 - `turnState=running` / glyph `running` — the peer is still working; keep doing other in-scope work and check status again later.
 
-Freshness matters. When status carries `turnAt`, record the value after you mark/send `running` and require a later `turnAt` before trusting `waiting`; otherwise an old ready state from a prior prompt can self-match.
+Freshness matters. When status carries `turnAt`, record the value after you mark/send `running` and require a later `turnAt` before trusting `ready`; otherwise an old ready state from a prior prompt can self-match. Legacy `waiting` means `ready`.
 
 `watch --idle` is not the primary completion signal for instrumented peers. Use it for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use `watch --until`, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT".
 
-For long peer turns, status checks are beats, not proof of correctness. A `waiting` state means "the peer thinks the turn ended"; still read the answer and judge it.
+For long peer turns, status checks are beats, not proof of correctness. A `ready` state means "the peer thinks the turn ended"; still read the answer and judge it.
 
 ## Classify fallback/output
 
 | capture shows | state | action |
 | --- | --- | --- |
-| answer plus fresh empty input box | done | read, synthesize, or quote |
+| answer plus fresh empty input box | ready | read, synthesize, or quote |
 | numbered options / approval prompt | permission prompt | apply permission policy and usually set `tab peer attention` |
 | free-form question to the driver | asking you | answer like a colleague |
 | submitted prompt with no answer/input | still working | check status again; for uninstrumented peers, wait/recapture |
@@ -253,7 +254,7 @@ Use the semantic peer lifecycle surface; it writes the policy metadata and the h
 | --- | --- |
 | peer spawned/reused | `zmux tab peer start codex-peer --role codex --topic '<sanitized topic>'` |
 | prompt accepted / turn running | `zmux tab peer running codex-peer` |
-| peer Stop/hook says turn ended | `zmux tab peer waiting codex-peer --source codex-stop` |
+| peer Stop/hook says turn ended | `zmux tab peer ready codex-peer --source codex-stop` |
 | permission prompt / question / human needed | `zmux tab peer attention codex-peer --msg '<why>'` |
 | answer consumed | `zmux tab peer consumed codex-peer` |
 | answer consumed but keep tab inspectable briefly | `zmux tab peer park codex-peer --ttl 30m` |

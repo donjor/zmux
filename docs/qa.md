@@ -76,7 +76,8 @@ unit tests cannot cover: top bar, session tab, and popup polish.
 (`zmux log start/stop/status/tail`) over tmux pipe-pane: detached recording,
 truncation, plain-vs-ANSI, and the TUI boundary.
 
-`checklists/natural-shell-lifecycle.toml` verifies plan 046's root-shell
+`checklists/natural-shell-lifecycle.toml` verifies plan 046/v2 root-shell
 lifecycle behavior on `zzmux`: raw typed commands publish running/done metadata,
-`zmux run` no longer prints completion sentinels, and failed commands report the
-recorded exit code through `tab status`.
+persistent agent/TUI venues do not leave a stuck spinner, `zmux run` no longer
+prints completion sentinels, and failed commands report the recorded exit code
+through `tab status`.

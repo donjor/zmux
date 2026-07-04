@@ -92,14 +92,17 @@ func lifecycleSnippet(shell Shell, bin string) string {
 
 func bashLifecycleSnippet(bin string) string {
 	q := shellQuote(bin)
-	return "# zmux command lifecycle glyphs (root interactive shell only)\n" +
+	return "# zmux command lifecycle glyphs (interactive shells in tmux)\n" +
 		"__zmux_setup_lifecycle() {\n" +
 		"    local __zmux_pane __zmux_socket __zmux_profile\n" +
+		"    if [ -n \"${BLE_VERSION:-}\" ] && declare -F ble-attach >/dev/null 2>&1; then\n" +
+		"        ble-attach >/dev/null 2>&1 || true\n" +
+		"    fi\n" +
 		"    __zmux_pane=\"${TMUX_PANE:-}\"\n" +
 		"    if [ -z \"$__zmux_pane\" ] && [ -n \"${TMUX:-}\" ] && command -v tmux >/dev/null 2>&1; then\n" +
 		"        __zmux_pane=\"$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)\"\n" +
 		"    fi\n" +
-		"    if [ -n \"${TMUX:-}\" ] && [ -n \"$__zmux_pane\" ] && { [ \"${ZMUX_SHELL_ROOT:-}\" != \"$__zmux_pane\" ] || [ \"${ZMUX_SHELL_ROOT_PID:-}\" = \"$$\" ]; }; then\n" +
+		"    if [ -n \"${TMUX:-}\" ] && [ -n \"$__zmux_pane\" ]; then\n" +
 		"        export TMUX_PANE=\"$__zmux_pane\"\n" +
 		"        export ZMUX_SHELL_ROOT=\"$__zmux_pane\"\n" +
 		"        export ZMUX_SHELL_ROOT_PID=\"$$\"\n" +
@@ -110,6 +113,7 @@ func bashLifecycleSnippet(bin string) string {
 		"        fi\n" +
 		"        __zmux_command_running=0\n" +
 		"        __zmux_at_prompt=0\n" +
+		"        __zmux_use_blehook=0\n" +
 		"        __zmux_install_precmd() {\n" +
 		"            if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare \\-[^ ]*a'; then\n" +
 		"                local __zmux_pc __zmux_new=()\n" +
@@ -138,11 +142,12 @@ func bashLifecycleSnippet(bin string) string {
 		"        }\n" +
 		"        __zmux_preexec() {\n" +
 		"            [ -n \"${ZMUX_SHELL_EVENT_ACTIVE:-}\" ] && return\n" +
-		"            [ \"${__zmux_at_prompt:-0}\" = \"1\" ] || return\n" +
+		"            [ \"${__zmux_use_blehook:-0}\" = \"1\" ] || [ \"${__zmux_at_prompt:-0}\" = \"1\" ] || return\n" +
 		"            [ \"${__zmux_command_running:-0}\" = \"1\" ] && return\n" +
+		"            local __zmux_cmd=\"${1:-$BASH_COMMAND}\"\n" +
 		"            __zmux_at_prompt=0\n" +
 		"            __zmux_command_running=1\n" +
-		"            ZMUX_SHELL_EVENT_ACTIVE=1 \"$ZMUX_BIN\" shell-event start --command \"$BASH_COMMAND\" >/dev/null 2>&1 || true\n" +
+		"            ZMUX_SHELL_EVENT_ACTIVE=1 \"$ZMUX_BIN\" shell-event start --command \"$__zmux_cmd\" >/dev/null 2>&1 || true\n" +
 		"        }\n" +
 		"        __zmux_precmd() {\n" +
 		"            local __zmux_ec=$?\n" +
@@ -158,8 +163,17 @@ func bashLifecycleSnippet(bin string) string {
 		"            __zmux_at_prompt=1\n" +
 		"            return $__zmux_ec\n" +
 		"        }\n" +
-		"        __zmux_install_precmd\n" +
-		"        trap 'case \"$BASH_COMMAND\" in __zmux_precmd*|__zmux_prompt_ready*|__zmux_preexec*|__zmux_install_precmd*|__zmux_setup_lifecycle*) ;; *) __zmux_preexec ;; esac' DEBUG\n" +
+		"        if declare -F blehook >/dev/null 2>&1; then\n" +
+		"            __zmux_use_blehook=1\n" +
+		"            case \"$(trap -p DEBUG 2>/dev/null)\" in *__zmux_preexec*) trap - DEBUG ;; esac\n" +
+		"            blehook PREEXEC-=__zmux_preexec 2>/dev/null || true\n" +
+		"            blehook PRECMD-=__zmux_precmd 2>/dev/null || true\n" +
+		"            blehook PREEXEC!=__zmux_preexec 2>/dev/null || true\n" +
+		"            blehook PRECMD!=__zmux_precmd 2>/dev/null || true\n" +
+		"        else\n" +
+		"            __zmux_install_precmd\n" +
+		"            trap 'case \"$BASH_COMMAND\" in __zmux_precmd*|__zmux_prompt_ready*|__zmux_preexec*|__zmux_install_precmd*|__zmux_setup_lifecycle*) ;; *) __zmux_preexec ;; esac' DEBUG\n" +
+		"        fi\n" +
 		"    fi\n" +
 		"}\n" +
 		"__zmux_setup_lifecycle"

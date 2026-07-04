@@ -26,19 +26,21 @@ import {
 	validateTabPlacementParams,
 } from "./shared.js";
 
-function tabPeerAction(value: string): "start" | "running" | "waiting" | "attention" | "consumed" | "park" | "keep" | "clear-keep" {
+function tabPeerAction(value: string): "start" | "running" | "ready" | "waiting" | "attention" | "failed" | "consumed" | "park" | "keep" | "clear-keep" {
 	switch (value) {
 		case "start":
 		case "running":
+		case "ready":
 		case "waiting":
 		case "attention":
+		case "failed":
 		case "consumed":
 		case "park":
 		case "keep":
 		case "clear-keep":
 			return value;
 		default:
-			throw new Error(`peer action must be one of: start, running, waiting, attention, consumed, park, keep, clear-keep (got ${value})`);
+			throw new Error(`peer action must be one of: start, running, ready, waiting, attention, failed, consumed, park, keep, clear-keep (got ${value})`);
 	}
 }
 
@@ -46,17 +48,17 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_tab_state",
 		label: "zmux tab state",
-		description: "Set or clear a zmux tab lifecycle glyph (attention/running/done/failed/clear). Use for peer/worker handoffs and human-visible status instead of shelling out to `zmux tab state`.",
+		description: "Set or clear a zmux tab lifecycle glyph (attention/failed/running/ready/done/clear). Use for peer/worker handoffs and human-visible status instead of shelling out to `zmux tab state`.",
 		promptSnippet: "Set a zmux tab lifecycle state",
 		parameters: Type.Object({
-			state: Type.String({ description: "attention, running, done, failed, or clear" }),
+			state: Type.String({ description: "attention, failed, running, ready, done, or clear" }),
 			tab: Type.Optional(Type.String({ description: "Tab name target; omitted means current pane" })),
 			target: Type.Optional(Type.String({ description: "Raw pane/window/tab target; overrides tab" })),
 			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),
 			source: Type.Optional(Type.String({ description: "State source label" })),
-			message: Type.Optional(Type.String({ description: "Display-only message for attention/failed states" })),
+			message: Type.Optional(Type.String({ description: "Display-only message for ready/attention/failed states" })),
 			ifState: Type.Optional(Type.String({ description: "For clear: only clear if current state matches" })),
-			byVisibility: Type.Optional(Type.Boolean({ description: "For done: store attention instead when pane is not visible" })),
+			byVisibility: Type.Optional(Type.Boolean({ description: "For done only: store attention instead when pane is not visible" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -78,10 +80,10 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_tab_peer",
 		label: "zmux tab peer",
-		description: "Record semantic peer/agent-turn lifecycle metadata (start/running, waiting, consumed, park, timestamped keep). Prefer this over manual glyph-only state for prompt-scoped peer tabs.",
+		description: "Record semantic peer/agent-turn lifecycle metadata (start/running, ready, attention, failed, consumed, park, timestamped keep). Prefer this over manual glyph-only state for prompt-scoped peer tabs.",
 		promptSnippet: "Set peer lifecycle metadata",
 		parameters: Type.Object({
-			action: Type.String({ description: "start, running, waiting, attention, consumed, park, keep, or clear-keep" }),
+			action: Type.String({ description: "start, running, ready, waiting, attention, failed, consumed, park, keep, or clear-keep" }),
 			tab: Type.Optional(Type.String({ description: "Tab name target; omitted means current pane" })),
 			target: Type.Optional(Type.String({ description: "Raw pane/window/tab target; overrides tab" })),
 			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),
@@ -91,7 +93,7 @@ export function registerTabTools(pi: ExtensionAPI): void {
 			topic: Type.Optional(Type.String({ description: "Sanitized display topic/title; do not include full prompts" })),
 			ttl: Type.Optional(Type.String({ description: "Retention TTL for park/keep, e.g. 30m or 2h. keep requires this." })),
 			source: Type.Optional(Type.String({ description: "Lifecycle source label" })),
-			message: Type.Optional(Type.String({ description: "Optional glyph message for waiting/attention" })),
+			message: Type.Optional(Type.String({ description: "Optional glyph message for ready/attention/failed" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {

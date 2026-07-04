@@ -16,8 +16,8 @@ export async function typeText(tab: string, text: string, cwd: string, session?:
 	return { text: `typed text into ${tab}`, details: { tab, text, session } };
 }
 
-export type TabStateAction = "attention" | "running" | "done" | "failed" | "clear";
-export type TabPeerAction = "start" | "running" | "waiting" | "attention" | "consumed" | "park" | "keep" | "clear-keep";
+export type TabStateAction = "attention" | "failed" | "running" | "ready" | "done" | "clear";
+export type TabPeerAction = "start" | "running" | "ready" | "waiting" | "attention" | "failed" | "consumed" | "park" | "keep" | "clear-keep";
 export type TabPlacementAction = "pane" | "full" | "hide" | "show";
 export type TabPlacementDirection = "right" | "left" | "up" | "down";
 export type LogAction = "start" | "tail" | "status" | "stop";

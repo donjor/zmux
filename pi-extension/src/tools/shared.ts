@@ -58,8 +58,8 @@ export function paneDirection(value?: string): PaneDirection | undefined {
 }
 
 export function tabStateAction(value: string): TabStateAction {
-	if (value === "attention" || value === "running" || value === "done" || value === "failed" || value === "clear") return value;
-	throw new Error(`state must be one of: attention, running, done, failed, clear (got ${value})`);
+	if (value === "attention" || value === "failed" || value === "running" || value === "ready" || value === "done" || value === "clear") return value;
+	throw new Error(`state must be one of: attention, failed, running, ready, done, clear (got ${value})`);
 }
 
 export function tabPlacementAction(value: string): TabPlacementAction {

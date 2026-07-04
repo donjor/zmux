@@ -170,7 +170,7 @@ func TestPlanShellIntegration_IncludesLifecycleHooks(t *testing.T) {
 		shell Shell
 		want  []string
 	}{
-		{Bash, []string{"shell-event start", "shell-event end", "PROMPT_COMMAND", "DEBUG", "ZMUX_SHELL_ROOT", "${TMUX%%,*}", "basename", "__zmux_prompt_ready"}},
+		{Bash, []string{"shell-event start", "shell-event end", "PROMPT_COMMAND", "DEBUG", "ble-attach", "blehook PREEXEC", "blehook PRECMD", "${1:-$BASH_COMMAND}", "ZMUX_SHELL_ROOT", "${TMUX%%,*}", "basename", "__zmux_prompt_ready"}},
 		{Zsh, []string{"preexec_functions=(__zmux_preexec", "precmd_functions=(__zmux_precmd", "shell-event start", "shell-event end", "ZMUX_SHELL_ROOT", "${TMUX%%,*}", "basename"}},
 		{Fish, []string{"fish_preexec", "fish_postexec", "shell-event start", "shell-event end", "set -l __zmux_ec $status", "ZMUX_SHELL_ROOT", "string split -m1", "basename"}},
 	}

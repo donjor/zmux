@@ -2,10 +2,10 @@
 // zmux-tab-state-stop — Stop hook (tab attention states, plan 026 P1).
 //
 // When a Claude turn ends inside a zmux tab, prefer peer lifecycle metadata if
-// the pane is a prompt-scoped peer; otherwise mark the primary agent tab `done`
-// — or `attention` if its window isn't currently visible (--by-visibility; the
-// zmux service decides by window membership). The human sees a glyph in the
-// bar from any tab instead of polling agent tabs for idleness.
+// the pane is a prompt-scoped peer; otherwise mark the primary agent tab `ready`.
+// Ready is non-urgent: the answer/turn is done and it is the user's move. The
+// human sees a glyph in the bar from any tab instead of polling agent tabs for
+// idleness.
 //
 // Deliberately dumb (agent-CLI boundary: no adapter machinery): no transcript
 // parsing, no output classification — the only signal used is "the turn
@@ -17,11 +17,11 @@
 import { execFileSync } from 'node:child_process'
 
 export function peerStopCommandArgs() {
-  return ['tab', 'peer', 'waiting', '--source', 'claude-stop']
+  return ['tab', 'peer', 'ready', '--source', 'claude-stop']
 }
 
 export function stopCommandArgs() {
-  return ['tab', 'state', 'done', '--source', 'claude-stop', '--quiet', '--by-visibility']
+  return ['tab', 'state', 'ready', '--source', 'claude-stop', '--quiet']
 }
 
 export function shouldRun(env) {
@@ -37,8 +37,8 @@ function main() {
     })
     return
   } catch {
-    // Non-peer panes reject `tab peer waiting`; fall back to the normal agent
-    // tab done/attention glyph path below.
+    // Non-peer panes reject `tab peer ready`; fall back to the normal agent
+    // tab ready glyph path below.
   }
   try {
     execFileSync('zmux', stopCommandArgs(), {

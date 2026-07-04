@@ -5,8 +5,8 @@
 # Drive from here: `./qa natural-shell-lifecycle` (picker) or `./qa run natural-shell-lifecycle`.
 
 [checklist]
-name = "Natural shell lifecycle (046)"
-doc = "Normal commands typed into a fresh zzmux-managed shell should publish running → done/failed glyph and command metadata without zmux-run sentinels. Keep a 'zzmux new qa-shell' terminal visible for the glyph expectations."
+name = "Natural shell lifecycle (046 + lifecycle-state v2)"
+doc = "Normal commands typed into a fresh zzmux-managed shell should publish running → done/failed glyph and command metadata without zmux-run sentinels, while persistent venues stay idle until explicit turn signals. Keep a 'zzmux new qa-shell' terminal visible for the glyph expectations."
 
 [checklist.vars]
 bin = "zzmux"
@@ -50,6 +50,14 @@ cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1)
 expect = "status JSON reports state=failed, cmdState=failed, lastExit=3, and the visible glyph is ✗"
 check = "(?s)\\\"state\\\": \\\"failed\\\".*\\\"cmdState\\\": \\\"failed\\\".*\\\"lastExit\\\": \\\"3\\\""
 needs = ["manual-done"]
+
+[[step]]
+id = "venue-no-spinner"
+name = "Persistent venue launch does not stick on running"
+cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" 'less /dev/null' Enter; sleep 1; printf 'state='; tmux -L zzmux show-options -p -t \"$pane\" -v @zmux_state 2>/dev/null || true; tmux -L zzmux send-keys -t \"$pane\" q"
+expect = "the visible tab does not show a running spinner for the long-lived less venue; state output is blank/unset"
+check = "state=[[:space:]]*$"
+needs = ["manual-failed"]
 
 [[step]]
 id = "run-no-sentinel"

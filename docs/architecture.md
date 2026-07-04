@@ -102,8 +102,8 @@ Numbers below are approximate lines of non-test Go code per package, ordered by 
 | `session`    | ~430  | Session model, CRUD, tmp-session helpers                                                                                                                                                                                                                                                                          |
 | `recipe`     | ~1650 | Recipe discovery, TOML parsing, pure planning, dry-run rendering, execution, plus fork/extend/create authoring                                                                                                                                                                                                    |
 | `workspace`  | ~1250 | Workspace state (TOML), v3 local-label session identity, session tracking, reconciliation                                                                                                                                                                                                                         |
-| `tabs`       | ~1450 | Logical-tab identity, scanning, placement, dock hide/show, MRU, reconciliation, lifecycle stamps (`lifecycle.go`), and the reaper (`reap.go`)                                                                                                                                                                     |
-| `tabstate`   | ~280  | Pane-canonical tab lifecycle state (`running` / `done` / `failed` / `attention`) and bar glyph formatting                                                                                                                                                                                                         |
+| `tabs`       | ~1500 | Logical-tab identity, scanning, placement, dock hide/show, MRU, reconciliation, lifecycle stamps (`lifecycle.go`), display-state resolution, and the reaper (`reap.go`)                                                                                                                                            |
+| `tabstate`   | ~300  | Pane-canonical human lifecycle state (`attention` / `failed` / `running` / `ready` / `done`) and bar glyph formatting                                                                                                                                                                                             |
 | `theme`      | ~650  | Theme parsing, semantic palette, resolver, embed of bundled themes                                                                                                                                                                                                                                                |
 | `bar`        | ~2700 | Status bar generation, presets, two-line logical-tabs rendering, preview                                                                                                                                                                                                                                          |
 | `sync`       | ~220  | Pull-only theme sync targets (Ghostty, Neovim)                                                                                                                                                                                                                                                                    |
@@ -236,9 +236,13 @@ commands. Keep new tab-targeting behavior behind that choke point so
 `run`, `watch`, `send`, `type`, `tab state`, `tab label`, `tab kill`, and
 `tab move` continue to reach a logical tab in every placement.
 
-`internal/tabstate` owns lifecycle state (`running`, `done`, `failed`,
-`attention`) and formats the bar glyphs. State is pane-canonical, so it follows
-the tab when the tab moves between full, pane, and dock placements.
+`internal/tabstate` owns the pane-canonical human display state (`attention`,
+`failed`, `running`, `ready`, `done`) and formats the bar glyphs. State follows
+the tab when the tab moves between full, pane, and dock placements. Raw signals
+live beside tab identity: shell command lifecycle in `@zmux_cmd_*`, agent/peer/
+worker turns in `@zmux_turn_*`, and explicit operator overrides through
+`zmux tab state`. `internal/tabs/display_state.go` is the small resolver that
+collapses those signals into one display answer: what needs attention now?
 
 `internal/tabs/reap.go` is the tab reaper. `PlanReap` is pure: it classifies
 every scanned row (origin/scope/age/idle/live) into keep/flag/kill/adopt with no
@@ -254,9 +258,12 @@ Origin inheritance is seeded by `zmux tab mark-agent` (`tabs.MarkAgentShell`),
 which the zmux skill's session-start hook (`skills/zmux/hooks/zmux-context.mjs`)
 calls to tag an agent's own shell `scope=agent-shell` — tabs that shell spawns
 then inherit `origin=agent` and the short agent TTL, while the shell itself is
-never reaped. The sibling hooks enforce raw-tmux/background-job guardrails and
-mark completed Claude turns with tab-state glyphs. For driving and grounding the
-reaper's time-gated behaviour, see [agent-grounding.md](agent-grounding.md).
+never reaped. Peer/worker/agent turns use `@zmux_turn_*`: `running` animates,
+`ready` (`↩`) means the host/user should read the answer, `attention` means real
+human action is needed, and `failed` means the turn errored. The sibling hooks
+enforce raw-tmux/background-job guardrails and mark completed Claude turns as
+`ready`, not command `done`. For driving and grounding the reaper's time-gated
+behaviour, see [agent-grounding.md](agent-grounding.md).
 
 ### QA walkthrough runner
 

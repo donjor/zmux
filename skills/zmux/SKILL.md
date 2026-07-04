@@ -132,7 +132,7 @@ zmux tab peer start codex-peer -s <session> --role codex --topic '<sanitized top
 zmux tab status codex-peer -s <session> --json
 zmux type codex-peer '<prompt with repo/file pointers>' -s <session>
 zmux tab peer running codex-peer -s <session>
-zmux tab status codex-peer -s <session> --json   # wait for fresh turnState=waiting|attention when instrumented
+zmux tab status codex-peer -s <session> --json   # wait for fresh turnState=ready|attention when instrumented
 zmux watch codex-peer -s <session>               # read output after state says ready, or as fallback
 ```
 

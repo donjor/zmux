@@ -24,7 +24,7 @@ terminal emulator or its own multiplexer.
 - **Recipes** — declarative TOML launch plans for workspaces, sessions, tabs, and commands
 - **Terminal commands** — run, watch, send, type for agent/scripting workflows
 - **Logical tabs** — tabs can run full-screen, ride as panes, or park hidden while staying addressable
-- **Attention states** — running/done/failed/needs-human glyphs in the bar
+- **Lifecycle states** — running/ready/done/failed/needs-human glyphs in the bar
 - **Tab reaper** — auto-expires idle agent-task tabs by lifecycle policy; live work and `--keep`/daemon tabs are spared
 - **Multi-source discovery** — find sessions across tmux sockets and overmind
 - **Init wizard** — interactive TUI setup
@@ -138,7 +138,7 @@ zmux where --json                   Same, as JSON (for tooling)
 
 zmux tab move <tab> <dest>          Move tab to another session
 zmux tab label [label]              Set/clear stable label for current tab
-zmux tab state <state> [tab]        Set lifecycle glyph: attention/running/done/failed/clear
+zmux tab state <state> [tab]        Set lifecycle glyph: attention/failed/running/ready/done/clear
 zmux tab status <tab> [--json]      Show lifecycle/command status for tooling
 zmux tab pane <tab|N> [--into host] Join a tab (by name or bar index N) as a pane beside another
 zmux tab split                      Create a new tab and join it as a pane in one step (prefix+j)
@@ -454,6 +454,8 @@ state substrate once the shell block is installed.
 - Read lifecycle/command/peer state with `zmux tab status --json`; read output with `zmux watch`/logs.
 - Use `zmux run`/Pi `zmux_run` for reviewable command-in-tab one-shots; don't add
   your own done markers or wrapper scripts.
+  Persistent agent/TUI venues do not count as running just because the process is alive;
+  explicit agent/peer/worker turn signals use `ready` (`↩`) when it is your move.
 - For sudo/interactive commands, use `zmux type admin 'sudo ...'` or Pi's typed
   `zmux_interactive_type` tool.
 

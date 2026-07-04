@@ -15,7 +15,7 @@ skills build on this; they must not duplicate the tab-driving mechanics.
 The **terminal loop builds on** `agent-peer.md` — Spawn, status-first state reads,
 output/fallback classification, Tab State, Placement, Submission Hygiene, Topic Changes,
 and Clean Quotes all apply. **Read `agent-peer.md` for the loop.** For workers, conductors
-read `zmux tab status --json` / Pi `zmux_tab_status` for `done|failed|attention` across
+read `zmux tab status --json` / Pi `zmux_tab_status` for `ready|failed|attention` across
 worker sessions; `watch --idle` is only the uninstrumented/output fallback. This doc covers
 only what a worker *inverts or adds*:
 
@@ -24,7 +24,7 @@ only what a worker *inverts or adds*:
 | posture | prompt-scoped reviewer | write + exec is the job |
 | cwd | the project (shared) | bound to one isolated worktree |
 | session | usually shares yours | **own session per worker** when >1 concurrent |
-| lifetime | persists, hidden between topics | terminal: spawn → work → done/blocked → reaped |
+| lifetime | persists, hidden between topics | terminal: spawn → work → ready/blocked → reaped |
 | writes | declined | routine **inside the worktree**; surfaced outside it |
 | autonomy | answers, then waits | works long unattended; raises its hand on triggers |
 
@@ -155,11 +155,11 @@ A worker runs **long, unattended**. It must know when to stop and raise its hand
 
 **Proceed** on everything else within the brief and the worktree — commit progress freely
 (small, frequent commits are the recovery seam if the session dies; the worktree's git
-history survives a lost tab). Mark `zmux tab state done <tab>` when the brief is complete,
+history survives a lost tab). Mark `zmux tab peer ready <tab>` (or `zmux tab state ready <tab>` when no turn metadata exists) when the brief/checkpoint is ready,
 `failed` if it gave up; the conductor reads that with `zmux tab status --json`, not by waiting
-for the screen to settle. Note: a worker that is *confidently wrong* will report `done`, not
-`attention` — `done` means "I think I finished," not "this is correct." Verification is the
-caller's job, never trust a worker's own `done` as proof.
+for the screen to settle. Note: a worker that is *confidently wrong* will report `ready`, not
+`attention` — `ready` means "I think I have an answer/checkpoint," not "this is correct." Verification is the
+caller's job, never trust a worker's own `ready` as proof.
 
 ## Names
 
@@ -175,7 +175,7 @@ they say which worktree/task the worker serves.
 
 Workers are **terminal**, unlike peers (which you hide to keep context warm):
 
-- spawn → `running` → `done`/`failed`/`attention` (glyphs per `agent-peer.md` → Tab State).
+- spawn → `running` → `ready`/`failed`/`attention` (glyphs per `agent-peer.md` → Tab State).
 - Once the work has been integrated and the worktree is gone, the worker's context has no
   further value — its session is **reapable**: `zmux session kill <worker-session>`.
 - Removing the **worktree** is the caller's concern (e.g. a `wt merge`), not the worker's;
@@ -185,6 +185,6 @@ Workers are **terminal**, unlike peers (which you hide to keep context warm):
 
 A workflow skill layered above zmux decides: which worktrees to create, how to brief each
 worker, how many run concurrently, merge order, who runs browser/integration tests, and how
-to verify a worker's output before trusting its `done`. That skill calls this doctrine for the
+to verify a worker's output before trusting its `ready`. That skill calls this doctrine for the
 terminal loop and refers to workers by the stable names above. None of that fan-out policy
 belongs here.

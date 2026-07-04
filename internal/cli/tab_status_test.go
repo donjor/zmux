@@ -34,7 +34,7 @@ func TestTabStatusJSONReportsLifecycle(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("json: %v\n%s", err, out)
 	}
-	if got.Tab != "build" || got.PaneID != "%3" || got.State != "done" || got.CmdState != tabs.CmdDone || got.CmdSeq != "42" || got.LastExit != "0" || got.Command != "make build" {
+	if got.Tab != "build" || got.PaneID != "%3" || got.State != "done" || got.ResolvedState != "done" || got.CmdState != tabs.CmdDone || got.CmdSeq != "42" || got.LastExit != "0" || got.Command != "make build" {
 		t.Fatalf("unexpected status: %+v", got)
 	}
 }
@@ -52,15 +52,15 @@ func TestTabStatusMissingTabErrors(t *testing.T) {
 	}
 }
 
-func TestTabStatusTextReportsPeerWaitingDone(t *testing.T) {
+func TestTabStatusTextReportsPeerReady(t *testing.T) {
 	root, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
 	mock.LogicalRows = []tmux.LogicalPaneRow{
 		logicalRow("%4", "test-session", "@3", 2, "ztab_peer", "claude-peer"),
 	}
 	mock.PaneOptions = map[string]string{
-		"%4\x00@zmux_state":          "done",
-		"%4\x00" + tabs.OptTurnState: tabs.TurnWaiting,
+		"%4\x00@zmux_state":          "ready",
+		"%4\x00" + tabs.OptTurnState: tabs.TurnReady,
 		"%4\x00" + tabs.OptTurnAt:    "1782860400",
 		"%4\x00" + tabs.OptPeerRole:  "claude",
 	}
@@ -71,7 +71,7 @@ func TestTabStatusTextReportsPeerWaitingDone(t *testing.T) {
 			t.Fatalf("execute: %v", err)
 		}
 	})
-	for _, want := range []string{"tab: claude-peer", "state: done", "turn-state: waiting (at 1782860400)"} {
+	for _, want := range []string{"tab: claude-peer", "state: ready", "turn-state: ready (at 1782860400)"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in output:\n%s", want, out)
 		}

@@ -163,6 +163,8 @@ func (m TabPickerModel) stateStyle(t *tabEntry) lipgloss.Style {
 		return m.styles.Error
 	case tabstate.StateRunning:
 		return m.styles.Info
+	case tabstate.StateReady:
+		return m.styles.Info
 	case tabstate.StateDone:
 		return m.styles.Success
 	}

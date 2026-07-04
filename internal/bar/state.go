@@ -13,9 +13,10 @@ import (
 // \u escapes — plane-15 icons break grep/Edit tooling (bar glyph gotchas).
 var stateGlyphs = map[tabstate.State]string{
 	tabstate.StateAttention: "●", // ● needs the human
-	tabstate.StateFailed:    "✗", // ✗ exited non-zero
+	tabstate.StateFailed:    "✗", // ✗ errored
 	tabstate.StateRunning:   "◐", // ◐ in flight (static fallback; see SpinnerFrame)
-	tabstate.StateDone:      "✓", // ✓ finished, unacknowledged
+	tabstate.StateReady:     "↩", // ↩ answer ready / user's move
+	tabstate.StateDone:      "✓", // ✓ plain command finished, unacknowledged
 }
 
 // spinnerFrames step the running glyph once per second. tmux 3.4 has format
@@ -44,6 +45,8 @@ func stateColor(p *theme.Palette, st tabstate.State) string {
 	case tabstate.StateFailed:
 		return p.Error.Hex()
 	case tabstate.StateRunning:
+		return p.Info.Hex()
+	case tabstate.StateReady:
 		return p.Info.Hex()
 	case tabstate.StateDone:
 		return p.Success.Hex()

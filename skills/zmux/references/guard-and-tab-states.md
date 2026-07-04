@@ -75,21 +75,21 @@ redirect when one exists.
 
 ## Tab lifecycle states
 
-`zmux tab state <attention|running|done|failed|clear> [tab]` marks a tab's lifecycle;
-the bar renders a colored glyph (● needs-human / ◐ running / ✓ done / ✗ failed)
+`zmux tab state <attention|failed|running|ready|done|clear> [tab]` marks a tab's lifecycle;
+the bar renders a colored glyph (● needs-human / ✗ failed / ◐ running / ↩ ready / ✓ done)
 visible from any tab. `zmux tab status <tab> --json` is the read side: it reports
 human glyph state plus command lifecycle and peer turn metadata for agents/tools.
 
 Mostly automatic:
 
-- In root interactive shells with the `zmux setup shell` block installed, normal foreground commands set running → done/failed through shell lifecycle hooks (`shell-event start/end`). This covers commands a human typed manually and commands delivered by `zmux run`/`send`/`type`.
+- In root interactive shells with the `zmux setup shell` block installed, normal foreground commands set running → done/failed through shell lifecycle hooks (`shell-event start/end`) even inside peer/worker/agent tabs. Known persistent venue commands (`pi`, `claude`, `codex`, REPLs/TUIs) and daemon-scoped launches do not get a stuck running glyph just because the process is alive.
 - `zmux run` only stages a silent run id for callers waiting on an exit code; it does not append visible sentinels or own glyph state.
-- `zmux send`/`type` clear a stale done/failed before sending input.
+- `zmux send`/`type` clear a stale ready/done/failed before sending input.
 - Focusing a tab clears attention.
 - A `Stop` hook (`hooks/zmux-tab-state-stop.mjs`, symlinked like the guard) marks the
-  agent's own tab done/attention when a turn ends — no transcript parsing, just "the
+  agent's own tab ready (`↩`) when a turn ends — no transcript parsing, just "the
   turn ended".
-- Prompt-scoped peers use `zmux tab peer <start|running|waiting|attention|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; waiting/answer-ready renders done (`✓`), while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi `zmux_tab_status`; screen capture is the fallback/output layer.
+- Prompt-scoped peers use `zmux tab peer <start|running|ready|attention|failed|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; legacy `waiting` aliases to `ready`. Answer-ready renders `↩`, while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi `zmux_tab_status`; screen capture is the fallback/output layer.
 
 Set `attention` **manually** when handing the human a prompt they must act on (sudo,
 permission prompt). For peer tabs, prefer `zmux tab peer attention ...` so the turn state stays in sync:

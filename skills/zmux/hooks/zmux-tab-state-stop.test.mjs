@@ -15,25 +15,24 @@ import { peerStopCommandArgs, stopCommandArgs, shouldRun } from './zmux-tab-stat
 const here = dirname(fileURLToPath(import.meta.url))
 const hookPath = join(here, 'zmux-tab-state-stop.mjs')
 
-test('peer command records hook-driven waiting state', () => {
+test('peer command records hook-driven ready state', () => {
   assert.deepEqual(peerStopCommandArgs(), [
     'tab',
     'peer',
-    'waiting',
+    'ready',
     '--source',
     'claude-stop',
   ])
 })
 
-test('fallback command is the quiet visibility-aware done write', () => {
+test('fallback command is the quiet ready write', () => {
   assert.deepEqual(stopCommandArgs(), [
     'tab',
     'state',
-    'done',
+    'ready',
     '--source',
     'claude-stop',
     '--quiet',
-    '--by-visibility',
   ])
 })
 

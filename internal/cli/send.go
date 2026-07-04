@@ -39,7 +39,7 @@ Examples:
 				return err
 			}
 
-			// Input acknowledges a finished tab: clear done|failed first
+			// Input acknowledges an answer/finished tab: clear ready|done|failed first
 			// (ratified clear table — attention/running stay).
 			rt.clearStale(app)
 

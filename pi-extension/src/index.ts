@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 import { shouldTriggerContinuation, takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
 import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
 import { registerZmuxTools } from "./tools.js";
-import { currentPane, listTabs, reloadZmux, zmux } from "./zmux.js";
+import { currentPane, listTabs, reloadZmux, setTabState, zmux } from "./zmux.js";
 
 
 function compact(value: string, max = 1200): string {
@@ -43,6 +43,16 @@ async function buildContext(cwd: string, projectTrusted: boolean): Promise<strin
 	].join("\n");
 }
 
+async function setCurrentPaneLifecycle(cwd: string, state: "running" | "ready" | "clear", message?: string): Promise<void> {
+	try {
+		const pane = await currentPane(cwd);
+		if (!pane?.ID) return;
+		await setTabState({ action: state, target: pane.ID, cwd, source: "pi-agent", msg: message, ifState: state === "clear" ? "running" : undefined });
+	} catch {
+		// Lifecycle reporting must fail open; Pi should never wedge because zmux is absent/stale.
+	}
+}
+
 function sendContinuation(
 	pi: ExtensionAPI,
 	kind: "reload" | "respawn",
@@ -64,6 +74,18 @@ function sendContinuation(
 
 export default function (pi: ExtensionAPI): void {
 	registerZmuxTools(pi);
+
+	pi.on("agent_start", async (_event, ctx) => {
+		await setCurrentPaneLifecycle(ctx.cwd, "running");
+	});
+
+	pi.on("agent_end", async (_event, ctx) => {
+		await setCurrentPaneLifecycle(ctx.cwd, "ready", "Pi ready");
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		await setCurrentPaneLifecycle(ctx.cwd, "clear");
+	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		const zmuxContext = await buildContext(ctx.cwd, ctx.isProjectTrusted());

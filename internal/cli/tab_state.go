@@ -15,7 +15,7 @@ import (
 
 // newTabStateCmd is the `zmux tab state` verb (plan 026 P1): write/clear tab
 // lifecycle states on pane options (canonical) + window mirror, so the bar
-// can signal attention/running/done/failed from any tab.
+// can signal attention/failed/running/ready/done from any tab.
 func newTabStateCmd(app *apppkg.App) *cobra.Command {
 	var (
 		targetFlag   string
@@ -28,7 +28,7 @@ func newTabStateCmd(app *apppkg.App) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "state <attention|running|done|failed|clear> [target]",
+		Use:   "state <attention|failed|running|ready|done|clear> [target]",
 		Short: "Set or clear a tab's lifecycle state (bar glyph)",
 		Long: `Set or clear a tab lifecycle state. State is stored on the pane
 (canonical — survives future placement moves) and mirrored to the window for
@@ -39,7 +39,8 @@ a raw tmux target (session:window).
 
 Examples:
   zmux tab state running buddy --source run
-  zmux tab state done --source claude-stop --quiet --by-visibility
+  zmux tab state ready --source claude-stop --quiet
+  zmux tab state done --source run --quiet --by-visibility
   zmux tab state clear --target '%12' --if attention --source focus --quiet
   zmux tab state failed test --msg 'exit 2'`,
 		Args: cobra.RangeArgs(1, 2),

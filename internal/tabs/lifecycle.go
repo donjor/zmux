@@ -127,8 +127,9 @@ func sanitizePeerTopic(s string) string {
 }
 
 func SetTurnState(r tmux.Runner, paneID, state string, now time.Time) error {
+	state = NormalizeTurnState(state)
 	switch state {
-	case TurnRunning, TurnWaiting, TurnAttention, TurnConsumed, TurnParked:
+	case TurnRunning, TurnReady, TurnAttention, TurnFailed, TurnConsumed, TurnParked:
 	default:
 		return nil
 	}
@@ -139,10 +140,18 @@ func SetTurnState(r tmux.Runner, paneID, state string, now time.Time) error {
 	if state == TurnRunning {
 		writes = append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerTurns, Value: strconv.Itoa(nextPeerTurn(r, paneID))})
 	}
-	if state == TurnRunning || state == TurnWaiting || state == TurnAttention {
+	if state == TurnRunning || state == TurnReady || state == TurnAttention || state == TurnFailed {
 		writes = append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerLastTurn, Value: strconv.FormatInt(now.Unix(), 10)})
 	}
 	return r.ApplyOptions(writes)
+}
+
+// NormalizeTurnState maps legacy spellings to the v2 turn-state vocabulary.
+func NormalizeTurnState(state string) string {
+	if state == TurnWaiting {
+		return TurnReady
+	}
+	return state
 }
 
 func nextPeerTurn(r tmux.Runner, paneID string) int {

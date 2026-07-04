@@ -55,12 +55,12 @@ func TestTabPeerStartWritesMetadataAndRunningGlyph(t *testing.T) {
 	}
 }
 
-func TestTabPeerWaitingMarksDone(t *testing.T) {
+func TestTabPeerReadyMarksReady(t *testing.T) {
 	root, mock := withMockApp(t)
 	mock.DisplayMessageResult = "%3\tdev:2\n"
 	mock.PaneOptions = map[string]string{"%3\x00" + tabs.OptScope: tabs.ScopePeer}
 
-	root.SetArgs([]string{"tab", "peer", "waiting", "%3", "--source", "claude-stop"})
+	root.SetArgs([]string{"tab", "peer", "ready", "%3", "--source", "claude-stop"})
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
@@ -77,7 +77,43 @@ func TestTabPeerWaitingMarksDone(t *testing.T) {
 			}
 		}
 	}
-	if turn != tabs.TurnWaiting || glyph != "done" || source != "claude-stop" {
-		t.Fatalf("turn/glyph/source = %q/%q/%q, want waiting/done/claude-stop", turn, glyph, source)
+	if turn != tabs.TurnReady || glyph != "ready" || source != "claude-stop" {
+		t.Fatalf("turn/glyph/source = %q/%q/%q, want ready/ready/claude-stop", turn, glyph, source)
+	}
+}
+
+func TestTabPeerRunningPreservesWorkerScope(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.DisplayMessageResult = "%3\tdev:2\n"
+	mock.PaneOptions = map[string]string{"%3\x00" + tabs.OptScope: tabs.ScopeWorker}
+
+	root.SetArgs([]string{"tab", "peer", "running", "%3", "--source", "worker"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" && c.Args[2] == tabs.OptScope && c.Args[3] == tabs.ScopePeer && c.Args[4] == "unset=false" {
+			t.Fatalf("worker running must not be restamped as peer: %+v", mock.Calls)
+		}
+	}
+}
+
+func TestTabPeerReadyAllowsWorkerScope(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.DisplayMessageResult = "%3\tdev:2\n"
+	mock.PaneOptions = map[string]string{"%3\x00" + tabs.OptScope: tabs.ScopeWorker}
+
+	root.SetArgs([]string{"tab", "peer", "ready", "%3", "--source", "worker"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	found := false
+	for _, c := range mock.Calls {
+		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%3" && c.Args[2] == "@zmux_state" && c.Args[3] == "ready" && c.Args[4] == "unset=false" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("worker ready glyph write missing: %+v", mock.Calls)
 	}
 }

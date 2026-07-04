@@ -30,6 +30,7 @@ func TestWindowFormatsCarryStateGlyphsEveryPreset(t *testing.T) {
 					tabstate.StateAttention: p.Accent.Hex(),
 					tabstate.StateFailed:    p.Error.Hex(),
 					tabstate.StateRunning:   p.Info.Hex(),
+					tabstate.StateReady:     p.Info.Hex(),
 					tabstate.StateDone:      p.Success.Hex(),
 				} {
 					if !strings.Contains(opt.Value, "#[fg="+glyph+"]"+stateGlyphs[st]) {
@@ -57,7 +58,7 @@ func TestTabStateFragmentEmptyWhenUnset(t *testing.T) {
 	frag := tabStateFragment(testPalette(), "")
 	// nested conditional falls through to empty — a stateless tab renders
 	// exactly nothing extra (the innermost alternative is the empty string)
-	if !strings.HasSuffix(frag, ",}}}}") {
+	if !strings.HasSuffix(frag, ",}}}}}") {
 		t.Fatalf("fragment must end in empty fall-through: %q", frag)
 	}
 }
@@ -71,7 +72,7 @@ func TestRunningGlyphAnimatesViaSpinnerJobWithBinary(t *testing.T) {
 		t.Fatalf("running glyph must be the bar-spinner job: %q", frag)
 	}
 	// other states stay static even with a binary
-	for _, st := range []tabstate.State{tabstate.StateAttention, tabstate.StateDone, tabstate.StateFailed} {
+	for _, st := range []tabstate.State{tabstate.StateAttention, tabstate.StateReady, tabstate.StateDone, tabstate.StateFailed} {
 		if !strings.Contains(frag, stateGlyphs[st]) {
 			t.Errorf("%s lost its static glyph: %q", st, frag)
 		}
