@@ -90,7 +90,7 @@ export function validateLogParams(action: LogAction, params: { tab?: string; ses
 	if (action !== "tail" && params.lines !== undefined) throw invalidOption(`zmux_log ${action}`, "lines");
 }
 
-export function validateTabPlacementParams(action: TabPlacementAction, params: { tab?: string; into?: string; direction?: string; size?: string; pane?: string; after?: boolean }): void {
+export function validateTabPlacementParams(action: TabPlacementAction, params: { tab?: string; into?: string; direction?: string; size?: string; pane?: string; after?: boolean; focus?: boolean }): void {
 	if (params.tab && params.pane) throw new Error("tab and pane cannot be combined");
 	if (action === "pane" && !params.tab) throw new Error("tab is required for tab pane");
 	if (action === "show" && !params.tab && !params.pane) throw new Error("tab or pane is required for tab show");
@@ -99,4 +99,5 @@ export function validateTabPlacementParams(action: TabPlacementAction, params: {
 	if (action !== "pane" && params.direction) throw invalidOption(`tab ${action}`, "direction");
 	if (action !== "pane" && params.size) throw invalidOption(`tab ${action}`, "size");
 	if (action !== "full" && params.after === true) throw invalidOption(`tab ${action}`, "after");
+	if (action !== "pane" && action !== "show" && params.focus === true) throw invalidOption(`tab ${action}`, "focus");
 }

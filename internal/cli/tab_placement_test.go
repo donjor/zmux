@@ -362,6 +362,36 @@ func TestTabPaneBareHostUsesFocusedRider(t *testing.T) {
 	}
 }
 
+func TestTabPaneFocusFlagSelectsJoinedPane(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", "test-session", "@2", 1, "ztab_wrk001", "work"),
+		logicalRow("%3", "test-session", "@5", 2, "ztab_bud001", "buddy"),
+	}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{session_name}": "test-session",
+		"session_group":   "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t1\t%2\n",
+		"#{window_panes}": "2\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "pane", "buddy", "--into", "work", "--focus"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab pane --focus failed: %v", err)
+	}
+
+	var selected bool
+	for _, c := range mock.Calls {
+		if c.Method == "SelectPane" && c.Args[0] == "%3" {
+			selected = true
+		}
+	}
+	if !selected {
+		t.Fatalf("expected joined pane to be selected, calls=%#v", mock.Calls)
+	}
+}
+
 // --notify on a successful join flashes the outcome via display-message
 // instead of stdout (which run-shell would dump as a sticky takeover).
 func TestTabPaneNotifyFlashesSuccess(t *testing.T) {
@@ -473,6 +503,43 @@ func TestTabSplitCreatesDetachedThenJoinsSnapshottedHost(t *testing.T) {
 	if !detachedCreate || !stamped || !joinedBesideHost {
 		t.Fatalf("expected detached create + stamp + join beside snapshotted host: detached=%v stamped=%v joined=%v calls=%#v",
 			detachedCreate, stamped, joinedBesideHost, mock.Calls)
+	}
+}
+
+func TestTabSplitFocusFlagSelectsCreatedPane(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session"}}
+	mock.NewWindowPaneID = "%9"
+	host := logicalRow("%2", "test-session", "@2", 1, "ztab_wrk001", "work")
+	createdNew := logicalRow("%9", "test-session", "@9", 2, "ztab_new001", "")
+	createdJoined := logicalRow("%9", "test-session", "@2", 1, "ztab_new001", "")
+	createdJoined.WindowPanes = 2
+	mock.LogicalRowsByCall = [][]tmux.LogicalPaneRow{
+		{host},
+		{host, createdNew},
+		{host, createdJoined},
+	}
+	mock.DisplayMessageFunc = displayByFormat(map[string]string{
+		"#{pane_id}":           "%2\n",
+		"#{pane_current_path}": "/repo/current\n",
+		"session_group":        "\t1\t1\n",
+		"#{window_layout}\t#{window_zoomed_flag}\t#{window_panes}\t#{pane_id}": "L\t0\t1\t%2\n",
+		"#{window_panes}": "2\n",
+	})
+
+	rootCmd.SetArgs([]string{"tab", "split", "--focus"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab split --focus failed: %v", err)
+	}
+
+	var selected bool
+	for _, c := range mock.Calls {
+		if c.Method == "SelectPane" && c.Args[0] == "%9" {
+			selected = true
+		}
+	}
+	if !selected {
+		t.Fatalf("expected created pane to be selected, calls=%#v", mock.Calls)
 	}
 }
 

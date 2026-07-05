@@ -509,7 +509,7 @@ func waitForRunResult(app *apppkg.App, target, paneID, nonce string, timeoutSec,
 			}
 			if !started && time.Now().After(startDeadline) {
 				_ = app.Runner.UnsetPaneOption(paneID, tabs.OptNextRunID)
-				return fmt.Errorf("timeout after %ds waiting for shell lifecycle to start in the target pane (run `zmux setup shell` and open a fresh tab, or use --detach/--follow for REPLs/TUIs/non-interactive shells)", int(runLifecycleStartDeadline(timeout).Seconds()))
+				return fmt.Errorf("timeout after %ds waiting for shell lifecycle to start in the target pane (run `zmux setup doctor`; if stale, run `zmux setup shell` and open a fresh tab, or use --detach/--follow for REPLs/TUIs/non-interactive shells)", int(runLifecycleStartDeadline(timeout).Seconds()))
 			}
 			if time.Now().After(deadline) {
 				if err != nil {
@@ -517,7 +517,7 @@ func waitForRunResult(app *apppkg.App, target, paneID, nonce string, timeoutSec,
 						fmt.Print(output)
 					}
 				}
-				return fmt.Errorf("timeout after %ds waiting for shell lifecycle result (run `zmux setup shell` for the target shell, or inspect output with `zmux watch`)", timeoutSec)
+				return fmt.Errorf("timeout after %ds waiting for shell lifecycle result (run `zmux setup doctor`; if stale, run `zmux setup shell` for the target shell, or inspect output with `zmux watch`)", timeoutSec)
 			}
 		}
 	}

@@ -110,7 +110,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	writeSection(&b, "Windows")
 	fmt.Fprintf(&b, "bind %s new-window -c \"#{pane_current_path}\"\n", keys.NewTab.Key)
 	if zmuxBin != "" {
-		fmt.Fprintf(&b, "bind %s run-shell \"%s tab split --notify\"\n", keys.TabSplit.Key, zmuxBin)
+		fmt.Fprintf(&b, "bind %s run-shell \"%s tab split --notify --focus\"\n", keys.TabSplit.Key, zmuxBin)
 	}
 	fmt.Fprintf(&b, "bind %s next-window\n", keys.TabNext.Key)
 	fmt.Fprintf(&b, "bind %s previous-window\n", keys.TabPrev.Key)
@@ -123,10 +123,10 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 		// exits 0, so a failed/loud join or promote never triggers tmux's
 		// view-mode takeover ("... returned 1" / a sticky stdout dump) that the
 		// user must keypress away.
-		fmt.Fprintf(&b, "bind %s command-prompt -p \"join tab here:\" \"run-shell '%s tab pane --notify \\\"%%%%\\\"'\"\n", keys.TabJoinPane.Key, zmuxBin)
+		fmt.Fprintf(&b, "bind %s command-prompt -p \"join tab here:\" \"run-shell '%s tab pane --notify --focus \\\"%%%%\\\"'\"\n", keys.TabJoinPane.Key, zmuxBin)
 		fmt.Fprintf(&b, "bind %s run-shell \"%s tab full --after --notify\"\n", keys.TabFull.Key, zmuxBin)
 		fmt.Fprintf(&b, "bind %s run-shell \"%s tab hide --notify\"\n", keys.TabHide.Key, zmuxBin)
-		fmt.Fprintf(&b, "bind %s command-prompt -p \"join hidden pane (#/name):\" \"run-shell '%s tab show --notify \\\"%%%%\\\"'\"\n", keys.TabShow.Key, zmuxBin)
+		fmt.Fprintf(&b, "bind %s command-prompt -p \"join hidden pane (#/name):\" \"run-shell '%s tab show --notify --focus \\\"%%%%\\\"'\"\n", keys.TabShow.Key, zmuxBin)
 	}
 	b.WriteString("\n")
 
@@ -137,7 +137,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	if zmuxBin != "" {
 		writeSection(&b, "Mouse pane menu")
 		fmt.Fprintf(&b, "bind -T root MouseDown3Pane display-menu -T \"Pane #{pane_index}\" -t \"{mouse}\" -x M -y M \"#{?@zmux_tab_anchor,Promote to full,-Promote to full}\" f { select-pane -t \"#{pane_id}\" ; run-shell \"%s tab full --pane \\\"#{pane_id}\\\" --after --notify\" } \"#{?#{&&:#{@zmux_tab_anchor},#{==:#{@zmux_hidden},}},Hide pane,-Hide pane}\" h { select-pane -t \"#{pane_id}\" ; run-shell \"%s tab hide --pane \\\"#{pane_id}\\\" --notify\" } \"#{?@zmux_tab_id,Kill tab,-Kill tab}\" x { run-shell \"%s tab kill --pane \\\"#{pane_id}\\\" --notify\" }\n", zmuxBin, zmuxBin, zmuxBin)
-		fmt.Fprintf(&b, `bind -T root MouseDown3Status if -F "#{==:#{mouse_status_range},pane}" { display-menu -T "Tab #{pane_index}" -t "{mouse}" -x M -y M "#{?@zmux_hidden,Join back,-Join back}" u { run-shell "%s tab show --pane \"#{pane_id}\" --notify" } "#{?@zmux_tab_anchor,Promote to full,-Promote to full}" f { run-shell "%s tab full --pane \"#{pane_id}\" --after --notify" } "#{?#{&&:#{@zmux_tab_anchor},#{==:#{@zmux_hidden},}},Hide pane,-Hide pane}" h { run-shell "%s tab hide --pane \"#{pane_id}\" --notify" } "#{?@zmux_tab_id,Kill tab,-Kill tab}" x { run-shell "%s tab kill --pane \"#{pane_id}\" --notify" } }\n`, zmuxBin, zmuxBin, zmuxBin, zmuxBin)
+		fmt.Fprintf(&b, `bind -T root MouseDown3Status if -F "#{==:#{mouse_status_range},pane}" { display-menu -T "Tab #{pane_index}" -t "{mouse}" -x M -y M "#{?@zmux_hidden,Join back,-Join back}" u { run-shell "%s tab show --pane \"#{pane_id}\" --notify --focus" } "#{?@zmux_tab_anchor,Promote to full,-Promote to full}" f { run-shell "%s tab full --pane \"#{pane_id}\" --after --notify" } "#{?#{&&:#{@zmux_tab_anchor},#{==:#{@zmux_hidden},}},Hide pane,-Hide pane}" h { run-shell "%s tab hide --pane \"#{pane_id}\" --notify" } "#{?@zmux_tab_id,Kill tab,-Kill tab}" x { run-shell "%s tab kill --pane \"#{pane_id}\" --notify" } }\n`, zmuxBin, zmuxBin, zmuxBin, zmuxBin)
 		b.WriteString("\n")
 	}
 

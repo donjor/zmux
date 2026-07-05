@@ -23,6 +23,7 @@ type SplitPaneOptions struct {
 	CWD       string
 	Title     string
 	Command   []string
+	Detached  bool // -d: don't move focus to the created pane
 }
 
 type Runner interface {

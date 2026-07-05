@@ -47,6 +47,12 @@ zzmux session kill zws_boop__dbg        # tear down when done
 
 Notes that bite:
 
+- `./dev.sh zzmux` installs only the edge binary. It intentionally does **not**
+  rewrite `~/.bashrc`, `~/.profile`, shared skills, or the Pi extension package.
+  If a shell-integration change needs live activation, prove it on `zzmux` first,
+  then ask before running the live `./dev.sh` / `zmux setup shell` path. Use
+  `zzmux doctor` to distinguish an outdated rc file from an already-open shell
+  that simply needs a fresh tab to load the new hook version.
 - Real session names are profile-mangled (`zws_<ws>__<session>`), e.g.
   `dbg` → `zws_boop__dbg`. Raw `tmux -L zzmux -t dbg` will NOT resolve a zmux
   label — address by the full tmux name, or via `zmux` verbs. For raw reads use

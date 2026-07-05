@@ -45,3 +45,6 @@ demo.gif
 legacy/v0/themes/iterm2/
 
 skills/zmux/reports
+
+# Local Pi subagent artifacts
+/.pi-subagents/

@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS = -ldflags "-X main.version=$(VERSION)"
 
-.PHONY: build build-zzmux test test-race test-integration vuln lint fmt hooks install install-zzmux clean keys-gen
+.PHONY: build build-zzmux test test-race test-integration test-agent-surfaces vuln lint fmt hooks install install-zzmux clean keys-gen
 
 build:
 	go build $(LDFLAGS) -o zmux ./cmd/zmux/
@@ -24,6 +24,12 @@ test-race:
 # Integration tests exec the built ./zmux binary, so build it first.
 test-integration: build
 	go test -tags integration ./tests/...
+
+test-agent-surfaces:
+	go test ./internal/setup ./internal/cli ./internal/tabs
+	cd pi-extension && npm run typecheck && npm test
+	./qa lint
+	node skills/zmux/test/doctor.mjs
 
 # Vulnerability scan. govulncheck@latest needs Go >= 1.25; the go toolchain
 # directive auto-fetches it if the local Go is older.

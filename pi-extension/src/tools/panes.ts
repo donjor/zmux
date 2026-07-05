@@ -61,8 +61,9 @@ export function registerPaneTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_pane_open",
 		label: "zmux pane open",
-		description: "Open a named sidecar pane using `zmux pane open`. Use for visible sidecars or terminal UI helpers instead of raw tmux split-window.",
+		description: "Open a named sidecar pane using `zmux pane open`. Defaults to not moving terminal focus; set focus only when the user explicitly wants to be taken there.",
 		promptSnippet: "Open a named zmux sidecar pane",
+		promptGuidelines: ["By default this opens with --no-focus for agent safety. Set focus: true only when the user asked to move terminal focus."],
 		parameters: Type.Object({
 			name: Type.String({ description: "Pane title/name" }),
 			command: Type.String({ description: "Command to run in the pane" }),
@@ -70,6 +71,7 @@ export function registerPaneTools(pi: ExtensionAPI): void {
 			size: Type.Optional(Type.String({ description: "Pane size, e.g. 35% or 80 cells" })),
 			target: Type.Optional(Type.String({ description: "Target pane/window; defaults to current" })),
 			labelTab: Type.Optional(Type.Boolean({ description: "Preserve current tab name as a zmux label before opening pane" })),
+			focus: Type.Optional(Type.Boolean({ description: "Focus the new pane after opening; default false for agent safety" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -82,6 +84,7 @@ export function registerPaneTools(pi: ExtensionAPI): void {
 				size: params.size,
 				target: params.target,
 				labelTab: params.labelTab,
+				focus: params.focus,
 			});
 			return content(result.text, result.details);
 		},

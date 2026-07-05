@@ -40,6 +40,7 @@ func addPaneOpenFlags(cmd *cobra.Command, flags *paneOpenFlags, includeName bool
 	cmd.Flags().StringVarP(&flags.down, "down", "d", "", "split below; optional shorthand size")
 	cmd.Flags().StringVarP(&flags.up, "up", "u", "", "split above; optional shorthand size")
 	cmd.Flags().BoolVar(&flags.labelTab, "label-tab", false, "preserve current tab name as a zmux label before opening the pane")
+	cmd.Flags().BoolVar(&flags.noFocus, "no-focus", false, "create the pane without selecting it (agent/tool path)")
 	for _, name := range []string{"right", "left", "down", "up"} {
 		cmd.Flags().Lookup(name).NoOptDefVal = paneAutoSize
 	}
@@ -106,6 +107,7 @@ func runPaneOpen(app *apppkg.App, cmd *cobra.Command, flags *paneOpenFlags, args
 		CWD:       cwd,
 		Title:     name,
 		Command:   command,
+		Detached:  flags.noFocus,
 	})
 	if err != nil {
 		return err

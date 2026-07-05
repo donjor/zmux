@@ -209,8 +209,9 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_tab_place",
 		label: "zmux tab place",
-		description: "Move logical tabs between full, pane, hidden, and shown placements. Use instead of shelling out to `zmux tab pane/full/hide/show` when managing tab layout from Pi.",
+		description: "Move logical tabs between full, pane, hidden, and shown placements. Defaults to not moving terminal focus; set focus only when the user explicitly wants to be taken there.",
 		promptSnippet: "Place a zmux logical tab as pane/full/hidden/shown",
+		promptGuidelines: ["By default pane/show placement is focus-safe for agents. Set focus: true only when the user asked to move terminal focus."],
 		parameters: Type.Object({
 			action: Type.String({ description: "pane, full, hide, or show" }),
 			tab: Type.Optional(Type.String({ description: "Tab name/index target; required for pane and show, optional for full/hide current-pane flows" })),
@@ -220,6 +221,7 @@ export function registerTabTools(pi: ExtensionAPI): void {
 			size: Type.Optional(Type.String({ description: "Pane size, e.g. 40% or 80" })),
 			pane: Type.Optional(Type.String({ description: "Raw pane id for mouse/menu-style targets" })),
 			after: Type.Optional(Type.Boolean({ description: "For full: insert after old host" })),
+			focus: Type.Optional(Type.Boolean({ description: "For pane/show: select the placed pane after moving it; default false for agent safety" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
@@ -234,6 +236,7 @@ export function registerTabTools(pi: ExtensionAPI): void {
 				size: params.size,
 				pane: params.pane,
 				after: params.after,
+				focus: params.focus,
 				cwd: resolveCwd(ctx.cwd, params.cwd),
 			});
 			return content(result.text, result.details);

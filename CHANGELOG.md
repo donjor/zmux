@@ -5,7 +5,27 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.11.1...HEAD`
+> Release tag: pending | Compare: `v0.11.2...HEAD`
+
+## [0.11.2] - 2026-07-05
+> Release tag: `v0.11.2` | Topics: `shell`, `agents`, `pi`, `tabs`, `panes`, `qa` | Compare: `v0.11.1...v0.11.2`
+
+### Added
+
+- **Shell integration freshness doctor** `shell` - `zmux doctor` / `zzmux doctor` now checks the managed rc block, bash login bridge, retired `ble-attach` path, and the current already-open shell's loaded hook version. `setup shell` prints a fresh-shell hint when files are current but the active shell is still running stale hooks.
+- **Agent-surface regression gate** `agents` `pi` `skills` - `make test-agent-surfaces` now runs core lifecycle tests, Pi extension typecheck/tests, QA lint, and a shipped zmux skill doctrine doctor so typed tools and agent docs cannot silently drift.
+- **Interactive shell QA coverage** `qa` `shell` - the natural-shell checklist now proves real stdout emission, running/done status metadata, interactive Claude launch under ble.sh, and no `[ble: exit 1]` regression on fresh `zzmux` shells.
+
+### Changed
+
+- **`zzmux` edge installs are binary-only by default** `shell` `qa` - `./dev.sh zzmux` no longer mutates live shell startup or shared agent integration state; live shell activation remains an explicit `setup shell` step after edge proof.
+- **Agent pane placement is focus-safe by default** `agents` `panes` `tabs` - Pi pane/tab placement tools default to no focus steal, while human keybinding/palette paths keep selecting the pane they create or rejoin.
+
+### Fixed
+
+- **ble.sh lifecycle hooks no longer break interactive TUIs** `shell` - the managed bash lifecycle block no longer forces `ble-attach`, preventing typed interactive CLIs such as `claude` from immediately returning `[ble: exit 1]`.
+- **Root-shell lifecycle setup is idempotent through bash login bridges** `shell` - repeated `.profile`/`.bashrc` setup in one shell process no longer double-registers hooks, and nested foreground shells are kept out of the parent pane lifecycle.
+- **Lifecycle wait failures now point at the doctor** `agents` `shell` - `zmux run` timeout guidance now tells agents to run `zmux setup doctor` before reinstalling or debugging stale shell hooks.
 
 ## [0.11.1] - 2026-07-01
 > Release tag: `v0.11.1` | Topics: `agents`, `pi`, `tabs`, `skills` | Compare: `v0.11.0...v0.11.1`

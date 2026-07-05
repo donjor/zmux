@@ -33,6 +33,17 @@ func TestBuildSplitPaneArgsLeftUsesBeforeFlag(t *testing.T) {
 	}
 }
 
+func TestBuildSplitPaneArgsDetachedUsesNoFocusFlag(t *testing.T) {
+	args, err := buildSplitPaneArgs(SplitPaneOptions{Direction: SplitDown, Detached: true})
+	if err != nil {
+		t.Fatalf("buildSplitPaneArgs failed: %v", err)
+	}
+	want := []string{"split-window", "-d", "-P", "-F", "#{pane_id}", "-v"}
+	if !reflect.DeepEqual(args, want) {
+		t.Fatalf("args mismatch\n got: %#v\nwant: %#v", args, want)
+	}
+}
+
 func TestShellCommandQuotesSingleQuotes(t *testing.T) {
 	got := shellCommand([]string{"bash", "-lc", "printf '%s\\n' hi"})
 	want := "bash -lc 'printf '\\''%s\\n'\\'' hi'"

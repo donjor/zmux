@@ -75,6 +75,7 @@ func newTabShowCmd(app *apppkg.App) *cobra.Command {
 	var sessionFlag string
 	var paneFlag string
 	var notifyFlag bool
+	var focusFlag bool
 
 	cmd := &cobra.Command{
 		Use:   "show [tab]",
@@ -85,6 +86,7 @@ parked index shown beside the current parent in the tab row. Promote a parked
 pane to a full tab explicitly with zmux tab full.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var warnings []string
 			msg, err := func() (string, error) {
 				t, err := resolveShowTab(app, sessionFlag, paneFlag, args)
 				if err != nil {
@@ -94,14 +96,18 @@ pane to a full tab explicitly with zmux tab full.`,
 				if err != nil {
 					return "", err
 				}
+				if focusFlag {
+					warnings = appendFocusWarning(warnings, focusLogicalTabByID(app, t.ID))
+				}
 				return fmt.Sprintf("shown: %s → %s", tabs.DisplayName(t), origin), nil
 			}()
-			return notifyOutcome(app, cmd, notifyFlag, msg, nil, err)
+			return notifyOutcome(app, cmd, notifyFlag, msg, warnings, err)
 		},
 	}
 	cmd.Flags().StringVarP(&sessionFlag, "session", "s", "", "session for tab-name targets (default: current)")
 	cmd.Flags().StringVar(&paneFlag, "pane", "", "target pane id (mouse/menu path)")
 	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (mouse/menu path)")
+	cmd.Flags().BoolVar(&focusFlag, "focus", false, "select the shown pane after rejoining it (human UI path)")
 	_ = cmd.Flags().MarkHidden("pane")
 	return cmd
 }
@@ -185,6 +191,7 @@ func newTabPaneCmd(app *apppkg.App) *cobra.Command {
 	var intoFlag string
 	var sizeFlag string
 	var notifyFlag bool
+	var focusFlag bool
 	var dirRight, dirLeft, dirUp, dirDown bool
 
 	cmd := &cobra.Command{
@@ -224,6 +231,9 @@ relative to the host pane (default: --right).`,
 				if err != nil {
 					return "", err
 				}
+				if focusFlag {
+					warnings = appendFocusWarning(warnings, focusLogicalTabByID(app, t.ID))
+				}
 				return fmt.Sprintf("pane: %s → beside %s (%s)",
 					tabs.DisplayName(t), tabs.DisplayName(host), host.Session), nil
 			}()
@@ -234,6 +244,7 @@ relative to the host pane (default: --right).`,
 	cmd.Flags().StringVar(&intoFlag, "into", "", "host tab to join (default: the tab under your cursor)")
 	cmd.Flags().StringVar(&sizeFlag, "size", "", "pane size, e.g. 40% or 80")
 	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (keybind path)")
+	cmd.Flags().BoolVar(&focusFlag, "focus", false, "select the joined pane after moving it (human UI path)")
 	cmd.Flags().BoolVar(&dirRight, "right", false, "place right of the host pane (default)")
 	cmd.Flags().BoolVar(&dirLeft, "left", false, "place left of the host pane")
 	cmd.Flags().BoolVar(&dirUp, "up", false, "place above the host pane")
@@ -244,6 +255,7 @@ relative to the host pane (default: --right).`,
 func newTabSplitCmd(app *apppkg.App) *cobra.Command {
 	var sizeFlag string
 	var notifyFlag bool
+	var focusFlag bool
 	var dirRight, dirLeft, dirUp, dirDown bool
 
 	cmd := &cobra.Command{
@@ -265,6 +277,9 @@ tab-to-pane path; use zmux tab pane <tab> when the tab already exists.`,
 				if err != nil {
 					return "", err
 				}
+				if focusFlag {
+					warnings = appendFocusWarning(warnings, focusLogicalTabByID(app, created.ID))
+				}
 				return fmt.Sprintf("split: %s → beside %s (%s)",
 					tabs.DisplayName(created), tabs.DisplayName(host), host.Session), nil
 			}()
@@ -273,6 +288,7 @@ tab-to-pane path; use zmux tab pane <tab> when the tab already exists.`,
 	}
 	cmd.Flags().StringVar(&sizeFlag, "size", "", "pane size, e.g. 40% or 80")
 	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (keybind path)")
+	cmd.Flags().BoolVar(&focusFlag, "focus", false, "select the created pane after joining it (human UI path)")
 	cmd.Flags().BoolVar(&dirRight, "right", false, "place right of the host pane (default)")
 	cmd.Flags().BoolVar(&dirLeft, "left", false, "place left of the host pane")
 	cmd.Flags().BoolVar(&dirUp, "up", false, "place above the host pane")
@@ -402,6 +418,39 @@ visible pane directly after its old host window instead.`,
 	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (keybind path)")
 	_ = cmd.Flags().MarkHidden("pane")
 	return cmd
+}
+
+func focusLogicalTabByID(app *apppkg.App, tabID string) error {
+	all, err := tabs.ListLogicalTabs(app.Runner)
+	if err != nil {
+		return fmt.Errorf("focus pane: scan tabs: %w", err)
+	}
+	t := tabs.ByID(all, tabID)
+	if t == nil {
+		return fmt.Errorf("focus pane: tab no longer exists")
+	}
+	if t.Placement == tabs.PlacementDock {
+		return fmt.Errorf("focus pane: tab %q is hidden", tabs.DisplayName(t))
+	}
+	if t.Session != "" {
+		if err := app.Runner.SelectWindow(t.Session, t.WindowIndex); err != nil {
+			return fmt.Errorf("focus pane: select window: %w", err)
+		}
+	}
+	if t.PaneID == "" {
+		return fmt.Errorf("focus pane: tab %q has no pane id", tabs.DisplayName(t))
+	}
+	if err := app.Runner.SelectPane(t.PaneID); err != nil {
+		return fmt.Errorf("focus pane: select pane: %w", err)
+	}
+	return nil
+}
+
+func appendFocusWarning(warnings []string, err error) []string {
+	if err != nil {
+		return append(warnings, err.Error())
+	}
+	return warnings
 }
 
 // notifyOutcome reports a placement command's result. On the keybind path

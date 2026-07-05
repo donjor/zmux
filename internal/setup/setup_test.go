@@ -2,6 +2,8 @@ package setup
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -165,14 +167,99 @@ func TestUpsertBlock_ReplaceInPlace(t *testing.T) {
 	}
 }
 
+func TestPlanShellIntegration_BashBleLoginBridgeIsIdempotent(t *testing.T) {
+	plan, ok := PlanShellIntegration(ShellInput{Shell: Bash, Home: "/home/u", Bin: "zzmux", BashProfile: "/home/u/.profile"})
+	if !ok || len(plan.Edits) != 2 {
+		t.Fatalf("expected bash rc + profile edits, got ok=%v edits=%d", ok, len(plan.Edits))
+	}
+
+	home := t.TempDir()
+	if err := os.WriteFile(filepath.Join(home, ".bashrc"), []byte(plan.Edits[0].Block), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	profile := "if [ -f \"$HOME/.bashrc\" ]; then\n  . \"$HOME/.bashrc\"\nfi\n" + plan.Edits[1].Block + "\n"
+	if err := os.WriteFile(filepath.Join(home, ".profile"), []byte(profile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	script := filepath.Join(home, "simulate-login.sh")
+	if err := os.WriteFile(script, []byte(`
+ble_attach_calls=0
+blehook_calls=0
+ble-attach() { ble_attach_calls=$((ble_attach_calls + 1)); }
+blehook() { blehook_calls=$((blehook_calls + 1)); }
+tmux() { printf '%%99\n'; }
+zzmux() { :; }
+. "$HOME/.profile"
+printf 'ble_attach_calls=%s\n' "$ble_attach_calls"
+printf 'blehook_calls=%s\n' "$blehook_calls"
+printf 'debug_trap=%s\n' "$(trap -p DEBUG)"
+printf 'prompt_command=%s\n' "${PROMPT_COMMAND-}"
+printf 'integration_version=%s\n' "${ZMUX_SHELL_INTEGRATION_VERSION-}"
+`), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("bash", "--noprofile", "--norc", "-i", script)
+	cmd.Env = append(os.Environ(),
+		"HOME="+home,
+		"TMUX=/tmp/zzmux,1,0",
+		"TMUX_PANE=%99",
+		"ZMUX_BIN=zzmux",
+		"BLE_VERSION=stub",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("simulated bash login failed: %v\n%s", err, out)
+	}
+	text := string(out)
+	if !strings.Contains(text, "ble_attach_calls=0\n") {
+		t.Fatalf("bash lifecycle setup must not force ble-attach; output:\n%s", text)
+	}
+	if !strings.Contains(text, "blehook_calls=4\n") {
+		t.Fatalf("bash lifecycle hooks should be registered exactly once; output:\n%s", text)
+	}
+	if strings.Contains(text, "__zmux_preexec") && strings.Contains(text, "debug_trap=trap") {
+		t.Fatalf("blehook path must not leave a DEBUG trap installed; output:\n%s", text)
+	}
+	if !strings.Contains(text, "integration_version="+ShellIntegrationVersion+"\n") {
+		t.Fatalf("bash lifecycle setup must export integration version; output:\n%s", text)
+	}
+}
+
+func TestPlanShellIntegration_BashHasVersionAndDoesNotForceBleAttach(t *testing.T) {
+	plan, ok := PlanShellIntegration(ShellInput{Shell: Bash, Home: "/home/u", Bin: "zzmux"})
+	if !ok || len(plan.Edits) == 0 {
+		t.Fatalf("expected bash integration plan")
+	}
+	if !strings.Contains(plan.Edits[0].Block, "ZMUX_SHELL_INTEGRATION_VERSION='"+ShellIntegrationVersion+"'") {
+		t.Fatalf("bash lifecycle block must embed integration version %s:\n%s", ShellIntegrationVersion, plan.Edits[0].Block)
+	}
+	if strings.Contains(plan.Edits[0].Block, "ble-attach") {
+		t.Fatalf("bash lifecycle block must not force ble-attach; it breaks interactive TUIs in ble.sh shells:\n%s", plan.Edits[0].Block)
+	}
+}
+
+func TestDevShZzmuxSkipsShellSetupByDefault(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "dev.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	want := `if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_SHELL_SETUP:-0}" != "1" ]; then`
+	if !strings.Contains(script, want) {
+		t.Fatalf("dev.sh must not rewrite live shell integration when TARGET=zzmux by default; expected guarded condition %q", want)
+	}
+}
+
 func TestPlanShellIntegration_IncludesLifecycleHooks(t *testing.T) {
 	cases := []struct {
 		shell Shell
 		want  []string
 	}{
-		{Bash, []string{"shell-event start", "shell-event end", "PROMPT_COMMAND", "DEBUG", "ble-attach", "blehook PREEXEC", "blehook PRECMD", "${1:-$BASH_COMMAND}", "ZMUX_SHELL_ROOT", "${TMUX%%,*}", "basename", "__zmux_prompt_ready"}},
-		{Zsh, []string{"preexec_functions=(__zmux_preexec", "precmd_functions=(__zmux_precmd", "shell-event start", "shell-event end", "ZMUX_SHELL_ROOT", "${TMUX%%,*}", "basename"}},
-		{Fish, []string{"fish_preexec", "fish_postexec", "shell-event start", "shell-event end", "set -l __zmux_ec $status", "ZMUX_SHELL_ROOT", "string split -m1", "basename"}},
+		{Bash, []string{"shell-event start", "shell-event end", "PROMPT_COMMAND", "DEBUG", "blehook PREEXEC", "blehook PRECMD", "${1:-$BASH_COMMAND}", "ZMUX_SHELL_ROOT", "ZMUX_SHELL_INTEGRATION_VERSION", "${TMUX%%,*}", "basename", "__zmux_prompt_ready"}},
+		{Zsh, []string{"preexec_functions=(__zmux_preexec", "precmd_functions=(__zmux_precmd", "shell-event start", "shell-event end", "ZMUX_SHELL_ROOT", "ZMUX_SHELL_INTEGRATION_VERSION", "${TMUX%%,*}", "basename"}},
+		{Fish, []string{"fish_preexec", "fish_postexec", "shell-event start", "shell-event end", "set -l __zmux_ec $status", "ZMUX_SHELL_ROOT", "ZMUX_SHELL_INTEGRATION_VERSION", "string split -m1", "basename"}},
 	}
 	for _, tc := range cases {
 		plan, ok := PlanShellIntegration(ShellInput{Shell: tc.shell, Home: "/home/u", Bin: "zzmux"})

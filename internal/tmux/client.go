@@ -419,7 +419,11 @@ func (c *Client) SplitPane(opts SplitPaneOptions) (string, error) {
 }
 
 func buildSplitPaneArgs(opts SplitPaneOptions) ([]string, error) {
-	args := []string{"split-window", "-P", "-F", "#{pane_id}"}
+	args := []string{"split-window"}
+	if opts.Detached {
+		args = append(args, "-d")
+	}
+	args = append(args, "-P", "-F", "#{pane_id}")
 	switch opts.Direction {
 	case "", SplitRight:
 		args = append(args, "-h")

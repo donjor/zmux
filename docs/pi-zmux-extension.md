@@ -49,6 +49,9 @@ cd pi-extension
 npm install
 npm run typecheck
 npm test
+
+# From the repo root: extension + QA lint + shipped skill doctrine doctor
+make test-agent-surfaces
 ```
 
 `pi-extension/node_modules` and `package-lock.json` are local dev artifacts and
@@ -83,12 +86,13 @@ Core tools:
 - `zmux_tabs` / `zmux_tab_kill` / `zmux_tab_focus` / `zmux_tab_label` /
   `zmux_tab_move` / `zmux_tab_state` / `zmux_tab_status` / `zmux_tab_place` — list, intentionally
   remove/focus/label/move, mark or read lifecycle/command/turn state, or switch logical tab placement
-  (`pane`/`full`/`hide`/`show`). `zmux_tab_state` accepts `attention`, `failed`, `running`, `ready`, `done`, and `clear`.
-  Ask before focusing in agent sessions.
+  (`pane`/`full`/`hide`/`show`). `zmux_tab_place` is focus-safe by default; pass `focus: true`
+  only when the user explicitly wants `pane`/`show` to select the placed pane. `zmux_tab_state`
+  accepts `attention`, `failed`, `running`, `ready`, `done`, and `clear`. Ask before focusing in agent sessions.
 - `zmux_send_keys` / `zmux_type` — send raw keys or type text into existing tabs.
 - `zmux_pane_list` / `zmux_pane_open` / `zmux_pane_focus` /
   `zmux_pane_close` / `zmux_pane_resize` — inspect and manage panes through zmux
-  verbs instead of raw tmux.
+  verbs instead of raw tmux. `zmux_pane_open` passes `--no-focus` unless `focus: true` is set.
 - `zmux_pane_send_keys` / `zmux_pane_type` — lower-level pane-id input for
   sidecars when no logical tab name exists.
 - `zmux_runtime_ensure` / `zmux_runtime_logs` / `zmux_runtime_stop` — manage
@@ -205,7 +209,8 @@ or a REPL, leave `waitForExit` false and tell the user which tab needs attention
 ## Grounding with zzmux
 
 For objective extension behavior, build the isolated edge binary and point the
-extension at it:
+extension at it. `./dev.sh zzmux` installs only `zzmux`; it does not mutate live
+shell startup, shared skills, or Pi package settings:
 
 ```bash
 ./dev.sh zzmux

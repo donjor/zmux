@@ -3,9 +3,9 @@
 #
 # Usage: ./dev.sh [zmux|zzmux]   (default: zmux)
 #   zmux   build + install the live binary, refresh shell + agent integrations
-#   zzmux  build + install an identical edge binary, refresh shell integration
-#          safely with live `zmux` as the default autostart target, so you can
-#          test changes without overwriting the zmux you're currently running
+#   zzmux  build + install an identical edge binary only; it skips live shell
+#          and shared agent integrations so you can test changes without
+#          overwriting or mutating the zmux profile you're currently running
 #
 # Local config:
 #   .env            shell-style env assignments, ignored by git
@@ -129,11 +129,8 @@ cp "$TARGET" "$BIN_DIR/$TARGET"
 printf "${green}ok${reset}  ${dim}%s/%s${reset}\n" "$BIN_DIR" "$TARGET"
 run_local_hook zmux_dev_after_install "$TARGET" "$ZMUX_ROOT" "$BIN_DIR"
 
-if [ "${ZMUX_SKIP_SHELL_SETUP:-0}" != "1" ]; then
+if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_SHELL_SETUP:-0}" != "1" ]; then
 	printf "${dim}updating shell integration...${reset} "
-	# Even when testing the edge `zzmux` binary, keep normal terminal autostart on
-	# live `zmux`. zzmux sessions set ZMUX_BIN=zzmux in tmux env, so lifecycle
-	# hooks still target the edge profile inside zzmux.
 	if setup_output=$("$BIN_DIR/$TARGET" setup shell --yes --bin zmux 2>&1); then
 		printf "${green}ok${reset}\n"
 		if [ -n "$setup_output" ]; then
@@ -144,7 +141,11 @@ if [ "${ZMUX_SKIP_SHELL_SETUP:-0}" != "1" ]; then
 		printf "%s\n" "$setup_output"
 	fi
 else
-	printf "${dim}skipping shell integration; ZMUX_SKIP_SHELL_SETUP=1${reset}\n"
+	if [ "$TARGET" = "zmux" ]; then
+		printf "${dim}skipping shell integration; ZMUX_SKIP_SHELL_SETUP=1${reset}\n"
+	else
+		printf "${dim}skipping shell integration for edge binary %s; run setup explicitly when needed${reset}\n" "$TARGET"
+	fi
 fi
 
 # Agent integration links only for the live binary. The skill is brand-agnostic;

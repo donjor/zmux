@@ -13,6 +13,11 @@ const (
 	Zsh     Shell = "zsh"
 	Fish    Shell = "fish"
 	Unknown Shell = ""
+
+	// ShellIntegrationVersion is embedded into generated rc snippets. Bump it
+	// whenever existing interactive shells need to be considered stale even if
+	// the managed block markers are present.
+	ShellIntegrationVersion = "3"
 )
 
 // DetectShell maps a shell binary name (e.g. from $SHELL) to a Shell. The name
@@ -92,20 +97,23 @@ func lifecycleSnippet(shell Shell, bin string) string {
 
 func bashLifecycleSnippet(bin string) string {
 	q := shellQuote(bin)
-	return "# zmux command lifecycle glyphs (interactive shells in tmux)\n" +
+	version := shellQuote(ShellIntegrationVersion)
+	return "# zmux command lifecycle glyphs (root interactive shell in tmux)\n" +
 		"__zmux_setup_lifecycle() {\n" +
-		"    local __zmux_pane __zmux_socket __zmux_profile\n" +
-		"    if [ -n \"${BLE_VERSION:-}\" ] && declare -F ble-attach >/dev/null 2>&1; then\n" +
-		"        ble-attach >/dev/null 2>&1 || true\n" +
-		"    fi\n" +
+		"    local __zmux_pane __zmux_socket __zmux_profile __zmux_install_key\n" +
 		"    __zmux_pane=\"${TMUX_PANE:-}\"\n" +
 		"    if [ -z \"$__zmux_pane\" ] && [ -n \"${TMUX:-}\" ] && command -v tmux >/dev/null 2>&1; then\n" +
 		"        __zmux_pane=\"$(tmux display-message -p '#{pane_id}' 2>/dev/null || true)\"\n" +
 		"    fi\n" +
-		"    if [ -n \"${TMUX:-}\" ] && [ -n \"$__zmux_pane\" ]; then\n" +
+		"    __zmux_install_key=\"$$:$__zmux_pane\"\n" +
+		"    [ \"${__zmux_lifecycle_installed:-}\" = \"$__zmux_install_key\" ] && return\n" +
+		"    if [ -n \"${TMUX:-}\" ] && [ -n \"$__zmux_pane\" ] && { [ -z \"${ZMUX_SHELL_ROOT:-}\" ] || [ \"${ZMUX_SHELL_ROOT:-}\" != \"$__zmux_pane\" ] || [ \"${ZMUX_SHELL_ROOT_PID:-}\" = \"$$\" ]; }; then\n" +
+		"        __zmux_lifecycle_installed=\"$__zmux_install_key\"\n" +
+
 		"        export TMUX_PANE=\"$__zmux_pane\"\n" +
 		"        export ZMUX_SHELL_ROOT=\"$__zmux_pane\"\n" +
 		"        export ZMUX_SHELL_ROOT_PID=\"$$\"\n" +
+		"        export ZMUX_SHELL_INTEGRATION_VERSION=" + version + "\n" +
 		"        if [ -z \"${ZMUX_BIN:-}\" ]; then\n" +
 		"            __zmux_socket=\"${TMUX%%,*}\"\n" +
 		"            __zmux_profile=\"$(basename \"$__zmux_socket\" 2>/dev/null || true)\"\n" +
@@ -181,6 +189,7 @@ func bashLifecycleSnippet(bin string) string {
 
 func zshLifecycleSnippet(bin string) string {
 	q := shellQuote(bin)
+	version := shellQuote(ShellIntegrationVersion)
 	return "# zmux command lifecycle glyphs (root interactive shell only)\n" +
 		"__zmux_pane=\"${TMUX_PANE:-}\"\n" +
 		"if [[ -z \"$__zmux_pane\" && -n \"${TMUX:-}\" ]] && command -v tmux >/dev/null 2>&1; then\n" +
@@ -189,6 +198,7 @@ func zshLifecycleSnippet(bin string) string {
 		"if [[ -n \"${TMUX:-}\" && -n \"$__zmux_pane\" && \"${ZMUX_SHELL_ROOT:-}\" != \"$__zmux_pane\" ]]; then\n" +
 		"    export TMUX_PANE=\"$__zmux_pane\"\n" +
 		"    export ZMUX_SHELL_ROOT=\"$__zmux_pane\"\n" +
+		"    export ZMUX_SHELL_INTEGRATION_VERSION=" + version + "\n" +
 		"    if [[ -z \"${ZMUX_BIN:-}\" ]]; then\n" +
 		"        __zmux_socket=\"${TMUX%%,*}\"\n" +
 		"        __zmux_profile=\"$(basename \"$__zmux_socket\" 2>/dev/null || true)\"\n" +
@@ -219,6 +229,7 @@ func zshLifecycleSnippet(bin string) string {
 
 func fishLifecycleSnippet(bin string) string {
 	q := shellQuote(bin)
+	version := shellQuote(ShellIntegrationVersion)
 	return "# zmux command lifecycle glyphs (root interactive shell only)\n" +
 		"set -l __zmux_pane \"$TMUX_PANE\"\n" +
 		"if test -z \"$__zmux_pane\"; and set -q TMUX; and command -q tmux\n" +
@@ -227,6 +238,7 @@ func fishLifecycleSnippet(bin string) string {
 		"if set -q TMUX; and test -n \"$__zmux_pane\"; and test \"$ZMUX_SHELL_ROOT\" != \"$__zmux_pane\"\n" +
 		"    set -gx TMUX_PANE \"$__zmux_pane\"\n" +
 		"    set -gx ZMUX_SHELL_ROOT \"$__zmux_pane\"\n" +
+		"    set -gx ZMUX_SHELL_INTEGRATION_VERSION " + version + "\n" +
 		"    if not set -q ZMUX_BIN\n" +
 		"        set -l __zmux_socket (string split -m1 , \"$TMUX\")[1]\n" +
 		"        set -l __zmux_profile (basename \"$__zmux_socket\" 2>/dev/null)\n" +

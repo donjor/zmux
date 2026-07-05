@@ -132,7 +132,7 @@ export async function snapshot(params: { cwd: string; noPng?: boolean; panes?: s
 	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || "snapshot captured", details: { ...params } };
 }
 
-export function buildTabPlacementArgs(params: { action: TabPlacementAction; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean }): string[] {
+export function buildTabPlacementArgs(params: { action: TabPlacementAction; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean; focus?: boolean }): string[] {
 	const args = ["tab", params.action];
 	if (params.tab) args.push(params.tab);
 	if (params.session) args.push("--session", params.session);
@@ -140,16 +140,18 @@ export function buildTabPlacementArgs(params: { action: TabPlacementAction; tab?
 		if (params.into) args.push("--into", params.into);
 		if (params.direction) args.push(`--${params.direction}`);
 		if (params.size) args.push("--size", params.size);
+		if (params.focus) args.push("--focus");
 		return args;
 	}
 	if (params.pane) args.push("--pane", params.pane);
+	if (params.action === "show" && params.focus) args.push("--focus");
 	if (params.action === "full" && params.after) args.push("--after");
 	return args;
 }
 
-export async function placeTab(params: { action: TabPlacementAction; cwd: string; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+export async function placeTab(params: { action: TabPlacementAction; cwd: string; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean; focus?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
 	const result = await zmux(buildTabPlacementArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
-	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || `tab ${params.action}`, details: { ...params } };
+	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || `tab ${params.action}`, details: { ...params, focus: params.focus ?? false } };
 }
 
 export async function terminalCurrent(cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {

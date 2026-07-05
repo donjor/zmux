@@ -28,6 +28,7 @@ type paneOpenFlags struct {
 	down     string
 	up       string
 	labelTab bool
+	noFocus  bool
 }
 
 type paneListFlags struct {

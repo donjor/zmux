@@ -212,6 +212,10 @@ func TestExecutorTabJoinUsesExecutionScanForHost(t *testing.T) {
 	if call.Args[0] != "%2" || call.Args[1] != "%1" {
 		t.Fatalf("JoinPane args = %v, want source %%2 target current-pane host %%1", call.Args)
 	}
+	focus, ok := lastCall(mock, "SelectPane")
+	if !ok || focus.Args[0] != "%2" {
+		t.Fatalf("expected palette join to focus moved pane %%2, got %v (calls=%v)", focus.Args, mock.Calls)
+	}
 }
 
 func TestExecutorPaneAndTabOpsDispatch(t *testing.T) {

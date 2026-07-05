@@ -1,7 +1,8 @@
 # QA walkthrough for plan 046: natural shell lifecycle glyphs.
 #
 # Targets the isolated zzmux edge profile — live zmux is untouched.
-# Setup: `./dev.sh zzmux`, then in another terminal `zzmux new qa-shell` and WATCH it.
+# Setup: `./dev.sh zzmux && zzmux apply`, then create the QA session with:
+# `tmux -L zzmux new-session -d -s qa-shell -n seed bash`.
 # Drive from here: `./qa natural-shell-lifecycle` (picker) or `./qa run natural-shell-lifecycle`.
 
 [checklist]
@@ -17,20 +18,45 @@ tab = "natural"
 id = "session"
 name = "qa-shell session exists"
 cmd = "{bin} ls"
-expect = "session 'qa-shell' is listed (in another terminal: zzmux new qa-shell)"
+expect = "session 'qa-shell' is listed (setup: tmux -L zzmux new-session -d -s qa-shell -n seed bash)"
 check = "(?m)\\bqa-shell\\b"
 
 [[step]]
 id = "raw-tab"
 name = "Create a fresh shell tab without zmux run"
-cmd = "tmux -L zzmux new-window -d -t {s} -n {tab}"
+cmd = "tmux -L zzmux new-window -d -t {s} -n {tab}; tmux -L zzmux list-windows -t {s} -F '#{{window_name}}'"
 expect = "a fresh tab named 'natural' appears in the visible qa-shell session"
+check = "(?m)^natural$"
 needs = ["session"]
+
+[[step]]
+id = "bash-norc-survives"
+name = "Nested bash --norc survives the managed shell"
+cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" 'bash --norc -ic \"echo bash-norc-ok; exit\"' Enter; sleep 1; out=$({bin} watch {tab} -s {s} -l 30); printf '%s\n' \"$out\"; if printf '%s\n' \"$out\" | grep -q '\\[ble: exit 1\\]'; then exit 1; fi; echo no-ble-error"
+expect = "bash --norc launches as a foreground child, prints bash-norc-ok, exits, and no [ble: exit 1] appears"
+check = "(?s)bash-norc-ok.*no-ble-error"
+needs = ["raw-tab"]
+
+[[step]]
+id = "foreground-child-survives"
+name = "Foreground terminal child exits cleanly"
+cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" 'python3 -c \"import sys, termios; termios.tcgetattr(sys.stdin.fileno()); print(\\\"ttyok\\\")\"' Enter; sleep 1; out=$({bin} watch {tab} -s {s} -l 40); printf '%s\n' \"$out\"; if printf '%s\n' \"$out\" | grep -q '\\[ble: exit 1\\]'; then exit 1; fi; echo no-ble-error"
+expect = "a foreground TTY-using child reads terminal state, exits cleanly, and does not print [ble: exit 1]"
+check = "(?s)ttyok.*no-ble-error"
+needs = ["bash-norc-survives"]
+
+[[step]]
+id = "agent-cli-interactive-launch"
+name = "Interactive Claude launch does not immediately fail under ble"
+cmd = "if ! command -v claude >/dev/null 2>&1; then echo claude-interactive-skipped; exit 0; fi; tmux -L zzmux new-window -d -t {s} -n claude-smoke bash; sleep 1; pane=$(tmux -L zzmux list-panes -t {s}:claude-smoke -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" 'claude' Enter; sleep 3; out=$(tmux -L zzmux capture-pane -t \"$pane\" -p -S -80); printf '%s\n' \"$out\"; tmux -L zzmux send-keys -t \"$pane\" C-c; sleep 1; tmux -L zzmux kill-window -t {s}:claude-smoke 2>/dev/null || true; if printf '%s\n' \"$out\" | grep -q '\\[ble: exit 1\\]'; then exit 1; fi; echo claude-interactive-ok"
+expect = "if Claude is installed, a typed interactive `claude` command shows the Claude Code UI instead of immediately returning `[ble: exit 1]`; otherwise the step prints an explicit skip"
+check = "(?s)(Claude Code|claude-interactive-skipped).*claude-interactive-ok|claude-interactive-skipped"
+needs = ["foreground-child-survives"]
 
 [[step]]
 id = "manual-running"
 name = "Raw typed command sets running"
-cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" 'sleep 3; echo natural-ok' Enter; sleep 1; printf 'state='; tmux -L zzmux show-options -p -t \"$pane\" -v @zmux_state; printf 'cmd='; tmux -L zzmux show-options -p -t \"$pane\" -v @zmux_cmd_state"
+cmd = "pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); tmux -L zzmux send-keys -t \"$pane\" 'sleep 3; printf \"natural-%s\\n\" ok' Enter; sleep 1; printf 'state='; tmux -L zzmux show-options -p -t \"$pane\" -v @zmux_state; printf 'cmd='; tmux -L zzmux show-options -p -t \"$pane\" -v @zmux_cmd_state"
 expect = "the visible tab shows a running spinner while the command sleeps; printed state/cmd are running"
 check = "state=running[[:space:]]+cmd=running"
 needs = ["raw-tab"]
@@ -39,8 +65,8 @@ needs = ["raw-tab"]
 id = "manual-done"
 name = "Raw typed command sets done and last exit"
 cmd = "sleep 4; pane=$(tmux -L zzmux list-panes -t {s}:{tab} -F '#{{pane_id}}' | head -1); {bin} watch {tab} -s {s} -l 20; {bin} tab status {tab} -s {s} --json"
-expect = "output includes natural-ok, status JSON reports state=done, cmdState=done, lastExit=0, and the visible glyph is ✓"
-check = "(?s)natural-ok.*\\\"cmdState\\\": \\\"done\\\""
+expect = "output includes a real natural-ok output line (not only the echoed command), status JSON reports state=done, cmdState=done, lastExit=0, and the visible glyph is ✓"
+check = "(?ms)^natural-ok$.*\\\"state\\\": \\\"done\\\".*\\\"cmdState\\\": \\\"done\\\".*\\\"lastExit\\\": \\\"0\\\""
 needs = ["manual-running"]
 
 [[step]]
@@ -68,6 +94,14 @@ check = "run-ok"
 needs = ["session"]
 
 [[step]]
+id = "agent-cli-smoke"
+name = "Agent CLI non-interactive smoke does not wedge"
+cmd = "{bin} run \"bash -lc \\\"(command -v claude >/dev/null && claude --version) || (command -v pi >/dev/null && pi --version) || echo agent-cli-smoke-skipped\\\"\" -n agent-cli-smoke -s {s} -T 20"
+expect = "prints a Claude/Pi version or an explicit skip marker; the run exits through lifecycle metadata without sentinel text"
+check = "(?s)(claude|pi|agent-cli-smoke-skipped)"
+needs = ["session"]
+
+[[step]]
 id = "failure-status"
 name = "Failure records failed state and exit code"
 cmd = "set +e; {bin} run \"sh -c 'exit 7'\" -n run-fail -s {s} -T 15 >/tmp/zmux-qa-run-fail.out 2>&1; rc=$?; cat /tmp/zmux-qa-run-fail.out; {bin} tab status run-fail -s {s} --json; exit 0"
@@ -78,6 +112,7 @@ needs = ["session"]
 [[step]]
 id = "cleanup"
 name = "Kill the qa-shell session"
-cmd = "{bin} kill {s}"
+cmd = "{bin} workspace kill {s}; if {bin} ls -s | grep -q '\\bqa-shell\\b'; then exit 1; fi; echo qa-shell-gone"
 expect = "the watching terminal detaches; session gone"
+check = "qa-shell-gone"
 needs = ["session"]

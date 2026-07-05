@@ -140,11 +140,12 @@ zmux tab move <tab> <dest>          Move tab to another session
 zmux tab label [label]              Set/clear stable label for current tab
 zmux tab state <state> [tab]        Set lifecycle glyph: attention/failed/running/ready/done/clear
 zmux tab status <tab> [--json]      Show lifecycle/command status for tooling
-zmux tab pane <tab|N> [--into host] Join a tab (by name or bar index N) as a pane beside another
-zmux tab split                      Create a new tab and join it as a pane in one step (prefix+j)
+zmux tab pane <tab|N> [--into host] [--focus]
+                                      Join a tab (by name or bar index N) as a pane beside another
+zmux tab split [--focus]            Create a new tab and join it as a pane in one step (prefix+j)
 zmux tab full [tab] / [--pane <id>] Promote focused/named/clicked pane-of tab back to full
 zmux tab hide <tab> / [--pane <id>] Park a tab off the bar in the hidden dock
-zmux tab show <tab>                 Return a hidden tab to its origin session
+zmux tab show <tab> [--focus]       Return a hidden tab to its origin session
 zmux tab kill <tab>                 Kill a tab
 zmux reap                           Adopt/flag/kill stale tabs by lifecycle policy
 zmux reap --dry-run                 Preview verdicts only — change nothing
@@ -180,7 +181,8 @@ zmux log stop <tab>            Stop recording
 zmux send <tab> <keys>         Send keystrokes to tab
 zmux type <tab> '<text>'       Type text + Enter
 
-zmux pane open <name> -r 40 -- <cmd>  Open right pane, print pane id
+zmux pane open <name> -r 40 -- <cmd>  Open right pane, print pane id (focuses by default)
+zmux pane open --no-focus ...         Open without selecting the new pane (agent/tool path)
 zmux pane open --label-tab ...        Preserve tab label before sidecar split
 zmux pane toggle <name> -r 40 -- <cmd> Toggle named pane (close/open)
 zmux pane current [--json]            Print current pane id/details
@@ -219,6 +221,7 @@ zmux status                    Show current config summary
 ### Other
 
 ```
+zmux doctor                    Check shell integration freshness
 zmux version                   Print version
 zmux completion <shell>        Generate completions (bash/zsh/fish)
 zmux help                      Styled help with keybindings
@@ -241,7 +244,7 @@ Prefix: `Ctrl+Space` (configurable)
 | prefix + n / N               | Next / previous tab                                     |
 | prefix + < / >               | Move tab left / right                                   |
 | prefix + x                   | Close tab (with confirm)                                |
-| prefix + J                   | Join a tab into this tab as a pane                      |
+| prefix + J                   | Join a tab into this tab as a pane and focus it         |
 | prefix + F                   | Promote focused pane-tab to full tab                    |
 | prefix + R                   | Respawn stopped/dead pane                               |
 | prefix + .                   | Label tab (blank clears label)                          |
@@ -269,8 +272,12 @@ Prefix: `Ctrl+Space` (configurable)
 | Alt+`                        | Tab switcher (no prefix)                                |
 
 Pane notes: mouse is enabled, so clicking focuses panes and dragging pane
-borders resizes them. Right-clicking a joined pane opens a per-pane menu —
-promote to full, hide to dock, or kill the pane. Failed or signalled foreground
+borders resizes them. Human placement paths (`prefix+j`, `prefix+J`,
+command-palette joins, and hidden-pane rejoin menus) select the created/rejoined
+pane; CLI/tool paths can stay focus-safe with `--no-focus` on `pane open` or by
+omitting `--focus` on `tab pane`/`tab show`. Right-clicking a joined pane opens
+a per-pane menu — promote to full, hide to dock, or kill the pane. Failed or
+signalled foreground
 commands stay visible as dead panes, so Ctrl+C spam cannot silently delete the
 tab; clean exits close normally. Use `prefix+x` / `zmux tab kill` when you mean
 to close a stopped tab.
@@ -515,10 +522,19 @@ make build            # build binary
 make test             # run unit tests
 make test-race        # unit tests with the race detector (mirrors CI)
 make test-integration # run integration tests (exercises the built CLI; no tmux needed)
+make test-agent-surfaces # Pi extension + QA lint + shipped skill doctrine doctor
 make vuln             # govulncheck vulnerability scan
 make lint             # go vet + golangci-lint (incl. gofumpt)
 make clean            # remove build output
 ```
+
+For live zmux development, use `./dev.sh zzmux` for edge-profile grounding first:
+it installs only `~/.local/bin/zzmux` and skips live shell/agent integration
+mutation. Use `zmux doctor` / `zzmux doctor` to check whether the rc file and
+the current already-open shell have the current lifecycle hook version.
+Use the live `./dev.sh zmux` / `zmux setup shell` path only after edge QA is
+green and you explicitly intend to update the active profile; then open a fresh
+shell/tab because existing shells keep already-loaded hook functions.
 
 ## Contributing
 

@@ -16,17 +16,17 @@ var (
 
 	// Tabs (prefix).
 	NewTab          = Binding{Action: "new", Key: "c", Help: "New tab", Category: CatTabs, Context: Prefix}
-	TabSplit        = Binding{Action: "tab.split", Key: "j", Help: "Create a new tab as a pane", Category: CatTabs, Context: Prefix}
+	TabSplit        = Binding{Action: "tab.split", Key: "j", Help: "Create a new tab as a focused pane", Category: CatTabs, Context: Prefix}
 	TabNext         = Binding{Action: "tab.next", Key: "n", Help: "Next tab", Category: CatTabs, Context: Prefix}
 	TabPrev         = Binding{Action: "tab.prev", Key: "N", Help: "Previous tab", Category: CatTabs, Context: Prefix}
 	TabReorderLeft  = Binding{Action: "reorder.left", Key: "<", Help: "Move tab left", Category: CatTabs, Context: Prefix}
 	TabReorderRight = Binding{Action: "reorder.right", Key: ">", Help: "Move tab right", Category: CatTabs, Context: Prefix}
 	TabKill         = Binding{Action: "kill", Key: "x", Help: "Close tab (with confirm)", Category: CatTabs, Context: Prefix}
 	LabelTab        = Binding{Action: "label.tab", Key: ".", Help: "Set stable tab label (blank clears)", Category: CatTabs, Context: Prefix}
-	TabJoinPane     = Binding{Action: "tab.pane", Key: "J", Help: "Join a tab into this tab as a pane", Category: CatTabs, Context: Prefix}
+	TabJoinPane     = Binding{Action: "tab.pane", Key: "J", Help: "Join a tab into this tab as a focused pane", Category: CatTabs, Context: Prefix}
 	TabFull         = Binding{Action: "tab.full", Key: "F", Help: "Promote focused pane-tab to full tab", Category: CatTabs, Context: Prefix}
 	TabHide         = Binding{Action: "tab.hide", Key: "h", Help: "Hide focused pane under its parent tab", Category: CatTabs, Context: Prefix}
-	TabShow         = Binding{Action: "tab.show", Key: "H", Help: "Rejoin hidden pane by parent index/name", Category: CatTabs, Context: Prefix}
+	TabShow         = Binding{Action: "tab.show", Key: "H", Help: "Rejoin hidden pane by parent index/name and focus it", Category: CatTabs, Context: Prefix}
 
 	// Sessions (prefix).
 	RenameSession = Binding{Action: "rename", Key: ",", Help: "Rename session", Category: CatSessions, Context: Prefix}

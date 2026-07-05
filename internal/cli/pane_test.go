@@ -43,6 +43,20 @@ func TestRunPaneOpenDefaultsToCurrentTmuxPaneAndPrintsID(t *testing.T) {
 	}
 }
 
+func TestRunPaneOpenNoFocusUsesDetachedSplit(t *testing.T) {
+	a, mock := newTestApp(t)
+	t.Setenv("TMUX_PANE", "%12")
+	cmd := newPaneOpenCmd(a)
+	cmd.SetArgs([]string{"logs", "--no-focus"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("pane open command failed: %v", err)
+	}
+	call := mock.Calls[len(mock.Calls)-1]
+	if call.Method != "SplitPane" || call.Args[6] != "detached=true" {
+		t.Fatalf("expected detached SplitPane, got %#v", call)
+	}
+}
+
 func TestRunPaneOpenAutoLabelsWindowBeforeSplit(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.DisplayMessageResult = "zmux\t\tpi"

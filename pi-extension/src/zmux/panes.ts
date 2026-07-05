@@ -21,20 +21,21 @@ export async function listPanes(cwd: string, session?: string): Promise<string> 
 	}
 }
 
-export function buildPaneOpenArgs(params: { name: string; command: string; cwd: string; direction?: "right" | "left" | "down" | "up"; size?: string; target?: string; labelTab?: boolean }): string[] {
+export function buildPaneOpenArgs(params: { name: string; command: string; cwd: string; direction?: "right" | "left" | "down" | "up"; size?: string; target?: string; labelTab?: boolean; focus?: boolean }): string[] {
 	const args = ["pane", "open", params.name, "--cwd", params.cwd];
 	if (params.target) args.push("--target", params.target);
 	const directionFlag = params.direction ? ({ right: "-r", left: "-l", down: "-d", up: "-u" } as const)[params.direction] : "-r";
 	args.push(directionFlag);
 	if (params.size) args.push(params.size);
 	if (params.labelTab) args.push("--label-tab");
+	if (!params.focus) args.push("--no-focus");
 	args.push("--", "bash", "-lc", params.command);
 	return args;
 }
 
-export async function openPane(params: { name: string; command: string; cwd: string; direction?: "right" | "left" | "down" | "up"; size?: string; target?: string; labelTab?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+export async function openPane(params: { name: string; command: string; cwd: string; direction?: "right" | "left" | "down" | "up"; size?: string; target?: string; labelTab?: boolean; focus?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
 	await zmux(buildPaneOpenArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
-	return { text: `opened pane ${params.name}`, details: { ...params } };
+	return { text: `opened pane ${params.name}${params.focus ? " and focused it" : " without changing focus"}`, details: { ...params, focus: params.focus ?? false } };
 }
 
 export async function focusPane(pane: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {

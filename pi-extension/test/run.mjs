@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -10,6 +10,7 @@ try {
   const tsc = join(root, 'node_modules/.bin/tsc');
   const compile = spawnSync(tsc, ['-p', join(root, 'tsconfig.json'), '--outDir', outDir, '--noEmit', 'false'], { stdio: 'inherit' });
   assert.equal(compile.status, 0, 'TypeScript compile failed');
+  symlinkSync(join(root, 'node_modules'), join(outDir, 'node_modules'), 'dir');
 
   const { classifyBash, hasExplicitBypass, stripQuotedSegments } = await import(join(outDir, 'src/classify.js'));
   const { loadConfig } = await import(join(outDir, 'src/config.js'));
@@ -35,6 +36,70 @@ try {
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
   const { reloadContinuationPath, shouldTriggerContinuation, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
+  const { shouldWaitForExit } = await import(join(outDir, 'src/tools/shared.js'));
+  const { default: registerExtension } = await import(join(outDir, 'src/index.js'));
+
+  const registeredTools = [];
+  const registeredCommands = [];
+  const registeredHandlers = [];
+  const fakePi = {
+    registerTool(tool) { registeredTools.push(tool); },
+    registerCommand(name, options) { registeredCommands.push({ name, options }); },
+    on(event, handler) { registeredHandlers.push({ event, handler }); },
+    sendMessage() {},
+    sendUserMessage() {},
+  };
+  registerExtension(fakePi);
+  const toolNames = registeredTools.map((tool) => tool.name).sort();
+  assert.deepEqual(toolNames, [
+    'zmux_current',
+    'zmux_interactive_type',
+    'zmux_log',
+    'zmux_pane_close',
+    'zmux_pane_focus',
+    'zmux_pane_list',
+    'zmux_pane_open',
+    'zmux_pane_resize',
+    'zmux_pane_send_keys',
+    'zmux_pane_type',
+    'zmux_pi_reload',
+    'zmux_pi_respawn',
+    'zmux_reload',
+    'zmux_run',
+    'zmux_runtime_ensure',
+    'zmux_runtime_logs',
+    'zmux_runtime_stop',
+    'zmux_send_keys',
+    'zmux_session_kill',
+    'zmux_session_run',
+    'zmux_sessions',
+    'zmux_snapshot',
+    'zmux_tab_focus',
+    'zmux_tab_kill',
+    'zmux_tab_label',
+    'zmux_tab_move',
+    'zmux_tab_peer',
+    'zmux_tab_place',
+    'zmux_tab_state',
+    'zmux_tab_status',
+    'zmux_tabs',
+    'zmux_terminal_current',
+    'zmux_type',
+  ].sort(), 'registered Pi tool surface drifted');
+  assert.equal(new Set(toolNames).size, toolNames.length, 'tool names must be unique');
+  assert.deepEqual(registeredCommands.map((cmd) => cmd.name), ['zmux']);
+  for (const eventName of ['agent_start', 'agent_end', 'session_shutdown', 'before_agent_start', 'session_start', 'tool_call']) {
+    assert.ok(registeredHandlers.some((handler) => handler.event === eventName), `expected handler for ${eventName}`);
+  }
+  const toolByName = Object.fromEntries(registeredTools.map((tool) => [tool.name, tool]));
+  assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /Do not add your own sentinels or wrapper scripts/);
+  assert.match(toolByName.zmux_tab_status.description, /do not set glyphs/);
+  assert.match(toolByName.zmux_interactive_type.description, /sudo, ssh, REPLs/);
+  assert.match(toolByName.zmux_interactive_type.parameters.properties.waitForExit.description, /defaults true.*false for long interactive shells/);
+  assert.equal(shouldWaitForExit('ssh onyxrock'), false);
+  assert.equal(shouldWaitForExit('bash --norc'), false);
+  assert.equal(shouldWaitForExit('sudo ufw status'), true);
+  assert.equal(shouldWaitForExit('sudo -i'), false);
 
   const cfg = { policy: { mode: 'enforce', blockBackgroundJobs: true, redirectInteractive: true }, runtimes: {} };
   const cases = [
@@ -122,7 +187,10 @@ try {
   assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '8', cmdState: 'failed', lastExit: '2' }, 7), { fresh: true, settled: true, state: 'failed', exitCode: 2, cmdSeq: 8 });
 
   assert.deepEqual(buildPaneOpenArgs({ name: 'logs', command: 'npm run dev', cwd: '/repo', direction: 'right', size: '40%' }), [
-    'pane', 'open', 'logs', '--cwd', '/repo', '-r', '40%', '--', 'bash', '-lc', 'npm run dev',
+    'pane', 'open', 'logs', '--cwd', '/repo', '-r', '40%', '--no-focus', '--', 'bash', '-lc', 'npm run dev',
+  ]);
+  assert.deepEqual(buildPaneOpenArgs({ name: 'logs', command: 'npm run dev', cwd: '/repo', focus: true }), [
+    'pane', 'open', 'logs', '--cwd', '/repo', '-r', '--', 'bash', '-lc', 'npm run dev',
   ]);
   assert.deepEqual(buildZmuxRunArgs({ command: 'npm test', cwd: '/repo', tab: 'tests', timeoutSeconds: 45, lines: 80, session: 'zws/repo' }), [
     'run', '--command', 'npm test', '-n', 'tests', '-T', '45', '--lines', '80', '-s', 'zws/repo',
@@ -153,8 +221,14 @@ try {
   assert.deepEqual(buildTabPlacementArgs({ action: 'pane', tab: 'logs', into: 'pi', direction: 'right', size: '35%', session: 'zws/repo' }), [
     'tab', 'pane', 'logs', '--session', 'zws/repo', '--into', 'pi', '--right', '--size', '35%',
   ]);
+  assert.deepEqual(buildTabPlacementArgs({ action: 'pane', tab: 'logs', into: 'pi', focus: true }), [
+    'tab', 'pane', 'logs', '--into', 'pi', '--focus',
+  ]);
   assert.deepEqual(buildTabPlacementArgs({ action: 'show', pane: '%42', session: 'zws/repo', direction: 'right', size: '35%', after: true }), [
     'tab', 'show', '--session', 'zws/repo', '--pane', '%42',
+  ]);
+  assert.deepEqual(buildTabPlacementArgs({ action: 'show', pane: '%42', focus: true }), [
+    'tab', 'show', '--pane', '%42', '--focus',
   ]);
 
   const nonZero = await runFileStatus(process.execPath, ['-e', 'process.exit(7)']);

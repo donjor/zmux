@@ -123,8 +123,10 @@ func (e *Executor) Run(action Action) PostAction {
 
 	case TabShowPayload:
 		return e.runTabPlacement(payload.TabID, func(t *tabs.LogicalTab) error {
-			_, err := tabs.ShowTab(e.Runner, t)
-			return err
+			if _, err := tabs.ShowTab(e.Runner, t); err != nil {
+				return err
+			}
+			return e.focusLogicalTab(t.ID)
 		})
 
 	case TabPromotePayload:
@@ -139,8 +141,10 @@ func (e *Executor) Run(action Action) PostAction {
 			if err != nil {
 				return err
 			}
-			_, err = tabs.JoinTab(e.Runner, t, host, tabs.JoinOptions{Direction: tmux.SplitRight})
-			return err
+			if _, err = tabs.JoinTab(e.Runner, t, host, tabs.JoinOptions{Direction: tmux.SplitRight}); err != nil {
+				return err
+			}
+			return e.focusLogicalTab(t.ID)
 		})
 
 	case DashboardTabPayload:
@@ -220,6 +224,32 @@ func (e *Executor) runTabPlacementFromScan(tabID string, op func(*tabs.LogicalTa
 		return PostAction{Kind: PostError, Err: err}
 	}
 	return PostAction{Kind: PostClose}
+}
+
+func (e *Executor) focusLogicalTab(tabID string) error {
+	all, err := tabs.ListLogicalTabs(e.Runner)
+	if err != nil {
+		return fmt.Errorf("focus pane: scan tabs: %w", err)
+	}
+	t := tabs.ByID(all, tabID)
+	if t == nil {
+		return fmt.Errorf("focus pane: tab no longer exists")
+	}
+	if t.Placement == tabs.PlacementDock {
+		return fmt.Errorf("focus pane: tab %q is hidden", tabs.DisplayName(t))
+	}
+	if t.Session != "" {
+		if err := e.Runner.SelectWindow(t.Session, t.WindowIndex); err != nil {
+			return fmt.Errorf("focus pane: select window: %w", err)
+		}
+	}
+	if t.PaneID == "" {
+		return fmt.Errorf("focus pane: tab %q has no pane id", tabs.DisplayName(t))
+	}
+	if err := e.Runner.SelectPane(t.PaneID); err != nil {
+		return fmt.Errorf("focus pane: select pane: %w", err)
+	}
+	return nil
 }
 
 // runTabOp dispatches a tab op to the typed tmux.Runner method that runs it

@@ -333,7 +333,7 @@ func (m *MockRunner) SplitWindow(target, direction string) error {
 
 // SplitPane records the call and returns a deterministic pane id.
 func (m *MockRunner) SplitPane(opts SplitPaneOptions) (string, error) {
-	m.record("SplitPane", opts.Target, string(opts.Direction), opts.Size, opts.CWD, opts.Title, fmt.Sprintf("%q", opts.Command))
+	m.record("SplitPane", opts.Target, string(opts.Direction), opts.Size, opts.CWD, opts.Title, fmt.Sprintf("%q", opts.Command), fmt.Sprintf("detached=%v", opts.Detached))
 	if m.Err != nil {
 		return "", m.Err
 	}

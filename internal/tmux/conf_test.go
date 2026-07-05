@@ -172,14 +172,14 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 
 	checks := []string{
 		`bind c new-window -c "#{pane_current_path}"`,
-		`bind j run-shell "/usr/local/bin/zmux tab split --notify"`,
+		`bind j run-shell "/usr/local/bin/zmux tab split --notify --focus"`,
 		"bind n next-window",
 		`bind . command-prompt -p "label tab (blank clears):"`,
 		`set-option -w -t #{window_id} @zmux_label`,
-		`bind J command-prompt -p "join tab here:" "run-shell '/usr/local/bin/zmux tab pane --notify \"%%\"'"`,
+		`bind J command-prompt -p "join tab here:" "run-shell '/usr/local/bin/zmux tab pane --notify --focus \"%%\"'"`,
 		`bind F run-shell "/usr/local/bin/zmux tab full --after --notify"`,
 		`bind h run-shell "/usr/local/bin/zmux tab hide --notify"`,
-		`bind H command-prompt -p "join hidden pane (#/name):" "run-shell '/usr/local/bin/zmux tab show --notify \"%%\"'"`,
+		`bind H command-prompt -p "join hidden pane (#/name):" "run-shell '/usr/local/bin/zmux tab show --notify --focus \"%%\"'"`,
 		`bind x confirm-before`,
 		`#{?@zmux_label,#{?#{==:#{@zmux_label},#W},#W,#{@zmux_label} [#W]},#W#{?@zmux_duplicate_name,[#{b:pane_current_path}],}}`,
 	}
@@ -202,7 +202,7 @@ func TestGenerateConfContainsMousePaneMenu(t *testing.T) {
 		`-t "{mouse}"`,
 		`"#{?@zmux_tab_anchor,Promote to full,-Promote to full}" f { select-pane -t "#{pane_id}" ; run-shell "/usr/local/bin/zmux tab full --pane \"#{pane_id}\" --after --notify" }`,
 		`"#{?#{&&:#{@zmux_tab_anchor},#{==:#{@zmux_hidden},}},Hide pane,-Hide pane}" h { select-pane -t "#{pane_id}" ; run-shell "/usr/local/bin/zmux tab hide --pane \"#{pane_id}\" --notify" }`,
-		`"#{?@zmux_hidden,Join back,-Join back}" u { run-shell "/usr/local/bin/zmux tab show --pane \"#{pane_id}\" --notify" }`,
+		`"#{?@zmux_hidden,Join back,-Join back}" u { run-shell "/usr/local/bin/zmux tab show --pane \"#{pane_id}\" --notify --focus" }`,
 		`"#{?@zmux_tab_id,Kill tab,-Kill tab}" x { run-shell "/usr/local/bin/zmux tab kill --pane \"#{pane_id}\" --notify" }`,
 	}
 	for _, want := range checks {

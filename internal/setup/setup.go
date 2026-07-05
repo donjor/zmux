@@ -139,6 +139,25 @@ func hasBlock(content string) bool {
 	return strings.Contains(content, markerBegin) && strings.Contains(content, markerEnd)
 }
 
+// ManagedBlock returns the content inside the zmux-managed markers, without the
+// markers themselves. It is intended for doctor/status checks; Apply remains
+// the only writer of managed blocks.
+func ManagedBlock(content string) (string, bool) {
+	if !hasBlock(content) {
+		return "", false
+	}
+	start := strings.Index(content, markerBegin)
+	end := strings.Index(content, markerEnd)
+	if start < 0 || end < 0 || end < start {
+		return "", false
+	}
+	start += len(markerBegin)
+	block := content[start:end]
+	block = strings.TrimPrefix(block, "\n")
+	block = strings.TrimSuffix(block, "\n")
+	return block, true
+}
+
 // upsertBlock returns content with the managed block set to block. If a managed
 // block already exists it is replaced in place; otherwise the block is appended.
 func upsertBlock(content, block string) string {

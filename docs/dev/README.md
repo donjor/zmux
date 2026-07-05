@@ -10,6 +10,7 @@ make build            # compile ./cmd/zmux
 make test             # unit tests
 make test-race        # race detector suite; mirrors the Worktrunk merge gate
 make test-integration # integration tests; builds first
+make test-agent-surfaces # Pi extension + QA lint + shipped skill doctrine doctor
 make lint             # go vet + golangci-lint + gofumpt check
 make fmt              # gofumpt formatting
 make vuln             # govulncheck
@@ -18,7 +19,8 @@ make vuln             # govulncheck
 ```
 
 Run the narrow test first, then `make test`. For material CLI, tmux, keybinding,
-or TUI behavior, also run `make build` and the relevant `./qa` checklist. The
+or TUI behavior, also run `make build` and the relevant `./qa` checklist. For
+agent-facing tool/doctrine changes, run `make test-agent-surfaces`. The
 Worktrunk pre-merge gate in [../../.config/wt.toml](../../.config/wt.toml) runs
 `make lint` and `make test-race`; GitHub CI adds build, race tests, integration
 tests, and govulncheck.
@@ -50,8 +52,13 @@ tests, and govulncheck.
   full, pane, and hidden placements stay addressable.
 - Route workspace/session target changes through `internal/cli/session_target.go`;
   raw tmux names are debug/interop fallbacks.
-- `zzmux` is the isolated edge profile for live grounding; use it for QA that
-  should not touch the active `zmux` profile.
+- `zzmux` is the isolated edge profile for live grounding; use `./dev.sh zzmux`
+  for QA that should not touch the active `zmux` profile. It installs only the
+  edge binary and skips live shell/agent integration mutation.
+- Use `zmux doctor` / `zzmux doctor` when shell lifecycle behavior looks stale.
+  It checks the rc file version and the current shell's loaded hook version;
+  after `setup shell`, open a fresh shell/tab because existing shells keep
+  already-loaded functions.
 - Long-running or interactive commands belong in zmux tabs/panes, not hidden
   shell jobs.
 
