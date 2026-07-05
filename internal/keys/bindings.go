@@ -2,7 +2,7 @@ package keys
 
 // Tmux-owned bindings. These are the canonical definitions consumed by
 // internal/tmux/conf.go (to emit `bind-key` lines), by the help surfaces, and
-// by the generated docs/keybindings.md. Keys are written exactly as tmux
+// by the generated docs/reference/keybindings.md. Keys are written exactly as tmux
 // expects them so conf.go can emit Key verbatim.
 //
 // Changing a Key here changes the generated tmux config, the help output, and

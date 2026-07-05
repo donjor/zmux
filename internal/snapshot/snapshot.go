@@ -1,7 +1,7 @@
 // Package snapshot bundles terminal/TUI evidence: per-pane text and ANSI
 // captures, pane metadata, and an optional strict PNG screenshot of the current
 // desktop terminal. It is the Go-native, provider-agnostic port of the prior
-// pi-parley vision_snapshot tool (see docs/terminal-snapshot-correlation-proposal.md).
+// pi-parley vision_snapshot tool (see docs/reference/terminal-snapshot-correlation-proposal.md).
 //
 // All side effects go through interfaces: tmux.Runner for captures, config.FS
 // for file writes, a TargetResolver for screenshot geometry (satisfied by

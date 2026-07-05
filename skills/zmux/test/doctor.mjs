@@ -38,8 +38,8 @@ const skillFiles = [
   'skills/zmux/references/agent-peer.md',
   'skills/zmux/references/agent-worker.md',
   'skills/zmux/references/cli-catalog.md',
-  'docs/pi-zmux-extension.md',
-  'docs/agent-grounding.md',
+  'docs/domains/pi-zmux-extension.md',
+  'docs/dev/agent-grounding.md',
 ];
 const docs = Object.fromEntries(skillFiles.map((file) => [file, read(file)]));
 const combined = Object.values(docs).join('\n');
@@ -88,6 +88,6 @@ assert.ok(
   devSh.includes('if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_SHELL_SETUP:-0}" != "1" ]; then'),
   'dev.sh must not update live shell integration for TARGET=zzmux by default',
 );
-assert.match(docs['docs/agent-grounding.md'], /\.\/dev\.sh zzmux\s+# build \+ install the edge binary \(binary only/i);
+assert.match(docs['docs/dev/agent-grounding.md'], /\.\/dev\.sh zzmux\s+# build \+ install the edge binary \(binary only/i);
 
 console.log(`zmux skill doctor passed (${toolNames.size} Pi tools, ${skillFiles.length} docs checked)`);

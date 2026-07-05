@@ -119,14 +119,6 @@ entry/creation/management surface (`internal/tui/workspaceoutline` +
   - Custom left/right ordering belongs with the custom segment work, after the
     segment model is explicit.
 
-### Run & watch reliability
-
-- [x] **Sentinel-free completion via shell integration**
-  - zmux-managed root shells report command start/end through `shell-event` hooks,
-    giving normal typed commands and `zmux run` the same lifecycle glyph path.
-  - `zmux run` waits on a silent pane-option run-result channel instead of printing
-    completion sentinels into command output/history.
-
 ### Distribution & packaging
 
 - [ ] **Distribution packages**

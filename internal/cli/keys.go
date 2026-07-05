@@ -9,7 +9,7 @@ import (
 )
 
 // newKeysCmd builds the hidden `keys` command group — maintainer tooling for the
-// keybinding registry. `keys gen` regenerates docs/keybindings.md from
+// keybinding registry. `keys gen` regenerates docs/reference/keybindings.md from
 // internal/keys; `--check` verifies it is up to date (used in CI).
 //
 // This operates on a repo working-tree file (not user config), so it uses os
@@ -26,7 +26,7 @@ func newKeysCmd() *cobra.Command {
 
 	gen := &cobra.Command{
 		Use:   "gen",
-		Short: "Generate docs/keybindings.md from the keys registry",
+		Short: "Generate docs/reference/keybindings.md from the keys registry",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			doc, err := keys.GenerateDoc()
 			if err != nil {
@@ -51,7 +51,7 @@ func newKeysCmd() *cobra.Command {
 		},
 	}
 	gen.Flags().BoolVar(&check, "check", false, "verify the doc is up to date (exit non-zero on drift)")
-	gen.Flags().StringVar(&output, "output", "docs/keybindings.md", "output path for the generated doc")
+	gen.Flags().StringVar(&output, "output", "docs/reference/keybindings.md", "output path for the generated doc")
 
 	cmd.AddCommand(gen)
 	return cmd

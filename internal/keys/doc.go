@@ -28,7 +28,7 @@ func mdCode(s string) string {
 	return "`" + s + "`"
 }
 
-// GenerateDoc renders docs/keybindings.md from the registry. The binding tables
+// GenerateDoc renders docs/reference/keybindings.md from the registry. The binding tables
 // are generated from the registry; surrounding prose lives in the embedded
 // template. Output is deterministic so `zmux keys gen --check` can golden-diff
 // it in CI.

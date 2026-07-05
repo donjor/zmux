@@ -44,7 +44,7 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
   Reuse or introduce interfaces such as `tmux.Runner`, `config.FS`, or
   `qa.CmdRunner`.
 - Keybindings come from `internal/keys`; run `make keys-gen` after changes and
-  let `TestKeybindingsDocInSync` verify `docs/keybindings.md`.
+  let `TestKeybindingsDocInSync` verify `docs/reference/keybindings.md`.
 - Logical tabs are pane-canonical. Route name/address changes through
   `internal/cli/tab_target.go` so `run`, `watch`, `log`, `send`, `type`,
   `state`, and tab verbs keep working for full, pane, and hidden tabs.
@@ -65,8 +65,8 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
 
 - [README.md](README.md) - user-facing install and command reference.
 - [docs/architecture.md](docs/architecture.md) - package map and change guide.
-- [docs/qa.md](docs/qa.md) - QA runner behavior.
-- [docs/agent-grounding.md](docs/agent-grounding.md) - drive zzmux to ground/QA
+- [docs/dev/qa.md](docs/dev/qa.md) - QA runner behavior.
+- [docs/dev/agent-grounding.md](docs/dev/agent-grounding.md) - drive zzmux to ground/QA
   your own changes (spawn protocol, `--now` time injection, dev-QA split).
-- [docs/pi-zmux-extension.md](docs/pi-zmux-extension.md) - Pi integration.
+- [docs/domains/pi-zmux-extension.md](docs/domains/pi-zmux-extension.md) - Pi integration.
 - [skills/zmux/SKILL.md](skills/zmux/SKILL.md) - terminal orchestration skill.

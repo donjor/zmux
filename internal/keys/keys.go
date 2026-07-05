@@ -7,7 +7,7 @@
 //
 //   - internal/tmux/conf.go    — emits the actual `bind-key` lines
 //   - `zmux help` + dashboard  — render the live keybinding reference
-//   - docs/keybindings.md       — generated via `zmux keys gen` (CI golden check)
+//   - docs/reference/keybindings.md — generated via `zmux keys gen` (CI golden check)
 //
 // The dashboard popup's keys are owned here too (the Dashboard context) and
 // routed at runtime by internal/tui/dashboard via Binding.Matches, so the

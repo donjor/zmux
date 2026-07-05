@@ -106,7 +106,7 @@ legacy/v0/         # archived bash prototype — unsupported (owns its own asset
 The fastest path is in [docs/architecture.md → Where to make common changes](docs/architecture.md#where-to-make-common-changes). A few highlights:
 
 - **New CLI subcommand** → `internal/cli/<name>.go`, register in `internal/cli/root.go`.
-- **New keybinding** → add the `Binding` to `internal/keys`; `conf.go`, the help surfaces, and `docs/keybindings.md` all derive from it. Run `make keys-gen` to regenerate the doc (`TestKeybindingsDocInSync` enforces freshness).
+- **New keybinding** → add the `Binding` to `internal/keys`; `conf.go`, the help surfaces, and `docs/reference/keybindings.md` all derive from it. Run `make keys-gen` to regenerate the doc (`TestKeybindingsDocInSync` enforces freshness).
 - **New dashboard tab** → implement `dashboard.Tab` under `internal/tui/dashboard/tabs/`.
 - **New QA walkthrough** → add `checklists/<name>.toml`, validate with `./qa lint`, and document human-visible expectations in `expect`.
 - **New theme** → drop a file into `internal/theme/bundled/`; it's `go:embed`'d on next build.
