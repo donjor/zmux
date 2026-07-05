@@ -6,6 +6,42 @@
 
 ## Now
 
+### Agent collaboration QoL
+
+Make agent-driven zmux work feel like supervised terminal collaboration, not a
+pile of bespoke `zmux run` / `watch` / `tab status` loops.
+
+- [ ] **Pi extension exposes first-class peer/agent inspection tools**
+  - In progress on `feat/zmux-agent-qol`.
+  - Agents should be able to inspect a peer tab, start/reuse a peer, type a
+    prompt, and wait for fresh lifecycle evidence without hand-rolled shell
+    loops.
+  - Ship typed tools for status-plus-tail inspection, peer ensure/readiness,
+    wait-aware typing, and wait/idle runtime logs; update the bash classifier and
+    extension tests so agent CLIs route through those tools.
+
+- [ ] **Agent/human pane handoff chooses and reuses the right shared surface**
+  - When an agent needs human input such as a sudo password or manual command,
+    inspect the current window size, tabs, panes, and existing scratch/shared
+    surfaces before creating anything new.
+  - Reuse an idle scratch or joined pane when one exists; never reuse a pane that
+    is running something.
+  - Agent mode: portrait terminals should split horizontally with roughly 70% for
+    the agent and 30% for the shared surface; landscape terminals should split
+    side-by-side. Non-agent usage should get the same context-aware helper, but
+    default to an even portrait split and focus the new/joined surface.
+
+### Human-driving QA harness
+
+- [ ] **`zmux test` / `zzmux test` drives real interaction flows**
+  - Build a pass/fail suite that uses real keypresses / `send-keys` behavior, not
+    internal command shortcuts, against isolated `zmux-test` / `zzmux-test`
+    sessions.
+  - Cover creating, switching, renaming, and deleting workspaces, sessions, tabs,
+    dashboard surfaces, panes, joining, and promoting.
+  - Maintain a command/feature → human-driving-step map so missing test surfaces
+    are deterministic gaps, and compose those steps into reusable example flows.
+
 ### Remote & nested zmux
 
 Make zmux feel native across SSH and nested layers. Builds on the unified local
