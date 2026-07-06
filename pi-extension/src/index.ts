@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 import { shouldTriggerContinuation, takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
 import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
 import { registerZmuxTools } from "./tools.js";
-import { currentPane, listTabs, reloadZmux, setTabState, zmux } from "./zmux.js";
+import { clearCallbacks, currentPane, listTabs, reloadZmux, setTabState, zmux } from "./zmux.js";
 
 
 function compact(value: string, max = 1200): string {
@@ -84,6 +84,7 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
+		clearCallbacks();
 		await setCurrentPaneLifecycle(ctx.cwd, "clear");
 	});
 

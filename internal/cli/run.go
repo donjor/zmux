@@ -192,7 +192,7 @@ Examples:
 						return err
 					}
 				}
-				if err := app.Runner.SendKeys(rt.Target, sendCmd, "Enter"); err != nil {
+				if err := sendShellLine(app.Runner, rt.Target, sendCmd); err != nil {
 					return fmt.Errorf("send to %s: %w", rt.Target, err)
 				}
 				fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
@@ -279,7 +279,7 @@ Examples:
 					return err
 				}
 			}
-			if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
+			if err := sendShellLine(app.Runner, target, sendCmd); err != nil {
 				return fmt.Errorf("send to %s: %w", target, err)
 			}
 
@@ -362,6 +362,13 @@ func runRecipeFromRun(app *apppkg.App, cmd *cobra.Command, name string, items []
 // invocation. crypto/rand so concurrent runs can never mint the same nonce (a
 // clock-based nonce theoretically could). Clock fallback only if the system RNG
 // is unreadable, which Go treats as effectively impossible.
+func sendShellLine(r tmux.Runner, target, line string) error {
+	if err := r.SendKeys(target, "-l", line); err != nil {
+		return err
+	}
+	return r.SendKeys(target, "Enter")
+}
+
 func runNonce() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -370,34 +377,17 @@ func runNonce() string {
 	return hex.EncodeToString(b[:])
 }
 
-// isSimpleCommand reports whether a command can be typed verbatim at an
-// interactive shell prompt without changing meaning, so it lands in shell
-// history and a human can Up-arrow to re-run it. Anything an interactive
-// shell or tmux send-keys could reinterpret falls back to the temp-script
-// path:
-//   - newlines / CR (each line would submit separately)
-//   - tabs (the pty delivers a literal Tab — triggers shell completion)
-//   - `!` (bash history expansion fires even inside double quotes)
-//   - backslashes (escape handling differs between prompt and script)
-//   - a leading dash (send-keys would parse it as a flag)
-//   - a single token starting uppercase (could collide with a tmux key
-//     name like Enter or Up; real commands conventionally start lowercase)
+// isSimpleCommand reports whether a command should be typed verbatim at an
+// interactive shell prompt so it lands in shell history and a human can
+// Up-arrow to re-run it. Prefer literal prompt entry; temp scripts are a last
+// resort only for input that cannot safely be delivered as one prompt line.
 func isSimpleCommand(cmd string) bool {
-	if cmd == "" || strings.ContainsAny(cmd, "\n\r\t!\\") {
-		return false
-	}
-	if strings.HasPrefix(cmd, "-") {
-		return false
-	}
-	if !strings.ContainsRune(cmd, ' ') && cmd[0] >= 'A' && cmd[0] <= 'Z' {
-		return false
-	}
-	return true
+	return cmd != "" && !strings.ContainsAny(cmd, "\n\r\t")
 }
 
-// writeCommandScript writes a command to a temp script file for safe execution
-// via send-keys. Returns the script path and a cleanup function.
-// This avoids shell quoting issues with newlines, quotes, and special characters.
+// writeCommandScript writes a command to a temp script file for the rare cases
+// where the command cannot be delivered as one prompt line (currently multiline
+// or literal-tab input). Returns the script path and a cleanup function.
 func writeCommandScript(command string, timeoutSec int) (string, func(), error) {
 	f, err := os.CreateTemp("", "zmux-cmd-*.sh")
 	if err != nil {

@@ -2,10 +2,12 @@ import { Type } from "typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	focusTab,
+	inspectTab,
 	killTab,
 	labelTab,
 	logCommand,
 	moveTab,
+	peerEnsure,
 	placeTab,
 	sendKeys,
 	setTabPeer,
@@ -13,7 +15,7 @@ import {
 	snapshot,
 	tabStatus,
 	terminalCurrent,
-	typeText,
+	typeTextWithWait,
 } from "../zmux.js";
 import {
 	content,
@@ -132,6 +134,67 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	});
 
 	pi.registerTool({
+		name: "zmux_tab_inspect",
+		label: "zmux tab inspect",
+		description: "Inspect a zmux tab in one call: lifecycle/status JSON plus recent output tail and warnings. Prefer this over repeated tabs/status/logs calls when diagnosing agent or peer state.",
+		promptSnippet: "Inspect tab status plus recent output",
+		parameters: Type.Object({
+			tab: Type.String({ description: "Tab name target" }),
+			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+			lines: Type.Optional(Type.Number({ description: "Output lines to capture; default 120" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await inspectTab({ tab: params.tab, session: params.session, cwd: resolveCwd(ctx.cwd, params.cwd), lines: params.lines });
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
+		name: "zmux_peer_ensure",
+		label: "zmux peer ensure",
+		description: "Create/reuse a peer tab, stamp peer lifecycle metadata, wait briefly for readiness if requested, and return status plus output evidence. Use for prompt-scoped peer CLIs instead of hand-rolled run/status/watch loops.",
+		promptSnippet: "Ensure a peer tab and inspect readiness",
+		parameters: Type.Object({
+			tab: Type.String({ description: "Peer tab name, e.g. claude-peer or codex-peer" }),
+			command: Type.Optional(Type.String({ description: "Command to run when starting/restarting the peer; omit to stamp/inspect an existing tab" })),
+			session: Type.Optional(Type.String({ description: "Session for tab-name targets (`-s`)" })),
+			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+			role: Type.Optional(Type.String({ description: "Peer role/CLI label, e.g. claude or codex" })),
+			hostTab: Type.Optional(Type.String({ description: "Stable host logical tab id" })),
+			hostPane: Type.Optional(Type.String({ description: "Host pane id" })),
+			topic: Type.Optional(Type.String({ description: "Sanitized display topic/title; do not include full prompts" })),
+			source: Type.Optional(Type.String({ description: "Lifecycle source label" })),
+			message: Type.Optional(Type.String({ description: "Optional glyph message" })),
+			readiness: Type.Optional(Type.String({ description: "Regex to wait for in new peer output" })),
+			waitForTurnState: Type.Optional(Type.String({ description: "Peer turn state to wait for briefly, e.g. ready, attention, failed, running" })),
+			timeoutSeconds: Type.Optional(Type.Number({ description: "Short readiness/wait timeout; default 10" })),
+			lines: Type.Optional(Type.Number({ description: "Output lines to capture; default 120" })),
+			restart: Type.Optional(Type.Boolean({ description: "Send C-c before starting command" })),
+		}),
+		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const result = await peerEnsure({
+				tab: params.tab,
+				command: params.command,
+				session: params.session,
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+				role: params.role,
+				hostTab: params.hostTab,
+				hostPane: params.hostPane,
+				topic: params.topic,
+				source: params.source,
+				message: params.message,
+				readiness: params.readiness,
+				waitForTurnState: params.waitForTurnState,
+				timeoutSeconds: params.timeoutSeconds,
+				lines: params.lines,
+				restart: params.restart,
+			});
+			return content(result.text, result.details);
+		},
+	});
+
+	pi.registerTool({
 		name: "zmux_tab_label",
 		label: "zmux tab label",
 		description: "Set or clear a stable zmux label for the current/targeted tab. Use for intentional tab identity, not routine output state.",
@@ -156,11 +219,12 @@ export function registerTabTools(pi: ExtensionAPI): void {
 		parameters: Type.Object({
 			tab: Type.String({ description: "Tab to move" }),
 			destination: Type.String({ description: "Destination session target" }),
+			session: Type.Optional(Type.String({ description: "Source session for tab-name targets (`-s`)" })),
 			force: Type.Optional(Type.Boolean({ description: "Allow cross-workspace move" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
-			const result = await moveTab({ tab: params.tab, destination: params.destination, force: params.force, cwd: resolveCwd(ctx.cwd, params.cwd) });
+			const result = await moveTab({ tab: params.tab, destination: params.destination, session: params.session, force: params.force, cwd: resolveCwd(ctx.cwd, params.cwd) });
 			return content(result.text, result.details);
 		},
 	});
@@ -263,11 +327,12 @@ export function registerTabTools(pi: ExtensionAPI): void {
 		description: "Kill a zmux tab/window by name. Use for intentional tab cleanup instead of shelling out to `zmux tab kill` in bash.",
 		promptSnippet: "Kill a zmux tab/window",
 		parameters: Type.Object({
-			tab: Type.String({ description: "Tab/window name to kill in the current session" }),
+			tab: Type.String({ description: "Tab/window name to kill" }),
+			session: Type.Optional(Type.String({ description: "Source session for tab-name targets (`-s`)" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
-			const result = await killTab(params.tab, resolveCwd(ctx.cwd, params.cwd));
+			const result = await killTab(params.tab, resolveCwd(ctx.cwd, params.cwd), params.session);
 			return content(result.text, result.details);
 		},
 	});
@@ -308,16 +373,33 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_type",
 		label: "zmux type",
-		description: "Type text plus Enter into an existing zmux tab. For sudo/password/manual-input commands, prefer zmux_interactive_type.",
+		description: "Type text plus Enter into an existing zmux tab. For sudo/password/manual-input commands, prefer zmux_interactive_type. For peer turns, optionally mark running and wait briefly for fresh lifecycle readiness.",
 		promptSnippet: "Type text into an existing zmux tab",
 		parameters: Type.Object({
 			tab: Type.String({ description: "Target tab/window" }),
 			text: Type.String({ description: "Text to type and submit" }),
 			session: Type.Optional(Type.String({ description: "Optional zmux session target (`-s`)" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
+			markPeerRunning: Type.Optional(Type.Boolean({ description: "After typing, stamp peer lifecycle as running" })),
+			waitForTurnState: Type.Optional(Type.String({ description: "Wait briefly for a fresh turn state, e.g. ready, attention, failed, running" })),
+			timeoutSeconds: Type.Optional(Type.Number({ description: "Short lifecycle wait timeout; default 8" })),
+			lines: Type.Optional(Type.Number({ description: "Output lines to include when waiting" })),
+			source: Type.Optional(Type.String({ description: "Lifecycle source label when marking peer running" })),
+			message: Type.Optional(Type.String({ description: "Optional glyph message when marking peer running" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
-			const result = await typeText(params.tab, params.text, resolveCwd(ctx.cwd, params.cwd), params.session);
+			const result = await typeTextWithWait({
+				tab: params.tab,
+				text: params.text,
+				session: params.session,
+				cwd: resolveCwd(ctx.cwd, params.cwd),
+				markPeerRunning: params.markPeerRunning,
+				waitForTurnState: params.waitForTurnState,
+				timeoutSeconds: params.timeoutSeconds,
+				lines: params.lines,
+				source: params.source,
+				message: params.message,
+			});
 			return content(result.text, result.details);
 		},
 	});

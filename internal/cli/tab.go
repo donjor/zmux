@@ -121,6 +121,7 @@ func newTabMarkAgentCmd(app *apppkg.App) *cobra.Command {
 
 func newTabMoveCmd(app *apppkg.App) *cobra.Command {
 	var moveForce bool
+	var sessionFlag string
 	cmd := &cobra.Command{
 		Use:   "move <tab-name> <dest-session>",
 		Short: "Move a tab to another session",
@@ -135,23 +136,31 @@ session).`,
 			tabName := args[0]
 			destInput := args[1]
 
-			// Get current session.
-			current, err := app.Runner.DisplayMessage("", "#{session_name}")
-			if err != nil {
-				return fmt.Errorf("not inside tmux")
+			sourceSession := strings.TrimSpace(sessionFlag)
+			if sourceSession == "" {
+				current, err := app.Runner.DisplayMessage("", "#{session_name}")
+				if err != nil {
+					return fmt.Errorf("not inside tmux")
+				}
+				sourceSession = strings.TrimSpace(current)
+			} else {
+				resolved, err := resolveSessionTarget(app, sourceSession)
+				if err != nil {
+					return fmt.Errorf("resolve source session %q: %w", sourceSession, err)
+				}
+				sourceSession = resolved
 			}
-			current = strings.TrimSpace(current)
 
 			// Resolve label-aware: logical tab → legacy window → raw name.
-			rt, err := resolveTabTarget(app, current, tabName)
+			rt, err := resolveTabTarget(app, sourceSession, tabName)
 			if err != nil {
 				return err
 			}
 
 			// Only full tabs move as windows; a pane-of or docked tab has no
 			// window of its own to move.
-			srcSession := current
-			src := current + ":" + tabName // raw fallback — tmux errors if missing
+			srcSession := sourceSession
+			src := sourceSession + ":" + tabName // raw fallback — tmux errors if missing
 			switch {
 			case rt.Tab != nil && rt.Tab.Placement == tabs.PlacementFull:
 				srcSession = rt.Tab.Session
@@ -159,7 +168,7 @@ session).`,
 			case rt.Tab != nil:
 				return fmt.Errorf("tab %q is %s — only full tabs move between sessions", tabName, rt.Tab.Placement)
 			case rt.Win != nil:
-				src = fmt.Sprintf("%s:%d", current, rt.Win.Index)
+				src = fmt.Sprintf("%s:%d", sourceSession, rt.Win.Index)
 			}
 
 			destSession, err := resolveSessionTarget(app, destInput)
@@ -197,6 +206,7 @@ session).`,
 		},
 	}
 	cmd.Flags().BoolVarP(&moveForce, "force", "f", false, "move even if the destination session is in another workspace")
+	cmd.Flags().StringVarP(&sessionFlag, "session", "s", "", "source session for tab-name targets (default: current)")
 	return cmd
 }
 
@@ -241,16 +251,20 @@ func newTabRefreshNamesCmd(app *apppkg.App) *cobra.Command {
 func newTabKillCmd(app *apppkg.App) *cobra.Command {
 	var paneFlag string
 	var notifyFlag bool
+	var sessionFlag string
 
 	cmd := &cobra.Command{
 		Use:   "kill [tab-name]",
-		Short: "Kill a tab in the current session",
+		Short: "Kill a tab in the current or targeted session",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			msg, err := func() (string, error) {
 				if paneFlag != "" {
 					if len(args) > 0 {
 						return "", fmt.Errorf("--pane cannot be combined with a tab argument")
+					}
+					if sessionFlag != "" {
+						return "", fmt.Errorf("--session cannot be combined with --pane")
 					}
 					t, err := logicalTabByPane(app.Runner, paneFlag)
 					if err != nil {
@@ -261,23 +275,33 @@ func newTabKillCmd(app *apppkg.App) *cobra.Command {
 				if len(args) == 0 {
 					return "", fmt.Errorf("tab name required")
 				}
-				return killNamedTab(app, args[0])
+				return killNamedTab(app, args[0], sessionFlag)
 			}()
 			return notifyOutcome(app, cmd, notifyFlag, msg, nil, err)
 		},
 	}
 	cmd.Flags().StringVar(&paneFlag, "pane", "", "target pane id (mouse/menu path)")
 	cmd.Flags().BoolVar(&notifyFlag, "notify", false, "flash the outcome as a transient tmux message and exit 0 (mouse/menu path)")
+	cmd.Flags().StringVarP(&sessionFlag, "session", "s", "", "source session for tab-name targets (default: current)")
 	_ = cmd.Flags().MarkHidden("pane")
 	return cmd
 }
 
-func killNamedTab(app *apppkg.App, tabName string) (string, error) {
-	current, err := app.Runner.DisplayMessage("", "#{session_name}")
-	if err != nil {
-		return "", fmt.Errorf("not inside tmux")
+func killNamedTab(app *apppkg.App, tabName string, sessionFlag string) (string, error) {
+	current := strings.TrimSpace(sessionFlag)
+	if current == "" {
+		resolved, err := app.Runner.DisplayMessage("", "#{session_name}")
+		if err != nil {
+			return "", fmt.Errorf("not inside tmux")
+		}
+		current = strings.TrimSpace(resolved)
+	} else {
+		resolved, err := resolveSessionTarget(app, current)
+		if err != nil {
+			return "", fmt.Errorf("resolve source session %q: %w", current, err)
+		}
+		current = resolved
 	}
-	current = strings.TrimSpace(current)
 
 	// kill mutates (destroys a tab) — never reach across sessions by a
 	// bare name (report 039). Cross-session kill must be explicit.
@@ -353,8 +377,12 @@ func newSessionKillCmd(app *apppkg.App) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			sessName := args[0]
+			target, err := resolveSessionTarget(app, sessName)
+			if err != nil {
+				return err
+			}
 
-			if err := workspace.KillSession(app.Runner, app.WorkspaceStore, sessName); err != nil {
+			if err := workspace.KillSession(app.Runner, app.WorkspaceStore, target); err != nil {
 				return err
 			}
 			fmt.Printf("Killed session %q\n", sessName)

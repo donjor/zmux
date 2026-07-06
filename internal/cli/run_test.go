@@ -312,9 +312,9 @@ func TestRunFailsSessionNotExist(t *testing.T) {
 	}
 }
 
-// Simple commands are typed verbatim so they land in the tab's shell history
-// (a human can Up-arrow to re-run them); only commands interactive bash or
-// send-keys could reinterpret go via the temp-script indirection.
+// Single-line commands are typed verbatim so they land in the tab's shell
+// history (a human can Up-arrow to re-run them). Temp scripts are reserved for
+// commands that cannot be delivered as one prompt line.
 func TestRunSimpleCommandSendsLiteral(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
@@ -325,8 +325,8 @@ func TestRunSimpleCommandSendsLiteral(t *testing.T) {
 	}
 
 	for _, c := range mock.Calls {
-		if c.Method == "SendKeys" {
-			sent := c.Args[1]
+		if c.Method == "SendKeys" && len(c.Args) >= 3 && c.Args[1] == "-l" {
+			sent := c.Args[2]
 			// Literal command at the prompt (Up-arrow re-runs it). Lifecycle
 			// is owned by shell hooks, so no sentinel/epilogue is appended.
 			if sent != "bun run dev" {
@@ -341,7 +341,7 @@ func TestRunSimpleCommandSendsLiteral(t *testing.T) {
 	t.Error("expected SendKeys call")
 }
 
-func TestRunComplexCommandUsesScript(t *testing.T) {
+func TestRunMultilineCommandUsesScript(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
 
@@ -351,9 +351,9 @@ func TestRunComplexCommandUsesScript(t *testing.T) {
 	}
 
 	for _, c := range mock.Calls {
-		if c.Method == "SendKeys" {
-			if !strings.HasPrefix(c.Args[1], "bash ") || !strings.Contains(c.Args[1], "zmux-cmd-") {
-				t.Errorf("expected temp-script indirection in SendKeys, got %q", c.Args[1])
+		if c.Method == "SendKeys" && len(c.Args) >= 3 && c.Args[1] == "-l" {
+			if !strings.HasPrefix(c.Args[2], "bash ") || !strings.Contains(c.Args[2], "zmux-cmd-") {
+				t.Errorf("expected temp-script indirection in SendKeys, got %q", c.Args[2])
 			}
 			return
 		}
@@ -367,6 +367,10 @@ func TestIsSimpleCommand(t *testing.T) {
 		"npm test",
 		"ls",
 		`go test ./... -run "TestFoo"`,
+		`printf 'a\n'`,
+		"echo hi!",
+		"-v",
+		"Enter",
 	}
 	for _, c := range simple {
 		if !isSimpleCommand(c) {
@@ -377,11 +381,7 @@ func TestIsSimpleCommand(t *testing.T) {
 	complexCmds := []string{
 		"",
 		"echo a\necho b", // multiline — each line would submit separately
-		"echo hi!",       // bash history expansion
-		`printf 'a\n'`,   // backslash escapes
 		"echo a\tb",      // literal tab triggers shell completion
-		"-v",             // leading dash — send-keys flag
-		"Enter",          // tmux key-name collision
 	}
 	for _, c := range complexCmds {
 		if isSimpleCommand(c) {
@@ -527,10 +527,10 @@ func TestRunDetachedDoesNotAppendExitEpilogue(t *testing.T) {
 	}
 
 	for _, c := range mock.Calls {
-		if c.Method != "SendKeys" {
+		if c.Method != "SendKeys" || len(c.Args) < 3 || c.Args[1] != "-l" {
 			continue
 		}
-		if sent := c.Args[1]; sent != "sleep 300" {
+		if sent := c.Args[2]; sent != "sleep 300" {
 			t.Fatalf("detached run must send the command without lifecycle epilogue: %q", sent)
 		}
 		return

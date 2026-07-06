@@ -15,12 +15,15 @@ try {
   const { classifyBash, hasExplicitBypass, stripQuotedSegments } = await import(join(outDir, 'src/classify.js'));
   const { loadConfig } = await import(join(outDir, 'src/config.js'));
   const {
+    autoPaneResizeAxis,
+    buildCallbackWatchArgs,
     buildLogArgs,
     buildPaneOpenArgs,
     buildPiReloadScript,
     buildSessionListArgs,
     buildSessionRunArgs,
     buildSnapshotArgs,
+    buildTabKillArgs,
     buildTabLabelArgs,
     buildTabMoveArgs,
     buildTabPeerArgs,
@@ -28,15 +31,21 @@ try {
     buildTabStateArgs,
     buildTabStatusArgs,
     buildTmuxRespawnScript,
+    buildWatchArgs,
     buildZmuxRunArgs,
     detectUserInputPrompt,
+    listCallbacks,
+    listRecentCallbackCompletions,
     settledFreshCommandStatus,
+    statusWarnings,
+    turnWaitOutcomeForStatus,
+    watchPatternPresentInText,
     zmuxRunResultDetails,
   } = await import(join(outDir, 'src/zmux.js'));
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
   const { reloadContinuationPath, shouldTriggerContinuation, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
-  const { shouldWaitForExit } = await import(join(outDir, 'src/tools/shared.js'));
+  const { shouldWaitForExit, validateLogParams } = await import(join(outDir, 'src/tools/shared.js'));
   const { default: registerExtension } = await import(join(outDir, 'src/index.js'));
 
   const registeredTools = [];
@@ -52,9 +61,12 @@ try {
   registerExtension(fakePi);
   const toolNames = registeredTools.map((tool) => tool.name).sort();
   assert.deepEqual(toolNames, [
+    'zmux_callback',
     'zmux_current',
     'zmux_interactive_type',
     'zmux_log',
+    'zmux_peer_ensure',
+    'zmux_peer_handoff',
     'zmux_pane_close',
     'zmux_pane_focus',
     'zmux_pane_list',
@@ -75,6 +87,7 @@ try {
     'zmux_sessions',
     'zmux_snapshot',
     'zmux_tab_focus',
+    'zmux_tab_inspect',
     'zmux_tab_kill',
     'zmux_tab_label',
     'zmux_tab_move',
@@ -94,6 +107,15 @@ try {
   const toolByName = Object.fromEntries(registeredTools.map((tool) => [tool.name, tool]));
   assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /Do not add your own sentinels or wrapper scripts/);
   assert.match(toolByName.zmux_tab_status.description, /do not set glyphs/);
+  assert.match(toolByName.zmux_tab_inspect.description, /status JSON plus recent output/);
+  assert.match(toolByName.zmux_peer_ensure.description, /peer lifecycle metadata/);
+  assert.match(toolByName.zmux_type.parameters.properties.waitForTurnState.description, /fresh turn state/);
+  assert.match(toolByName.zmux_runtime_logs.parameters.properties.waitFor.description, /Regex to wait/);
+  assert.match(toolByName.zmux_callback.description, /notify Pi later/);
+  assert.match(toolByName.zmux_peer_handoff.description, /Pi callback message/);
+  assert.match(toolByName.zmux_pane_resize.description, /auto-selects width.*height/);
+  assert.match(toolByName.zmux_pane_resize.parameters.properties.axis.description, /auto.*width.*height/);
+  assert.match(toolByName.zmux_tab_kill.parameters.properties.session.description, /Source session/);
   assert.match(toolByName.zmux_interactive_type.description, /sudo, ssh, REPLs/);
   assert.match(toolByName.zmux_interactive_type.parameters.properties.waitForExit.description, /defaults true.*false for long interactive shells/);
   assert.equal(shouldWaitForExit('ssh onyxrock'), false);
@@ -125,6 +147,8 @@ try {
     ['zmux session run peer -n agy-peer -- agy', 'direct_zmux'],
     ['zmux session kill peer', 'direct_zmux'],
     ['zmux run --command "npm test" -n tests', 'direct_zmux'],
+    ['zmux run --command "claude --dangerously-skip-permissions" -n claude-peer -d', 'direct_zmux'],
+    ['zmux tab status claude-peer --json && zmux watch claude-peer -l 80', 'direct_zmux'],
     ['zmux watch server -l 20', 'direct_zmux'],
     ['zmux log tail server -n 20', 'direct_zmux'],
     ['zmux snapshot --no-png', 'direct_zmux'],
@@ -175,6 +199,11 @@ try {
   assert.equal(hasExplicitBypass('PI_ZMUX_ALLOW=1 zmux tabs'), true);
   assert.equal(hasExplicitBypass('zmux tabs # pi-zmux: allow'), true);
   assert.equal(hasExplicitBypass('zmux tabs'), false);
+  assert.deepEqual(listCallbacks(), []);
+  assert.deepEqual(listRecentCallbackCompletions(), []);
+  assert.equal(autoPaneResizeAxis({ paneWidth: 80, paneHeight: 6, windowWidth: 80, windowHeight: 23 }), 'height');
+  assert.equal(autoPaneResizeAxis({ paneWidth: 35, paneHeight: 23, windowWidth: 80, windowHeight: 23 }), 'width');
+  assert.equal(autoPaneResizeAxis(undefined), 'width');
   assert.equal(shouldTriggerContinuation('Reload complete. Continue with verification.'), true);
   assert.equal(shouldTriggerContinuation("Reload complete. Wait for the user's next instruction."), false);
   assert.equal(shouldTriggerContinuation('reload complete; wait for user next instruction'), false);
@@ -185,6 +214,17 @@ try {
   assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '7', cmdState: 'done', lastExit: '0' }, 7), { fresh: false, settled: false, state: 'done', cmdSeq: 7 });
   assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '8', cmdState: 'running' }, 7), { fresh: true, settled: false, state: 'running', cmdSeq: 8 });
   assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '8', cmdState: 'failed', lastExit: '2' }, 7), { fresh: true, settled: true, state: 'failed', exitCode: 2, cmdSeq: 8 });
+  assert.equal(turnWaitOutcomeForStatus({ turnState: 'ready', turnAt: '100' }, 'ready', 100), 'unproven');
+  assert.equal(turnWaitOutcomeForStatus({ turnState: 'ready', turnAt: '101' }, 'ready', 100), 'ready');
+  assert.equal(turnWaitOutcomeForStatus({ turnState: 'failed', turnAt: '101' }, 'ready', 100), 'failed');
+  assert.deepEqual(statusWarnings({ turnState: 'ready', turnAt: '100' }, { targetState: 'ready', expectFreshAfter: 100 }), {
+    warnings: ['matching turn state is stale; readiness is unproven'],
+    failureKind: 'stale_turn_state',
+  });
+  assert.deepEqual(statusWarnings({}, { targetState: 'ready' }), {
+    warnings: ['turn state is unavailable; readiness is unproven'],
+    failureKind: 'turn_state_unavailable',
+  });
 
   assert.deepEqual(buildPaneOpenArgs({ name: 'logs', command: 'npm run dev', cwd: '/repo', direction: 'right', size: '40%' }), [
     'pane', 'open', 'logs', '--cwd', '/repo', '-r', '40%', '--no-focus', '--', 'bash', '-lc', 'npm run dev',
@@ -211,10 +251,24 @@ try {
   assert.deepEqual(buildTabStatusArgs({ tab: 'claude-peer', session: 'zws/repo' }), [
     'tab', 'status', 'claude-peer', '--json', '-s', 'zws/repo',
   ]);
+  assert.deepEqual(buildWatchArgs({ tab: 'claude-peer', session: 'zws/repo', lines: 80, waitFor: 'ready', timeoutSeconds: 8 }), [
+    'watch', 'claude-peer', '-l', '80', '--until', 'ready', '-T', '8', '-s', 'zws/repo',
+  ]);
+  assert.deepEqual(buildWatchArgs({ tab: 'server', idleSeconds: 2 }), [
+    'watch', 'server', '-l', '120', '--idle', '2', '-T', '10',
+  ]);
+  assert.deepEqual(buildCallbackWatchArgs({ tab: 'bench', session: 'repo/main', waitFor: 'DONE', timeoutSeconds: 60 }), [
+    'watch', 'bench', '-l', '160', '--until', 'DONE', '-T', '60', '-s', 'repo/main',
+  ]);
+  assert.equal(watchPatternPresentInText('ready-service', 'tail\nready-service'), true);
+  assert.equal(watchPatternPresentInText('[invalid', 'tail [invalid'), false);
   assert.deepEqual(buildTabLabelArgs({ label: 'api', target: '%42' }), ['tab', 'label', '--target', '%42', 'api']);
   assert.deepEqual(buildTabMoveArgs({ tab: 'api', destination: 'repo/sidecar', force: true }), ['tab', 'move', 'api', 'repo/sidecar', '--force']);
+  assert.deepEqual(buildTabMoveArgs({ tab: 'api', destination: 'repo/sidecar', session: 'repo/main' }), ['tab', 'move', 'api', 'repo/sidecar', '-s', 'repo/main']);
+  assert.deepEqual(buildTabKillArgs({ tab: 'api', session: 'repo/main' }), ['tab', 'kill', 'api', '-s', 'repo/main']);
   assert.deepEqual(buildLogArgs({ action: 'tail', tab: 'server', session: 'zws/repo', lines: 40 }), ['log', 'tail', 'server', '-n', '40', '-s', 'zws/repo']);
   assert.deepEqual(buildLogArgs({ action: 'status', tab: 'server', session: 'zws/repo', lines: 40 }), ['log', 'status']);
+  assert.throws(() => validateLogParams('status', { session: 'zws/repo' }), /session is not valid for zmux_log status/);
   assert.deepEqual(buildSnapshotArgs({ noPng: true, panes: ['%1', '%2'], lines: 120, out: '/tmp/snap', json: true }), [
     'snapshot', '--no-png', '--pane', '%1', '--pane', '%2', '--lines', '120', '--out', '/tmp/snap', '--json',
   ]);

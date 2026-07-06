@@ -116,6 +116,22 @@ socket:
 Keep the human's part to spawning the client. Everything before and after is the
 agent's to drive.
 
+## Prompt-driven agent-surface QA
+
+For broad changes to the shipped zmux skill, Pi extension tools, guardrails, or
+peer/worker flows, deterministic checks should be paired with a fresh-session
+prompt run:
+
+- `test-prompts/zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine
+  and `zzmux` smoke coverage.
+- `test-prompts/zmux-agent-pi-extension-testing-prompt.md` — active Pi tool
+  inventory, bash guardrails, typed tools, and peer composite behavior.
+
+These prompts are exploratory QA wrappers, not a new behavior source of truth.
+Expected behavior still lives in `skills/zmux/SKILL.md`, its references, and
+`docs/domains/pi-zmux-extension.md`; `make test-agent-surfaces` remains the
+repeatable gate.
+
 ## What stays on the human's plate
 
 After the agent has grounded every objective check on zzmux, the residual human

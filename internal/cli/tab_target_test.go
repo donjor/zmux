@@ -222,6 +222,70 @@ func TestTabKillFullTabKillsWindow(t *testing.T) {
 	}
 }
 
+func TestTabKillResolvesSourceSessionFlag(t *testing.T) {
+	app, mock := newTestApp(t)
+	source := workspace.RawSessionName("proj", "worker")
+	current := workspace.RawSessionName("proj", "main")
+	if err := app.WorkspaceStore.AddSession("proj", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WorkspaceStore.AddSession("proj", "main"); err != nil {
+		t.Fatal(err)
+	}
+	mock.DisplayMessageResult = current
+	mock.Sessions = []tmux.Session{{Name: source}, {Name: current}}
+	mock.Windows[source] = []tmux.Window{
+		{Index: 0, Name: "worker", Active: true},
+		{Index: 1, Name: "tests"},
+	}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", source, "@5", 1, "ztab_tests1", "tests"),
+	}
+
+	rootCmd := NewRootCmd(app, testVersion)
+	rootCmd.SetArgs([]string{"tab", "kill", "tests", "--session", "proj/worker"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab kill failed: %v", err)
+	}
+
+	killed := false
+	for _, c := range mock.Calls {
+		if c.Method == "KillWindowByID" && c.Args[0] == "@5" {
+			killed = true
+		}
+	}
+	if !killed {
+		t.Fatalf("expected KillWindowByID @5, calls = %#v", mock.Calls)
+	}
+}
+
+func TestTabKillSourceSessionFlagReportsResolveError(t *testing.T) {
+	app, _ := newTestApp(t)
+	if err := app.WorkspaceStore.CreateWorkspace("proj", "/repo"); err != nil {
+		t.Fatal(err)
+	}
+
+	rootCmd := NewRootCmd(app, testVersion)
+	rootCmd.SetArgs([]string{"tab", "kill", "tests", "--session", "proj/missing"})
+	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "resolve source session") {
+		t.Fatalf("expected source-session resolve error, got %v", err)
+	}
+}
+
+func TestTabKillPaneFlagRejectsSessionFlag(t *testing.T) {
+	rootCmd, _ := withMockApp(t)
+	rootCmd.SetArgs([]string{"tab", "kill", "--pane", "%2", "--session", "proj/worker"})
+	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--session cannot be combined with --pane") {
+		t.Fatalf("expected --pane/--session error, got %v", err)
+	}
+}
+
 func TestTabKillPaneFlagUsesLogicalTabSemanticsAndNotifies(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Windows["test-session"] = []tmux.Window{
@@ -316,6 +380,46 @@ func TestTabMoveFullTabMovesWindowByID(t *testing.T) {
 		if c.Method == "MoveWindow" {
 			if c.Args[0] != "@5" || c.Args[1] != "other:" {
 				t.Errorf("expected MoveWindow @5 → other:, got %v", c.Args)
+			}
+			moved = true
+		}
+	}
+	if !moved {
+		t.Fatal("expected MoveWindow call")
+	}
+}
+
+func TestTabMoveResolvesSourceSessionFlag(t *testing.T) {
+	app, mock := newTestApp(t)
+	source := workspace.RawSessionName("proj", "worker")
+	dest := workspace.RawSessionName("proj", "main")
+	if err := app.WorkspaceStore.AddSession("proj", "worker"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.WorkspaceStore.AddSession("proj", "main"); err != nil {
+		t.Fatal(err)
+	}
+	mock.DisplayMessageResult = dest
+	mock.Sessions = []tmux.Session{{Name: source}, {Name: dest}}
+	mock.Windows[source] = []tmux.Window{
+		{Index: 0, Name: "worker", Active: true},
+		{Index: 1, Name: "tests"},
+	}
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		logicalRow("%2", source, "@5", 1, "ztab_tests1", "tests"),
+	}
+
+	rootCmd := NewRootCmd(app, testVersion)
+	rootCmd.SetArgs([]string{"tab", "move", "tests", "main", "--session", "proj/worker"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("tab move failed: %v", err)
+	}
+
+	moved := false
+	for _, c := range mock.Calls {
+		if c.Method == "MoveWindow" {
+			if c.Args[0] != "@5" || c.Args[1] != dest+":" {
+				t.Errorf("expected MoveWindow @5 -> %s:, got %v", dest, c.Args)
 			}
 			moved = true
 		}

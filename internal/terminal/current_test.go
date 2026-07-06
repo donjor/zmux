@@ -66,6 +66,44 @@ func TestResolveCurrentUnsupportedTmuxFormat(t *testing.T) {
 	}
 }
 
+func TestResolveCurrentUnsupportedHeadlessClientMetadata(t *testing.T) {
+	mock := currentMock()
+	mock.DisplayMessageResult = "\t\t$28\t@50\t1\tparley\t%139"
+	resolver := Resolver{Runner: mock, Adapter: fakeAdapter{}, CurrentPaneID: "%139"}
+	result, err := resolver.Resolve(context.Background())
+	if err != nil {
+		t.Fatalf("Resolve error: %v", err)
+	}
+	if result.OK || result.Status != StatusUnsupported || result.Reason != "tmux current client metadata is unavailable; terminal current requires an attached tmux client" {
+		t.Fatalf("expected precise client-metadata unsupported result, got %#v", result)
+	}
+}
+
+func TestResolveCurrentUnsupportedTrimmedHeadlessClientMetadata(t *testing.T) {
+	mock := currentMock()
+	mock.DisplayMessageResult = "$28\t@50\t1\tparley\t%139"
+	resolver := Resolver{Runner: mock, Adapter: fakeAdapter{}, CurrentPaneID: "%139"}
+	result, err := resolver.Resolve(context.Background())
+	if err != nil {
+		t.Fatalf("Resolve error: %v", err)
+	}
+	if result.OK || result.Status != StatusUnsupported || result.Reason != "tmux current client metadata is unavailable; terminal current requires an attached tmux client" {
+		t.Fatalf("expected precise trimmed-client unsupported result, got %#v", result)
+	}
+}
+
+func TestCurrentFactsPreservesTabbedWindowName(t *testing.T) {
+	mock := currentMock()
+	mock.DisplayMessageResult = "/dev/pts/13\tpi\t$28\t@50\t1\tpar\tley\t%139"
+	facts, err := currentFacts(mock)
+	if err != nil {
+		t.Fatalf("currentFacts error: %v", err)
+	}
+	if facts.WindowName != "par\tley" || facts.PaneID != "%139" {
+		t.Fatalf("unexpected facts: %#v", facts)
+	}
+}
+
 func TestResolveCurrentNotFound(t *testing.T) {
 	mock := currentMock()
 	resolver := Resolver{Runner: mock, Adapter: fakeAdapter{windows: []wm.Window{{Title: "Ghostty", Visible: true}}}, Process: fakeProcess{ancestor: true}, CurrentPaneID: "%139"}

@@ -108,6 +108,7 @@ func commandSections() []Section {
 			{"zmux ls <ws>", "List sessions within a workspace"},
 			{"zmux ls -s", "Flat session list"},
 			{"zmux tabs [session]", "List tabs (alias: t)"},
+			{"zmux where [--json]", "Current workspace/session/tab/pane (alias: whoami)"},
 		}},
 		{Title: "Recipes", Entries: []Entry{
 			{"zmux run <recipe>", "Open the recipe form with defaults"},

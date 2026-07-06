@@ -161,8 +161,8 @@ func TestTypeSendsTextThenEnterSeparately(t *testing.T) {
 	if len(sends) != 2 {
 		t.Fatalf("expected 2 SendKeys calls (text, then Enter), got %d: %v", len(sends), sends)
 	}
-	if len(sends[0]) != 2 || sends[0][1] != "git status" {
-		t.Errorf("first call should send the text only, got %v", sends[0])
+	if len(sends[0]) != 3 || sends[0][1] != "-l" || sends[0][2] != "git status" {
+		t.Errorf("first call should send the text literally only, got %v", sends[0])
 	}
 	if len(sends[1]) != 2 || sends[1][1] != "Enter" {
 		t.Errorf("second call should send Enter only, got %v", sends[1])
@@ -170,13 +170,13 @@ func TestTypeSendsTextThenEnterSeparately(t *testing.T) {
 }
 
 func TestTypeGapScalesWithPasteSize(t *testing.T) {
-	if g := typeGap(10); g != 210*time.Millisecond {
+	if g := typeGap(10); g != 770*time.Millisecond {
 		t.Errorf("short text: got %v", g)
 	}
-	if g := typeGap(1020); g != 1220*time.Millisecond {
-		t.Errorf("1KB paste must exceed the old fixed 200ms gap: got %v", g)
+	if g := typeGap(1020); g != 2500*time.Millisecond {
+		t.Errorf("1KB paste must use the bounded high-safety TUI gap: got %v", g)
 	}
-	if g := typeGap(100_000); g != 1500*time.Millisecond {
+	if g := typeGap(100_000); g != 2500*time.Millisecond {
 		t.Errorf("cap: got %v", g)
 	}
 }

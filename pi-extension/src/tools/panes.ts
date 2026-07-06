@@ -123,15 +123,17 @@ export function registerPaneTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_pane_resize",
 		label: "zmux pane resize",
-		description: "Resize a zmux pane by id/title/index. Use for intentional pane layout control instead of raw tmux resize-pane.",
+		description: "Resize a zmux pane by id/title/index. Use for intentional pane layout control instead of raw tmux resize-pane. By default, Pi auto-selects width for side-by-side panes and height for full-width stacked panes.",
 		promptSnippet: "Resize a zmux pane",
 		parameters: Type.Object({
 			pane: Type.String({ description: "Pane id/title/index to resize" }),
 			size: Type.String({ description: "New pane size, e.g. 40% or 80" }),
+			axis: Type.Optional(Type.String({ description: "Resize axis: auto (default), width, or height" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
-			const result = await resizePane(params.pane, resolveCwd(ctx.cwd, params.cwd), params.size);
+			const axis = params.axis === "width" || params.axis === "height" || params.axis === "auto" ? params.axis : undefined;
+			const result = await resizePane(params.pane, resolveCwd(ctx.cwd, params.cwd), params.size, axis);
 			return content(result.text, result.details);
 		},
 	});

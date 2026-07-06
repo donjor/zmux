@@ -90,7 +90,7 @@ Examples:
 			// send-keys call gets absorbed into the paste as a newline and
 			// the message silently never submits. Shells don't care about
 			// the gap.
-			if err := app.Runner.SendKeys(target, text); err != nil {
+			if err := app.Runner.SendKeys(target, "-l", text); err != nil {
 				return fmt.Errorf("type to %s: %w", target, err)
 			}
 			time.Sleep(typeGap(len(text)))
@@ -110,13 +110,14 @@ Examples:
 // The TUI paste-burst window scales with paste size: a large paste takes
 // longer to ingest, and an Enter arriving mid-ingest is absorbed into the
 // paste as a newline (observed live: ~1KB prompts into codex with a fixed
-// 200ms gap silently never submit). 200ms base covers the empirical
-// ~30-50ms burst window for short text; +1ms/char covers ingest time for
-// large pastes, capped so shells never wait absurdly long.
+// 200ms gap silently never submit; Claude first-turn composer also needed
+// a wider gap during agent-surface E2E). Shells don't care about the gap,
+// so bias toward reliable TUI submission and cap the wait at a still-bounded
+// interactive delay.
 func typeGap(textLen int) time.Duration {
-	gap := 200*time.Millisecond + time.Duration(textLen)*time.Millisecond
-	if gap > 1500*time.Millisecond {
-		return 1500 * time.Millisecond
+	gap := 750*time.Millisecond + time.Duration(textLen)*2*time.Millisecond
+	if gap > 2500*time.Millisecond {
+		return 2500 * time.Millisecond
 	}
 	return gap
 }

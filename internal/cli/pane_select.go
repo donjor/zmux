@@ -50,11 +50,9 @@ func findPaneByName(app *apppkg.App, name, target string) (tmux.Pane, bool, erro
 	if err != nil {
 		return tmux.Pane{}, false, err
 	}
-	var matches []tmux.Pane
-	for _, pane := range panes {
-		if pane.Title == name {
-			matches = append(matches, pane)
-		}
+	matches, err := matchingPanes(app, panes, name)
+	if err != nil {
+		return tmux.Pane{}, false, err
 	}
 	if len(matches) == 0 {
 		return tmux.Pane{}, false, nil
@@ -80,11 +78,9 @@ func resolvePaneSelector(app *apppkg.App, selector string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var matches []tmux.Pane
-	for _, pane := range panes {
-		if pane.Title == selector || strconv.Itoa(pane.Index) == selector {
-			matches = append(matches, pane)
-		}
+	matches, err := matchingPanes(app, panes, selector)
+	if err != nil {
+		return "", err
 	}
 	if len(matches) == 0 {
 		return "", fmt.Errorf("pane %q not found", selector)
@@ -93,4 +89,24 @@ func resolvePaneSelector(app *apppkg.App, selector string) (string, error) {
 		return "", fmt.Errorf("pane %q is ambiguous (%d matches); use a pane id", selector, len(matches))
 	}
 	return matches[0].ID, nil
+}
+
+func matchingPanes(app *apppkg.App, panes []tmux.Pane, selector string) ([]tmux.Pane, error) {
+	var matches []tmux.Pane
+	seen := map[string]bool{}
+	for _, pane := range panes {
+		matched := pane.Title == selector || strconv.Itoa(pane.Index) == selector
+		if !matched {
+			name, err := app.Runner.ShowPaneOption(pane.ID, optPaneName)
+			if err != nil {
+				return nil, err
+			}
+			matched = name == selector
+		}
+		if matched && !seen[pane.ID] {
+			seen[pane.ID] = true
+			matches = append(matches, pane)
+		}
+	}
+	return matches, nil
 }

@@ -484,6 +484,10 @@ func (m *MockRunner) UnsetWindowOption(target, key string) error {
 // SetPaneOption records the call.
 func (m *MockRunner) SetPaneOption(target, key, value string) error {
 	m.record("SetPaneOption", target, key, value)
+	if m.PaneOptions == nil {
+		m.PaneOptions = map[string]string{}
+	}
+	m.PaneOptions[target+"\x00"+key] = value
 	return m.Err
 }
 

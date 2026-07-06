@@ -5,9 +5,9 @@ capabilities, snapshots, output recording, and config. The hot operational loop 
 raw-tmux guard, tab states, peer/worker) lives in `SKILL.md`; this is the
 lookup-when-you-need-it reference, routed from there at point of use. In Pi,
 prefer typed tools over shelling out: `zmux_run`, `zmux_sessions`,
-`zmux_session_run/kill`, `zmux_tabs`, `zmux_tab_*`, `zmux_pane_*`, `zmux_log`,
-`zmux_snapshot`, `zmux_terminal_current`, and `zmux_runtime_*` cover the agent
-surface below.
+`zmux_session_run/kill`, `zmux_tabs`, `zmux_tab_inspect`, `zmux_peer_ensure`,
+`zmux_callback`, `zmux_peer_handoff`, `zmux_tab_*`, `zmux_pane_*`, `zmux_log`,
+`zmux_snapshot`, `zmux_terminal_current`, and `zmux_runtime_*` cover the agent surface below.
 
 ## Sessions & workspaces
 
@@ -24,8 +24,14 @@ zmux run <recipe>               # recipe form with cwd/workspace/session default
 zmux run <recipe> -y            # run recipe defaults without prompting
 zmux run <recipe> --dry-run     # print the exact recipe plan
 zmux recipe list                # list bundled and user recipes
+zmux recipe show <recipe>       # inspect a recipe TOML
+zmux recipe lint [recipe]       # validate recipes
+zmux recipe fork <recipe>       # copy a bundled recipe for human editing
+zmux recipe edit <recipe>       # edit a user recipe (human-maintenance surface)
 zmux open <ws> [session]         # open/attach a workspace session (aliases: attach, a)
 zmux open <ws> <session> --hijack   # take over a session attached elsewhere (advanced)
+zmux fork <new-session-label> [--dir path]
+                                 # human/worktree setup: copy current session tab names/order into a new local session
 zmux kill <name>                 # smart kill, workspace-first (alias: k)
 zmux session kill <session>      # kill a single session explicitly
 
@@ -47,8 +53,9 @@ target. Contrast `zmux new` (attaches by design) — see the worker doctrine in
 ### Session targeting (`-s`)
 
 `-s <session>` is accepted by `run`, `watch`, `send`, `type`, `tabs`, `log`,
-`tab state`, `tab status`, and the `tab pane/full/hide/show` placements. (`open` takes the
-workspace/session positionally; `zmux pane` uses `--target`.) It accepts three
+`tab state`, `tab status`, `tab move`, `tab kill`, and the `tab pane/full/hide/show` placements. (`open` takes the
+workspace/session positionally; `zmux pane list --session --target <session>` uses
+`--target` for the same session forms, while `pane list --target <session>` without `--session` stays a raw tmux pane/window target.) It accepts three
 forms:
 
 - **bare session label** — `-s server`
@@ -68,6 +75,7 @@ zmux tab label '<label>'         # set a stable zmux label for the current tab
 zmux tab label ''                # clear the label
 zmux tab status <tab> --json     # read glyph, command, and peer lifecycle state
 zmux tab kill <tab>              # kill a tab in the current session
+zmux reap --dry-run              # preview reaper decisions; human-gated cleanup/maintenance
 ```
 
 Labels are zmux overlays (`label [auto-name]`); they don't disable tmux's automatic
@@ -87,6 +95,7 @@ zmux tab full <tab>                      # promote a pane back to its own tab (-
 zmux tab hide <tab>                      # park it off the bar — process keeps running
 zmux tab show <tab>                      # bring it back to the session it was hidden from (focus-safe)
 zmux tab show <tab> --focus              # human path: rejoin and select it
+zmux tab kill <tab> -s <session>         # kill a tab by name in a source session
 ```
 
 States and labels ride along: a `running` glyph set on a full tab is still there
@@ -105,12 +114,14 @@ zmux pane open --label-tab <name> -r 35 -- <cmd>   # preserve tab label across s
 zmux pane toggle <name> -r 35 -- <cmd> # open if absent, close if present (--focus/--replace)
 zmux pane focus <pane>           # focus by id/title/index
 zmux pane close <pane>           # close by id/title/index
-zmux pane resize <pane> --size 40%
+zmux pane resize <pane> --size 40%   # CLI width resize; Pi tool auto-selects width/height unless axis is forced
 ```
 
 Split direction: `-r` right, `-l` left, `-d` down, `-u` up (each takes a size).
 Use `--label-tab` for sidecars that would otherwise let tmux's auto-rename clobber
-the conceptual tab label.
+the conceptual tab label. From a detached agent shell, prefer the pane id printed
+by `pane open` for follow-up `resize`/`close`; title/index lookup is scoped to the
+current target window, and unrelated `run` commands can move that current window.
 
 ## Terminal capabilities
 
@@ -163,7 +174,7 @@ zmux log start <tab>                  # begin recording to a bounded file (backg
 zmux log start <tab> --ansi           # keep ANSI colour/escapes instead of stripping to plain
 zmux log start <tab> --max-bytes 4096 # cap before oldest output is dropped (default 1 MiB)
 zmux log start <tab> -s <session>     # target a tab in another session
-zmux log status                       # tabs recording now: mark, pane, size, file
+zmux log status                       # global recording view; no -s/--session
 zmux log tail <tab>                   # print the recorded log (already bounded)
 zmux log tail <tab> -n 50             # last 50 lines only
 zmux log stop <tab>                   # stop recording

@@ -79,8 +79,8 @@ Pin that session on the spawn and every follow-up — belt-and-suspenders for
 the writes, load-bearing for the reads:
 `zmux run '…' -n <peer> -d -s <session> --scope peer`, `zmux tab status <peer> -s <session> --json`,
 `zmux watch <peer> -s <session>`, `zmux type <peer> -s <session> …`, `zmux tab peer … <peer> -s <session>`. In Pi,
-use the equivalent `session` parameter on `zmux_run`, `zmux_tab_status`, `zmux_runtime_logs`,
-`zmux_type`, `zmux_tab_peer`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
+use the equivalent `session` parameter on `zmux_peer_ensure`, `zmux_tab_inspect`, `zmux_run`,
+`zmux_tab_status`, `zmux_runtime_logs`, `zmux_type`, `zmux_tab_peer`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
 "X", outside the current session "Y"` on the read path when a bare name crosses —
 seeing that means you skipped the pin.
 
@@ -229,9 +229,38 @@ Treat a fresh peer turn as ready when status shows one of:
 
 Freshness matters. When status carries `turnAt`, record the value after you mark/send `running` and require a later `turnAt` before trusting `ready`; otherwise an old ready state from a prior prompt can self-match. Legacy `waiting` means `ready`.
 
-`watch --idle` is not the primary completion signal for instrumented peers. Use it for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use `watch --until`, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT".
+`watch --idle` is not the primary completion signal for instrumented peers. Use it for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use `watch --until`, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT". `watch --until` observes new output after its baseline; for fast peer replies, pair it with a buffer/log grep so already-in-tail output is still valid evidence and not a retry loop.
 
 For long peer turns, status checks are beats, not proof of correctness. A `ready` state means "the peer thinks the turn ended"; still read the answer and judge it.
+
+## Canonical flow failure
+
+The canonical loop is: pinned peer spawn/reuse → `tab peer start` → verified prompt submit → `tab peer running` → status/readiness check → read answer → `consumed`/`park`.
+
+If that loop breaks, do **not** quietly switch to a different automation style.
+After at most two bounded attempts, stop the peer-driving work and diagnose the
+zmux surface itself:
+
+```bash
+zmux tab status <peer> -s <session> --json
+zmux watch <peer> -s <session> -l 120
+```
+
+In Pi, prefer `zmux_tab_inspect` for the status+output bundle and
+`zmux_peer_ensure` / `zmux_type` with short wait fields for the composed happy
+path. For long peer turns where the host should continue after the peer answers,
+use `zmux_peer_handoff`: it types the prompt and schedules an output
+callback/handoff. Treat it as a bounded output/idle handoff unless lifecycle `turnAt`
+proves true instrumented readiness.
+
+Use the fields that actually describe this failure:
+
+- `lastExit != 0` or `cmdState=failed` — the peer process/command failed; inspect output and fix the clear command/core issue if obvious, otherwise report zmux/tooling as suspect.
+- `turnState` never advances after `tab peer start`/`running` — lifecycle instrumentation is broken or the peer CLI has no usable hook; report `unproven`, do not fake readiness with sleeps.
+- `turnState=ready` but `turnAt` is not newer than your `running` mark — stale ready from a prior prompt; keep waiting briefly or return `unproven`.
+- screen shows install/auth/update/password/UI prompt — classify as interstitial/attention, not success.
+
+`zmux doctor` is **not** the peer-process doctor; today it checks shell integration freshness. Run it only when the symptom points at stale shell hooks/lifecycle setup. Otherwise, the diagnostic path is `tab status --json` plus recent output. If the clear fix is in zmux core/tooling, fix that; if not, break out with the evidence instead of chaining `--print`, raw pane keys, manual sleeps, or `C-c` workarounds.
 
 ## Classify fallback/output
 

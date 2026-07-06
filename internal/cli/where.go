@@ -48,8 +48,8 @@ for config (theme/bar/prefix) use ` + "`zmux status`" + `.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			paneID := os.Getenv("TMUX_PANE")
-			if paneID == "" {
-				return fmt.Errorf("zmux where requires tmux (no current pane)")
+			if paneID == "" || !app.Runner.IsInsideTmux() {
+				return fmt.Errorf("zmux where requires tmux in the current profile (no current pane)")
 			}
 			pane := currentPaneByID(app, paneID)
 			wsName, rec, found := app.WorkspaceStore.SessionRecordFor(pane.Session)

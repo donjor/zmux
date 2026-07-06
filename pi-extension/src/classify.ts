@@ -13,6 +13,8 @@ export type BashClassification =
 	| { kind: "direct_tmux"; reason: string; suggestion: string };
 
 const directZmuxPatterns: Array<{ re: RegExp; reason: string; tool: string }> = [
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+status\b[\s\S]*zmux\s+watch\b|(^|[;&|\n]\s*)zmux\s+watch\b[\s\S]*zmux\s+tab\s+status\b/u, reason: "combined tab status/output inspection has a typed tool", tool: "zmux_tab_inspect" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+run\b[^\n;&|]*\s-n\s+\S*peer\b/u, reason: "peer tab startup has a typed tool", tool: "zmux_peer_ensure" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+tabs\b/u, reason: "tab listing has a typed tool", tool: "zmux_tabs" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+ls\b/u, reason: "session listing has a typed tool", tool: "zmux_sessions" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+where\b/u, reason: "context inspection has a typed tool", tool: "zmux_current" },
@@ -26,14 +28,14 @@ const directZmuxPatterns: Array<{ re: RegExp; reason: string; tool: string }> = 
 	{ re: /(^|[;&|\n]\s*)zmux\s+session\s+run\b/u, reason: "focus-safe session spawn has a typed tool", tool: "zmux_session_run" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+session\s+kill\b/u, reason: "session cleanup has a typed tool", tool: "zmux_session_kill" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+send\b/u, reason: "key sending has a typed tool", tool: "zmux_send_keys" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+type\b/u, reason: "typing has typed tools", tool: "zmux_type or zmux_interactive_type" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+type\b/u, reason: "typing has typed tools", tool: "zmux_type (optionally waitForTurnState for peers) or zmux_interactive_type" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+list\b/u, reason: "pane listing has a typed tool", tool: "zmux_pane_list" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+open\b/u, reason: "pane opening has a typed tool", tool: "zmux_pane_open" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+focus\b/u, reason: "pane focus has a typed tool", tool: "zmux_pane_focus" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+close\b/u, reason: "pane cleanup has a typed tool", tool: "zmux_pane_close" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+resize\b/u, reason: "pane resize has a typed tool", tool: "zmux_pane_resize" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+run\b/u, reason: "command-in-tab execution has a typed tool", tool: "zmux_run (or zmux_runtime_ensure for persistent runtimes)" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+watch\b/u, reason: "runtime logs have a typed tool", tool: "zmux_runtime_logs" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+watch\b/u, reason: "runtime logs and tab inspection have typed tools", tool: "zmux_runtime_logs (supports waitFor/idleSeconds) or zmux_tab_inspect" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+log\b/u, reason: "persistent tab logging has a typed tool", tool: "zmux_log" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+snapshot\b/u, reason: "terminal evidence capture has a typed tool", tool: "zmux_snapshot" },
 	{ re: /(^|[;&|\n]\s*)zmux\s+terminal\s+current\b/u, reason: "terminal target inspection has a typed tool", tool: "zmux_terminal_current" },

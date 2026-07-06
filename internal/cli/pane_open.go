@@ -112,6 +112,11 @@ func runPaneOpen(app *apppkg.App, cmd *cobra.Command, flags *paneOpenFlags, args
 	if err != nil {
 		return err
 	}
+	if name != "" {
+		if err := app.Runner.SetPaneOption(paneID, optPaneName, name); err != nil {
+			return err
+		}
+	}
 	fmt.Fprintln(cmd.OutOrStdout(), paneID)
 	return nil
 }

@@ -27,8 +27,8 @@ func TestRunPaneOpenDefaultsToCurrentTmuxPaneAndPrintsID(t *testing.T) {
 	if got := strings.TrimSpace(out.String()); got != "%57" {
 		t.Fatalf("expected pane id %%57, got %q", got)
 	}
-	if len(mock.Calls) != 2 {
-		t.Fatalf("expected IsInsideTmux + SplitPane calls, got %#v", mock.Calls)
+	if len(mock.Calls) != 3 {
+		t.Fatalf("expected IsInsideTmux + SplitPane + SetPaneOption calls, got %#v", mock.Calls)
 	}
 	call := mock.Calls[1]
 	if call.Method != "SplitPane" {
@@ -51,9 +51,9 @@ func TestRunPaneOpenNoFocusUsesDetachedSplit(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("pane open command failed: %v", err)
 	}
-	call := mock.Calls[len(mock.Calls)-1]
-	if call.Method != "SplitPane" || call.Args[6] != "detached=true" {
-		t.Fatalf("expected detached SplitPane, got %#v", call)
+	call, ok := srFindCall(mock.Calls, "SplitPane")
+	if !ok || call.Args[6] != "detached=true" {
+		t.Fatalf("expected detached SplitPane, got %#v", mock.Calls)
 	}
 }
 
@@ -70,7 +70,7 @@ func TestRunPaneOpenAutoLabelsWindowBeforeSplit(t *testing.T) {
 	for _, call := range mock.Calls {
 		methods = append(methods, call.Method)
 	}
-	want := []string{"IsInsideTmux", "DisplayMessage", "SetWindowOption", "SetWindowOption", "SplitPane"}
+	want := []string{"IsInsideTmux", "DisplayMessage", "SetWindowOption", "SetWindowOption", "SplitPane", "SetPaneOption"}
 	if len(methods) != len(want) {
 		t.Fatalf("methods = %#v, want %#v", methods, want)
 	}
@@ -97,9 +97,9 @@ func TestPaneOpenCommandPreservesArgsAfterDash(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("pane open command failed: %v", err)
 	}
-	call := mock.Calls[len(mock.Calls)-1]
-	if call.Method != "SplitPane" {
-		t.Fatalf("expected SplitPane call, got %#v", call)
+	call, ok := srFindCall(mock.Calls, "SplitPane")
+	if !ok {
+		t.Fatalf("expected SplitPane call, got %#v", mock.Calls)
 	}
 	if call.Args[2] != "35%" || call.Args[4] != "clean-ui" || call.Args[5] != "[\"bash\" \"-lc\" \"echo hi && sleep 1\"]" {
 		t.Fatalf("unexpected SplitPane args: %#v", call.Args)
@@ -114,9 +114,9 @@ func TestPaneOpenNameFlagLeavesArgsAsCommand(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("pane open command failed: %v", err)
 	}
-	call := mock.Calls[len(mock.Calls)-1]
-	if call.Args[4] != "clean-ui" || call.Args[5] != "[\"bash\" \"-lc\" \"echo hi\"]" {
-		t.Fatalf("unexpected SplitPane args: %#v", call.Args)
+	call, ok := srFindCall(mock.Calls, "SplitPane")
+	if !ok || call.Args[4] != "clean-ui" || call.Args[5] != "[\"bash\" \"-lc\" \"echo hi\"]" {
+		t.Fatalf("unexpected SplitPane args/calls: %#v", mock.Calls)
 	}
 }
 
@@ -227,8 +227,8 @@ func TestRunPaneToggleOpensMissing(t *testing.T) {
 	if err := runPaneToggle(a, cmd, flags, []string{"clean-ui", "bash"}); err != nil {
 		t.Fatalf("runPaneToggle failed: %v", err)
 	}
-	if len(mock.Calls) != 3 || mock.Calls[0].Method != "ListWindowPanes" || mock.Calls[1].Method != "IsInsideTmux" || mock.Calls[2].Method != "SplitPane" {
-		t.Fatalf("expected ListWindowPanes + IsInsideTmux + SplitPane, got %#v", mock.Calls)
+	if len(mock.Calls) != 4 || mock.Calls[0].Method != "ListWindowPanes" || mock.Calls[1].Method != "IsInsideTmux" || mock.Calls[2].Method != "SplitPane" || mock.Calls[3].Method != "SetPaneOption" {
+		t.Fatalf("expected ListWindowPanes + IsInsideTmux + SplitPane + SetPaneOption, got %#v", mock.Calls)
 	}
 	if mock.Calls[2].Args[2] != "40%" || mock.Calls[2].Args[4] != "clean-ui" || mock.Calls[2].Args[5] != "[\"bash\"]" {
 		t.Fatalf("unexpected SplitPane args: %#v", mock.Calls[2].Args)
@@ -265,6 +265,7 @@ func TestRunPaneListDefaultsToCurrentWindow(t *testing.T) {
 
 func TestRunPaneListSessionScope(t *testing.T) {
 	a, mock := newTestApp(t)
+	mock.Sessions = []tmux.Session{{Name: "dev"}}
 	mock.Panes["dev"] = []tmux.Pane{{ID: "%1"}}
 	cmd := newPaneListCmd(a)
 	var out bytes.Buffer
@@ -272,8 +273,9 @@ func TestRunPaneListSessionScope(t *testing.T) {
 	if err := runPaneList(a, cmd, &paneListFlags{target: "dev", session: true, quiet: true}); err != nil {
 		t.Fatalf("runPaneList failed: %v", err)
 	}
-	if len(mock.Calls) != 1 || mock.Calls[0].Method != "ListPanes" || mock.Calls[0].Args[0] != "dev" {
-		t.Fatalf("expected ListPanes session call, got %#v", mock.Calls)
+	call, ok := srFindCall(mock.Calls, "ListPanes")
+	if !ok || call.Args[0] != "dev" {
+		t.Fatalf("expected ListPanes(dev) call, got %#v", mock.Calls)
 	}
 }
 
@@ -337,6 +339,7 @@ func TestRunPaneListJoinedImpliedSessionScope(t *testing.T) {
 
 func TestRunPaneListJoinedExplicitTarget(t *testing.T) {
 	a, mock := newTestApp(t)
+	mock.Sessions = []tmux.Session{{Name: "dev"}}
 	mock.Panes["dev"] = []tmux.Pane{
 		{Session: "dev", ID: "%10", WindowIndex: 1, Command: "bash", Dir: "/repo", Title: "host"},
 		{Session: "dev", ID: "%11", WindowIndex: 1, Active: true, Command: "codex", Dir: "/repo", Title: "peer"},
@@ -356,7 +359,8 @@ func TestRunPaneListJoinedExplicitTarget(t *testing.T) {
 		t.Fatalf("runPaneList failed: %v", err)
 	}
 	// Must call ListPanes with the explicit session, not the empty-string key.
-	if len(mock.Calls) != 2 || mock.Calls[0].Method != "ListPanes" || mock.Calls[0].Args[0] != "dev" {
+	call, ok := srFindCall(mock.Calls, "ListPanes")
+	if !ok || call.Args[0] != "dev" {
 		t.Fatalf("expected ListPanes(dev) + logical scan, got %#v", mock.Calls)
 	}
 	var rows []joinedPaneListRow
@@ -421,6 +425,20 @@ func TestPaneCloseResolvesTitle(t *testing.T) {
 	}
 }
 
+func TestPaneCloseResolvesStablePaneNameWhenTitleDrifts(t *testing.T) {
+	a, mock := newTestApp(t)
+	mock.Panes[""] = []tmux.Pane{{ID: "%57", Title: "bash"}}
+	mock.PaneOptions = map[string]string{"%57\x00" + optPaneName: "clean-ui"}
+	cmd := newPaneCloseCmd(a)
+	cmd.SetArgs([]string{"clean-ui"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("pane close failed: %v", err)
+	}
+	if len(mock.Calls) != 3 || mock.Calls[0].Method != "ListWindowPanes" || mock.Calls[1].Method != "ShowPaneOption" || mock.Calls[2].Method != "KillPane" || mock.Calls[2].Args[0] != "%57" {
+		t.Fatalf("expected stable-name lookup + KillPane %%57, got %#v", mock.Calls)
+	}
+}
+
 func TestPaneCloseAmbiguousTitle(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.Panes[""] = []tmux.Pane{{ID: "%57", Title: "clean-ui"}, {ID: "%58", Title: "clean-ui"}}
@@ -452,5 +470,19 @@ func TestPaneResizeRawID(t *testing.T) {
 	}
 	if len(mock.Calls) != 1 || mock.Calls[0].Method != "ResizePane" || mock.Calls[0].Args[0] != "%57" || mock.Calls[0].Args[1] != "width" || mock.Calls[0].Args[2] != "40%" {
 		t.Fatalf("expected ResizePane %%57 width 40%%, got %#v", mock.Calls)
+	}
+}
+
+func TestPaneResizeResolvesStablePaneNameWhenTitleDrifts(t *testing.T) {
+	a, mock := newTestApp(t)
+	mock.Panes[""] = []tmux.Pane{{ID: "%57", Title: "bash"}}
+	mock.PaneOptions = map[string]string{"%57\x00" + optPaneName: "clean-ui"}
+	cmd := newPaneResizeCmd(a)
+	cmd.SetArgs([]string{"clean-ui", "--size", "35%"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("pane resize failed: %v", err)
+	}
+	if len(mock.Calls) != 3 || mock.Calls[0].Method != "ListWindowPanes" || mock.Calls[1].Method != "ShowPaneOption" || mock.Calls[2].Method != "ResizePane" || mock.Calls[2].Args[0] != "%57" {
+		t.Fatalf("expected stable-name lookup + ResizePane %%57, got %#v", mock.Calls)
 	}
 }

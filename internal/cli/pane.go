@@ -16,7 +16,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const paneAutoSize = "auto"
+const (
+	paneAutoSize = "auto"
+	optPaneName  = "@zmux_pane_name"
+)
 
 type paneOpenFlags struct {
 	target   string

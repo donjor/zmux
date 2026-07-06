@@ -1,4 +1,5 @@
 import { trimOutput } from "../shell.js";
+import { watchTabOutput } from "./agent.js";
 import { tabStatus } from "./tabs.js";
 import { withSession, zmux } from "./shared.js";
 
@@ -61,9 +62,8 @@ export async function runtimeEnsure(params: {
 	return { text: trimOutput(output.join("\n")), details };
 }
 
-export async function runtimeLogs(tab: string, cwd: string, lines = 120, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(withSession(["watch", tab, "-l", String(lines)], session), { cwd, timeoutMs: 10_000 });
-	return { text: trimOutput(result.stdout), details: { tab, lines, session } };
+export async function runtimeLogs(tab: string, cwd: string, lines = 120, session?: string, options: { waitFor?: string; idleSeconds?: number; timeoutSeconds?: number } = {}): Promise<{ text: string; details: Record<string, unknown> }> {
+	return watchTabOutput({ tab, cwd, lines, session, waitFor: options.waitFor, idleSeconds: options.idleSeconds, timeoutSeconds: options.timeoutSeconds });
 }
 
 export async function runtimeStop(tab: string, cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {

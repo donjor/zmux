@@ -92,11 +92,11 @@ func (r Resolver) Resolve(ctx context.Context) (Result, error) {
 	if err != nil {
 		return result.with(StatusUnsupported, fmt.Sprintf("tmux current context unavailable: %v", err)), nil
 	}
+	if reason := facts.unsupportedReason(); reason != "" {
+		return result.with(StatusUnsupported, reason), nil
+	}
 	if facts.PaneID != r.CurrentPaneID {
 		return result.with(StatusUnsupported, "TMUX_PANE does not match live tmux current pane"), nil
-	}
-	if !facts.supported() {
-		return result.with(StatusUnsupported, "tmux does not expose required terminal metadata formats"), nil
 	}
 	result.Tmux = &TmuxContext{
 		ClientTty:     facts.ClientTty,
@@ -200,8 +200,25 @@ func currentFacts(runner tmux.Runner) (tmuxFacts, error) {
 	if err != nil {
 		return tmuxFacts{}, err
 	}
-	fields := strings.SplitN(strings.TrimSpace(out), "\t", 7)
-	if len(fields) != 7 {
+	fields := strings.Split(strings.TrimRight(out, "\r\n"), "\t")
+	if len(fields) < 7 {
+		if len(fields) >= 5 {
+			// tmux client_* fields are empty for detached/headless panes, and the
+			// shared runner trims leading whitespace from command output. Treat the
+			// remaining fields as enough context to refuse precisely rather than as
+			// a parser error.
+			var index int
+			if _, err := fmt.Sscanf(fields[2], "%d", &index); err != nil {
+				return tmuxFacts{}, fmt.Errorf("invalid window index %q", fields[2])
+			}
+			return tmuxFacts{
+				SessionID:   fields[0],
+				WindowID:    fields[1],
+				WindowIndex: index,
+				WindowName:  strings.Join(fields[3:len(fields)-1], "\t"),
+				PaneID:      fields[len(fields)-1],
+			}, nil
+		}
 		return tmuxFacts{}, fmt.Errorf("expected 7 current tmux fields, got %d", len(fields))
 	}
 	var index int
@@ -214,19 +231,22 @@ func currentFacts(runner tmux.Runner) (tmuxFacts, error) {
 		SessionID:     fields[2],
 		WindowID:      fields[3],
 		WindowIndex:   index,
-		WindowName:    fields[5],
-		PaneID:        fields[6],
+		WindowName:    strings.Join(fields[5:len(fields)-1], "\t"),
+		PaneID:        fields[len(fields)-1],
 	}, nil
 }
 
-func (f tmuxFacts) supported() bool {
+func (f tmuxFacts) unsupportedReason() string {
+	if f.ClientTty == "" || f.ClientSession == "" {
+		return "tmux current client metadata is unavailable; terminal current requires an attached tmux client"
+	}
 	values := []string{f.ClientTty, f.ClientSession, f.SessionID, f.WindowID, f.PaneID}
 	for _, value := range values {
 		if value == "" || strings.Contains(value, "#{") {
-			return false
+			return "tmux does not expose required terminal metadata formats"
 		}
 	}
-	return true
+	return ""
 }
 
 func findLiveClient(clients []tmux.ClientInfo, facts tmuxFacts) (tmux.ClientInfo, bool) {

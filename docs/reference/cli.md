@@ -14,7 +14,9 @@ zmux <workspace-or-query>
 With no command, `zmux` opens the workspace picker outside tmux and the
 dashboard flow inside tmux. Commands that target a session accept the normal
 `workspace/session` grammar and usually fall back to the current workspace or
-current tmux context.
+current tmux context. `pane list --session --target <session>` follows that
+session grammar; `pane list --target <session>` without `--session` is a raw
+pane/window target and may fail with tmux's raw-target error.
 
 ## Command groups
 
@@ -50,8 +52,8 @@ zmux tab split [--focus]
 zmux tab full [tab] [--pane pane-id]
 zmux tab hide <tab> [--pane pane-id]
 zmux tab show <tab> [--focus]
-zmux tab move <tab> <destination>
-zmux tab kill <tab>
+zmux tab move <tab> <destination> [--session source]
+zmux tab kill <tab> [--session source]
 zmux pane open <name> [--no-focus] -- <cmd>
 zmux pane toggle <name> -- <cmd>
 zmux pane current|list|focus|resize|close
@@ -68,7 +70,7 @@ the current pane.
 zmux run '<cmd>' -n <tab> [-T seconds] [-d] [-f] [--keep] [--scope daemon]
 zmux watch <tab> [-l lines] [--until pattern] [--idle seconds] [-f]
 zmux log start <tab> [--ansi] [--max-bytes n]
-zmux log status
+zmux log status                    # global recording view; no -s/--session
 zmux log tail <tab>
 zmux log stop <tab>
 zmux send <tab> <keys...>

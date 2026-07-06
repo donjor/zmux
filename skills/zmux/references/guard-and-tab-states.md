@@ -46,12 +46,22 @@ already exists, so addressing by a stable purpose-name keeps related work togeth
 | `<agent>-peer` | a review peer — owned by the peer skill |
 | `worker-*` | orchestrate worker *sessions* (not conductor roster tabs) |
 
-Do **not** mint `eval-2`, `test-run`, `build-x`, or feature-named tabs — that scatters the surface
+Do **not** mint `eval-2`, `test-run`, `build-x`, per-Playwright-lane, or feature-named tabs — that scatters the surface
 and is the exact sprawl this rule exists to stop. A reviewable long/odd command → `scratch`; the
 main runtime → `dev`; a bounded check → your shell. App-managed detached daemons (their own
 `setsid`/systemd/Docker `-d`) aren't tabs at all — don't babysit an empty wrapper.
 
+Headed/browser-visible Playwright is the special bounded-looking case: if it opens real browser UI,
+uses CDB/headed placement, or produces visual proof the user may need to watch, route it through one
+reusable proof tab (`scratch` or `pw-scratch`). Serial lanes reuse that tab; do not create
+`test-2d-surface`, `test-2d-quality`, `test-2d-all`, etc. unless the user explicitly wants separate
+supervised lanes. Before launching an aggregate suite, inspect the existing proof tab/output so you
+do not duplicate coverage that has already passed.
+
 Pairs with **tab hygiene** in `SKILL.md`: spawn into the roster, reuse by purpose, tear down after.
+If a prompt creates several tabs/panes, take a cheap before/after roster (`zmux tabs`, `zmux pane list --joined --session` when relevant), then kill ad-hoc tabs as soon as evidence is captured. Keep only intentional runtimes/peers/worker sessions with a named next checkpoint.
+
+Assume focus may move unless the command/tool explicitly says otherwise. Agent paths prefer `run -d`, `session run`, `pane open --no-focus`, placement without `--focus`, and typed Pi tools whose default is focus-safe. Ask before `tab focus`, `pane focus`, or any `focus: true` option.
 
 ## The guard hook
 
@@ -59,7 +69,7 @@ Claude's `hooks/zmux-guard.mjs` (symlinked into `~/.claude/hooks/`) **blocks** r
 tmux calls and prints the mapping back to you — so a slip self-corrects instead of
 silently targeting the wrong window. Pi's `pi-extension/` enforces the same doctrine
 through typed tools (`zmux_run`, `zmux_runtime_ensure`, `zmux_interactive_type`,
-session/tab/pane/log/snapshot tools) and a `bash` tool-call guard. Both guard
+`zmux_peer_ensure`, `zmux_tab_inspect`, session/tab/pane/log/snapshot tools) and a `bash` tool-call guard. Both guard
 surfaces enforce the rest of this skill's
 hygiene: a dev server / background job (`npm run dev`, `&`, `nohup`, or any
 harness-native hidden-background option the adapter can see) is **blocked** toward a
@@ -89,7 +99,7 @@ Mostly automatic:
 - A `Stop` hook (`hooks/zmux-tab-state-stop.mjs`, symlinked like the guard) marks the
   agent's own tab ready (`↩`) when a turn ends — no transcript parsing, just "the
   turn ended".
-- Prompt-scoped peers use `zmux tab peer <start|running|ready|attention|failed|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; legacy `waiting` aliases to `ready`. Answer-ready renders `↩`, while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi `zmux_tab_status`; screen capture is the fallback/output layer.
+- Prompt-scoped peers use `zmux tab peer <start|running|ready|attention|failed|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; legacy `waiting` aliases to `ready`. Answer-ready renders `↩`, while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi `zmux_tab_status`; Pi can bundle status+output via `zmux_tab_inspect`. Screen capture is the fallback/output layer.
 
 Set `attention` **manually** when handing the human a prompt they must act on (sudo,
 permission prompt). For peer tabs, prefer `zmux tab peer attention ...` so the turn state stays in sync:

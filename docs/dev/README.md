@@ -11,6 +11,7 @@ that owns the path.
 | CLI, tmux behavior, workspace/session, logical tabs | [../architecture.md](../architecture.md), [../reference/cli.md](../reference/cli.md) |
 | Keybindings, generated help, command palette | [../reference/keybindings.md](../reference/keybindings.md), `internal/keys/**` |
 | QA runner or checklist specs | [qa.md](qa.md), [agent-grounding.md](agent-grounding.md) |
+| Agent-facing zmux skill/Pi extension test prompts | [test-prompts/](test-prompts/), [../domains/pi-zmux-extension.md](../domains/pi-zmux-extension.md) |
 | Bar density, pane headers, status-line layout | [../domains/bar-density.md](../domains/bar-density.md) |
 | Terminal evidence/capabilities | [../reference/terminal-current.md](../reference/terminal-current.md), [../reference/terminal-capabilities.md](../reference/terminal-capabilities.md) |
 | Pi extension, shared zmux skill, agent guardrails | [../domains/pi-zmux-extension.md](../domains/pi-zmux-extension.md), [agent-grounding.md](agent-grounding.md) |
@@ -33,7 +34,9 @@ make vuln                  # govulncheck
 
 Run the narrow test first, then `make test`. For material CLI, tmux, keybinding,
 or TUI behavior, also run `make build` and the relevant `./qa` checklist. For
-agent-facing tool/doctrine changes, run `make test-agent-surfaces`.
+agent-facing tool/doctrine changes, run `make test-agent-surfaces`; for broad
+agent-surface changes, also hand a fresh session the relevant prompt under
+[test-prompts/](test-prompts/).
 
 The Worktrunk pre-merge gate in [../../.config/wt.toml](../../.config/wt.toml)
 runs `make lint` and `make test-race`; GitHub CI adds build, race tests,
@@ -45,6 +48,7 @@ integration tests, and govulncheck.
 | ----- | ------- |
 | [agent-grounding.md](agent-grounding.md) | How agents prove visible/tmux behavior in the isolated `zzmux` sandbox. |
 | [qa.md](qa.md) | Repo-local QA runner, checklist semantics, and current checklist inventory. |
+| [test-prompts/](test-prompts/) | Copy-paste prompts for fresh sessions to audit agent skill/Pi extension surfaces. |
 
 ## Source routing
 

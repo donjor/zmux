@@ -22,6 +22,7 @@ You are likely already inside a zmux-managed session. In Pi, prefer the typed
 | Guard mapping, roster details, lifecycle glyphs | `references/guard-and-tab-states.md` |
 | Real CLI as prompt-scoped review peer | `references/agent-peer.md` |
 | Real CLI as write-capable worktree worker | `references/agent-worker.md` |
+| Testing the shipped agent/Pi surface while developing zmux | repo-root `docs/dev/test-prompts/` |
 
 ## Core invariants
 
@@ -45,7 +46,9 @@ stdout is the whole artifact — even a slow `go test` can stay inline.
 Use **zmux** for software that keeps running (servers, watchers, queues, REPLs),
 commands a human may want to see/grab/re-run, input/passwords/sudo/manual
 control, existing long-running process inspection, sidecars, terminal capability
-diagnosis, and visual/TUI evidence.
+diagnosis, and visual/TUI evidence. Headed/browser-visible Playwright or Chrome
+proof counts as visual evidence even when the command exits; run those batches
+through one reusable scratch/proof tab, not direct bash and not one tab per lane.
 
 ### Reuse a tiny roster
 
@@ -57,10 +60,11 @@ work stays together:
 - `<agent>-peer` — a review peer with semantic `tab peer` lifecycle; `worker-*` — orchestrated worker sessions.
 - `claude` / `codex` / `pi` / `agy` — long-lived primary agent shells, not task tabs.
 
-Do **not** mint `eval-2`, `test-run`, `build-x`, or feature-named tabs. Bounded
-checks stay in your shell; odd reviewable commands go to `scratch`; the main
-runtime goes to `dev`. Re-running the same job means re-fire the same `run -n
-<name>` target, never suffix-bump `x` → `x2` → `x3`.
+Do **not** mint `eval-2`, `test-run`, `build-x`, per-Playwright-lane, or
+feature-named tabs. Bounded checks stay in your shell; odd reviewable commands
+and serial browser-proof batches go to `scratch`/`pw-scratch`; the main runtime
+goes to `dev`. Re-running the same job means re-fire the same `run -n <name>`
+target, never suffix-bump `x` → `x2` → `x3`.
 
 ### Joined panes are roster tabs too
 
@@ -78,10 +82,12 @@ placement, and lifecycle on the logical tab.
 
 ### Tear down after the task
 
-Kill task-scoped peer, worker, or ad-hoc `run` tabs once their work is integrated.
-The reaper backstops forgotten agent-task tabs, but it is housekeeping, not a
-substitute for cleanup. Protect intentional long-lived tabs with `run --keep` or
-`run --scope daemon`.
+Kill task-scoped peer, worker, or ad-hoc `run` tabs once their evidence is
+captured or their work is integrated — not at some vague session closeout. If
+you create several tabs/panes, compare the roster before/after and remove what
+you created. The reaper backstops forgotten agent-task tabs, but it is
+housekeeping, not a substitute for cleanup. Protect intentional long-lived tabs
+with `run --keep` or `run --scope daemon`.
 
 Do not wrap app-detached daemons in a tab. If the app backgrounds itself and
 survives independently (systemd, Docker `-d`, its own `setsid`), a zmux wrapper
@@ -93,10 +99,14 @@ In Pi, use typed tools instead of shelling out for common zmux operations:
 
 - `zmux_current` — inspect current session/tab/pane, binary/profile, project trust, config.
 - `zmux_run` — reviewable command-in-tab one-shots.
-- `zmux_runtime_ensure` / `zmux_runtime_logs` / `zmux_runtime_stop` — persistent runtimes.
+- `zmux_runtime_ensure` / `zmux_runtime_logs` / `zmux_runtime_stop` — persistent runtimes; logs can wait briefly for regex/idle output.
+- `zmux_callback` — explicit notification when visible tab output matches/settles; no agent-side sleeps or polling. Default delivery is `steer` so active turns can observe completion; pass `deliverAs: "followUp"` for end-turn-only handoff. `list` shows active handles plus recent completions.
+- `zmux_peer_handoff` — type into a peer and receive an output handoff when matching/idle output arrives; default delivery is `steer` unless overridden.
 - `zmux_interactive_type` — sudo, SSH, REPLs, database shells, manual input.
 - `zmux_tabs`, `zmux_sessions`, `zmux_session_run`, `zmux_session_kill` — tab/session control.
-- `zmux_tab_status` / `zmux_tab_*`, `zmux_pane_*`, `zmux_log`, `zmux_snapshot`, `zmux_terminal_current` — status, layout, lifecycle, logging, evidence.
+- `zmux_tab_inspect` — one-call status+output evidence for peer/tab diagnosis.
+- `zmux_peer_ensure` — peer spawn/reuse + lifecycle stamp + readiness inspection.
+- `zmux_tab_status` / `zmux_tab_*`, `zmux_pane_*`, `zmux_log`, `zmux_snapshot`, `zmux_terminal_current` — status, layout, lifecycle, logging, evidence. `zmux_tab_kill` accepts `session` for source-session cleanup; `zmux_pane_resize` auto-selects width vs height unless you pass `axis`.
 - `zmux_pi_reload` after Pi extension/skill/prompt/theme changes; `zmux_reload` only for zmux config/key/theme changes; `zmux_pi_respawn` only as hard fallback.
 
 If the Pi bash guard says to use a typed tool, do that instead of bypassing into
@@ -136,8 +146,7 @@ zmux tab status codex-peer -s <session> --json   # wait for fresh turnState=read
 zmux watch codex-peer -s <session>               # read output after state says ready, or as fallback
 ```
 
-In Pi, use `zmux_run`, `zmux_type`, `zmux_tab_peer`, `zmux_tab_status`, `zmux_runtime_logs`, and `zmux_tab_state` with
-the `session` parameter.
+In Pi, prefer `zmux_peer_ensure` for spawn/reuse, `zmux_type` with `markPeerRunning`/`waitForTurnState` for peer prompts, and `zmux_tab_inspect` for status+output diagnosis. Use the `session` parameter on every peer call.
 
 ## Agent worker
 

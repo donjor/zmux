@@ -1,9 +1,13 @@
 import { trimOutput } from "../shell.js";
 import { safeJson, withSession, zmux } from "./shared.js";
 
-export async function killTab(tab: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	await zmux(["tab", "kill", tab], { cwd, timeoutMs: 10_000 });
-	return { text: `killed tab ${tab}`, details: { tab } };
+export function buildTabKillArgs(params: { tab: string; session?: string }): string[] {
+	return withSession(["tab", "kill", params.tab], params.session);
+}
+
+export async function killTab(tab: string, cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
+	await zmux(buildTabKillArgs({ tab, session }), { cwd, timeoutMs: 10_000 });
+	return { text: `killed tab ${tab}`, details: { tab, session } };
 }
 
 export async function sendKeys(tab: string, keys: string[], cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
@@ -87,13 +91,13 @@ export async function labelTab(params: { cwd: string; label?: string; target?: s
 	return { text: output || (params.clear ? "cleared tab label" : `set tab label ${params.label ?? ""}`), details: { ...params } };
 }
 
-export function buildTabMoveArgs(params: { tab: string; destination: string; force?: boolean }): string[] {
+export function buildTabMoveArgs(params: { tab: string; destination: string; force?: boolean; session?: string }): string[] {
 	const args = ["tab", "move", params.tab, params.destination];
 	if (params.force) args.push("--force");
-	return args;
+	return withSession(args, params.session);
 }
 
-export async function moveTab(params: { cwd: string; tab: string; destination: string; force?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
+export async function moveTab(params: { cwd: string; tab: string; destination: string; force?: boolean; session?: string }): Promise<{ text: string; details: Record<string, unknown> }> {
 	const result = await zmux(buildTabMoveArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
 	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
 	return { text: output || `moved tab ${params.tab} to ${params.destination}`, details: { ...params } };

@@ -32,7 +32,7 @@ Successful output includes screenshot geometry:
 Expected refusal statuses use `ok:false` and do not expose screenshotable geometry:
 
 - `not_in_tmux` — the command was not invoked from a tmux pane.
-- `unsupported` — required tmux or window-manager metadata is unavailable.
+- `unsupported` — required tmux or window-manager metadata is unavailable. In headless `zzmux session run` / detached-agent checks, the expected reason is often `tmux current client metadata is unavailable; terminal current requires an attached tmux client`.
 - `not_found` — no desktop window exposes matching `zmux:v1` title metadata.
 - `hidden` — a matching window exists, but is not visible on an active Hyprland monitor workspace.
 - `ambiguous` — more than one visible window exposes the same validated marker.

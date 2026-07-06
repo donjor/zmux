@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	apppkg "github.com/donjor/zmux/internal/app"
@@ -135,7 +136,11 @@ func loadJoinedPanesForList(app *apppkg.App, flags *paneListFlags) ([]joinedPane
 	// --joined is intentionally session-scoped. The default raw pane list stays
 	// current-window scoped, but joined-pane reuse needs to find sibling-window
 	// logical tabs inside the current or target session.
-	panes, err := app.Runner.ListPanes(flags.target)
+	target, err := resolvePaneListSessionTarget(app, flags.target)
+	if err != nil {
+		return nil, err
+	}
+	panes, err := app.Runner.ListPanes(target)
 	if err != nil {
 		return nil, err
 	}
@@ -242,15 +247,33 @@ func loadPanesForList(app *apppkg.App, flags *paneListFlags) ([]tmux.Pane, error
 		return app.Runner.ListAllPanes()
 	}
 	if flags.session {
-		return app.Runner.ListPanes(flags.target)
+		target, err := resolvePaneListSessionTarget(app, flags.target)
+		if err != nil {
+			return nil, err
+		}
+		return app.Runner.ListPanes(target)
 	}
 	return app.Runner.ListWindowPanes(flags.target)
 }
 
+func resolvePaneListSessionTarget(app *apppkg.App, target string) (string, error) {
+	if target == "" {
+		return "", nil
+	}
+	resolved, err := resolveSessionTarget(app, target)
+	if err == nil {
+		return resolved, nil
+	}
+	if strings.Contains(target, "/") {
+		return "", err
+	}
+	return target, nil
+}
+
 func runPaneCurrent(app *apppkg.App, cmd *cobra.Command, flags *paneCurrentFlags) error {
 	paneID := os.Getenv("TMUX_PANE")
-	if paneID == "" {
-		return fmt.Errorf("pane current requires tmux")
+	if paneID == "" || !app.Runner.IsInsideTmux() {
+		return fmt.Errorf("pane current requires tmux in the current profile")
 	}
 	if !flags.json {
 		fmt.Fprintln(cmd.OutOrStdout(), paneID)

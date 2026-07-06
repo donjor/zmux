@@ -25,7 +25,7 @@ zmux run '<cmd>' -n <name> -f           # follow output live (Ctrl+C stops follo
 zmux run '<cmd>' -n <name> -s <session> # target a specific session
 ```
 
-`zmux run` waits by default, streams output, then returns the command exit code via zmux's shell-lifecycle run-result channel. It does not print completion sentinels — do not add your own `echo ":::DONE:::"` markers, wrapper scripts, or `sleep && watch` layer.
+`zmux run` waits by default, streams output, then returns the command exit code via zmux's shell-lifecycle run-result channel. It types normal single-line commands directly into the tab so they remain visible and shell-history re-runnable; temp script indirection is reserved for rare command text that cannot be delivered as one prompt line. It does not print completion sentinels — do not add your own `echo ":::DONE:::"` markers, wrapper scripts, or `sleep && watch` layer.
 
 If a tab with that name already exists, the command is sent to it and the tab is reused. `-d` creates or reuses the tab without stealing focus; use it only for commands expected to keep running.
 
@@ -53,7 +53,7 @@ zmux watch <tab> --idle 3 -T 300              # wait until screen is quiet
 zmux watch <tab> --until 'ready|listening' -T 60   # wait for new matching output
 ```
 
-`watch --until` snapshots the buffer at start and matches only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt. Do not use `watch` as lifecycle truth when `tab status` can answer state.
+`watch --until` snapshots the buffer at start and matches only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt. For fast responders, pair `watch --until` with a buffer/log proof (`watch -l`, `zmux_log tail`, or `zmux_tab_inspect` in Pi): if the marker is already in tail, record it as already-in-tail evidence instead of retrying blindly. Do not use `watch` as lifecycle truth when `tab status` can answer state.
 
 For persistent bounded recording that survives detach, use `zmux log`:
 
@@ -81,6 +81,13 @@ zmux type <tab> '<text>'     # type text and submit it
 ```bash
 # Reviewable one-shot that exits but should stay inspectable
 zmux run 'go test ./...' -n scratch -T 180
+
+# Headed/browser-visible Playwright or Chrome proof batch
+# Reuse one scratch/proof tab for serial lanes; do not mint one tab per spec.
+zmux run 'PLAYWRIGHT_BASE_URL=https://app.localhost bun run test:2d:surface' -n pw-scratch -T 300
+zmux run 'PLAYWRIGHT_BASE_URL=https://app.localhost bun run test:2d:quality' -n pw-scratch -T 300
+zmux watch pw-scratch -l 160
+zmux tab kill pw-scratch     # after evidence is copied and no inspection is needed
 
 # Dev server / persistent runtime
 zmux run 'npm run dev' -n dev -d

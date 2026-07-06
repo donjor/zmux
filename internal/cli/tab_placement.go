@@ -536,17 +536,7 @@ func resolvePaneHost(app *apppkg.App, session, into string) (*tabs.LogicalTab, e
 // placementSession resolves the session scope for placement verbs: explicit
 // flag, else the caller's current session.
 func placementSession(app *apppkg.App, flag string) (string, error) {
-	if flag != "" {
-		return flag, nil
-	}
-	if !app.Runner.IsInsideTmux() {
-		return "", fmt.Errorf("not inside tmux — use --session to specify target")
-	}
-	name, err := app.Runner.DisplayMessage("", "#{session_name}")
-	if err != nil {
-		return "", fmt.Errorf("not inside a tmux session")
-	}
-	return strings.TrimSpace(name), nil
+	return resolveSessionTarget(app, flag)
 }
 
 // tabIndexArg reports whether name is a bare 1-based index (pure digits, ≥ 1).

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -162,16 +161,9 @@ func resolveTabStateTarget(app *apppkg.App, svc *tabstate.Service, a tabStateArg
 		return svc.Resolve(spec)
 	}
 
-	sessionName := a.session
-	if sessionName == "" {
-		if !app.Runner.IsInsideTmux() {
-			return tabstate.Target{}, errors.New("tab-name target outside tmux — use --session")
-		}
-		name, err := app.Runner.DisplayMessage("", "#{session_name}")
-		if err != nil {
-			return tabstate.Target{}, fmt.Errorf("current session: %w", err)
-		}
-		sessionName = strings.TrimSpace(name)
+	sessionName, err := resolveSessionTarget(app, a.session)
+	if err != nil {
+		return tabstate.Target{}, err
 	}
 	rt, err := resolveTabTargetForMutation(app, sessionName, spec, spec)
 	if err != nil {

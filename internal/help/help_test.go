@@ -54,15 +54,22 @@ func TestScopeTagging(t *testing.T) {
 // TestKnownCommandEntryPresent pins the contract shorthand_test relies on, so a
 // refactor of the source can't silently drop it.
 func TestKnownCommandEntryPresent(t *testing.T) {
-	want := "zmux open <ws> [session]"
+	wants := map[string]bool{
+		"zmux open <ws> [session]": false,
+		"zmux where [--json]":      false,
+	}
 	for _, s := range help.Sections() {
 		for _, e := range s.Entries {
-			if e.Label == want {
-				return
+			if _, ok := wants[e.Label]; ok {
+				wants[e.Label] = true
 			}
 		}
 	}
-	t.Errorf("Sections() missing command entry %q", want)
+	for want, found := range wants {
+		if !found {
+			t.Errorf("Sections() missing command entry %q", want)
+		}
+	}
 }
 
 // TestEveryPrefixBindingSurfaces is the drift pin: every prefix binding appears

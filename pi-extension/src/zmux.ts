@@ -1,3 +1,5 @@
+export * from "./zmux/agent.js";
+export * from "./zmux/callbacks.js";
 export * from "./zmux/context.js";
 export * from "./zmux/interactive.js";
 export * from "./zmux/panes.js";

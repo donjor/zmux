@@ -121,7 +121,7 @@ session is tagged into the workspace but never made the default attach target.`,
 				}
 				sendCmd = fmt.Sprintf("bash %s", scriptPath)
 			}
-			if err := app.Runner.SendKeys(target, sendCmd, "Enter"); err != nil {
+			if err := sendShellLine(app.Runner, target, sendCmd); err != nil {
 				return fmt.Errorf("send to %s: %w", target, err)
 			}
 
