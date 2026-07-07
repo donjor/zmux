@@ -43,12 +43,24 @@ state details live in `references/guard-and-tab-states.md`.
 Use your **shell** for quick reads/searches and bounded checks whose captured
 stdout is the whole artifact — even a slow `go test` can stay inline.
 
-Use **zmux** for software that keeps running (servers, watchers, queues, REPLs),
-commands a human may want to see/grab/re-run, input/passwords/sudo/manual
-control, existing long-running process inspection, sidecars, terminal capability
-diagnosis, and visual/TUI evidence. Headed/browser-visible Playwright or Chrome
-proof counts as visual evidence even when the command exits; run those batches
-through one reusable scratch/proof tab, not direct bash and not one tab per lane.
+Use **zmux** for work that needs a shared terminal surface:
+
+- software that keeps running: servers, watchers, queues, REPLs;
+- commands a human may want to see, grab, interrupt, or re-run;
+- input/passwords/sudo/manual control;
+- existing long-running process inspection, sidecars, and terminal diagnostics;
+- visual/TUI evidence.
+
+SSH/remote-admin retry loops use one stable visible tab:
+
+- Use `admin` or `remote-<host>`.
+- Never suffix-bump `remote-sim` → `remote-sim2` → `remote-sim3`.
+- If quoting forces an opaque encoded/admin payload, decode/explain it first.
+- State the intended host/config mutation before running it.
+
+Headed/browser-visible Playwright or Chrome proof counts as visual evidence even
+when the command exits. Run those batches through one reusable scratch/proof tab,
+not direct bash and not one tab per lane.
 
 ### Reuse a tiny roster
 
@@ -60,9 +72,10 @@ work stays together:
 - `<agent>-peer` — a review peer with semantic `tab peer` lifecycle; `worker-*` — orchestrated worker sessions.
 - `claude` / `codex` / `pi` / `agy` — long-lived primary agent shells, not task tabs.
 
-Do **not** mint `eval-2`, `test-run`, `build-x`, per-Playwright-lane, or
-feature-named tabs. Bounded checks stay in your shell; odd reviewable commands
-and serial browser-proof batches go to `scratch`/`pw-scratch`; the main runtime
+Do **not** mint `eval-2`, `test-run`, `build-x`, per-Playwright-lane,
+`remote-sim2`, or feature-named tabs. Bounded checks stay in your shell; odd
+reviewable commands and serial browser-proof batches go to `scratch`/`pw-scratch`;
+remote/manual admin goes to `admin` or one `remote-<host>` tab; the main runtime
 goes to `dev`. Re-running the same job means re-fire the same `run -n <name>`
 target, never suffix-bump `x` → `x2` → `x3`.
 

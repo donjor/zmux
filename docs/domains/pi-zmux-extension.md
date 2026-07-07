@@ -34,6 +34,7 @@ so agents use visible zmux-managed tabs instead of hidden shell jobs or raw tmux
 ## Split-logic warnings
 
 - Do not duplicate shell lifecycle waiting with temp sentinels or wrapper scripts; read `zmux tab status --json` or use first-class `zmux wait` / `zmux type --wait-*` condition results.
+- Do not let Pi-tool wrappers silently normalize opaque remote-admin behavior: numbered `remote-<host>N` tabs and encoded/obfuscated remote payloads need deterministic warnings/tests, not just prose doctrine.
 - Do not add a Pi typed tool without updating skill doctrine and the guard redirect map when the workflow should be tool-preferred.
 - Keep package loading settings-managed. A retired global `~/.pi/agent/extensions/pi-zmux` symlink can mask the local package.
 - Keep `zzmux` grounding isolated from live `zmux`; edge profile QA must not mutate live shell startup or agent integration links.
@@ -126,7 +127,7 @@ Sessions, tabs, panes, peers, and input:
 
 Runtime/output/evidence:
 
-- `zmux_run` — reviewable command-in-tab one-shots.
+- `zmux_run` — reviewable command-in-tab one-shots. For remote-admin retries, tool guidance and result metadata warn on numbered `remote-<host>N` tab sprawl and opaque encoded/obfuscated payloads; agents should reuse one `admin`/`remote-<host>` tab, decode/explain payloads, and state the intended remote mutation before changing host config.
 - `zmux_runtime_ensure`, `zmux_runtime_logs`, `zmux_runtime_stop` — stable named
   runtime tabs; readiness/log waits route through first-class `zmux wait --json` and report the evidence basis (`outputRegex` or `idleFallback`). If a fast marker was already visible before the wait baseline, results surface `failureKind: output_regex_already_present` / `alreadyInTail: true` as tail evidence instead of a generic unproven wait.
 - `zmux_callback` — explicit live-session-scoped notification for a visible tab when first-class `zmux wait --json` proves future output or idle/quiet evidence. Default delivery is `steer` so active turns can observe completion before the next model call; pass `deliverAs: "followUp"` for end-turn-only handoff. `list` reports both active handles and recent completions; delivered callbacks are top-level Pi `custom_message` entries with `customType: pi-zmux-callback`. Callback handles are not durable across Pi reload, crash, or respawn.

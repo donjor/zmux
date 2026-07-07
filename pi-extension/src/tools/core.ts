@@ -101,6 +101,8 @@ export function registerCoreTools(pi: ExtensionAPI): void {
 		promptSnippet: "Run a command in a named zmux tab",
 		promptGuidelines: [
 			"Use zmux_run for reviewable command-in-tab one-shots; use normal bash for bounded checks whose captured stdout is enough.",
+			"For SSH/remote-admin retries, use one stable visible remote/admin tab; do not create remote-host, remote-host2, remote-host3 variants.",
+			"Decode/explain opaque encoded remote/admin payloads before execution, and state the intended host/config mutation before changing remote state.",
 			"Use zmux_runtime_ensure for software that keeps running, and zmux_interactive_type for sudo/password/manual-input commands.",
 			"Do not add your own sentinels or wrapper scripts; zmux-managed shell lifecycle owns command state, and watch/log tools own output inspection.",
 		],

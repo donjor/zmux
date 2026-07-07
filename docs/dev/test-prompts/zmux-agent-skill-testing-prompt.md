@@ -279,7 +279,7 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence. A documentati
 ### Roster and addressing
 
 - Tiny roster is documented: `dev`, `scratch`, `<agent>-peer`, worker sessions, long-lived primary agent tabs.
-- Reuse is preferred over suffix tab sprawl, and repeated test/proof batches do not mint per-lane tabs.
+- Reuse is preferred over suffix tab sprawl, repeated test/proof batches do not mint per-lane tabs, and SSH/remote-admin retries use one stable `admin`/`remote-<host>` tab rather than `remote-host2` suffixes.
 - Joined logical panes are treated as roster tabs and targeted by logical tab names.
 - Outside-tmux and ambiguous session flows require listing sessions and passing explicit `-s`.
 - Session labels, workspace/session labels, and raw `zws_...` fallback are documented.
@@ -287,6 +287,7 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence. A documentati
 ### Run/observe/lifecycle
 
 - `run`, `watch`, `log`, `send`, and `type` have clear examples and separation of lifecycle vs output.
+- Opaque encoded/obfuscated remote payload guidance is explicit: decode/explain payloads and state intended host/config mutations before execution.
 - `tab status --json` is the lifecycle/command/peer state source of truth.
 - `zmux wait --for output:/idle:` is documented as structured output/idle evidence, not process truth; `watch --until`/`--idle` remain human output tools. For fast markers, count already-in-tail output only when a buffer/log read proves the marker, and call it out in the report instead of retrying blindly.
 - No custom sentinels, wrapper scripts, or hand-rolled poll loops are recommended.

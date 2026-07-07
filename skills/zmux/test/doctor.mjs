@@ -40,6 +40,8 @@ const skillFiles = [
   'skills/zmux/references/cli-catalog.md',
   'docs/domains/pi-zmux-extension.md',
   'docs/dev/agent-grounding.md',
+  'docs/dev/test-prompts/zmux-agent-pi-extension-testing-prompt.md',
+  'docs/dev/test-prompts/zmux-agent-skill-testing-prompt.md',
 ];
 const docs = Object.fromEntries(skillFiles.map((file) => [file, read(file)]));
 const combined = Object.values(docs).join('\n');
@@ -87,6 +89,10 @@ assert.ok(
 assert.match(docs['skills/zmux/references/agent-peer.md'], /-s <session>/);
 assert.match(docs['skills/zmux/references/agent-peer.md'], /`session` parameter/);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /legacy `waiting` means `ready`|Legacy `waiting` means `ready`|waiting` aliases to `ready`/i);
+assert.match(docs['skills/zmux/SKILL.md'], /remote-sim2/i);
+assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /opaque\nencoded or obfuscated payload/i);
+assert.match(docs['docs/domains/pi-zmux-extension.md'], /numbered `remote-<host>N` tab sprawl/i);
+assert.match(docs['docs/dev/test-prompts/zmux-agent-pi-extension-testing-prompt.md'], /report-025 failure class/i);
 
 const devSh = read('dev.sh');
 assert.ok(

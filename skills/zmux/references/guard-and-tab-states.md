@@ -43,13 +43,28 @@ already exists, so addressing by a stable purpose-name keeps related work togeth
 | `claude` / `codex` / `pi` / `agy` | the session's primary agent shell — long-lived, not a task tab |
 | `dev` | the project runtime: app server, local service, main REPL, the process a human stops/restarts |
 | `scratch` | reviewable one-offs: mutations, manual takeover, things to inspect/re-run, no durable name |
+| `admin` / `remote-<host>` | SSH, sudo, remote shells, and remote-config retries — one stable tab per host |
 | `<agent>-peer` | a review peer — owned by the peer skill |
 | `worker-*` | orchestrate worker *sessions* (not conductor roster tabs) |
 
-Do **not** mint `eval-2`, `test-run`, `build-x`, per-Playwright-lane, or feature-named tabs — that scatters the surface
-and is the exact sprawl this rule exists to stop. A reviewable long/odd command → `scratch`; the
-main runtime → `dev`; a bounded check → your shell. App-managed detached daemons (their own
-`setsid`/systemd/Docker `-d`) aren't tabs at all — don't babysit an empty wrapper.
+Do **not** mint `eval-2`, `test-run`, `build-x`, `remote-sim2`,
+per-Playwright-lane, or feature-named tabs.
+That scatters the surface and is the exact sprawl this rule exists to stop.
+
+Route by purpose:
+
+- reviewable long/odd command → `scratch`;
+- SSH/remote-admin retries → `admin` or one `remote-<host>` tab;
+- main runtime → `dev`;
+- bounded check → your shell.
+
+App-managed detached daemons (their own `setsid`/systemd/Docker `-d`) aren't tabs
+at all — don't babysit an empty wrapper.
+
+Remote admin has an extra audit rule: if a quoting workaround uses an opaque
+encoded or obfuscated payload, decode/explain it and say “about to change X on
+host Y” before running it. An encoded blob in tab history is not reviewable
+enough, especially for `.env`, credential, service, or deployment mutations.
 
 Headed/browser-visible Playwright is the special bounded-looking case: if it opens real browser UI,
 uses CDB/headed placement, or produces visual proof the user may need to watch, route it through one

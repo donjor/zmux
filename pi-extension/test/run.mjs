@@ -44,6 +44,7 @@ try {
     turnWaitOutcomeForStatus,
     watchPatternPresentInText,
     zmuxRunResultDetails,
+    zmuxRunSafetyWarnings,
   } = await import(join(outDir, 'src/zmux.js'));
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
   const { reloadContinuationPath, shouldTriggerContinuation, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
@@ -109,6 +110,19 @@ try {
   }
   const toolByName = Object.fromEntries(registeredTools.map((tool) => [tool.name, tool]));
   assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /Do not add your own sentinels or wrapper scripts/);
+  assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /one stable.*remote/i);
+  assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /opaque encoded remote\/admin payloads/i);
+  const encodedRemoteMutation = Buffer.from("Add-Content C:\\Users\\Jordon\\prlt-agent\\.env 'DEPOT_SMB_PASS=redacted'", 'utf16le').toString('base64');
+  const remoteRunWarnings = zmuxRunSafetyWarnings({
+    command: `ssh sim "powershell -NoProfile -EncodedCommand ${encodedRemoteMutation}"`,
+    cwd: root,
+    tab: 'remote-sim2',
+  });
+  assert.match(remoteRunWarnings.text, /reuse.*remote-sim/i, 'numbered remote tabs should warn toward one stable tab');
+  assert.match(remoteRunWarnings.text, /opaque encoded remote\/admin payload/i, 'opaque encoded remote command should be called out generically');
+  assert.match(remoteRunWarnings.text, /about to change.*sim/i, 'remote env mutation should require an explicit pre-change status');
+  assert.equal(remoteRunWarnings.details.recommendedTab, 'remote-sim');
+  assert.match(remoteRunWarnings.details.decodedRemoteCommandPreview, /Add-Content/);
   assert.match(toolByName.zmux_tab_status.description, /do not set glyphs/);
   assert.match(toolByName.zmux_tab_inspect.description, /status JSON plus recent output/);
   assert.match(toolByName.zmux_peer_ensure.description, /peer lifecycle metadata/);

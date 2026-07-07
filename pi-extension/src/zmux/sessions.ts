@@ -26,6 +26,56 @@ export function buildZmuxRunArgs(params: ZmuxRunParams): string[] {
 	return withSession(args, params.session);
 }
 
+function numberedRemoteTabBase(tab?: string): string | undefined {
+	if (!tab) return undefined;
+	const match = /^(remote-[A-Za-z0-9_-]*?)([2-9]\d*)$/u.exec(tab);
+	return match?.[1];
+}
+
+function sshHost(command: string): string | undefined {
+	const match = /(?:^|[;&|]\s*)ssh\s+(?:-[A-Za-z0-9]+(?:\s+\S+)?\s+)*([A-Za-z0-9._-]+)/u.exec(command);
+	return match?.[1];
+}
+
+function encodedRemoteCommandPreview(command: string): string | undefined {
+	const match = /(?:^|\s)-EncodedCommand\s+([A-Za-z0-9+/=]+)/iu.exec(command);
+	if (!match) return undefined;
+	try {
+		return Buffer.from(match[1], "base64").toString("utf16le").replace(/\u0000/g, "").trim().slice(0, 500);
+	} catch {
+		return "<could not decode encoded payload>";
+	}
+}
+
+function looksLikeRemoteMutation(decoded: string | undefined, command: string): boolean {
+	const haystack = `${decoded ?? ""}\n${command}`;
+	return /\b(Add-Content|Set-Content|Out-File|New-Item|Remove-Item|Set-Item|Restart-Service|Stop-Service|Start-Service|setx)\b|\.env\b|\bDEPOT_|\b[A-Z0-9_]*(PASS|TOKEN|SECRET|USER)\b/iu.test(haystack);
+}
+
+export function zmuxRunSafetyWarnings(params: ZmuxRunParams): { text: string; details: Record<string, unknown> } {
+	const warnings: string[] = [];
+	const details: Record<string, unknown> = { warnings };
+	const recommendedTab = numberedRemoteTabBase(params.tab);
+	const host = sshHost(params.command);
+	const decodedRemoteCommandPreview = encodedRemoteCommandPreview(params.command);
+
+	if (recommendedTab) {
+		warnings.push(`tab ${params.tab} looks like numbered remote tab sprawl; inspect/reuse one stable tab (${recommendedTab}) instead of creating suffix variants`);
+		details.recommendedTab = recommendedTab;
+	}
+	if (decodedRemoteCommandPreview !== undefined) {
+		warnings.push("opaque encoded remote/admin payload is hard to audit in tab history; decode/explain it before execution or prefer a visible script/here-doc when practical");
+		details.decodedRemoteCommandPreview = decodedRemoteCommandPreview;
+	}
+	if (host && decodedRemoteCommandPreview !== undefined && looksLikeRemoteMutation(decodedRemoteCommandPreview, params.command)) {
+		warnings.push(`about to change remote host ${host}; state the intended mutation before running encoded/admin commands`);
+		details.remoteHost = host;
+		details.remoteMutationLikely = true;
+	}
+
+	return { text: warnings.length ? `zmux_run safety warning:\n${warnings.map((warning) => `- ${warning}`).join("\n")}` : "", details };
+}
+
 export function zmuxRunResultDetails(result: CommandStatusResult, output: string): Record<string, unknown> {
 	const details: Record<string, unknown> = {
 		zmuxExitCode: result.exitCode,
@@ -66,6 +116,7 @@ export async function runCommand(params: ZmuxRunParams): Promise<{ text: string;
 	const timeoutMs = params.detach ? 15_000 : (timeoutSeconds + 5) * 1000;
 	const result = await runFileStatus(zmuxBin(), buildZmuxRunArgs({ ...params, timeoutSeconds }), { cwd: params.cwd, timeoutMs });
 	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+	const safety = zmuxRunSafetyWarnings(params);
 	const details: Record<string, unknown> = {
 		command: params.command,
 		tab: params.tab,
@@ -75,8 +126,10 @@ export async function runCommand(params: ZmuxRunParams): Promise<{ text: string;
 		detach: params.detach ?? false,
 		follow: params.follow ?? false,
 		...zmuxRunResultDetails(result, output),
+		...safety.details,
 	};
-	return { text: output || (result.failed ? `zmux run failed: ${details.warning}` : "zmux run completed"), details };
+	const body = output || (result.failed ? `zmux run failed: ${details.warning}` : "zmux run completed");
+	return { text: [safety.text, body].filter(Boolean).join("\n"), details };
 }
 
 export function buildSessionListArgs(params: { workspace?: string; flat?: boolean } = {}): string[] {
