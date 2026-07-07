@@ -15,12 +15,10 @@ import (
 type Basis string
 
 const (
-	BasisTurnState   Basis = "turnState"
-	BasisCmdState    Basis = "cmdState"
-	BasisOutput      Basis = "outputRegex"
-	BasisIdle        Basis = "idleFallback"
-	BasisTimeout     Basis = "timeout"
-	BasisUnavailable Basis = "unavailable"
+	BasisTurnState Basis = "turnState"
+	BasisCmdState  Basis = "cmdState"
+	BasisOutput    Basis = "outputRegex"
+	BasisIdle      Basis = "idleFallback"
 )
 
 type ConditionKind string
@@ -339,14 +337,13 @@ func waitLifecycle(ctx context.Context, req Request, baseline Baseline) (Outcome
 			return oc, nil
 		}
 		if time.Now().After(deadline) {
-			oc := timeoutOutcome(req, baseline, string(req.Condition.Kind)+"_unproven")
-			oc.Status = st
+			oc := timeoutOutcomeWithStatus(req, baseline, string(req.Condition.Kind)+"_unproven", st)
 			oc.OutputTail, _ = req.Runner.CapturePane(req.Target, req.Lines)
 			return oc, nil
 		}
 		select {
 		case <-ctx.Done():
-			return timeoutOutcome(req, baseline, "interrupted"), ctx.Err()
+			return timeoutOutcomeWithStatus(req, baseline, "interrupted", st), ctx.Err()
 		case <-ticker.C:
 		}
 	}
@@ -403,8 +400,15 @@ func classifyLifecycle(req Request, baseline Baseline, st Status) (Outcome, bool
 }
 
 func timeoutOutcome(req Request, baseline Baseline, failure string) Outcome {
-	st := ReadStatus(req.Runner, req.PaneID)
-	basis := BasisTimeout
+	return timeoutOutcomeWithStatus(req, baseline, failure, ReadStatus(req.Runner, req.PaneID))
+}
+
+// timeoutOutcomeWithStatus builds a timeout outcome from an already-read status,
+// avoiding a redundant ReadStatus round-trip when the caller holds a fresh one.
+func timeoutOutcomeWithStatus(req Request, baseline Baseline, failure string, st Status) Outcome {
+	// Every accepted condition kind maps to a basis — there is no separate
+	// "timeout" basis; Met=false + FailureKind carries the expiry.
+	var basis Basis
 	switch req.Condition.Kind {
 	case ConditionCmd:
 		basis = BasisCmdState

@@ -106,7 +106,7 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 	// First pass: identify root sessions and count grouped copies.
 	// A session is a grouped copy if it has a group, its RootName differs
 	// from its own name, and the root session actually exists.
-	roots := make(map[string]*SessionInfo) // group name → root info
+	roots := make(map[string]int) // group name → index into infos
 	var infos []SessionInfo
 
 	for _, s := range raw {
@@ -114,10 +114,11 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 		isGroupedCopy := s.Group != "" && root != s.Name && nameSet[root]
 
 		if isGroupedCopy && !s.PinnedView {
-			// Merge into root: count attached clients.
-			if ri, ok := roots[s.Group]; ok {
+			// Merge into root: count attached clients. Index, not pointer —
+			// a pointer into infos goes stale when append reallocates.
+			if idx, ok := roots[s.Group]; ok {
 				if s.Attached {
-					ri.AttachedClients++
+					infos[idx].AttachedClients++
 				}
 			}
 			continue // don't add ephemeral grouped copies to the list
@@ -150,7 +151,7 @@ func ListSessions(runner tmux.Runner) ([]SessionInfo, error) {
 		}
 		infos = append(infos, info)
 		if s.Group != "" {
-			roots[s.Group] = &infos[len(infos)-1]
+			roots[s.Group] = len(infos) - 1
 		}
 	}
 

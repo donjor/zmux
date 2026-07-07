@@ -77,21 +77,11 @@ func runApply(app *apppkg.App, skipSource bool) error {
 		}
 	}
 
-	// Step 4: Apply bar preset + layout (live set-option calls).
+	// Step 4: Apply bar preset + layout (live set-option calls), then
+	// reconcile per-session status lines so existing sessions pick up the
+	// always-2-line wiring rather than only new ones (plan 024).
 	preset, _ := bar.PresetFromString(cfg.Bar.Preset)
-	layoutCfg := bar.BarLayoutConfig{
-		Layout:    cfg.Bar.Layout,
-		Indicator: cfg.Bar.Indicator,
-		TopBar:    cfg.Bar.TopBar,
-	}
-	_ = bar.Apply(app.Runner, zmuxBin, preset, palette, layoutCfg)
-
-	// Step 4b: Reconcile per-session status lines to the configured layout, so
-	// existing sessions pick up the always-2-line wiring (and any stale
-	// per-session overrides are cleared) rather than only new ones (plan 024).
-	if zmuxBin != "" {
-		reconcileBarStatusLines(app.Runner, cfg.Bar.Layout, cfg.Bar.TopBar, zmuxBin)
-	}
+	_ = applyBarPreset(app, preset, palette, cfg.Bar)
 
 	// Step 5: Source conf for keybinding changes.
 	// Skipped during bootstrap (--bootstrap) to prevent an infinite

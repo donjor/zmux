@@ -76,8 +76,7 @@ func (t *CurrentTab) handleConfirmKillKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cm
 		return t, nil
 	}
 
-	// Workspace with attached sessions: route through the second confirmation.
-	if t.confirm.kind == "workspace" && t.confirm.attached && t.mode != currentModeConfirmKillAttached {
+	if confirmKillEscalate(t.confirm, t.mode == currentModeConfirmKillAttached) {
 		t.mode = currentModeConfirmKillAttached
 		return t, nil
 	}

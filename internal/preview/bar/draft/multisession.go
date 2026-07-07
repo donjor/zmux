@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/donjor/zmux/internal/bar"
-	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -60,20 +59,6 @@ const (
 // These render the session content for the top row (two-line/split).
 // The workspace pill is prepended by the layout renderer.
 
-func renderTopBarContent(variant string, pal *theme.Palette, sessions []Session, currentIdx int, preset bar.Preset) string {
-	switch variant {
-	case TopBarTabs:
-		return RenderSessionTabs(pal, sessions, currentIdx, preset)
-	case TopBarDots:
-		return renderDotsEnriched(pal, sessions, currentIdx)
-	case TopBarMinimal:
-		return renderMinimalSessionList(pal, sessions, currentIdx)
-	default:
-		return renderMinimalSessionList(pal, sessions, currentIdx)
-	}
-}
-
-// RenderDotsEnrichedStr renders enriched dots with names for the top bar.
 func RenderDotsEnrichedStr(pal *theme.Palette, sessions []Session, currentIdx int) string {
 	return renderDotsEnriched(pal, sessions, currentIdx)
 }
@@ -121,21 +106,6 @@ func renderMinimalSessionList(pal *theme.Palette, sessions []Session, currentIdx
 
 // applyIndicator sets the SessionIndicator field on a BarContext based
 // on the indicator choice. This is called via the override callback.
-func applyIndicator(ctx *bar.BarContext, indicator string, pal *theme.Palette, sessions []Session, currentIdx int) {
-	switch indicator {
-	case IndicatorDots:
-		ctx.SessionIndicator = RenderDotsPlain(sessions, currentIdx)
-	case IndicatorNumbers:
-		// Leave SessionIndicator empty — SessionLabel() falls back to "N/M".
-	case IndicatorNone:
-		// Suppress both dots and numbers.
-		ctx.WorkspaceCount = 1
-	}
-}
-
-// RenderDotsPlain returns the dot string WITHOUT ANSI colors — it goes
-// inside the session pill which already has its own fg/bg from the
-// preset. The dots use unicode chars that render well in any color.
 func RenderDotsPlain(sessions []Session, currentIdx int) string {
 	if len(sessions) <= 1 {
 		return ""
@@ -161,174 +131,6 @@ func RenderDotsPlain(sessions []Session, currentIdx int) string {
 // directly (not tmux format strings). Phase 1+ will generate actual
 // tmux format strings through the preset's windowFmt/windowCurrentFmt.
 
-func RenderSessionTabs(pal *theme.Palette, sessions []Session, currentIdx int, preset bar.Preset) string {
-	if len(sessions) <= 1 {
-		return ""
-	}
-
-	switch preset {
-	case bar.Powerline:
-		return renderTabsPowerline(pal, sessions, currentIdx)
-	case bar.Rpowerline:
-		return renderTabsRpowerline(pal, sessions, currentIdx)
-	case bar.Rounded:
-		return renderTabsRounded(pal, sessions, currentIdx)
-	case bar.Blocks:
-		return renderTabsBlocks(pal, sessions, currentIdx)
-	case bar.Hacker:
-		return renderTabsHacker(pal, sessions, currentIdx)
-	case bar.Zen:
-		return renderTabsZen(pal, sessions, currentIdx)
-	case bar.Minimal:
-		return renderTabsMinimal(pal, sessions, currentIdx)
-	default:
-		return renderTabsDefault(pal, sessions, currentIdx)
-	}
-}
-
-// Each preset-specific renderer mirrors the window tab styling from
-// generate.go but outputs ANSI instead of tmux format strings.
-
-func renderTabsDefault(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	var parts []string
-	for _, s := range sessions {
-		if s.Index == currentIdx {
-			parts = append(parts, fgbg(pal.BG, pal.Accent, " "+bold(s.Name)+" "))
-		} else {
-			parts = append(parts, fgbg(pal.Dim, pal.Surface, " "+s.Name+" "))
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
-func renderTabsPowerline(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	// Mirrors the two-section powerline window format from generate.go:
-	//   [▸index▸name▸]
-	var parts []string
-	for _, s := range sessions {
-		idx := fmt.Sprintf("%d", s.Index)
-		if s.Index == currentIdx {
-			parts = append(parts,
-				fgonlybg(pal.BG, pal.Accent, "")+
-					fgbg(pal.BG, pal.Accent, bold(" "+idx+" "))+
-					fgonlybg(pal.Accent, pal.Surface, "")+
-					fgbg(pal.FG, pal.Surface, bold(" "+s.Name+" "))+
-					fgonly(pal.Surface, ""))
-		} else {
-			parts = append(parts,
-				fgonlybg(pal.BG, pal.Dim, "")+
-					fgbg(pal.Surface, pal.Dim, " "+idx+" ")+
-					fgonlybg(pal.Dim, pal.Surface, "")+
-					fgbg(pal.Muted, pal.Surface, " "+s.Name+" ")+
-					fgonly(pal.Surface, ""))
-		}
-	}
-	return strings.Join(parts, "")
-}
-
-func renderTabsRpowerline(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	// Two-section rpowerline pills matching window tab format from generate.go:
-	//   ╭ index ▸ name ╮
-	// Current session gets accent highlight + ● icon; others get ○.
-	var parts []string
-	for _, s := range sessions {
-		icon := "○"
-		if s.Index == currentIdx {
-			icon = "●"
-		}
-		if s.Index == currentIdx {
-			parts = append(parts,
-				fgonly(pal.Accent, "")+
-					fgbg(pal.BG, pal.Accent, " "+icon+" ")+
-					fgonlybg(pal.Accent, pal.Surface, "")+
-					fgbg(pal.FG, pal.Surface, bold(" "+s.Name+" "))+
-					fgonly(pal.Surface, ""))
-		} else {
-			parts = append(parts,
-				fgonly(pal.Dim, "")+
-					fgbg(pal.Surface, pal.Dim, " "+icon+" ")+
-					fgonlybg(pal.Dim, pal.Surface, "")+
-					fgbg(pal.Muted, pal.Surface, " "+s.Name+" ")+
-					fgonly(pal.Surface, ""))
-		}
-	}
-	return strings.Join(parts, "")
-}
-
-func renderTabsRounded(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	var parts []string
-	for _, s := range sessions {
-		if s.Index == currentIdx {
-			parts = append(parts,
-				fgonly(pal.Accent, "")+
-					fgbg(pal.BG, pal.Accent, bold(" "+s.Name+" "))+
-					fgonly(pal.Accent, ""))
-		} else {
-			parts = append(parts,
-				fgonly(pal.Surface, "")+
-					fgbg(pal.Dim, pal.Surface, " "+s.Name+" ")+
-					fgonly(pal.Surface, ""))
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
-func renderTabsBlocks(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	var parts []string
-	for _, s := range sessions {
-		if s.Index == currentIdx {
-			parts = append(parts, fg(pal.Accent, bold("["+s.Name+"]")))
-		} else {
-			parts = append(parts, fg(pal.Dim, "["+s.Name+"]"))
-		}
-	}
-	return strings.Join(parts, " ")
-}
-
-func renderTabsHacker(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	var parts []string
-	for _, s := range sessions {
-		label := fmt.Sprintf("%d:%s", s.Index, s.Name)
-		if s.Index == currentIdx {
-			parts = append(parts, fg(pal.Success, bold(label)))
-		} else {
-			parts = append(parts, fg(pal.Dim, label))
-		}
-	}
-	return strings.Join(parts, fg(pal.Dim, "|"))
-}
-
-func renderTabsZen(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	var parts []string
-	for _, s := range sessions {
-		if s.Index == currentIdx {
-			parts = append(parts, fg(pal.Muted, s.Name))
-		} else {
-			parts = append(parts, fg(pal.Dim, s.Name))
-		}
-	}
-	return strings.Join(parts, fg(pal.Dim, " · "))
-}
-
-func renderTabsMinimal(pal *theme.Palette, sessions []Session, currentIdx int) string {
-	var parts []string
-	for _, s := range sessions {
-		if s.Index == currentIdx {
-			parts = append(parts, fg(pal.FG, bold(s.Name)))
-		} else {
-			parts = append(parts, fg(pal.Dim, s.Name))
-		}
-	}
-	return strings.Join(parts, "  ")
-}
-
-// ── Workspace pill (preset-matched) ─────────────────────────────────
-//
-// These approximate each preset's workspace pill chrome so the top row
-// of the two-line layout looks like it belongs. Phase 1+ will use the
-// real preset renderer.
-
-// RenderWorkspacePill renders a preset-matched workspace pill.
 func RenderWorkspacePill(pal *theme.Palette, workspace string, preset bar.Preset) string {
 	return renderWorkspacePill(pal, workspace, preset)
 }
@@ -373,47 +175,6 @@ func renderWorkspacePill(pal *theme.Palette, workspace string, preset bar.Preset
 
 // RenderSingle: one-line bar. The indicator (dots/numbers/none) goes
 // INSIDE the session pill via the BarContext.SessionIndicator field.
-func RenderSingle(indicator string, pal *theme.Palette, sessions []Session, currentIdx int, preset bar.Preset, segments config.BarSegments, width int) string {
-	return bar.RenderPreviewWithSegmentsOverride(preset, pal, segments, func(ctx *bar.BarContext) {
-		applyIndicator(ctx, indicator, pal, sessions, currentIdx)
-	})
-}
-
-// RenderTwoLine:
-//
-//	top row = preset-styled workspace pill + session indicator (tabs/dots)
-//	bottom row = session bar (no workspace, no position numbers)
-//
-// The workspace pill on the top row uses the preset's own rendering so
-// the icon + colors + chrome match exactly. The bottom row strips
-// the workspace segment AND the position suffix (since the session
-// indicator already communicates which session you're on).
-//
-// Collapses to single-line when only 1 session.
-func RenderTwoLine(topVariant, indicator string, pal *theme.Palette, sessions []Session, currentIdx int, preset bar.Preset, segments config.BarSegments, workspace string, width int) (top, bottom string) {
-	// ── Top: workspace pill + session content (always present) ──
-	wsPill := renderWorkspacePill(pal, workspace, preset)
-	sessionContent := renderTopBarContent(topVariant, pal, sessions, currentIdx, preset)
-	top = wsPill + "  " + sessionContent
-
-	// ── Bottom: session bar (no workspace, indicator in session pill) ──
-	noWS := segments
-	noWS.Workspace = false
-	bottom = bar.RenderPreviewWithSegmentsOverride(preset, pal, noWS, func(ctx *bar.BarContext) {
-		applyIndicator(ctx, indicator, pal, sessions, currentIdx)
-	})
-	return top, bottom
-}
-
-// RenderSplit: same content as two-line; page.go places the bottom bar
-// below the editor content instead of directly under the top bar.
-func RenderSplit(variant, indicator string, pal *theme.Palette, sessions []Session, currentIdx int, preset bar.Preset, segments config.BarSegments, workspace string, width int) (top, bottom string) {
-	return RenderTwoLine(variant, indicator, pal, sessions, currentIdx, preset, segments, workspace, width)
-}
-
-// ── ANSI helpers ────────────────────────────────────────────────────
-
-// fg sets foreground only; terminates with [39m so outer BG survives.
 func fg(c theme.Color, s string) string {
 	return fmt.Sprintf("\033[38;2;%d;%d;%dm%s\033[39m", c.R, c.G, c.B, s)
 }

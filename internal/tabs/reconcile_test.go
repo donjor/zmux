@@ -44,6 +44,28 @@ func TestReconcileWritesMissingMirror(t *testing.T) {
 	}
 }
 
+// A cleared pane label must clear the window mirror too — before this, the
+// label write was gated on a non-empty label, so the bar rendered the dead
+// label forever while MirrorsWritten bumped every pass.
+func TestReconcileClearsMirrorWhenLabelCleared(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	mock.LogicalRows = []tmux.LogicalPaneRow{
+		row("%1", "work", "@1", "ztab_a"), // pane label now empty
+	}
+	mock.WindowOptions = map[string]string{"@1\x00" + tablabel.Option: "buddy"}
+	res, err := Reconcile(mock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.MirrorsWritten != 1 {
+		t.Fatalf("want 1 mirror write, got %+v", res)
+	}
+	labels := applied(mock, tablabel.Option)
+	if len(labels) != 1 || labels[0].Args[1] != "@1" || labels[0].Args[4] != "unset=true" {
+		t.Errorf("want an unset write for the stale mirror, got %v", labels)
+	}
+}
+
 func TestReconcileLeavesHealthyMirrorAlone(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	mock.LogicalRows = []tmux.LogicalPaneRow{

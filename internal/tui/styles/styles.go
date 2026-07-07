@@ -14,14 +14,18 @@ type Styles struct {
 	Subtitle lipgloss.Style
 	Selected lipgloss.Style
 	Normal   lipgloss.Style
-	Muted    lipgloss.Style
-	Accent   lipgloss.Style
-	Error    lipgloss.Style
-	Success  lipgloss.Style
-	Info     lipgloss.Style
-	Special  lipgloss.Style
-	Dim      lipgloss.Style
-	Help     lipgloss.Style
+	// Muted, Dim, and Help are distinct semantic names for the same
+	// de-emphasized tone (palette.Dim / ANSI 8): muted body text, dim chrome,
+	// help hints. Kept separate so a theme can later split them without touching
+	// call sites; the constructors derive all three from one style value.
+	Muted   lipgloss.Style
+	Accent  lipgloss.Style
+	Error   lipgloss.Style
+	Success lipgloss.Style
+	Info    lipgloss.Style
+	Special lipgloss.Style
+	Dim     lipgloss.Style
+	Help    lipgloss.Style
 }
 
 // NewStyles creates a Styles set from a theme Palette.
@@ -29,6 +33,9 @@ func NewStyles(palette *theme.Palette) Styles {
 	if palette == nil {
 		return DefaultStyles()
 	}
+
+	dim := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(palette.Dim.Hex()))
 
 	return Styles{
 		Title: lipgloss.NewStyle().
@@ -46,8 +53,7 @@ func NewStyles(palette *theme.Palette) Styles {
 		Normal: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.FG.Hex())),
 
-		Muted: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(palette.Dim.Hex())),
+		Muted: dim,
 
 		Accent: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Accent.Hex())),
@@ -64,16 +70,16 @@ func NewStyles(palette *theme.Palette) Styles {
 		Special: lipgloss.NewStyle().
 			Foreground(lipgloss.Color(palette.Special.Hex())),
 
-		Dim: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(palette.Dim.Hex())),
-
-		Help: lipgloss.NewStyle().
-			Foreground(lipgloss.Color(palette.Dim.Hex())),
+		Dim:  dim,
+		Help: dim,
 	}
 }
 
 // DefaultStyles returns styles using default ANSI colors when no theme is available.
 func DefaultStyles() Styles {
+	dim := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8"))
+
 	return Styles{
 		Title: lipgloss.NewStyle().
 			Bold(true).
@@ -90,8 +96,7 @@ func DefaultStyles() Styles {
 		Normal: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("15")),
 
-		Muted: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")),
+		Muted: dim,
 
 		Accent: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("3")),
@@ -108,10 +113,7 @@ func DefaultStyles() Styles {
 		Special: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("5")),
 
-		Dim: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")),
-
-		Help: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8")),
+		Dim:  dim,
+		Help: dim,
 	}
 }

@@ -65,7 +65,7 @@ func newPaneCmd(app *apppkg.App) *cobra.Command {
 		Short: "Manage tmux panes with zmux-native commands",
 	}
 	cmd.AddCommand(newPaneOpenCmd(app))
-	cmd.AddCommand(newPaneListCmd(app))
+	cmd.AddCommand(newPaneListCmd(app, "list"))
 	cmd.AddCommand(newPaneCurrentCmd(app))
 	cmd.AddCommand(newPaneToggleCmd(app))
 	cmd.AddCommand(newPaneCloseCmd(app))

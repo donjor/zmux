@@ -20,8 +20,8 @@ import (
 
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/sahilm/fuzzy"
 
+	"github.com/donjor/zmux/internal/tui/filter"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
@@ -249,19 +249,7 @@ func (m *Model) applyFilter() {
 		source = filtered
 	}
 
-	if query == "" {
-		m.filtered = source
-	} else {
-		names := make([]string, len(source))
-		for i, ws := range source {
-			names[i] = ws.Name
-		}
-		matches := fuzzy.Find(query, names)
-		m.filtered = make([]workspaceview.WorkspaceViewModel, len(matches))
-		for i, match := range matches {
-			m.filtered[i] = source[match.Index]
-		}
-	}
+	m.filtered = filter.Fuzzy(source, query, func(ws workspaceview.WorkspaceViewModel) string { return ws.Name })
 	m.tree.SetRows(m.buildRows())
 }
 

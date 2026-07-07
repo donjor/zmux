@@ -70,7 +70,7 @@ func attachOwnedSessionLoop(app *apppkg.App, name string, attach ownedAttachFunc
 }
 
 func runSessionlessDashboard(app *apppkg.App) error {
-	return runNewDashboard(app, string(dashboard.TabWorkspaces))
+	return runDashboard(app, string(dashboard.TabWorkspaces))
 }
 
 func attachFallbackWorkspace(app *apppkg.App, name string) (string, bool) {

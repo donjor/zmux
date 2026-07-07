@@ -238,7 +238,7 @@ func TestRunPaneToggleOpensMissing(t *testing.T) {
 func TestRunPaneListQuiet(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.Panes[""] = []tmux.Pane{{ID: "%1"}, {ID: "%2"}}
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(a, cmd, &paneListFlags{quiet: true}); err != nil {
@@ -252,7 +252,7 @@ func TestRunPaneListQuiet(t *testing.T) {
 func TestRunPaneListDefaultsToCurrentWindow(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.Panes[""] = []tmux.Pane{{ID: "%1"}}
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(a, cmd, &paneListFlags{quiet: true}); err != nil {
@@ -267,7 +267,7 @@ func TestRunPaneListSessionScope(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.Sessions = []tmux.Session{{Name: "dev"}}
 	mock.Panes["dev"] = []tmux.Pane{{ID: "%1"}}
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(a, cmd, &paneListFlags{target: "dev", session: true, quiet: true}); err != nil {
@@ -282,7 +282,7 @@ func TestRunPaneListSessionScope(t *testing.T) {
 func TestRunPaneListAllScope(t *testing.T) {
 	a, mock := newTestApp(t)
 	mock.Panes["dev"] = []tmux.Pane{{ID: "%1"}}
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(a, cmd, &paneListFlags{all: true, quiet: true}); err != nil {
@@ -309,7 +309,7 @@ func TestRunPaneListJoinedImpliedSessionScope(t *testing.T) {
 	}
 	t.Setenv("TMUX_PANE", "%2")
 
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(a, cmd, &paneListFlags{joined: true, json: true}); err != nil {
@@ -352,7 +352,7 @@ func TestRunPaneListJoinedExplicitTarget(t *testing.T) {
 		{PaneID: "%21", Session: "other", WindowID: "@20", WindowIndex: 1, WindowName: "other", WindowPanes: 2, WindowActive: true, PaneActive: true, TabID: "ztab_o_peer", Label: "other-peer", Anchor: "ztab_o_host"},
 	}
 
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(a, cmd, &paneListFlags{joined: true, target: "dev", json: true}); err != nil {
@@ -374,7 +374,7 @@ func TestRunPaneListJoinedExplicitTarget(t *testing.T) {
 
 func TestRunPaneListJoinedRejectsAllScope(t *testing.T) {
 	a, _ := newTestApp(t)
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	err := runPaneList(a, cmd, &paneListFlags{joined: true, all: true})
 	if err == nil || !strings.Contains(err.Error(), "--joined cannot be combined with --all") {
 		t.Fatalf("expected --joined/--all error, got %v", err)
@@ -388,7 +388,7 @@ func TestRunPaneListMarksCallerPane(t *testing.T) {
 		{ID: "%2", Title: "side", Command: "bash", Width: 80, Height: 40},
 	}
 	t.Setenv("TMUX_PANE", "%1")
-	cmd := newPaneListCmd(a)
+	cmd := newPaneListCmd(a, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(a, cmd, &paneListFlags{}); err != nil {

@@ -76,12 +76,3 @@ func TestNewWorkspaceDefaultSessionAvoidsGlobalMainCollision(t *testing.T) {
 		t.Fatalf("last active = %q, want main", ws.LastActiveSession)
 	}
 }
-
-func TestWorkspaceSessionNameDefaultCollision(t *testing.T) {
-	app, mock := newTestApp(t)
-	mock.Sessions = []tmux.Session{{Name: "main"}}
-
-	if got, want := workspaceSessionName(app, "", "hello"), workspace.RawSessionName("hello", "main"); got != want {
-		t.Fatalf("workspaceSessionName = %q, want %q", got, want)
-	}
-}

@@ -111,9 +111,10 @@ Mostly automatic:
 - `zmux run` only stages a silent run id for callers waiting on an exit code; it does not append visible sentinels or own glyph state.
 - `zmux send`/`type` clear a stale ready/done/failed before sending input.
 - Focusing a tab clears attention.
-- A `Stop` hook (`hooks/zmux-tab-state-stop.mjs`, symlinked like the guard) marks the
-  agent's own tab ready (`↩`) when a turn ends — no transcript parsing, just "the
-  turn ended".
+- A `Stop` hook (`hooks/zmux-tab-state-stop.mjs`) can mark the agent's own tab ready
+  (`↩`) when a turn ends — no transcript parsing, just "the turn ended". It ships in the
+  skill but, unlike the guard/context hooks, is not symlinked into the live install by
+  default; register it as a `Stop` hook to enable it.
 - Prompt-scoped peers use `zmux tab peer <start|running|ready|attention|failed|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; legacy `waiting` aliases to `ready`. Answer-ready renders `↩`, while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi `zmux_tab_status`; Pi can bundle status+output via `zmux_tab_inspect`. Screen capture is the fallback/output layer.
 
 Set `attention` **manually** when handing the human a prompt they must act on (sudo,

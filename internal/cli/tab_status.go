@@ -7,6 +7,7 @@ import (
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/tabs"
+	"github.com/donjor/zmux/internal/tabstate"
 	"github.com/spf13/cobra"
 )
 
@@ -43,19 +44,10 @@ func newTabStatusCmd(app *apppkg.App) *cobra.Command {
 		Short: "Show tab lifecycle and command status",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sessionName := sessionFlag
-			if sessionName == "" {
-				if app.Runner.IsInsideTmux() {
-					out, err := app.Runner.DisplayMessage("", "#{session_name}")
-					if err != nil {
-						return fmt.Errorf("could not get current session")
-					}
-					sessionName = strings.TrimSpace(out)
-				} else {
-					return fmt.Errorf("specify a session: zmux tab status <tab> -s <session>")
-				}
+			if sessionFlag == "" && !app.Runner.IsInsideTmux() {
+				return fmt.Errorf("specify a session: zmux tab status <tab> -s <session>")
 			}
-			sessionName, err := resolveSessionTarget(app, sessionName)
+			sessionName, err := resolveSessionTarget(app, sessionFlag)
 			if err != nil {
 				return err
 			}
@@ -107,25 +99,31 @@ func buildTabStatus(app *apppkg.App, label, target string, rt resolvedTab) (tabS
 	if pane == "" {
 		return status, nil
 	}
-	status.State, _ = app.Runner.ShowPaneOption(pane, "@zmux_state")
-	status.Message, _ = app.Runner.ShowPaneOption(pane, "@zmux_state_msg")
-	status.Source, _ = app.Runner.ShowPaneOption(pane, "@zmux_state_source")
-	status.Scope, _ = app.Runner.ShowPaneOption(pane, tabs.OptScope)
-	status.Origin, _ = app.Runner.ShowPaneOption(pane, tabs.OptOrigin)
-	status.CmdState, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdState)
-	status.CmdSeq, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdSeq)
-	status.LastExit, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdLastExit)
-	status.RunID, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdRunID)
-	status.TurnState, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnState)
-	status.TurnState = tabs.NormalizeTurnState(status.TurnState)
-	status.TurnAt, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnAt)
-	status.TurnSeq, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnSeq)
+	opts, _ := app.Runner.ShowPaneOptions(pane, []string{
+		tabstate.OptState, tabstate.OptMsg, tabstate.OptSource,
+		tabs.OptScope, tabs.OptOrigin,
+		tabs.OptCmdState, tabs.OptCmdSeq, tabs.OptCmdLastExit, tabs.OptCmdRunID,
+		tabs.OptTurnState, tabs.OptTurnAt, tabs.OptTurnSeq, tabs.OptPeerTurns,
+		tabs.OptPeerRole, tabs.OptPeerTopic, tabs.OptCmdText,
+	})
+	status.State = opts[tabstate.OptState]
+	status.Message = opts[tabstate.OptMsg]
+	status.Source = opts[tabstate.OptSource]
+	status.Scope = opts[tabs.OptScope]
+	status.Origin = opts[tabs.OptOrigin]
+	status.CmdState = opts[tabs.OptCmdState]
+	status.CmdSeq = opts[tabs.OptCmdSeq]
+	status.LastExit = opts[tabs.OptCmdLastExit]
+	status.RunID = opts[tabs.OptCmdRunID]
+	status.TurnState = tabs.NormalizeTurnState(opts[tabs.OptTurnState])
+	status.TurnAt = opts[tabs.OptTurnAt]
+	status.TurnSeq = opts[tabs.OptTurnSeq]
 	if status.TurnSeq == "" {
-		status.TurnSeq, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerTurns)
+		status.TurnSeq = opts[tabs.OptPeerTurns]
 	}
-	status.PeerRole, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerRole)
-	status.PeerTopic, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerTopic)
-	if cmd, _ := app.Runner.ShowPaneOption(pane, tabs.OptCmdText); cmd != "" {
+	status.PeerRole = opts[tabs.OptPeerRole]
+	status.PeerTopic = opts[tabs.OptPeerTopic]
+	if cmd := opts[tabs.OptCmdText]; cmd != "" {
 		status.Command = cmd
 	}
 	res := tabs.ResolveDisplayState(tabs.DisplaySignals{

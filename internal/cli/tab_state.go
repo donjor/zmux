@@ -198,22 +198,22 @@ func newTabStateExitCmd(app *apppkg.App) *cobra.Command {
 				return nil // garbage in, no glyph out — stay silent
 			}
 			if code == 0 {
-				markTabState(app, "", tabstate.StateDone, "run", "")
+				markTabState(app, tabstate.StateDone, "run", "")
 			} else {
-				markTabState(app, "", tabstate.StateFailed, "run", fmt.Sprintf("exit %d", code))
+				markTabState(app, tabstate.StateFailed, "run", fmt.Sprintf("exit %d", code))
 			}
 			return nil
 		},
 	}
 }
 
-// markTabState best-effort sets a lifecycle state on a tmux target spec.
+// markTabState best-effort sets a lifecycle state on the caller's own pane.
 // Lifecycle hook writes must never fail the command that triggered them — a
-// dead pane or detached server just skips the glyph. Resolves the spec at write
-// time, so a pane that moved placement mid-run still mirrors to the right window.
-func markTabState(app *apppkg.App, target string, st tabstate.State, source, msg string) {
+// dead pane or detached server just skips the glyph. Resolves at write time,
+// so a pane that moved placement mid-run still mirrors to the right window.
+func markTabState(app *apppkg.App, st tabstate.State, source, msg string) {
 	svc := tabstate.New(app.Runner, os.Getenv)
-	t, err := svc.Resolve(target)
+	t, err := svc.Resolve("")
 	if err != nil {
 		return
 	}

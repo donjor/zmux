@@ -12,6 +12,9 @@ type MockCall struct {
 }
 
 // MockRunner implements Runner with configurable return data and call recording.
+// Compile-time check that MockRunner satisfies the full Runner seam.
+var _ Runner = (*MockRunner)(nil)
+
 type MockRunner struct {
 	Sessions    []Session
 	Clients     []ClientInfo
@@ -325,12 +328,6 @@ func (m *MockRunner) ToggleZoom(target string) error {
 	return m.Err
 }
 
-// SplitWindow records the call.
-func (m *MockRunner) SplitWindow(target, direction string) error {
-	m.record("SplitWindow", target, direction)
-	return m.Err
-}
-
 // SplitPane records the call and returns a deterministic pane id.
 func (m *MockRunner) SplitPane(opts SplitPaneOptions) (string, error) {
 	m.record("SplitPane", opts.Target, string(opts.Direction), opts.Size, opts.CWD, opts.Title, fmt.Sprintf("%q", opts.Command), fmt.Sprintf("detached=%v", opts.Detached))
@@ -472,12 +469,17 @@ func (m *MockRunner) SetSessionOption(target, key, value string) error {
 // SetWindowOption records the call.
 func (m *MockRunner) SetWindowOption(target, key, value string) error {
 	m.record("SetWindowOption", target, key, value)
+	if m.WindowOptions == nil {
+		m.WindowOptions = map[string]string{}
+	}
+	m.WindowOptions[target+"\x00"+key] = value
 	return m.Err
 }
 
 // UnsetWindowOption records the call.
 func (m *MockRunner) UnsetWindowOption(target, key string) error {
 	m.record("UnsetWindowOption", target, key)
+	delete(m.WindowOptions, target+"\x00"+key)
 	return m.Err
 }
 
@@ -494,6 +496,7 @@ func (m *MockRunner) SetPaneOption(target, key, value string) error {
 // UnsetPaneOption records the call.
 func (m *MockRunner) UnsetPaneOption(target, key string) error {
 	m.record("UnsetPaneOption", target, key)
+	delete(m.PaneOptions, target+"\x00"+key)
 	return m.Err
 }
 
@@ -502,6 +505,18 @@ func (m *MockRunner) UnsetPaneOption(target, key string) error {
 func (m *MockRunner) ApplyOptions(writes []OptionWrite) error {
 	for _, w := range writes {
 		m.record("ApplyOptions", string(w.Scope), w.Target, w.Key, w.Value, fmt.Sprintf("unset=%v", w.Unset))
+		opts := &m.PaneOptions
+		if w.Scope == ScopeWindow {
+			opts = &m.WindowOptions
+		}
+		if w.Unset {
+			delete(*opts, w.Target+"\x00"+w.Key)
+			continue
+		}
+		if *opts == nil {
+			*opts = map[string]string{}
+		}
+		(*opts)[w.Target+"\x00"+w.Key] = w.Value
 	}
 	return m.Err
 }
@@ -510,6 +525,16 @@ func (m *MockRunner) ApplyOptions(writes []OptionWrite) error {
 func (m *MockRunner) ShowWindowOption(target, key string) (string, error) {
 	m.record("ShowWindowOption", target, key)
 	return m.WindowOptions[target+"\x00"+key], m.Err
+}
+
+// ShowPaneOptions returns the configured pane options ("" when absent).
+func (m *MockRunner) ShowPaneOptions(target string, keys []string) (map[string]string, error) {
+	m.record("ShowPaneOptions", append([]string{target}, keys...)...)
+	got := make(map[string]string, len(keys))
+	for _, key := range keys {
+		got[key] = m.PaneOptions[target+"\x00"+key]
+	}
+	return got, m.Err
 }
 
 // ShowPaneOption returns the configured pane option ("" when absent).

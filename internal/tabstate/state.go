@@ -26,6 +26,12 @@ const (
 	OptMsg    = "@zmux_state_msg" // display-only: format expansion escapes $ (spike A) — never parse back
 )
 
+// MirrorKeys are the state options written canonically to the pane and
+// mirrored to its window. Every state writer (Set/Clear) and every mirror
+// cleaner (the tabs reconciler) iterates this one list, so adding an option
+// here keeps write and cleanup in step.
+var MirrorKeys = []string{OptState, OptSource, OptAt, OptMsg}
+
 // All enumerates valid states in aggregation priority order (highest urgency
 // first). Multi-pane/window aggregation is distinct from per-pane resolver
 // precedence, but uses the same top-level priority shape: attention and

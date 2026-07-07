@@ -16,13 +16,8 @@ import (
 // into its bar, which then resolves the wrong workspace store and renders an
 // empty workspace pill. SelfBin also falls back to the profile name rather
 // than "" (a "" here produces a broken `#( bar-render …)` status string).
-func Apply(runner tmux.Runner, selfBin string, preset Preset, palette *theme.Palette, layout ...BarLayoutConfig) error {
-	var lc BarLayoutConfig
-	if len(layout) > 0 {
-		lc = layout[0]
-	}
-
-	opts := GenerateWithLayout(preset, palette, lc, selfBin)
+func Apply(runner tmux.Runner, selfBin string, preset Preset, palette *theme.Palette, layout BarLayoutConfig) error {
+	opts := GenerateWithLayout(preset, palette, layout, selfBin)
 	for _, opt := range opts {
 		if err := runner.SetOption("-g", opt.Key, opt.Value); err != nil {
 			return fmt.Errorf("set %s: %w", opt.Key, err)

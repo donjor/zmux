@@ -3,8 +3,8 @@
 //
 // Three slips this catches, in priority order:
 //   1. raw `tmux` on a zmux-managed session — drops the @zmux_label pin +
-//      session/workspace bookkeeping that keep tabs stably addressable (report
-//      002). The skill *says* "never raw tmux"; Claude slipped anyway, twice,
+//      session/workspace bookkeeping that keep tabs stably addressable.
+//      The skill *says* "never raw tmux"; Claude slipped anyway, twice,
 //      deep in a long session. Advisory text is necessary but insufficient.
 //   2. dev servers / background jobs in the agent's own shell — invisible to the
 //      user and dead at end-of-turn. They belong in a named zmux tab.
@@ -560,8 +560,8 @@ function main() {
 
   // Harness-native backgrounding: the Bash tool's `run_in_background: true` is a
   // tool PARAMETER, not shell `&`/`nohup`, so the string classifier above never
-  // sees it — a second "long-running off-screen" path the guard was blind to
-  // (report 013). This check is intentionally OUTSIDE the shared classifier:
+  // sees it — a second "long-running off-screen" path the guard was blind to.
+  // This check is intentionally OUTSIDE the shared classifier:
   // run_in_background has no meaning in the corpus or for codex/pi, so it stays a
   // Claude-hook-only adapter concern. If the command would otherwise pass, treat
   // the background flag itself as the runtime signal and route it to a zmux tab.

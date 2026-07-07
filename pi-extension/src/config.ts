@@ -27,7 +27,7 @@ export interface PiZmuxConfig {
 }
 
 export interface LoadConfigOptions {
-	projectTrusted?: boolean;
+	projectTrusted: boolean;
 }
 
 function defaultPolicy(): PiZmuxConfig["policy"] {
@@ -76,8 +76,8 @@ function asRuntimeConfig(value: unknown): RuntimeConfig | undefined {
 	return out;
 }
 
-export function loadConfig(cwd: string, options: LoadConfigOptions = {}): PiZmuxConfig {
-	const projectTrusted = options.projectTrusted ?? true;
+export function loadConfig(cwd: string, options: LoadConfigOptions): PiZmuxConfig {
+	const projectTrusted = options.projectTrusted;
 	const path = findConfig(cwd);
 	if (!path) return { policy: defaultPolicy(), runtimes: {}, projectTrusted };
 	if (!projectTrusted) {

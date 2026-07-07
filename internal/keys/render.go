@@ -85,17 +85,3 @@ func FindKeybound(action string) (Binding, bool) {
 	}
 	return Binding{}, false
 }
-
-// ByCategory groups bindings by their Category, preserving the input order
-// within each category and returning categories in first-seen order.
-func ByCategory(bindings []Binding) ([]Category, map[Category][]Binding) {
-	order := []Category{}
-	groups := map[Category][]Binding{}
-	for _, b := range bindings {
-		if _, ok := groups[b.Category]; !ok {
-			order = append(order, b.Category)
-		}
-		groups[b.Category] = append(groups[b.Category], b)
-	}
-	return order, groups
-}

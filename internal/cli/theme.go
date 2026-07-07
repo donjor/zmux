@@ -141,7 +141,7 @@ func setTheme(app *apppkg.App, name string) error {
 		if err != nil {
 			return fmt.Errorf("parse bar preset: %w", err)
 		}
-		if err := bar.Apply(app.Runner, config.SelfBin(app.Profile), preset, &palette); err != nil {
+		if err := applyBarPreset(app, preset, &palette, cfg.Bar); err != nil {
 			return fmt.Errorf("apply bar: %w", err)
 		}
 

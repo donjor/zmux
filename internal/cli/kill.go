@@ -1,10 +1,7 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"strings"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/session"
@@ -59,6 +56,8 @@ the same way run, send, type, and watch address sessions.
 	return cmd
 }
 
+// killWorkspace is the single implementation behind `zmux kill <ws>` and
+// `zmux ws kill` — both confirm before killing live sessions.
 func killWorkspace(app *apppkg.App, ws *workspace.Workspace, assumeYes bool) error {
 	// Count live sessions.
 	liveCount := 0
@@ -69,16 +68,11 @@ func killWorkspace(app *apppkg.App, ws *workspace.Workspace, assumeYes bool) err
 	}
 
 	if liveCount > 0 && !assumeYes {
-		// Confirm with user.
 		plural := "session"
 		if liveCount > 1 {
 			plural = "sessions"
 		}
-		fmt.Printf("Kill %d live %s in workspace %q? (y/N) ", liveCount, plural, ws.Name)
-		reader := bufio.NewReader(os.Stdin)
-		answer, _ := reader.ReadString('\n')
-		answer = strings.TrimSpace(strings.ToLower(answer))
-		if answer != "y" && answer != "yes" {
+		if !confirm(fmt.Sprintf("Kill %d live %s in workspace %q?", liveCount, plural, ws.Name)) {
 			fmt.Println("Cancelled.")
 			return nil
 		}
@@ -92,5 +86,9 @@ func killWorkspace(app *apppkg.App, ws *workspace.Workspace, assumeYes bool) err
 	}
 
 	// Remove workspace.
-	return app.WorkspaceStore.DeleteWorkspace(ws.Name)
+	if err := app.WorkspaceStore.DeleteWorkspace(ws.Name); err != nil {
+		return err
+	}
+	fmt.Printf("Killed workspace %q (%d live sessions)\n", ws.Name, liveCount)
+	return nil
 }

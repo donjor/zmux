@@ -51,7 +51,7 @@ A worker is bound to a pair: **(zmux session, worktree path)**. Honor both:
   follow-up `zmux_type`, `zmux_tab_status`, `zmux_runtime_logs`, `zmux_tab_state`, and related tools.
   **Never** spawn an automated worker with `zmux new <ws> <worker-session>`: `new`
   attaches (steals the conductor's focus) and births a blank shell tab beside the CLI —
-  the report-009 failure this primitive exists to fix.
+  the exact failure the `session run` spawn path exists to avoid.
 - **Reuse joined worker panes in an existing session.** When the worker/session already
   exists (or a single worker lives in the current session) and you are about to run a
   long-running visible command with `run -n <worker-tab>`, first inspect joined logical

@@ -75,36 +75,8 @@ func registerSyncCompletions(themePullCmd *cobra.Command) {
 	}
 }
 
-// listThemeNames returns all available theme names for completion.
+// listThemeNames returns all available theme names for completion, resolved
+// against the active profile's themes dir (so zzmux completes its own themes).
 func listThemeNames() []string {
-	fs := &config.RealFS{}
-	home, err := fs.UserHomeDir()
-	if err != nil {
-		return bundledThemeNames()
-	}
-
-	resolver := theme.NewResolver(
-		fs,
-		home+"/.zmux/themes",
-		home+"/.zmux/themes/iterm2",
-	)
-
-	themes := resolver.List()
-	names := make([]string, len(themes))
-	for i, ti := range themes {
-		names[i] = ti.Name
-	}
-	return names
-}
-
-// bundledThemeNames returns just the bundled theme names as a fallback.
-func bundledThemeNames() []string {
-	fs := &config.RealFS{}
-	resolver := theme.NewResolver(fs, "", "")
-	themes := resolver.List()
-	names := make([]string, len(themes))
-	for i, ti := range themes {
-		names[i] = ti.Name
-	}
-	return names
+	return theme.ActiveThemeNames(&config.RealFS{})
 }

@@ -14,14 +14,7 @@ import (
 func resolveSessionTarget(app *apppkg.App, input string) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
-		if !app.Runner.IsInsideTmux() {
-			return "", fmt.Errorf("not inside tmux — use --session workspace/session to specify target")
-		}
-		name, err := app.Runner.DisplayMessage("", "#{session_name}")
-		if err != nil {
-			return "", fmt.Errorf("not inside a tmux session")
-		}
-		return strings.TrimSpace(name), nil
+		return currentSessionName(app)
 	}
 
 	if strings.Contains(input, "/") {
@@ -66,6 +59,21 @@ func resolveSessionTarget(app *apppkg.App, input string) (string, error) {
 		return input, nil
 	}
 	return "", fmt.Errorf("session %q not found; use workspace/session for workspace-local labels", input)
+}
+
+// currentSessionName resolves the session the caller is inside, root-
+// normalized: a grouped clone (dev-b) collapses to its root, matching the
+// user-facing label model and the root-keyed workspace store. Window/pane
+// operations are unaffected — clones share windows with their root.
+func currentSessionName(app *apppkg.App) (string, error) {
+	if !app.Runner.IsInsideTmux() {
+		return "", fmt.Errorf("not inside tmux — use --session workspace/session to specify target")
+	}
+	name, err := app.Runner.DisplayMessage("", "#{session_name}")
+	if err != nil {
+		return "", fmt.Errorf("not inside a tmux session")
+	}
+	return session.RootName(strings.TrimSpace(name)), nil
 }
 
 func parseWorkspaceSessionTarget(target string) (string, string, error) {

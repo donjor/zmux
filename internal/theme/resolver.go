@@ -202,3 +202,44 @@ func (r *Resolver) listBundled() []ThemeInfo {
 
 	return themes
 }
+
+// activeResolver builds a theme resolver rooted at the active profile's themes
+// dir, falling back to bundled-only when no profile dir is set.
+func activeResolver(fs config.FS) *Resolver {
+	if p := config.ActiveProfile(fs); p.ThemesDir != "" {
+		return NewResolver(fs, p.ThemesDir, p.ThemesDir+"/iterm2")
+	}
+	return NewResolver(fs, "", "")
+}
+
+// ActiveThemeNames returns every theme name available under the active profile
+// (user themes plus bundled fallbacks), sorted and deduplicated by the resolver.
+func ActiveThemeNames(fs config.FS) []string {
+	themes := activeResolver(fs).List()
+	names := make([]string, len(themes))
+	for i, ti := range themes {
+		names[i] = ti.Name
+	}
+	return names
+}
+
+// ActivePalette resolves the configured theme's semantic palette for the
+// active profile, falling back to the bundled default theme. It never fails:
+// worst case is a zero palette, which renders unstyled rather than crashing.
+func ActivePalette(fs config.FS) *Palette {
+	r := activeResolver(fs)
+
+	names := []string{config.DefaultConfig().Theme}
+	if path, err := config.ConfigPath(fs); err == nil && config.ConfigExists(fs) {
+		if cfg, err := config.Load(fs, path); err == nil && cfg.Theme != "" {
+			names = append([]string{cfg.Theme}, names...)
+		}
+	}
+	for _, name := range names {
+		if t, err := r.Resolve(name); err == nil {
+			pal := t.SemanticPalette()
+			return &pal
+		}
+	}
+	return &Palette{}
+}

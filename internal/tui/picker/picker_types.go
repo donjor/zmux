@@ -34,7 +34,7 @@ type pickerState struct {
 
 // PickerResult holds the outcome of the picker interaction.
 type PickerResult struct {
-	Action    string // "attach", "hijack", "new", "overmind-connect", "external-attach", "workspace-create", "workspace-focus", ""
+	Action    string // "attach", "new", "overmind-connect", "external-attach", "workspace-create", "workspace-focus", ""
 	Session   string // session name to attach
 	Name      string // name for new session (may be "" for auto tmp-N)
 	Workspace string // workspace name for workspace-level actions

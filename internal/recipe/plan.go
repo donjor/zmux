@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/donjor/zmux/internal/session"
-	"github.com/donjor/zmux/internal/workspace"
 )
 
 func DefaultOptions(r Recipe, cwd string) PlanOptions {
@@ -355,8 +354,4 @@ func validateUniquePlannedNames(sessions []PlannedSession) error {
 		}
 	}
 	return nil
-}
-
-func ValidateWorkspaceName(name string) error {
-	return workspace.ValidateWorkspaceName(name)
 }

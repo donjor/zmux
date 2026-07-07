@@ -29,15 +29,11 @@ func newTabInspectCmd(app *apppkg.App) *cobra.Command {
 		Short: "Inspect lifecycle status plus output for a tab",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			target, err := resolveWaitTarget(app, args[0], sessionFlag, false)
+			target, err := resolveWaitTarget(app, args[0], sessionFlag)
 			if err != nil {
 				return err
 			}
-			rt, err := resolveTabTarget(app, target.Session, args[0])
-			if err != nil {
-				return err
-			}
-			status, err := buildTabStatus(app, args[0], target.Target, rt)
+			status, err := buildTabStatus(app, args[0], target.Target, target.rt)
 			if err != nil {
 				return err
 			}

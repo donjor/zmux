@@ -398,8 +398,12 @@ func shellHeredocBodies(command string) []string {
 	return bodies
 }
 
-// hasSocketFlag reports whether a tmux arg list is socket-scoped (`-L <socket>`),
-// marking it as zzmux/profile testing and therefore exempt.
+// hasSocketFlag reports whether a tmux arg list is socket-scoped via `-L
+// <socket>`, marking it as zzmux/profile testing and therefore exempt. Only
+// `-L` (named socket) is matched, not `-S` (arbitrary socket path): profiles
+// scope with `-L <name>` (e.g. the zzmux profile's `-L zzmux`), so `-L` is the
+// deliberate exemption surface. A raw `-S /some/path` isn't a profile
+// invocation and stays guarded. Kept in lockstep with classify.ts hasSocketFlag.
 func hasSocketFlag(args []string) bool {
 	for _, a := range args {
 		if a == "-L" || strings.HasPrefix(a, "-L") {

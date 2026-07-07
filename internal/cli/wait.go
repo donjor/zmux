@@ -20,6 +20,7 @@ type resolvedWaitTarget struct {
 	Target  string
 	PaneID  string
 	TabName string
+	rt      resolvedTab // the tab resolution this target came from
 }
 
 func newWaitCmd(app *apppkg.App) *cobra.Command {
@@ -51,7 +52,7 @@ manual diagnostics where current state is intentionally enough.`,
 			if err != nil {
 				return err
 			}
-			target, err := resolveWaitTarget(app, args[0], sessionFlag, false)
+			target, err := resolveWaitTarget(app, args[0], sessionFlag)
 			if err != nil {
 				return err
 			}
@@ -116,17 +117,12 @@ manual diagnostics where current state is intentionally enough.`,
 	return cmd
 }
 
-func resolveWaitTarget(app *apppkg.App, tabName, sessionFlag string, mutation bool) (resolvedWaitTarget, error) {
+func resolveWaitTarget(app *apppkg.App, tabName, sessionFlag string) (resolvedWaitTarget, error) {
 	sessionName, err := resolveSessionTarget(app, sessionFlag)
 	if err != nil {
 		return resolvedWaitTarget{}, err
 	}
-	var rt resolvedTab
-	if mutation {
-		rt, err = resolveTabTargetForMutation(app, sessionName, tabName, tabName)
-	} else {
-		rt, err = resolveTabTarget(app, sessionName, tabName)
-	}
+	rt, err := resolveTabTarget(app, sessionName, tabName)
 	if err != nil {
 		return resolvedWaitTarget{}, err
 	}
@@ -151,7 +147,7 @@ func resolveWaitTarget(app *apppkg.App, tabName, sessionFlag string, mutation bo
 	if paneID == "" {
 		return resolvedWaitTarget{}, fmt.Errorf("could not resolve pane for tab %q", tabName)
 	}
-	return resolvedWaitTarget{Session: sessionName, Target: target, PaneID: paneID, TabName: tabName}, nil
+	return resolvedWaitTarget{Session: sessionName, Target: target, PaneID: paneID, TabName: tabName, rt: rt}, nil
 }
 
 func printWaitOutcome(target resolvedWaitTarget, outcome waitfor.Outcome) {

@@ -97,7 +97,7 @@ func loadActiveStyles(app *apppkg.App) (styles.Styles, *theme.Palette, *theme.Re
 // background, and on restore puts the saved value back (or unsets it when there
 // was none). Tints background only — text foreground is untouched.
 //
-// Called from inside the popup process (runNewDashboard / runPalette), which
+// Called from inside the popup process (runDashboard / runPalette), which
 // covers every popup entry point — the prefix+Space keybind, the bare `zmux`
 // launch, and the palette→dashboard relaunch — with one seam, since they all
 // converge on the same blocking p.Run(). A SIGKILL of the popup skips the
@@ -136,10 +136,6 @@ func restoreWindowStyle(runner tmux.Runner, target, key, prev string) {
 }
 
 func runDashboard(app *apppkg.App, dashboardTabFlag string) error {
-	return runNewDashboard(app, dashboardTabFlag)
-}
-
-func runNewDashboard(app *apppkg.App, dashboardTabFlag string) error {
 	styles, pal, resolver := loadActiveStyles(app)
 
 	services := dashboard.Services{

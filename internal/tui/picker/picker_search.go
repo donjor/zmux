@@ -3,7 +3,6 @@ package picker
 import (
 	"strings"
 
-	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
 	"github.com/sahilm/fuzzy"
 )
@@ -42,24 +41,6 @@ func matchWorkspaces(query string, workspaces []workspaceview.WorkspaceViewModel
 		ws := workspaces[m.Index]
 		ws.MatchedIndexes = m.MatchedIndexes
 		result[i] = ws
-	}
-	return result
-}
-
-// matchSessions returns sessions matching the query (fuzzy).
-// Empty query returns all sessions.
-func matchSessions(query string, sessions []session.SessionInfo) []session.SessionInfo {
-	if query == "" {
-		return sessions
-	}
-	names := make([]string, len(sessions))
-	for i, s := range sessions {
-		names[i] = session.QualifiedDisplayName(s)
-	}
-	matches := fuzzy.Find(query, names)
-	result := make([]session.SessionInfo, len(matches))
-	for i, m := range matches {
-		result[i] = sessions[m.Index]
 	}
 	return result
 }

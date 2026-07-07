@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -52,7 +53,7 @@ Examples:
 				return fmt.Errorf("send to %s: %w", rt.Target, err)
 			}
 
-			fmt.Printf("sent to %s\n", rt.Target)
+			fmt.Fprintf(cmd.OutOrStdout(), "sent to %s\n", rt.Target)
 			return nil
 		},
 	}
@@ -164,13 +165,13 @@ Examples:
 				if err != nil {
 					return err
 				}
-				fmt.Println(string(b))
+				fmt.Fprintln(cmd.OutOrStdout(), string(b))
 				if out.Outcome != nil && !out.Outcome.Met {
 					return fmt.Errorf("type wait not met: %s", emptyForHuman(out.Outcome.FailureKind, "unproven"))
 				}
 				return nil
 			}
-			printTypeOutcome(out)
+			printTypeOutcome(cmd.OutOrStdout(), out)
 			if out.Outcome != nil && !out.Outcome.Met {
 				return fmt.Errorf("type wait not met: %s", emptyForHuman(out.Outcome.FailureKind, "unproven"))
 			}
@@ -189,19 +190,19 @@ Examples:
 	return cmd
 }
 
-func printTypeOutcome(out typeCommandOutput) {
-	fmt.Printf("typed to %s\n", out.Target)
+func printTypeOutcome(w io.Writer, out typeCommandOutput) {
+	fmt.Fprintf(w, "typed to %s\n", out.Target)
 	if out.Outcome != nil {
-		fmt.Printf("wait: met=%t state=%s basis=%s fresh=%t\n", out.Outcome.Met, out.Outcome.State, out.Outcome.Basis, out.Outcome.Fresh)
+		fmt.Fprintf(w, "wait: met=%t state=%s basis=%s fresh=%t\n", out.Outcome.Met, out.Outcome.State, out.Outcome.Basis, out.Outcome.Fresh)
 	}
 	for _, warning := range out.Warnings {
-		fmt.Printf("warning: %s\n", warning)
+		fmt.Fprintf(w, "warning: %s\n", warning)
 	}
 	if out.Outcome != nil && strings.TrimSpace(out.OutputTail) != "" {
-		fmt.Println("output:")
-		fmt.Print(out.OutputTail)
+		fmt.Fprintln(w, "output:")
+		fmt.Fprint(w, out.OutputTail)
 		if !strings.HasSuffix(out.OutputTail, "\n") {
-			fmt.Println()
+			fmt.Fprintln(w)
 		}
 	}
 }

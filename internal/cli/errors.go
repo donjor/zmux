@@ -21,6 +21,15 @@ const (
 
 var errInvalidCommand = errors.New("invalid command")
 
+// tmuxNotInstalledMsg is the shared "install tmux" guidance surfaced whenever a
+// missing tmux binary is detected (directly or wrapped in another error).
+const tmuxNotInstalledMsg = "tmux is not installed.\n\n" +
+	"Install it with your package manager:\n" +
+	"  macOS:   brew install tmux\n" +
+	"  Ubuntu:  sudo apt install tmux\n" +
+	"  Fedora:  sudo dnf install tmux\n" +
+	"  Arch:    sudo pacman -S tmux"
+
 // codedError carries an explicit exit code (and an already-formatted message),
 // bypassing the heuristic formatError/exitCodeForError mappings. A command that
 // has already printed its own output returns one with an empty msg so Run adds
@@ -55,23 +64,13 @@ func formatError(err error) string {
 	var pathErr *exec.Error
 	if errors.As(err, &pathErr) {
 		if pathErr.Name == "tmux" {
-			return "tmux is not installed.\n\n" +
-				"Install it with your package manager:\n" +
-				"  macOS:   brew install tmux\n" +
-				"  Ubuntu:  sudo apt install tmux\n" +
-				"  Fedora:  sudo dnf install tmux\n" +
-				"  Arch:    sudo pacman -S tmux"
+			return tmuxNotInstalledMsg
 		}
 	}
 
 	// tmux not found via exec.ErrNotFound wrapped in other errors.
 	if errors.Is(err, exec.ErrNotFound) && strings.Contains(msg, "tmux") {
-		return "tmux is not installed.\n\n" +
-			"Install it with your package manager:\n" +
-			"  macOS:   brew install tmux\n" +
-			"  Ubuntu:  sudo apt install tmux\n" +
-			"  Fedora:  sudo dnf install tmux\n" +
-			"  Arch:    sudo pacman -S tmux"
+		return tmuxNotInstalledMsg
 	}
 
 	// Config errors — suggest zmux init.

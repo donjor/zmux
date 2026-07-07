@@ -164,7 +164,14 @@ func ensureManagedShellPane(app *apppkg.App, paneID string) error {
 	}
 	origin, _ := app.Runner.ShowPaneOption(paneID, tabs.OptOrigin)
 	if origin == "" {
-		_ = tabs.StampBirth(app.Runner, paneID, tabs.OriginHuman, tabs.ScopeShell, time.Now())
+		// A pane can carry a scope without birth identity (daemon tabs get
+		// scoped at creation); backfilling birth must not clobber it.
+		scope, _ := app.Runner.ShowPaneOption(paneID, tabs.OptScope)
+		scope = strings.TrimSpace(scope)
+		if scope == "" {
+			scope = tabs.ScopeShell
+		}
+		_ = tabs.StampBirth(app.Runner, paneID, tabs.OriginHuman, scope, time.Now())
 	}
 	return nil
 }

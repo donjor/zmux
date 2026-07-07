@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"strings"
@@ -40,6 +39,14 @@ and the prior rc file is backed up to <rc>.bak.
   --doctor    check rc files and the current shell's loaded hook version
   --yes       skip the confirmation prompt`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if doctor {
+				doctorPlan, doctorBin, err := setupDoctorPlan(app, binOverride)
+				if err != nil {
+					return err
+				}
+				return runSetupDoctor(app, doctorPlan, doctorBin)
+			}
+
 			home, err := app.FS.UserHomeDir()
 			if err != nil {
 				return fmt.Errorf("resolve home dir: %w", err)
@@ -60,14 +67,6 @@ and the prior rc file is backed up to <rc>.bak.
 				return fmt.Errorf("unsupported shell %q — add zmux to your rc file manually", os.Getenv("SHELL"))
 			}
 
-			if doctor {
-				doctorPlan, doctorBin, err := setupDoctorPlan(app, binOverride)
-				if err != nil {
-					return err
-				}
-				return runSetupDoctor(app, doctorPlan, doctorBin)
-			}
-
 			verb := "Add zmux shell integration to"
 			if remove {
 				verb = "Remove zmux shell integration from"
@@ -84,14 +83,9 @@ and the prior rc file is backed up to <rc>.bak.
 				return nil
 			}
 
-			if !assumeYes {
-				fmt.Printf("%s %s? [y/N] ", verb, describeSetupFiles(plan))
-				reader := bufio.NewReader(os.Stdin)
-				line, _ := reader.ReadString('\n')
-				if r := strings.TrimSpace(strings.ToLower(line)); r != "y" && r != "yes" {
-					fmt.Println("Skipped.")
-					return nil
-				}
+			if !assumeYes && !confirm(fmt.Sprintf("%s %s?", verb, describeSetupFiles(plan))) {
+				fmt.Println("Skipped.")
+				return nil
 			}
 
 			results, err := plan.Apply(app.FS, setup.ApplyOptions{Backup: true})
@@ -111,20 +105,8 @@ and the prior rc file is backed up to <rc>.bak.
 	shellCmd.Flags().BoolVar(&assumeYes, "yes", false, "skip the confirmation prompt")
 	shellCmd.Flags().StringVar(&binOverride, "bin", "", "binary name to write into the shell block (default: current profile)")
 
-	doctorCmd := &cobra.Command{
-		Use:   "doctor",
-		Short: "Check zmux shell integration freshness",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			plan, bin, err := setupDoctorPlan(app, binOverride)
-			if err != nil {
-				return err
-			}
-			return runSetupDoctor(app, plan, bin)
-		},
-	}
-	doctorCmd.Flags().StringVar(&binOverride, "bin", "", "binary name expected in the shell block when comparing setup plans")
-
-	cmd.AddCommand(shellCmd, doctorCmd)
+	// `zmux setup doctor` is the same command as top-level `zmux doctor`.
+	cmd.AddCommand(shellCmd, newDoctorCmd(app))
 	return cmd
 }
 

@@ -11,7 +11,6 @@ import (
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
-	"github.com/donjor/zmux/internal/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -137,19 +136,12 @@ session).`,
 			tabName := args[0]
 			destInput := args[1]
 
-			sourceSession := strings.TrimSpace(sessionFlag)
-			if sourceSession == "" {
-				current, err := app.Runner.DisplayMessage("", "#{session_name}")
-				if err != nil {
-					return fmt.Errorf("not inside tmux")
+			sourceSession, err := resolveSessionTarget(app, sessionFlag)
+			if err != nil {
+				if strings.TrimSpace(sessionFlag) != "" {
+					return fmt.Errorf("resolve source session %q: %w", sessionFlag, err)
 				}
-				sourceSession = strings.TrimSpace(current)
-			} else {
-				resolved, err := resolveSessionTarget(app, sourceSession)
-				if err != nil {
-					return fmt.Errorf("resolve source session %q: %w", sourceSession, err)
-				}
-				sourceSession = resolved
+				return err
 			}
 
 			// Resolve label-aware: logical tab → legacy window → raw name.
@@ -289,23 +281,17 @@ func newTabKillCmd(app *apppkg.App) *cobra.Command {
 }
 
 func killNamedTab(app *apppkg.App, tabName string, sessionFlag string) (string, error) {
-	current := strings.TrimSpace(sessionFlag)
-	if current == "" {
-		resolved, err := app.Runner.DisplayMessage("", "#{session_name}")
-		if err != nil {
-			return "", fmt.Errorf("not inside tmux")
+	current, err := resolveSessionTarget(app, sessionFlag)
+	if err != nil {
+		if strings.TrimSpace(sessionFlag) != "" {
+			return "", fmt.Errorf("resolve source session %q: %w", sessionFlag, err)
 		}
-		current = strings.TrimSpace(resolved)
-	} else {
-		resolved, err := resolveSessionTarget(app, current)
-		if err != nil {
-			return "", fmt.Errorf("resolve source session %q: %w", current, err)
-		}
-		current = resolved
+		return "", err
 	}
 
 	// kill mutates (destroys a tab) — never reach across sessions by a
-	// bare name (report 039). Cross-session kill must be explicit.
+	// bare name: an agent once killed a same-named tab in a different
+	// session it resolved to implicitly. Cross-session kill must be explicit.
 	rt, err := resolveTabTargetScoped(app, current, tabName, scopeSessionOnly)
 	if err != nil {
 		return "", err
@@ -361,46 +347,13 @@ func guardNotLastTab(runner tmux.Runner, sessionName string) error {
 	return nil
 }
 
-func newSessionCmd(app *apppkg.App) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "session",
-		Short: "Manage sessions",
-	}
-	cmd.AddCommand(newSessionKillCmd(app))
-	cmd.AddCommand(newSessionRunCmd(app))
-	return cmd
-}
-
-func newSessionKillCmd(app *apppkg.App) *cobra.Command {
-	return &cobra.Command{
-		Use:   "kill <session>",
-		Short: "Kill a session and clean up workspace membership",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			sessName := args[0]
-			target, err := resolveSessionTarget(app, sessName)
-			if err != nil {
-				return err
-			}
-
-			if err := workspace.KillSession(app.Runner, app.WorkspaceStore, target); err != nil {
-				return err
-			}
-			fmt.Printf("Killed session %q\n", sessName)
-			return nil
-		},
-	}
-}
-
 func refreshDuplicateWindowNameMarkers(app *apppkg.App, sessionName string) error {
-	if sessionName == "" {
-		if app.Runner.IsInsideTmux() {
-			name, err := app.Runner.DisplayMessage("", "#{session_name}")
-			if err != nil {
-				return fmt.Errorf("current session: %w", err)
-			}
-			sessionName = strings.TrimSpace(name)
+	if sessionName == "" && app.Runner.IsInsideTmux() {
+		name, err := currentSessionName(app)
+		if err != nil {
+			return err
 		}
+		sessionName = name
 	}
 	if sessionName != "" {
 		return refreshDuplicateWindowNameMarkersForSession(app, sessionName)

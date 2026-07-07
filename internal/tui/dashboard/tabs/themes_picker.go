@@ -7,10 +7,10 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/filter"
 	"github.com/donjor/zmux/internal/tui/views"
 )
 
@@ -324,19 +324,7 @@ func (t *ThemesTab) renderSwatch(ti theme.ThemeInfo) string {
 
 func (t *ThemesTab) applyFilter() {
 	query := t.filter.Value()
-	if query == "" {
-		t.filtered = t.themes
-	} else {
-		names := make([]string, len(t.themes))
-		for i, ti := range t.themes {
-			names[i] = ti.Name
-		}
-		matches := fuzzy.Find(query, names)
-		t.filtered = make([]theme.ThemeInfo, len(matches))
-		for i, match := range matches {
-			t.filtered[i] = t.themes[match.Index]
-		}
-	}
+	t.filtered = filter.Fuzzy(t.themes, query, func(ti theme.ThemeInfo) string { return ti.Name })
 
 	if t.themeCursor >= len(t.filtered) {
 		t.themeCursor = max(0, len(t.filtered)-1)

@@ -22,11 +22,11 @@ func (t *BarTab) View() string {
 	b.WriteString("\n")
 	lineCount++
 	currentLabel := "default"
-	if t.currentBar != "" {
-		currentLabel = t.currentBar
+	if t.cfg.Bar.Preset != "" {
+		currentLabel = t.cfg.Bar.Preset
 	}
-	if t.layout != "" {
-		currentLabel += " (" + t.layout + ")"
+	if t.cfg.Bar.Layout != "" {
+		currentLabel += " (" + t.cfg.Bar.Layout + ")"
 	}
 	b.WriteString(t.styles.Dim.Render("Current: ") + t.styles.Success.Render(currentLabel))
 	b.WriteString("\n\n")
@@ -36,7 +36,7 @@ func (t *BarTab) View() string {
 
 	for i, preset := range t.presets {
 		selected := t.currentSection() == barPresets && t.cursor == i
-		isCurrent := preset.String() == t.currentBar
+		isCurrent := preset.String() == t.cfg.Bar.Preset
 
 		if selected {
 			cursorLine = lineCount
@@ -156,22 +156,22 @@ func (t *BarTab) renderPresetPreview(preset bar.Preset) string {
 		width = 60
 	}
 
-	switch t.layout {
+	switch t.cfg.Bar.Layout {
 	case "two-line", "split":
 		topRow := bar.RenderTopPreviewVariant(
-			preset, t.palette, previewSessions, previewSessions[0], width, t.topBar,
+			preset, t.palette, previewSessions, previewSessions[0], width, t.cfg.Bar.TopBar,
 		)
 		if topRow == "" {
-			return bar.RenderPreviewWithSegments(preset, t.palette, t.segments)
+			return bar.RenderPreviewWithSegments(preset, t.palette, t.cfg.Bar.Segments)
 		}
-		noWS := t.segments
+		noWS := t.cfg.Bar.Segments
 		noWS.Workspace = false
 		bottomRow := bar.RenderBarPreviewOverride(preset, t.palette, noWS, width,
 			func(bctx *bar.BarContext) {
 				// Top row owns identity in two-line mode (plan 024) — flag it
 				// so the dashboard preview matches the live bottom-left.
 				bctx.TopRowActive = true
-				switch t.indicator {
+				switch t.cfg.Bar.Indicator {
 				case "dots":
 					bctx.SessionIndicator = bar.CompactDots(previewSessions, previewSessions[0], nil)
 				case "none":
@@ -180,6 +180,6 @@ func (t *BarTab) renderPresetPreview(preset bar.Preset) string {
 			})
 		return topRow + "\n" + bottomRow
 	default:
-		return bar.RenderPreviewWithSegments(preset, t.palette, t.segments)
+		return bar.RenderPreviewWithSegments(preset, t.palette, t.cfg.Bar.Segments)
 	}
 }

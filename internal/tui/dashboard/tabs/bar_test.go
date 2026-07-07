@@ -100,8 +100,8 @@ func TestBarActivateLoadsData(t *testing.T) {
 	tab, _, _ := newTestBarTab(t)
 	tab = activateBar(t, tab)
 
-	if tab.currentBar != "default" {
-		t.Errorf("currentBar = %q, want default", tab.currentBar)
+	if tab.cfg.Bar.Preset != "default" {
+		t.Errorf("currentBar = %q, want default", tab.cfg.Bar.Preset)
 	}
 }
 
@@ -170,15 +170,15 @@ func TestBarSegmentToggle(t *testing.T) {
 
 	tab.cursor = len(tab.presets) + len(barLayoutOptions) // first segment
 
-	before := tab.segments.Git
+	before := tab.cfg.Bar.Segments.Git
 
 	_, cmd := sendBarKey(tab, " ")
 	if cmd == nil {
 		t.Fatal("space on segment should return a cmd")
 	}
 
-	if tab.segments.Git == before {
-		t.Errorf("segment git did not toggle: before=%v after=%v", before, tab.segments.Git)
+	if tab.cfg.Bar.Segments.Git == before {
+		t.Errorf("segment git did not toggle: before=%v after=%v", before, tab.cfg.Bar.Segments.Git)
 	}
 }
 
@@ -186,14 +186,14 @@ func TestBarToggleSegmentFields(t *testing.T) {
 	tab, _, _ := newTestBarTab(t)
 
 	fields := []string{"git", "workspace", "clock", "lang", "directory", "process", "group"}
-	tab.segments = config.BarSegments{}
+	tab.cfg.Bar.Segments = config.BarSegments{}
 	for _, f := range fields {
 		tab.toggleSegment(f)
 	}
-	if !tab.segments.Git || !tab.segments.Workspace || !tab.segments.Clock ||
-		!tab.segments.Lang || !tab.segments.Directory || !tab.segments.Process ||
-		!tab.segments.Group {
-		t.Errorf("toggleSegment did not flip all fields: %+v", tab.segments)
+	if !tab.cfg.Bar.Segments.Git || !tab.cfg.Bar.Segments.Workspace || !tab.cfg.Bar.Segments.Clock ||
+		!tab.cfg.Bar.Segments.Lang || !tab.cfg.Bar.Segments.Directory || !tab.cfg.Bar.Segments.Process ||
+		!tab.cfg.Bar.Segments.Group {
+		t.Errorf("toggleSegment did not flip all fields: %+v", tab.cfg.Bar.Segments)
 	}
 }
 
@@ -210,8 +210,8 @@ func TestBarLayoutCycle(t *testing.T) {
 	}
 
 	// Default layout from config is "two-line".
-	if tab.layout != "two-line" {
-		t.Fatalf("layout = %q, want two-line", tab.layout)
+	if tab.cfg.Bar.Layout != "two-line" {
+		t.Fatalf("layout = %q, want two-line", tab.cfg.Bar.Layout)
 	}
 
 	// Cycle forward: two-line → split.
@@ -219,20 +219,20 @@ func TestBarLayoutCycle(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("l on layout option should return a cmd (saveConfig)")
 	}
-	if tab.layout != "split" {
-		t.Errorf("after l: layout = %q, want split", tab.layout)
+	if tab.cfg.Bar.Layout != "split" {
+		t.Errorf("after l: layout = %q, want split", tab.cfg.Bar.Layout)
 	}
 
 	// Cycle forward again: split → two-line (wraps; "single" was removed).
 	sendBarKey(tab, "l")
-	if tab.layout != "two-line" {
-		t.Errorf("after l: layout = %q, want two-line", tab.layout)
+	if tab.cfg.Bar.Layout != "two-line" {
+		t.Errorf("after l: layout = %q, want two-line", tab.cfg.Bar.Layout)
 	}
 
 	// Cycle backward: two-line → split.
 	sendBarKey(tab, "h")
-	if tab.layout != "split" {
-		t.Errorf("after h: layout = %q, want split", tab.layout)
+	if tab.cfg.Bar.Layout != "split" {
+		t.Errorf("after h: layout = %q, want split", tab.cfg.Bar.Layout)
 	}
 }
 

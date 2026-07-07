@@ -2,6 +2,7 @@ package recipeup
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/recipe"
+	"github.com/donjor/zmux/internal/theme"
 )
 
 type screen int
@@ -58,26 +60,44 @@ type recipeFormValues struct {
 	ItemsRaw  string
 }
 
+// Styles derive from the active theme palette, set once by New via
+// applyPalette. Package globals are fine here: `zmux up` runs one Program
+// per process. (Previously a hardcoded Catppuccin palette, so user themes
+// silently never applied to this screen.)
 var (
-	ink     = lipgloss.Color("#D9E0EE")
-	muted   = lipgloss.Color("#7F849C")
-	accent  = lipgloss.Color("#89B4FA")
-	green   = lipgloss.Color("#A6E3A1")
-	yellow  = lipgloss.Color("#F9E2AF")
-	red     = lipgloss.Color("#F38BA8")
-	surface = lipgloss.Color("#313244")
-
-	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(accent)
-	mutedStyle   = lipgloss.NewStyle().Foreground(muted)
-	okStyle      = lipgloss.NewStyle().Foreground(green)
-	warnStyle    = lipgloss.NewStyle().Foreground(yellow)
-	errorStyle   = lipgloss.NewStyle().Foreground(red)
-	commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#CBA6F7"))
-	sectionStyle = lipgloss.NewStyle().Bold(true).Foreground(ink)
-	panelStyle   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(surface).Padding(1, 2)
-	activeStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#11111B")).Background(accent).Bold(true).Padding(0, 1)
-	chipStyle    = lipgloss.NewStyle().Foreground(ink).Background(surface).Padding(0, 1)
+	titleStyle   lipgloss.Style
+	mutedStyle   lipgloss.Style
+	okStyle      lipgloss.Style
+	warnStyle    lipgloss.Style
+	errorStyle   lipgloss.Style
+	commandStyle lipgloss.Style
+	sectionStyle lipgloss.Style
+	panelStyle   lipgloss.Style
+	activeStyle  lipgloss.Style
+	chipStyle    lipgloss.Style
 )
+
+// muted/accent/highlight stay as vars: view.go badges take raw colors.
+var muted, accent, highlight color.Color
+
+func applyPalette(p *theme.Palette) {
+	ink := lipgloss.Color(p.FG.Hex())
+	surface := lipgloss.Color(p.Surface.Hex())
+	muted = lipgloss.Color(p.Muted.Hex())
+	accent = lipgloss.Color(p.Accent.Hex())
+	highlight = lipgloss.Color(p.Highlight.Hex())
+
+	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(accent)
+	mutedStyle = lipgloss.NewStyle().Foreground(muted)
+	okStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(p.Success.Hex()))
+	warnStyle = lipgloss.NewStyle().Foreground(highlight)
+	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(p.Error.Hex()))
+	commandStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(p.Special.Hex()))
+	sectionStyle = lipgloss.NewStyle().Bold(true).Foreground(ink)
+	panelStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(surface).Padding(1, 2)
+	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(p.BG.Hex())).Background(accent).Bold(true).Padding(0, 1)
+	chipStyle = lipgloss.NewStyle().Foreground(ink).Background(surface).Padding(0, 1)
+}
 
 func Run(app *apppkg.App) error {
 	_, err := tea.NewProgram(New(app)).Run()
@@ -123,6 +143,7 @@ func SnapshotPlan(app *apppkg.App, name string, items []string) (string, error) 
 }
 
 func New(app *apppkg.App) Model {
+	applyPalette(theme.ActivePalette(app.FS))
 	m := Model{app: app, width: 100, height: 30}
 	m.reload()
 	return m

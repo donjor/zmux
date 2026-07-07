@@ -13,26 +13,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newPaneListCmd(app *apppkg.App) *cobra.Command {
+// newPaneListCmd builds the pane-listing command. Registered as "list"
+// under `zmux pane` and as top-level "panes" (alias "list-panes") for
+// symmetry with `zmux ls`.
+func newPaneListCmd(app *apppkg.App, use string, aliases ...string) *cobra.Command {
 	flags := &paneListFlags{}
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List panes",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPaneList(app, cmd, flags)
-		},
-	}
-	addPaneListFlags(cmd, flags)
-	return cmd
-}
-
-// newTopLevelPaneListCmd is the same as `pane list` but registered as
-// a top-level command (e.g. `zmux panes`) for symmetry with `zmux ls`.
-func newTopLevelPaneListCmd(app *apppkg.App, use string) *cobra.Command {
-	flags := &paneListFlags{}
-	cmd := &cobra.Command{
-		Use:   use,
-		Short: "List panes",
+		Use:     use,
+		Aliases: aliases,
+		Short:   "List panes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runPaneList(app, cmd, flags)
 		},

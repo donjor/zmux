@@ -52,9 +52,6 @@ func runSessionPicker(app *apppkg.App) error {
 	case "attach":
 		return attachOwnedSession(app, res.Session)
 
-	case "hijack":
-		return attachOwnedSessionWith(app, res.Session, session.AttachHijack)
-
 	case "new":
 		name := res.Name
 		if name == "" {

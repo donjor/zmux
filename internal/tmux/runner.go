@@ -1,9 +1,6 @@
 // Package tmux provides a typed wrapper over the tmux CLI.
 package tmux
 
-// Runner is the interface for all tmux operations.
-// All tmux interactions in zmux go through this interface,
-// enabling testability via mock implementations.
 type SplitDirection string
 
 const (
@@ -26,6 +23,8 @@ type SplitPaneOptions struct {
 	Detached  bool // -d: don't move focus to the created pane
 }
 
+// Runner is the interface for all tmux operations. All tmux interactions in
+// zmux go through this interface, enabling testability via mock implementations.
 type Runner interface {
 	// Sessions
 	ListSessions() ([]Session, error)
@@ -68,7 +67,6 @@ type Runner interface {
 	// every pane on the server with the placement/identity facts the tabs
 	// layer computes logical tabs from.
 	ListLogicalPaneRows() ([]LogicalPaneRow, error)
-	SplitWindow(target, direction string) error
 	SplitPane(opts SplitPaneOptions) (string, error)
 	// JoinPane relocates a pane into another window; BreakPane promotes a
 	// pane to its own window (returning the new window id). Both auto-unzoom
@@ -138,6 +136,10 @@ type Runner interface {
 	// (list-panes -a), one entry per pane; unset options yield empty strings.
 	// Lets tabstate ask "does any running state remain?" in one round-trip.
 	ListPaneOptionValues(key string) ([]string, error)
+	// ShowPaneOptions reads many pane options in ONE round-trip (a single
+	// display-message format expansion); unset keys map to "". Status-style
+	// reads touch a dozen options — one spawn, not twelve.
+	ShowPaneOptions(target string, keys []string) (map[string]string, error)
 	// RefreshStatus forces a status-line redraw (refresh-client -S). Errors
 	// with "no current client" when nothing is attached — callers treat it
 	// as best-effort and must not fail state writes on it.

@@ -144,6 +144,24 @@ func captureRunOutput(t *testing.T, argv []string, run func() int) (int, string,
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
 
+	// Drain both pipes WHILE run() executes. Reading only afterwards
+	// deadlocks once output exceeds the pipe buffer — which can be as small
+	// as one page when the kernel's pipe-user-pages-soft limit is exhausted.
+	type readResult struct {
+		data []byte
+		err  error
+	}
+	stdoutCh := make(chan readResult, 1)
+	stderrCh := make(chan readResult, 1)
+	go func() {
+		data, err := io.ReadAll(stdoutR)
+		stdoutCh <- readResult{data, err}
+	}()
+	go func() {
+		data, err := io.ReadAll(stderrR)
+		stderrCh <- readResult{data, err}
+	}()
+
 	code := run()
 
 	_ = stdoutW.Close()
@@ -152,14 +170,14 @@ func captureRunOutput(t *testing.T, argv []string, run func() int) (int, string,
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 
-	stdout, err := io.ReadAll(stdoutR)
-	if err != nil {
-		t.Fatalf("read stdout: %v", err)
+	stdout := <-stdoutCh
+	if stdout.err != nil {
+		t.Fatalf("read stdout: %v", stdout.err)
 	}
-	stderr, err := io.ReadAll(stderrR)
-	if err != nil {
-		t.Fatalf("read stderr: %v", err)
+	stderr := <-stderrCh
+	if stderr.err != nil {
+		t.Fatalf("read stderr: %v", stderr.err)
 	}
 
-	return code, string(stdout), string(stderr)
+	return code, string(stdout.data), string(stderr.data)
 }

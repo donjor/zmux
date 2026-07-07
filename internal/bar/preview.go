@@ -17,13 +17,6 @@ func RenderPreviewWithSegments(preset Preset, palette *theme.Palette, segments c
 	return renderPreviewCtx(preset, palette, segments)
 }
 
-// RenderPreviewWithSegmentsOverride renders a preview with segment
-// visibility AND a callback to modify the BarContext before rendering.
-// Used by the two-line layout to suppress position suffixes etc.
-func RenderPreviewWithSegmentsOverride(preset Preset, palette *theme.Palette, segments config.BarSegments, override func(*BarContext)) string {
-	return renderPreviewCtxOverride(preset, palette, segments, override)
-}
-
 // RenderTopPreview renders the top row (workspace + session tabs) as
 // ANSI for preview outside tmux. Uses the real RenderTop with bg-aware
 // tmux→ANSI conversion so the bar bg persists across all segments.
@@ -53,11 +46,6 @@ func RenderTopPreviewVariant(preset Preset, palette *theme.Palette, sessions []s
 	}
 	content := tmuxToANSIWithBarBG(top, bg)
 	return padWithBarBG(content, bg, width)
-}
-
-// RenderBarPreview renders the main bar row as ANSI with proper bar bg.
-func RenderBarPreview(preset Preset, palette *theme.Palette, segments config.BarSegments, width int) string {
-	return RenderBarPreviewOverride(preset, palette, segments, width, nil)
 }
 
 // RenderBarPreviewOverride is RenderBarPreview with a BarContext override.

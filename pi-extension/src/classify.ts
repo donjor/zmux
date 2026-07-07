@@ -275,8 +275,15 @@ function foregroundComposeUp(scan: string): boolean {
 	return false;
 }
 
+// Single source of truth for the headless-agent print-mode guard: the pattern
+// and the remediation string are shared with tools/shared.ts so the two block
+// sites can't drift.
+export const HEADLESS_AGENT_PRINT_PATTERN = /(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)/u;
+export const HEADLESS_AGENT_SUGGESTION =
+	"Do not launch agent peers with -p/--print. Use zmux_peer_ensure for a visible interactive CLI, then deliver prompts with zmux_type or zmux_peer_handoff.";
+
 const headlessAgentPatterns: Array<{ re: RegExp; reason: string }> = [
-	{ re: /(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)/u, reason: "agent headless/print mode bypasses visible zmux peer flow" },
+	{ re: HEADLESS_AGENT_PRINT_PATTERN, reason: "agent headless/print mode bypasses visible zmux peer flow" },
 ];
 
 const interactivePatterns: Array<{ re: RegExp; reason: string }> = [
@@ -313,10 +320,6 @@ function suggestionForInteractive(command: string): string {
 
 function suggestionForDirectTool(tool: string): string {
 	return `Use the typed ${tool} tool instead of shelling out through bash.`;
-}
-
-function suggestionForHeadlessAgent(): string {
-	return "Do not launch agent peers with -p/--print. Use zmux_peer_ensure for a visible interactive CLI, then deliver prompts with zmux_type or zmux_peer_handoff.";
 }
 
 function suggestionForTmux(tool: string): string {
@@ -430,7 +433,7 @@ export function classifyBash(command: string, config: PiZmuxConfig, depth = 0): 
 
 	for (const pattern of headlessAgentPatterns) {
 		if (pattern.re.test(scan)) {
-			return { kind: "headless_agent", reason: pattern.reason, suggestion: suggestionForHeadlessAgent() };
+			return { kind: "headless_agent", reason: pattern.reason, suggestion: HEADLESS_AGENT_SUGGESTION };
 		}
 	}
 

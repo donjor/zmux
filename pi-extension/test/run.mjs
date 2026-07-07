@@ -390,7 +390,7 @@ try {
     runtimes: { server: { command: 'go run ./cmd/api', tab: 'api', readiness: 'ready' } },
   }));
   delete process.env.PI_ZMUX_POLICY;
-  let loaded = loadConfig(project);
+  let loaded = loadConfig(project, { projectTrusted: true });
   assert.equal(loaded.policy.mode, 'warn');
   assert.equal(loaded.policy.blockBackgroundJobs, false);
   assert.equal(loaded.policy.redirectInteractive, false);
@@ -405,8 +405,9 @@ try {
   assert.deepEqual(loaded.runtimes, {});
 
   process.env.PI_ZMUX_POLICY = 'observe';
-  loaded = loadConfig(project);
+  loaded = loadConfig(project, { projectTrusted: true });
   assert.equal(loaded.policy.mode, 'observe');
+  delete process.env.PI_ZMUX_POLICY;
 
   const reloadContinuationRoot = mkdtempSync(join(tmpdir(), 'pi-zmux-reload-continuation-'));
   const reloadPath = writeReloadContinuation(reloadContinuationRoot, { createdAt: '2026-05-04T00:00:00.000Z', prompt: 'continue after reload' });
@@ -420,11 +421,14 @@ try {
   assert.equal(takeRespawnContinuation(continuationRoot)?.prompt, 'continue smoke');
   assert.equal(existsSync(continuationPath), false);
 
+  // Invalid JSON must fall back to enforce — env was cleared above, so this
+  // exercises the real fallback rather than the env override.
   const malformed = mkdtempSync(join(tmpdir(), 'pi-zmux-bad-'));
   mkdirSync(join(malformed, '.pi'));
   writeFileSync(join(malformed, '.pi/zmux.json'), '{not json');
-  loaded = loadConfig(malformed);
-  assert.equal(loaded.policy.mode, 'observe');
+  loaded = loadConfig(malformed, { projectTrusted: true });
+  assert.equal(loaded.policy.mode, 'enforce');
+  assert.equal(loaded.ignoredReason, 'invalid-json');
   assert.deepEqual(loaded.runtimes, {});
 
   console.log('pi-zmux extension tests passed');

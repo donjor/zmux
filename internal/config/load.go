@@ -26,7 +26,13 @@ func Load(fs FS, path string) (Config, error) {
 		return Config{}, fmt.Errorf("parse config: %w", err)
 	}
 
-	applyDefaults(&cfg)
+	// Second decode into a raw map so defaults only fill keys the user did
+	// not write — a plain bool field can't distinguish absent from an
+	// explicit false (go-toml/v2 exposes no decoded-keys metadata).
+	var raw map[string]any
+	_ = toml.Unmarshal(data, &raw)
+
+	applyDefaults(&cfg, raw)
 	return cfg, nil
 }
 
@@ -72,8 +78,24 @@ func ExpandHome(fs FS, path string) (string, error) {
 	return path, nil
 }
 
-// applyDefaults fills in zero-value fields with defaults.
-func applyDefaults(cfg *Config) {
+// tomlHas reports whether the raw decoded TOML contains the given key path.
+func tomlHas(raw map[string]any, keys ...string) bool {
+	cur := any(raw)
+	for _, k := range keys {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return false
+		}
+		if cur, ok = m[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// applyDefaults fills in fields the user did not write with defaults; raw is
+// the untyped decode of the same TOML, used for absent-vs-explicit-false.
+func applyDefaults(cfg *Config, raw map[string]any) {
 	defaults := DefaultConfig()
 
 	if cfg.Theme == "" {
@@ -91,22 +113,23 @@ func applyDefaults(cfg *Config) {
 	if cfg.Bar.Layout != "two-line" && cfg.Bar.Layout != "split" {
 		cfg.Bar.Layout = defaults.Bar.Layout
 	}
-	// For auto_cleanup_tmp: TOML unmarshals missing bools as false, but our
-	// default is true. We check if the sessions section was entirely absent
-	// (both fields at zero value) and apply the default in that case.
-	// If the user explicitly wrote [sessions] with auto_cleanup_tmp = false,
-	// DefaultShell would likely also be set, or at minimum the section exists.
-	// This is imperfect but correct for the common case.
-	if !cfg.Sessions.AutoCleanupTmp && cfg.Sessions.DefaultShell == "" {
+	// Bool defaults are true, so they only apply when the key is absent —
+	// an explicit `= false` must survive the load.
+	if !tomlHas(raw, "sessions", "auto_cleanup_tmp") {
 		cfg.Sessions.AutoCleanupTmp = defaults.Sessions.AutoCleanupTmp
 	}
-
-	// For bar segments: if the entire [bar.segments] section is absent,
-	// all bools are false. Apply defaults (all true) when no segments are set.
-	seg := cfg.Bar.Segments
-	if !seg.Workspace && !seg.Git && !seg.Lang && !seg.Clock &&
-		!seg.Directory && !seg.Process && !seg.Group {
-		cfg.Bar.Segments = defaults.Bar.Segments
+	for key, field := range map[string]*bool{
+		"workspace": &cfg.Bar.Segments.Workspace,
+		"git":       &cfg.Bar.Segments.Git,
+		"lang":      &cfg.Bar.Segments.Lang,
+		"clock":     &cfg.Bar.Segments.Clock,
+		"directory": &cfg.Bar.Segments.Directory,
+		"process":   &cfg.Bar.Segments.Process,
+		"group":     &cfg.Bar.Segments.Group,
+	} {
+		if !tomlHas(raw, "bar", "segments", key) {
+			*field = true
+		}
 	}
 
 	if cfg.Sync.Target == "" {

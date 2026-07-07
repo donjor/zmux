@@ -148,7 +148,7 @@ func parseClients(output string) ([]ClientInfo, error) {
 }
 
 // parsePanes parses tab-delimited list-panes output into []Pane.
-// Expected format per line: session_name\tpane_id\tpane_index\tpane_active\tcommand\tpid\tdir\twidth\theight\ttitle\twindow_index
+// Expected format per line: session_name\tpane_id\tpane_index\tpane_active\tcommand\tpid\tdir\twidth\theight\ttitle\twindow_index\twindow_name
 func parsePanes(output string) ([]Pane, error) {
 	if output == "" {
 		return nil, nil
@@ -165,7 +165,10 @@ func parsePanes(output string) ([]Pane, error) {
 
 		fields := strings.SplitN(line, "\t", 12)
 		if len(fields) < 10 {
-			continue // skip malformed lines gracefully
+			// Deliberately lenient — unlike parseSessions/parseClients/
+			// parseWindows (which error on a short line), pane listings skip a
+			// malformed row so one odd pane can't blank the whole list.
+			continue
 		}
 
 		index, _ := strconv.Atoi(fields[2])

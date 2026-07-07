@@ -33,15 +33,15 @@ func (s *Service) Resolve(spec string) (Target, error) {
 // go out as ONE batched tmux invocation.
 func (s *Service) Set(t Target, st State, source, msg string) error {
 	at := strconv.FormatInt(s.now().Unix(), 10)
-	pairs := []struct{ key, value string }{
-		{OptState, string(st)},
-		{OptSource, source},
-		{OptAt, at},
-		{OptMsg, msg},
+	values := map[string]string{
+		OptState:  string(st),
+		OptSource: source,
+		OptAt:     at,
+		OptMsg:    msg,
 	}
-	writes := make([]tmux.OptionWrite, 0, len(pairs)*2)
-	for _, p := range pairs {
-		writes = append(writes, stateWrites(t, p.key, p.value)...)
+	writes := make([]tmux.OptionWrite, 0, len(MirrorKeys)*2)
+	for _, key := range MirrorKeys {
+		writes = append(writes, stateWrites(t, key, values[key])...)
 	}
 	if err := s.runner.ApplyOptions(writes); err != nil {
 		return err
@@ -54,9 +54,8 @@ func (s *Service) Set(t Target, st State, source, msg string) error {
 // Clear removes all state options from the pane and its window mirror in one
 // batched invocation.
 func (s *Service) Clear(t Target) error {
-	keys := []string{OptState, OptSource, OptAt, OptMsg}
-	writes := make([]tmux.OptionWrite, 0, len(keys)*2)
-	for _, key := range keys {
+	writes := make([]tmux.OptionWrite, 0, len(MirrorKeys)*2)
+	for _, key := range MirrorKeys {
 		writes = append(writes, stateWrites(t, key, "")...)
 	}
 	if err := s.runner.ApplyOptions(writes); err != nil {
@@ -86,7 +85,7 @@ func stateWrites(t Target, key, value string) []tmux.OptionWrite {
 // flows through Set/Clear; the flips are best-effort like RefreshStatus.
 const (
 	intervalActive = "1"
-	intervalIdle   = "5" // keep in step with the conf.go baseline
+	intervalIdle   = tmux.StatusIntervalIdle // shared with the conf.go baseline
 )
 
 func (s *Service) syncStatusInterval(runningJustSet bool) {

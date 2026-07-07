@@ -48,7 +48,8 @@ func (m Model) browserView(height int) string {
 	rightW := max(32, m.width-leftW-6)
 	left := m.recipeListView(leftW, height)
 	right := m.detailView(rightW, height)
-	return lipgloss.JoinHorizontal(lipgloss.Top,
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
 		panelStyle.Width(leftW).Height(height).Render(left),
 		"  ",
 		panelStyle.Width(rightW).Height(height).Render(right),
@@ -67,7 +68,8 @@ func (m Model) recipeListView(width int, height int) string {
 	}
 	for i := start; i < len(m.defs) && len(lines) < height-1; i++ {
 		def := m.defs[i]
-		label := fmt.Sprintf("%s %s  %s",
+		label := fmt.Sprintf(
+			"%s %s  %s",
 			m.lintBadge(def.Recipe.Name),
 			def.Recipe.Name,
 			mutedStyle.Render(string(def.Recipe.Kind)),
@@ -96,7 +98,7 @@ func (m Model) detailView(width int, height int) string {
 	}
 	lines := []string{
 		titleStyle.Render(def.Recipe.Name),
-		badge(string(def.Source), muted) + " " + badge(string(def.Recipe.Kind), accent) + " " + badge(def.Recipe.Context, yellow) + " " + lintLine,
+		badge(string(def.Source), muted) + " " + badge(string(def.Recipe.Kind), accent) + " " + badge(def.Recipe.Context, highlight) + " " + lintLine,
 		"",
 		def.Recipe.Description,
 		"",

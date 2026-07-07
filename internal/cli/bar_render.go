@@ -8,6 +8,7 @@ import (
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/theme"
 	"github.com/spf13/cobra"
 )
 
@@ -46,25 +47,7 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			}
 
 			if side == "tabs" {
-				// Logical tab row: one scan, rendered for the RAW session (a
-				// grouped clone has its own current-window pointer) with
-				// docked-tab origins matched against the root name (hide
-				// records the root — clone-block keeps clones away from
-				// placement verbs). Preset comes from config (same per-call
-				// load as left/right); prefix arrives as a flag because tmux
-				// #{?} conditionals don't expand inside #() output.
-				rows, err := app.Runner.ListLogicalPaneRows()
-				if err != nil {
-					return nil // empty row beats a broken bar
-				}
-				originScope := sessionName
-				if groupID != "" {
-					originScope = session.RootName(sessionName)
-				}
-				cfg, _ := loadConfig(app.FS)
-				preset, _ := bar.PresetFromString(cfg.Bar.Preset)
-				fmt.Print(bar.RenderTabsRow(palette, preset, sessionName, originScope, rows, barRenderPrefix == "1", time.Now()))
-				return nil
+				return renderBarTabs(app, palette, sessionName, groupID, barRenderPrefix)
 			}
 
 			// Resolve grouped session clones (e.g. "dev-b") to their root
@@ -155,38 +138,7 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 			case "right":
 				fmt.Print(bar.RenderRight(palette, ctx, preset))
 			case "top":
-				// Fetch workspace sessions for the top row. Untracked
-				// sessions (no workspace) still get a one-session top row
-				// so always-2-line never shows a blank top (plan 024).
-				if workspace != "" {
-					labels := app.WorkspaceStore.SessionLabelsIn(workspace)
-					targets := app.WorkspaceStore.SessionTargetsIn(workspace)
-					// Drop pills for sessions the store still lists but tmux no
-					// longer has, so a killed session disappears without waiting
-					// for a later interaction. Read-only: never reconcile the
-					// store from this hot, side-effect-free #() render. Compute
-					// the live set once and share it with the attach-state pass.
-					live, err := session.ListSessions(app.Runner)
-					if err == nil {
-						labels, targets = filterLiveSessions(labels, targets, live)
-					}
-					ctx.WorkspaceSessions = labels
-					ctx.WorkspaceSessionStates = attachStatesFor(live, targets, sessionName)
-				}
-				if len(ctx.WorkspaceSessions) == 0 && displaySession != "" {
-					ctx.WorkspaceSessions = []string{displaySession}
-				}
-				topVariant := barRenderTopBar
-				if topVariant == "" {
-					topVariant = cfg.Bar.TopBar
-				}
-				if topVariant == "" {
-					topVariant = "tabs"
-				}
-				fmt.Print(bar.RenderTopRow(palette, ctx, preset, topVariant))
-				// Right-aligned overlay: cwd plus non-default profile badge
-				// (e.g. zzmux). Keep both off the bottom tabs row.
-				fmt.Print(bar.RenderTopOverlay(palette, ctx, app.Profile.Name))
+				renderBarTop(app, palette, &ctx, preset, workspace, displaySession, sessionName, barRenderTopBar, cfg.Bar.TopBar)
 			default:
 				return fmt.Errorf("unknown side %q (use 'left', 'right', 'top', or 'tabs')", side)
 			}
@@ -220,6 +172,62 @@ func newBarRenderCmd(app *apppkg.App, barCmd *cobra.Command) *cobra.Command {
 	barCmd.AddCommand(barRenderDebug)
 
 	return cmd
+}
+
+// renderBarTabs prints the logical-tab row for the session. Rendered for the
+// RAW session (a grouped clone has its own current-window pointer) with
+// docked-tab origins matched against the root name; preset comes from config
+// and prefix arrives as a flag because tmux #{?} conditionals don't expand
+// inside #() output.
+func renderBarTabs(app *apppkg.App, palette *theme.Palette, sessionName, groupID, prefix string) error {
+	rows, err := app.Runner.ListLogicalPaneRows()
+	if err != nil {
+		return nil // empty row beats a broken bar
+	}
+	originScope := sessionName
+	if groupID != "" {
+		originScope = session.RootName(sessionName)
+	}
+	cfg, _ := loadConfig(app.FS)
+	preset, _ := bar.PresetFromString(cfg.Bar.Preset)
+	fmt.Print(bar.RenderTabsRow(palette, preset, sessionName, originScope, rows, prefix == "1", time.Now()))
+	return nil
+}
+
+// renderBarTop prints the two-line top row plus its right-aligned overlay,
+// gathering the workspace's live sessions for the pill strip. Untracked
+// sessions still get a one-session top row so always-2-line never shows a blank
+// top (plan 024). It mutates ctx's workspace-session fields in place.
+func renderBarTop(app *apppkg.App, palette *theme.Palette, ctx *bar.BarContext, preset bar.Preset, workspace, displaySession, sessionName, topBarFlag, cfgTopBar string) {
+	if workspace != "" {
+		labels := app.WorkspaceStore.SessionLabelsIn(workspace)
+		targets := app.WorkspaceStore.SessionTargetsIn(workspace)
+		// Drop pills for sessions the store still lists but tmux no longer has,
+		// so a killed session disappears without waiting for a later
+		// interaction. Read-only: never reconcile the store from this hot,
+		// side-effect-free #() render. Compute the live set once and share it
+		// with the attach-state pass.
+		live, err := session.ListSessions(app.Runner)
+		if err == nil {
+			labels, targets = filterLiveSessions(labels, targets, live)
+		}
+		ctx.WorkspaceSessions = labels
+		ctx.WorkspaceSessionStates = attachStatesFor(live, targets, sessionName)
+	}
+	if len(ctx.WorkspaceSessions) == 0 && displaySession != "" {
+		ctx.WorkspaceSessions = []string{displaySession}
+	}
+	topVariant := topBarFlag
+	if topVariant == "" {
+		topVariant = cfgTopBar
+	}
+	if topVariant == "" {
+		topVariant = "tabs"
+	}
+	fmt.Print(bar.RenderTopRow(palette, *ctx, preset, topVariant))
+	// Right-aligned overlay: cwd plus non-default profile badge (e.g. zzmux).
+	// Keep both off the bottom tabs row.
+	fmt.Print(bar.RenderTopOverlay(palette, *ctx, app.Profile.Name))
 }
 
 // workspaceAttachStates returns a slice of attach states index-aligned with

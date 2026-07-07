@@ -120,6 +120,7 @@ Sessions, tabs, panes, peers, and input:
 - `zmux_sessions`, `zmux_session_run`, `zmux_session_kill`
 - `zmux_tabs`, `zmux_tab_status`, `zmux_tab_inspect`, `zmux_tab_state`, `zmux_tab_place`,
   `zmux_tab_label`, `zmux_tab_move` (with optional source `session`), `zmux_tab_kill` (with optional source `session`), `zmux_tab_focus`
+- `zmux_tab_peer` — record semantic peer/agent-turn lifecycle metadata (start/running, ready, attention, failed, consumed, park, timestamped keep); prefer over manual glyph-only state for prompt-scoped peer tabs.
 - `zmux_peer_ensure` — thin adapter over first-class `zmux tab peer ensure`; safe peer spawn/reuse, lifecycle stamping, short readiness wait, and status/output evidence in one result.
 - `zmux_pane_list`, `zmux_pane_open`, `zmux_pane_focus`, `zmux_pane_close`,
   `zmux_pane_resize` (auto axis: width for side-by-side panes, height for full-width stacked panes; pass `axis` to force one)
@@ -147,6 +148,11 @@ enforcement.
 A trusted project can override policy with `.pi/zmux.json` or
 `.config/pi-zmux.json`. Emergency bypass is deliberately explicit:
 `PI_ZMUX_ALLOW=1` or `# pi-zmux: allow` on the bash command.
+
+The `PI_ZMUX_POLICY` environment variable (`observe`, `warn`, or `enforce`)
+overrides the policy mode from both the built-in default and any project config
+`policy.mode`; an unset or unrecognized value leaves the configured mode in
+effect.
 
 ## Project config
 

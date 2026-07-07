@@ -5,9 +5,30 @@ import (
 	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/config"
 	"github.com/donjor/zmux/internal/tabs"
+	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/spf13/cobra"
 )
+
+// applyBarPreset applies a preset with the *configured* bar layout and then
+// reconciles per-session status lines, so a preset/theme change never
+// regresses the two-line contract to a zero-value layout. Every live
+// bar-apply path must go through here rather than bar.Apply directly.
+func applyBarPreset(app *apppkg.App, preset bar.Preset, palette *theme.Palette, barCfg config.BarConfig) error {
+	selfBin := config.SelfBin(app.Profile)
+	lc := bar.BarLayoutConfig{
+		Layout:    barCfg.Layout,
+		Indicator: barCfg.Indicator,
+		TopBar:    barCfg.TopBar,
+	}
+	if err := bar.Apply(app.Runner, selfBin, preset, palette, lc); err != nil {
+		return err
+	}
+	if selfBin != "" {
+		reconcileBarStatusLines(app.Runner, barCfg.Layout, barCfg.TopBar, selfBin)
+	}
+	return nil
+}
 
 // newBarAdjustCmd reconciles per-session status-line options to the configured
 // layout. Called from tmux hooks (session-created, session-closed,

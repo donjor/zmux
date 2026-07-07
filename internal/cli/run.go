@@ -14,7 +14,6 @@ import (
 	"github.com/donjor/zmux/internal/recipe"
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
-	"github.com/donjor/zmux/internal/tabstate"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/recipeup"
 	"github.com/spf13/cobra"
@@ -178,120 +177,21 @@ Examples:
 			if err != nil {
 				return err
 			}
+			opts := runTabOpts{
+				windowName:  runWindowName,
+				detach:      runDetach,
+				follow:      runFollow,
+				timeout:     runTimeout,
+				followLines: runFollowLines,
+				ttl:         runTTL,
+				keep:        runKeep,
+				scope:       runScope,
+				origin:      runOrigin,
+			}
 			if rt.found() {
-				// Delivering input clears stale done|failed first (ratified
-				// clear table: typing-by-proxy = user input) — same as send/type.
-				rt.clearStale(app)
-				waitPane := ""
-				if shouldWait {
-					waitPane = runWaitPaneID(app, rt)
-					if waitPane == "" {
-						return fmt.Errorf("cannot resolve pane for lifecycle wait on %s:%s", sessionName, name)
-					}
-					if err := stageRunID(app, waitPane, nonce); err != nil {
-						return err
-					}
-				}
-				if err := sendShellLine(app.Runner, rt.Target, sendCmd); err != nil {
-					return fmt.Errorf("send to %s: %w", rt.Target, err)
-				}
-				fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
-				if shouldWait {
-					return waitForRunResult(app, rt.Target, waitPane, nonce, runTimeout, runFollowLines)
-				}
-				if runFollow {
-					return followOutput(app, rt.Target, runFollowLines)
-				}
-				return nil
+				return runInResolvedTab(app, rt, sessionName, name, sendCmd, nonce, shouldWait, opts)
 			}
-
-			// No existing tab — create one. Surface this when a name was
-			// explicitly requested so the operator notices a fresh tab rather
-			// than a silent duplicate.
-			if runWindowName != "" {
-				fmt.Fprintf(os.Stderr, "no tab %q in %s — creating\n", name, sessionName)
-				// Roster nudge (plan 038): a fresh ad-hoc named tab is the
-				// sprawl slip. Non-blocking, create-only; --keep / --scope daemon
-				// and peer/worker names opt out (they're deliberate roster tabs).
-				if !isRosterTabName(name) && !runKeep && runScope != tabs.ScopeDaemon && runScope != tabs.ScopePeer && runScope != tabs.ScopeWorker {
-					fmt.Fprintf(os.Stderr, "tip: %q is an ad-hoc tab — reuse 'scratch' (one-offs) or 'dev' (runtime) to avoid sprawl (zmux skill: tab roster)\n", name)
-				}
-			}
-
-			dir, _ := os.Getwd()
-			var newOpts []tmux.WindowOpt
-			if runDetach {
-				// Don't yank the user's focus to a fire-and-forget tab.
-				newOpts = append(newOpts, tmux.Detached())
-			}
-			paneID, err := app.Runner.NewWindow(sessionName, name, dir, newOpts...)
-			if err != nil {
-				return fmt.Errorf("create tab: %w", err)
-			}
-
-			// Target the new pane directly — the id stays valid across
-			// auto-rename and placement moves mid-run. session:name is the
-			// fallback for runners that don't report a pane id.
-			target := fmt.Sprintf("%s:%s", sessionName, name)
-			if paneID != "" {
-				target = paneID
-			}
-
-			// Stamp identity at birth on all run-created panes so shell
-			// lifecycle hooks have a managed pane to update. Only an explicit
-			// -n becomes a stable pane label; command-derived names remain
-			// incidental and can auto-rename without becoming an address pin.
-			if paneID != "" {
-				label, labelSource := "", ""
-				if runWindowName != "" {
-					label, labelSource = name, tablabel.SourcePane
-				}
-				if _, err := tabs.Stamp(app.Runner, paneID, paneID, label, labelSource); err != nil {
-					return fmt.Errorf("stamp tab: %w", err)
-				}
-				// Lifecycle birth stamp (plan 038): records origin/scope/born so
-				// the reaper can reason about this tab. Set-once on born, so a
-				// reused tab keeps its original identity. Non-fatal — hygiene
-				// metadata must never break the actual run.
-				scope := runScope
-				if scope == "" {
-					scope = tabs.ScopeTask
-				}
-				callerOrigin, callerScope := callerLifecycle(app)
-				origin := tabs.ResolveOrigin(runOrigin, callerOrigin, callerScope, os.Getenv("ZMUX_ACTOR"))
-				_ = tabs.StampBirth(app.Runner, paneID, origin, scope, time.Now())
-				if runTTL > 0 {
-					_ = tabs.SetTTL(app.Runner, paneID, runTTL)
-				}
-				if runKeep {
-					_ = tabs.SetKeep(app.Runner, paneID, true)
-				}
-				_ = tabs.TouchInput(app.Runner, paneID, time.Now())
-			}
-
-			waitPane := ""
-			if shouldWait {
-				waitPane = target
-				if paneID != "" {
-					waitPane = paneID
-				}
-				if err := stageRunID(app, waitPane, nonce); err != nil {
-					return err
-				}
-			}
-			if err := sendShellLine(app.Runner, target, sendCmd); err != nil {
-				return fmt.Errorf("send to %s: %w", target, err)
-			}
-
-			fmt.Fprintf(os.Stderr, "running in %s:%s\n", sessionName, name)
-
-			if shouldWait {
-				return waitForRunResult(app, target, waitPane, nonce, runTimeout, runFollowLines)
-			}
-			if runFollow {
-				return followOutput(app, target, runFollowLines)
-			}
-			return nil
+			return runInNewTab(app, sessionName, name, sendCmd, nonce, shouldWait, opts)
 		},
 	}
 
@@ -314,6 +214,141 @@ Examples:
 	cmd.Flags().StringVar(&runOrigin, "origin", "", "lifecycle origin override: agent|human (default inferred)")
 	_ = cmd.Flags().MarkHidden("origin")
 	return cmd
+}
+
+// runTabOpts carries the `zmux run` flag values the tab-delivery helpers need,
+// so the RunE closure stays a thin dispatcher over the reuse/create branches.
+type runTabOpts struct {
+	windowName  string
+	detach      bool
+	follow      bool
+	timeout     int
+	followLines int
+	ttl         time.Duration
+	keep        bool
+	scope       string
+	origin      string
+}
+
+// runInResolvedTab delivers the command to an already-existing tab, clearing
+// stale glyph state first and optionally staging a lifecycle wait.
+func runInResolvedTab(app *apppkg.App, rt resolvedTab, sessionName, name, sendCmd, nonce string, shouldWait bool, opts runTabOpts) error {
+	// Delivering input clears stale done|failed first (ratified
+	// clear table: typing-by-proxy = user input) — same as send/type.
+	rt.clearStale(app)
+	waitPane := ""
+	if shouldWait {
+		waitPane, _ = paneTargetForResolvedTab(app, rt)
+		if waitPane == "" {
+			return fmt.Errorf("cannot resolve pane for lifecycle wait on %s:%s", sessionName, name)
+		}
+		if err := stageRunID(app, waitPane, nonce); err != nil {
+			return err
+		}
+	}
+	if err := sendShellLine(app.Runner, rt.Target, sendCmd); err != nil {
+		return fmt.Errorf("send to %s: %w", rt.Target, err)
+	}
+	fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
+	if shouldWait {
+		return waitForRunResult(app, rt.Target, waitPane, nonce, opts.timeout, opts.followLines)
+	}
+	if opts.follow {
+		return followOutput(app, rt.Target, opts.followLines)
+	}
+	return nil
+}
+
+// runInNewTab creates a fresh tab for the command, stamps lifecycle identity at
+// birth, and optionally stages a lifecycle wait.
+func runInNewTab(app *apppkg.App, sessionName, name, sendCmd, nonce string, shouldWait bool, opts runTabOpts) error {
+	// No existing tab — create one. Surface this when a name was
+	// explicitly requested so the operator notices a fresh tab rather
+	// than a silent duplicate.
+	if opts.windowName != "" {
+		fmt.Fprintf(os.Stderr, "no tab %q in %s — creating\n", name, sessionName)
+		// Roster nudge (plan 038): a fresh ad-hoc named tab is the
+		// sprawl slip. Non-blocking, create-only; --keep / --scope daemon
+		// and peer/worker names opt out (they're deliberate roster tabs).
+		if !isRosterTabName(name) && !opts.keep && opts.scope != tabs.ScopeDaemon && opts.scope != tabs.ScopePeer && opts.scope != tabs.ScopeWorker {
+			fmt.Fprintf(os.Stderr, "tip: %q is an ad-hoc tab — reuse 'scratch' (one-offs) or 'dev' (runtime) to avoid sprawl (zmux skill: tab roster)\n", name)
+		}
+	}
+
+	dir, _ := os.Getwd()
+	var newOpts []tmux.WindowOpt
+	if opts.detach {
+		// Don't yank the user's focus to a fire-and-forget tab.
+		newOpts = append(newOpts, tmux.Detached())
+	}
+	paneID, err := app.Runner.NewWindow(sessionName, name, dir, newOpts...)
+	if err != nil {
+		return fmt.Errorf("create tab: %w", err)
+	}
+
+	// Target the new pane directly — the id stays valid across
+	// auto-rename and placement moves mid-run. session:name is the
+	// fallback for runners that don't report a pane id.
+	target := fmt.Sprintf("%s:%s", sessionName, name)
+	if paneID != "" {
+		target = paneID
+	}
+
+	// Stamp identity at birth on all run-created panes so shell
+	// lifecycle hooks have a managed pane to update. Only an explicit
+	// -n becomes a stable pane label; command-derived names remain
+	// incidental and can auto-rename without becoming an address pin.
+	if paneID != "" {
+		label, labelSource := "", ""
+		if opts.windowName != "" {
+			label, labelSource = name, tablabel.SourcePane
+		}
+		if _, err := tabs.Stamp(app.Runner, paneID, paneID, label, labelSource); err != nil {
+			return fmt.Errorf("stamp tab: %w", err)
+		}
+		// Lifecycle birth stamp (plan 038): records origin/scope/born so
+		// the reaper can reason about this tab. Set-once on born, so a
+		// reused tab keeps its original identity. Non-fatal — hygiene
+		// metadata must never break the actual run.
+		scope := opts.scope
+		if scope == "" {
+			scope = tabs.ScopeTask
+		}
+		callerOrigin, callerScope := callerLifecycle(app)
+		origin := tabs.ResolveOrigin(opts.origin, callerOrigin, callerScope, os.Getenv("ZMUX_ACTOR"))
+		_ = tabs.StampBirth(app.Runner, paneID, origin, scope, time.Now())
+		if opts.ttl > 0 {
+			_ = tabs.SetTTL(app.Runner, paneID, opts.ttl)
+		}
+		if opts.keep {
+			_ = tabs.SetKeep(app.Runner, paneID, true)
+		}
+		_ = tabs.TouchInput(app.Runner, paneID, time.Now())
+	}
+
+	waitPane := ""
+	if shouldWait {
+		waitPane = target
+		if paneID != "" {
+			waitPane = paneID
+		}
+		if err := stageRunID(app, waitPane, nonce); err != nil {
+			return err
+		}
+	}
+	if err := sendShellLine(app.Runner, target, sendCmd); err != nil {
+		return fmt.Errorf("send to %s: %w", target, err)
+	}
+
+	fmt.Fprintf(os.Stderr, "running in %s:%s\n", sessionName, name)
+
+	if shouldWait {
+		return waitForRunResult(app, target, waitPane, nonce, opts.timeout, opts.followLines)
+	}
+	if opts.follow {
+		return followOutput(app, target, opts.followLines)
+	}
+	return nil
 }
 
 func shouldDispatchRecipeRun(cmd *cobra.Command, app *apppkg.App, args []string, tabName string, sessionFlag string, follow bool, detach bool, yes bool, dryRun bool) bool {
@@ -358,10 +393,6 @@ func runRecipeFromRun(app *apppkg.App, cmd *cobra.Command, name string, items []
 	return recipeup.RunRecipe(app, name, items, opts)
 }
 
-// runNonce returns a random hex token scoping a command result to one
-// invocation. crypto/rand so concurrent runs can never mint the same nonce (a
-// clock-based nonce theoretically could). Clock fallback only if the system RNG
-// is unreadable, which Go treats as effectively impossible.
 func sendShellLine(r tmux.Runner, target, line string) error {
 	if err := r.SendKeys(target, "-l", line); err != nil {
 		return err
@@ -369,6 +400,10 @@ func sendShellLine(r tmux.Runner, target, line string) error {
 	return r.SendKeys(target, "Enter")
 }
 
+// runNonce returns a random hex token scoping a command result to one
+// invocation. crypto/rand so concurrent runs can never mint the same nonce (a
+// clock-based nonce theoretically could). Clock fallback only if the system RNG
+// is unreadable, which Go treats as effectively impossible.
 func runNonce() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -418,21 +453,6 @@ func writeCommandScript(command string, timeoutSec int) (string, func(), error) 
 	}
 
 	return f.Name(), cleanup, nil
-}
-
-func runWaitPaneID(app *apppkg.App, rt resolvedTab) string {
-	if rt.Tab != nil {
-		return rt.Tab.PaneID
-	}
-	if rt.stateOK {
-		return rt.state.PaneID
-	}
-	svc := tabstate.New(app.Runner, os.Getenv)
-	t, err := rt.stateTarget(svc)
-	if err != nil {
-		return ""
-	}
-	return t.PaneID
 }
 
 func stageRunID(app *apppkg.App, paneID, nonce string) error {

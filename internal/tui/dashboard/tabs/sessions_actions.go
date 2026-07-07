@@ -96,33 +96,15 @@ func (t *SessionsTab) enterSearchMode() (dashboard.Tab, tea.Cmd) {
 	return t, textinput.Blink
 }
 
-// handleSearchKey drives the inline search input. Typing live-filters the
-// tree; Enter applies the filter and returns to list browsing (the filter
-// stays active); Esc cancels the filter entirely. Arrow keys move the cursor
-// through the filtered results without leaving the input.
+// handleSearchKey drives the inline search input via the shared handler;
+// Enter/Esc leave search mode (Enter keeps the filter, Esc cancels it).
 func (t *SessionsTab) handleSearchKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
-		t.searchQuery = strings.TrimSpace(t.searchInput.Value())
+	done, cmd := handleSearchInputKey(msg, &t.searchInput, &t.searchQuery, t.tree, func() {
+		t.tree.SetRows(t.buildRows())
+	})
+	if done {
 		t.finishSearch()
-		return t, nil
-	case "esc":
-		t.searchQuery = ""
-		t.searchInput.SetValue("")
-		t.finishSearch()
-		return t, nil
-	case "up":
-		t.tree.MoveUp()
-		return t, nil
-	case "down":
-		t.tree.MoveDown()
-		return t, nil
 	}
-
-	var cmd tea.Cmd
-	t.searchInput, cmd = t.searchInput.Update(msg)
-	t.searchQuery = strings.TrimSpace(t.searchInput.Value())
-	t.tree.SetRows(t.buildRows())
 	return t, cmd
 }
 
@@ -488,8 +470,7 @@ func (t *SessionsTab) handleConfirmKillKey(msg tea.KeyMsg) (dashboard.Tab, tea.C
 		return t, nil
 	}
 
-	// Workspace with attached sessions: route through the second confirmation.
-	if t.confirm.kind == "workspace" && t.confirm.attached && t.mode != sessionsModeConfirmKillAttached {
+	if confirmKillEscalate(t.confirm, t.mode == sessionsModeConfirmKillAttached) {
 		t.mode = sessionsModeConfirmKillAttached
 		return t, nil
 	}

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	apppkg "github.com/donjor/zmux/internal/app"
-	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/workspace"
 	"github.com/spf13/cobra"
 )
@@ -36,12 +35,10 @@ worktrunk branch, or persist pane layouts.
 				return fmt.Errorf("invalid session label %q: %w", destLabel, err)
 			}
 
-			source, err := app.Runner.DisplayMessage("", "#{session_name}")
-			if err != nil || strings.TrimSpace(source) == "" {
+			sourceRoot, err := currentSessionName(app)
+			if err != nil {
 				return fmt.Errorf("resolve current session: %w", err)
 			}
-			source = strings.TrimSpace(source)
-			sourceRoot := session.RootName(source)
 
 			wsName, ok := app.WorkspaceStore.WorkspaceFor(sourceRoot)
 			if !ok {

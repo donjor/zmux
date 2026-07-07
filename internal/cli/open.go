@@ -121,20 +121,6 @@ func liveWorkspaceSessionTarget(app *apppkg.App, wsName string, rec workspace.Wo
 	return rec.TmuxName
 }
 
-// workspaceSessionName resolves the requested session name for a workspace
-// against tmux's global session namespace.
-func workspaceSessionName(app *apppkg.App, requested, workspace string) string {
-	label := requested
-	if label == "" {
-		label = session.DefaultName
-	}
-	rec, err := workspacepkgSessionRecord(workspace, label)
-	if err != nil {
-		return label
-	}
-	return rec.TmuxName
-}
-
 // attachSession handles the attach logic: normal attach, auto-clone, pinned view, or hijack.
 func attachSession(app *apppkg.App, hijack, pinView bool, name string) error {
 	if pinView {
@@ -175,8 +161,4 @@ func parseWorkspaceSessionArgs(args []string) (workspaceName, sessionLabel strin
 		}
 	}
 	return workspaceName, sessionLabel, nil
-}
-
-func workspacepkgSessionRecord(workspaceName, label string) (workspace.WorkspaceSession, error) {
-	return workspace.NewSessionRecord(workspaceName, label)
 }

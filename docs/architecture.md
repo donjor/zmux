@@ -344,10 +344,11 @@ and `docs/reference/keybindings.md` never drift.
 
 ### Preview framework
 
-`internal/preview` is a reusable `Page` + `Control` harness used by the
-dashboard for bar and theme previews. `internal/preview/pane/` and
-`internal/preview/bar/` host concrete pages. The framework stays separate from
-the production TUI so previews do not drag in production state.
+`internal/preview` is a reusable `Page` + `Control` harness driven by the
+`cmd/uiproto` prototyping harness (not shipped, not the dashboard) for bar and
+pane previews. `internal/preview/pane/` and `internal/preview/bar/` host
+concrete pages. The framework stays separate from the production TUI so
+previews do not drag in production state.
 
 ---
 

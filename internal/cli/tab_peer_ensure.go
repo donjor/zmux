@@ -134,7 +134,7 @@ func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, e
 	exists := rt.found()
 	baseline := waitfor.Baseline{}
 	if exists {
-		paneID, _ := paneForResolvedTab(app, rt)
+		paneID, _ := paneTargetForResolvedTab(app, rt)
 		baseline = waitfor.SnapshotBaseline(app.Runner, paneID)
 	}
 	out := peerEnsureOutput{Tab: o.tab, Session: sessionName, Reused: exists && !o.restart}
@@ -266,24 +266,22 @@ func sendPreparedCommand(app *apppkg.App, target, command string, timeoutSec int
 	return nil
 }
 
-func paneForResolvedTab(app *apppkg.App, rt resolvedTab) (string, error) {
-	pane, _ := paneTargetForResolvedTab(app, rt)
-	if pane == "" {
-		return "", fmt.Errorf("could not resolve pane")
-	}
-	return pane, nil
-}
-
+// paneTargetForResolvedTab is the single pane-resolution ladder for a
+// resolved tab: logical tab → cached state → state service. paneID is ""
+// when no pane could be resolved.
 func paneTargetForResolvedTab(app *apppkg.App, rt resolvedTab) (paneID, target string) {
 	target = rt.Target
 	if rt.Tab != nil {
 		return rt.Tab.PaneID, target
 	}
+	if rt.stateOK {
+		return rt.state.PaneID, target
+	}
 	svc := tabstate.New(app.Runner, os.Getenv)
 	if st, err := rt.stateTarget(svc); err == nil {
 		return st.PaneID, target
 	}
-	return target, target
+	return "", target
 }
 
 func printPeerEnsure(out peerEnsureOutput) {

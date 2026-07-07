@@ -15,6 +15,37 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func newSessionCmd(app *apppkg.App) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "session",
+		Short: "Manage sessions",
+	}
+	cmd.AddCommand(newSessionKillCmd(app))
+	cmd.AddCommand(newSessionRunCmd(app))
+	return cmd
+}
+
+func newSessionKillCmd(app *apppkg.App) *cobra.Command {
+	return &cobra.Command{
+		Use:   "kill <session>",
+		Short: "Kill a session and clean up workspace membership",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sessName := args[0]
+			target, err := resolveSessionTarget(app, sessName)
+			if err != nil {
+				return err
+			}
+
+			if err := workspace.KillSession(app.Runner, app.WorkspaceStore, target); err != nil {
+				return err
+			}
+			fmt.Printf("Killed session %q\n", sessName)
+			return nil
+		},
+	}
+}
+
 // newSessionRunCmd implements `zmux session run` — create a detached session in
 // a workspace and launch a command as its first/only tab. Unlike `zmux new`
 // (attach-by-contract, births a blank shell tab), this never steals focus and

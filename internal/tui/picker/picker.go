@@ -9,9 +9,10 @@
 //     handleEnter and its handle*Enter delegates, plus
 //     the workspace/session delete mutation.
 //   - picker_outline.go — Filter, outline-row construction, label helpers.
-//   - picker_view.go    — View() rendering (separately maintained).
+//   - picker_view.go    — View(), top-level view() + header rendering.
+//   - picker_view_list.go — List/row rendering, including external source rows.
+//   - picker_view_help.go — Help footer and ghost-prompt rendering.
 //   - picker_search.go  — Fuzzy-match helpers (separately maintained).
-//   - picker_external.go — External source resolution (separately maintained).
 //   - picker_types.go   — Modes, confirm-targets, view-models, key bindings.
 package picker
 

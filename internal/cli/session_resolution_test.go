@@ -42,7 +42,7 @@ func TestPaneListSessionTargetResolvesWorkspaceSession(t *testing.T) {
 	raw := seedWorkspaceSessions(t, app, mock, "qa-qol", "main")
 	mock.Panes[raw["main"]] = []tmux.Pane{{ID: "%1", Session: raw["main"]}}
 
-	cmd := newPaneListCmd(app)
+	cmd := newPaneListCmd(app, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(app, cmd, &paneListFlags{target: "qa-qol/main", session: true, quiet: true}); err != nil {
@@ -186,7 +186,7 @@ func TestPaneListSessionTargetKeepsRawFallback(t *testing.T) {
 	mock.Sessions = []tmux.Session{{Name: "raw-debug-session"}}
 	mock.Panes["raw-debug-session"] = []tmux.Pane{{ID: "%1", Session: "raw-debug-session"}}
 
-	cmd := newPaneListCmd(app)
+	cmd := newPaneListCmd(app, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(app, cmd, &paneListFlags{target: "raw-debug-session", session: true, quiet: true}); err != nil {
@@ -203,7 +203,7 @@ func TestPaneListSessionTargetKeepsRawPaneFallback(t *testing.T) {
 	mock.InsideTmux = false
 	mock.Panes["%5"] = []tmux.Pane{{ID: "%5", Session: "raw-debug-session"}}
 
-	cmd := newPaneListCmd(app)
+	cmd := newPaneListCmd(app, "list")
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneList(app, cmd, &paneListFlags{target: "%5", session: true, quiet: true}); err != nil {
@@ -222,7 +222,7 @@ func TestPaneListSessionTargetRejectsMissingWorkspaceLabel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := newPaneListCmd(app)
+	cmd := newPaneListCmd(app, "list")
 	err := runPaneList(app, cmd, &paneListFlags{target: "qa-qol/missing", session: true, quiet: true})
 	if err == nil || !strings.Contains(err.Error(), "not in workspace") {
 		t.Fatalf("error = %v, want workspace/session miss", err)

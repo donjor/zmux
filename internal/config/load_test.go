@@ -152,6 +152,44 @@ ghostty_config = "/home/user/.config/ghostty/config"
 			},
 		},
 		{
+			// Regression: the old zero-value heuristic flipped a bare
+			// explicit false back to the true default.
+			name: "explicit auto_cleanup_tmp=false survives without default_shell",
+			toml: "[sessions]\nauto_cleanup_tmp = false\n",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Sessions.AutoCleanupTmp {
+					t.Error("explicit auto_cleanup_tmp=false was overridden to true")
+				}
+			},
+		},
+		{
+			// Regression: disabling every segment used to read as "section
+			// absent" and re-enable all seven; partial sections must also
+			// only default the keys not written.
+			name: "explicit bar segment toggles survive",
+			toml: "[bar.segments]\nworkspace = false\ngit = false\nlang = false\nclock = false\ndirectory = false\nprocess = false\ngroup = false\n",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Bar.Segments.Workspace || cfg.Bar.Segments.Git ||
+					cfg.Bar.Segments.Lang || cfg.Bar.Segments.Clock ||
+					cfg.Bar.Segments.Directory || cfg.Bar.Segments.Process ||
+					cfg.Bar.Segments.Group {
+					t.Errorf("all-false segments re-enabled: %+v", cfg.Bar.Segments)
+				}
+			},
+		},
+		{
+			name: "partial bar segments default the unwritten keys",
+			toml: "[bar.segments]\ngit = false\n",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Bar.Segments.Git {
+					t.Error("explicit git=false was overridden")
+				}
+				if !cfg.Bar.Segments.Workspace || !cfg.Bar.Segments.Clock {
+					t.Errorf("unwritten segments should default true: %+v", cfg.Bar.Segments)
+				}
+			},
+		},
+		{
 			name:    "invalid TOML returns error",
 			toml:    `this is not [valid toml`,
 			wantErr: true,

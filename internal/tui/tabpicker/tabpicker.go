@@ -12,15 +12,14 @@ package tabpicker
 import (
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
+	"github.com/donjor/zmux/internal/tui/filter"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/styles"
 )
@@ -541,7 +540,9 @@ func (m TabPickerModel) currentTab() *tabEntry {
 // the drilled session's tabs at tab level — then rebuilds the tree.
 func (m *TabPickerModel) applyFilter() {
 	if m.nav == navSession {
-		m.filtered = filterSessions(m.entries, m.input.Value())
+		m.filtered = filter.Fuzzy(m.entries, m.input.Value(), func(e sessionEntry) string {
+			return session.RootName(e.Info.Name)
+		})
 		if !m.entryInFiltered(m.focused) {
 			if len(m.filtered) > 0 {
 				m.focused = m.filtered[0].Info.Name
@@ -609,7 +610,7 @@ func (m *TabPickerModel) buildRows() []outline.Row {
 
 		wins := s.Windows
 		if m.nav == navTab && name == m.drilled {
-			wins = filterTabs(s.Windows, m.input.Value())
+			wins = filter.Fuzzy(s.Windows, m.input.Value(), func(e tabEntry) string { return e.displayName() })
 		}
 		for j := range wins {
 			w := &wins[j]
@@ -633,42 +634,3 @@ func (m *TabPickerModel) buildRows() []outline.Row {
 	}
 	return rows
 }
-
-// filterSessions fuzzy-matches sessions by root name. Empty query returns
-// all entries unchanged.
-func filterSessions(entries []sessionEntry, query string) []sessionEntry {
-	if strings.TrimSpace(query) == "" {
-		return entries
-	}
-	names := make([]string, len(entries))
-	for i := range entries {
-		names[i] = session.RootName(entries[i].Info.Name)
-	}
-	matches := fuzzy.Find(query, names)
-	out := make([]sessionEntry, len(matches))
-	for i, mt := range matches {
-		out[i] = entries[mt.Index]
-	}
-	return out
-}
-
-// filterTabs fuzzy-matches tabs by display name (logical label when one
-// exists). Empty query returns all.
-func filterTabs(entries []tabEntry, query string) []tabEntry {
-	if strings.TrimSpace(query) == "" {
-		return entries
-	}
-	names := make([]string, len(entries))
-	for i := range entries {
-		names[i] = entries[i].displayName()
-	}
-	matches := fuzzy.Find(query, names)
-	out := make([]tabEntry, len(matches))
-	for i, mt := range matches {
-		out[i] = entries[mt.Index]
-	}
-	return out
-}
-
-// SetKey is a no-op retained to absorb external key-conflict probes.
-func (m TabPickerModel) SetKey(_ key.Binding) {}

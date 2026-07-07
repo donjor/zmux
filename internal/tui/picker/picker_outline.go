@@ -2,6 +2,7 @@ package picker
 
 import (
 	"github.com/donjor/zmux/internal/session"
+	"github.com/donjor/zmux/internal/tui/filter"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/workspaceoutline"
 	"github.com/donjor/zmux/internal/tui/workspaceview"
@@ -136,7 +137,7 @@ func (m *PickerModel) buildOutlineWithFocus(forceFocusWS string) {
 		},
 		Sessions: func(ws *workspaceview.WorkspaceViewModel) []session.SessionInfo {
 			if m.state.sessionQuery != "" {
-				return matchSessions(m.state.sessionQuery, ws.LiveSessions)
+				return filter.Fuzzy(ws.LiveSessions, m.state.sessionQuery, session.QualifiedDisplayName)
 			}
 			return ws.LiveSessions
 		},

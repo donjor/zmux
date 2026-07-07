@@ -13,6 +13,12 @@ import (
 	"github.com/donjor/zmux/internal/theme"
 )
 
+// StatusIntervalIdle is the baseline tmux status-interval (seconds, as a string
+// for direct use in tmux commands). It is the #() bar-render cache TTL and the
+// value tabstate.Service restores once no pane holds a running state; the active
+// (spinner) cadence drops to 1s while a run is live.
+const StatusIntervalIdle = "5"
+
 // GenerateConf produces a tmux configuration string from the given config and palette.
 // zmuxBin is the path to the zmux binary for run-shell commands.
 func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) string {
@@ -60,7 +66,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	// holds a running tab state, tabstate.Service drops this to 1s so the
 	// #(bar-spinner) glyph steps, and restores 5s when the last one clears
 	// (no constant 1s bar-render spawn load while nothing runs).
-	b.WriteString("set -g status-interval 5\n")
+	b.WriteString("set -g status-interval " + StatusIntervalIdle + "\n")
 	b.WriteString("set -g status-left-length 40\n")
 	b.WriteString("set -g status-right-length 100\n")
 	if zmuxBin != "" {

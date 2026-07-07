@@ -1,6 +1,8 @@
 package tabs
 
 import (
+	"slices"
+
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabstate"
 	"github.com/donjor/zmux/internal/tmux"
@@ -18,12 +20,9 @@ type ReconcileResult struct {
 }
 
 // mirrorKeys are the window-scope presentation options a full tab's window
-// carries. Source/at/msg state details heal on the next state write; the
-// reconciler owns label and state, which the bar renders from.
-var mirrorKeys = []string{
-	tablabel.Option, tablabel.SourceOption,
-	tabstate.OptState, tabstate.OptSource, tabstate.OptAt, tabstate.OptMsg,
-}
+// carries — the label and state mirror sets, each owned by its package so
+// new options can't silently miss reconciler cleanup.
+var mirrorKeys = slices.Concat(tablabel.MirrorKeys, tabstate.MirrorKeys)
 
 // Reconcile repairs drift between physical tmux state and logical-tab
 // metadata after moves zmux didn't make (manual join/break, killed windows,
@@ -42,6 +41,14 @@ func Reconcile(r tmux.Runner) (ReconcileResult, error) {
 	byPane := make(map[string]*LogicalTab, len(tabs))
 	for i := range tabs {
 		byPane[tabs[i].PaneID] = &tabs[i]
+	}
+	// paneID → row, so the advisory pass reads anchor/hidden by direct lookup
+	// instead of rescanning every row per tab (O(tabs×panes)). PaneIDs are
+	// unique per row, so a missing key yields the zero row (empty fields), which
+	// matches the old linear-scan default.
+	rowByPane := make(map[string]tmux.LogicalPaneRow, len(rows))
+	for _, row := range rows {
+		rowByPane[row.PaneID] = row
 	}
 
 	var writes []tmux.OptionWrite
@@ -68,9 +75,14 @@ func Reconcile(r tmux.Runner) (ReconcileResult, error) {
 			continue
 		}
 		res.MirrorsWritten++
-		if tab.Label != "" {
-			writes = append(writes,
-				tmux.OptionWrite{Scope: tmux.ScopeWindow, Target: windowID, Key: tablabel.Option, Value: tab.Label})
+		if label != tab.Label {
+			// Unset when the pane label was cleared — otherwise the stale
+			// window mirror survives every pass and the bar keeps rendering
+			// the dead label.
+			writes = append(writes, tmux.OptionWrite{
+				Scope: tmux.ScopeWindow, Target: windowID, Key: tablabel.Option,
+				Value: tab.Label, Unset: tab.Label == "",
+			})
 		}
 		if state != tab.State {
 			writes = append(writes, tmux.OptionWrite{
@@ -128,7 +140,7 @@ func Reconcile(r tmux.Runner) (ReconcileResult, error) {
 	// origin only while docked.
 	for i := range tabs {
 		t := &tabs[i]
-		advisory := rowAnchor(rows, t.PaneID)
+		advisory := rowByPane[t.PaneID].Anchor
 		switch t.Placement {
 		case PlacementFull:
 			if advisory != "" {
@@ -146,7 +158,7 @@ func Reconcile(r tmux.Runner) (ReconcileResult, error) {
 			// anchors are stale history while docked; cheap to leave, they
 			// get rewritten on the next pane placement
 		}
-		if t.Placement != PlacementDock && rowHidden(rows, t.PaneID) != "" {
+		if t.Placement != PlacementDock && rowByPane[t.PaneID].Hidden != "" {
 			res.HiddenCleared++
 			writes = append(writes,
 				tmux.OptionWrite{Scope: tmux.ScopePane, Target: t.PaneID, Key: OptHidden, Unset: true})
@@ -189,22 +201,4 @@ func Reconcile(r tmux.Runner) (ReconcileResult, error) {
 		res.MRUPruned++
 	}
 	return res, nil
-}
-
-func rowAnchor(rows []tmux.LogicalPaneRow, paneID string) string {
-	for _, row := range rows {
-		if row.PaneID == paneID {
-			return row.Anchor
-		}
-	}
-	return ""
-}
-
-func rowHidden(rows []tmux.LogicalPaneRow, paneID string) string {
-	for _, row := range rows {
-		if row.PaneID == paneID {
-			return row.Hidden
-		}
-	}
-	return ""
 }

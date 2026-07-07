@@ -245,8 +245,6 @@ func classifyReap(r tmux.LogicalPaneRow, ctx ReapContext, sessionWindows int) Re
 	return d
 }
 
-// lastActivity is the most recent observable activity: tmux window_activity or
-// the last zmux-mediated input, whichever is later.
 func classifyPeerReap(r tmux.LogicalPaneRow, ctx ReapContext, d ReapDecision, keep func(string) ReapDecision, live, noSignal bool) ReapDecision {
 	if keepUntil, ok := ParseUnix(r.KeepUntil); ok && ctx.Now.Before(keepUntil) {
 		return keep("peer kept until " + keepUntil.Format(time.RFC3339))
@@ -287,6 +285,8 @@ func classifyPeerReap(r tmux.LogicalPaneRow, ctx ReapContext, d ReapDecision, ke
 	}
 }
 
+// lastActivity is the most recent observable activity: tmux window_activity or
+// the last zmux-mediated input, whichever is later.
 func lastActivity(r tmux.LogicalPaneRow) time.Time {
 	last := r.WindowActivity
 	if in, ok := ParseUnix(r.LastInputAt); ok && in.After(last) {

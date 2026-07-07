@@ -71,17 +71,6 @@ func Attach(runner tmux.Runner, name string) error {
 	return runner.AttachSession(name)
 }
 
-// AttachMirror attaches to a session with a literal shared view — both clients
-// see the exact same terminal. Useful for agent/user shared terminals where
-// both need to see output and can type.
-func AttachMirror(runner tmux.Runner, name string) error {
-	if runner.IsInsideTmux() {
-		return runner.SwitchClient(name)
-	}
-	// Plain tmux attach (no -d, no grouped session) = mirror mode.
-	return runner.AttachSession(name)
-}
-
 // AttachHijack forcefully attaches to a session, detaching any existing clients.
 // Use when you want to steal a session (e.g., dead SSH connection left it attached).
 func AttachHijack(runner tmux.Runner, name string) error {
@@ -146,7 +135,7 @@ func nextGroupName(runner tmux.Runner, base string) string {
 			return candidate
 		}
 	}
-	// Fallback if somehow a-z are all taken.
+	// Fallback if somehow b-z are all taken.
 	return fmt.Sprintf("%s-%d", base, time.Now().UnixNano()%10000)
 }
 
@@ -341,11 +330,6 @@ func Kill(runner tmux.Runner, name string) error {
 // Rename renames a session from old to new.
 func Rename(runner tmux.Runner, old, newName string) error {
 	return runner.RenameSession(old, newName)
-}
-
-// MoveWindow moves the current window from srcSession to dstSession.
-func MoveWindow(runner tmux.Runner, srcSession, dstSession string) error {
-	return runner.MoveWindow(srcSession, dstSession)
 }
 
 // CleanupTmp kills all unattached tmp-N sessions and returns the names

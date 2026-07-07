@@ -90,15 +90,8 @@ type BarTab struct {
 	selfBin  string // binary embedded in #(<bin> bar-render); config.SelfBin(profile)
 	styles   styles.Styles
 
-	presets    []bar.Preset
-	cursor     int
-	currentBar string
-	segments   config.BarSegments
-
-	// Layout settings.
-	layout    string // "two-line", "split"
-	topBar    string // "tabs", "dots", "minimal"
-	indicator string // "none", "numbers", "dots"
+	presets []bar.Preset
+	cursor  int
 
 	// Resolved palette for bar previews.
 	palette *theme.Palette
@@ -184,11 +177,6 @@ func (t *BarTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 		}
 		t.cfg = msg.cfg
 		t.cfgExists = msg.cfgExists
-		t.currentBar = msg.cfg.Bar.Preset
-		t.segments = msg.cfg.Bar.Segments
-		t.layout = msg.cfg.Bar.Layout
-		t.topBar = msg.cfg.Bar.TopBar
-		t.indicator = msg.cfg.Bar.Indicator
 		t.palette = msg.palette
 		return t, nil
 
@@ -253,7 +241,6 @@ func (t *BarTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		switch t.currentSection() {
 		case barPresets:
 			preset := t.presets[t.cursor]
-			t.currentBar = preset.String()
 			t.cfg.Bar.Preset = preset.String()
 			return t, t.saveConfig()
 		case barLayout:
@@ -264,7 +251,6 @@ func (t *BarTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 			segIdx := t.cursor - len(t.presets) - len(barLayoutOptions)
 			if segIdx >= 0 && segIdx < len(barSegmentLabels) {
 				t.toggleSegment(barSegmentLabels[segIdx].Field)
-				t.cfg.Bar.Segments = t.segments
 				return t, t.saveConfig()
 			}
 		}

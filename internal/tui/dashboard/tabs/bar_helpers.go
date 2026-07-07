@@ -82,38 +82,38 @@ func (t *BarTab) saveConfig() tea.Cmd {
 func (t *BarTab) toggleSegment(field string) {
 	switch field {
 	case "git":
-		t.segments.Git = !t.segments.Git
+		t.cfg.Bar.Segments.Git = !t.cfg.Bar.Segments.Git
 	case "workspace":
-		t.segments.Workspace = !t.segments.Workspace
+		t.cfg.Bar.Segments.Workspace = !t.cfg.Bar.Segments.Workspace
 	case "clock":
-		t.segments.Clock = !t.segments.Clock
+		t.cfg.Bar.Segments.Clock = !t.cfg.Bar.Segments.Clock
 	case "lang":
-		t.segments.Lang = !t.segments.Lang
+		t.cfg.Bar.Segments.Lang = !t.cfg.Bar.Segments.Lang
 	case "directory":
-		t.segments.Directory = !t.segments.Directory
+		t.cfg.Bar.Segments.Directory = !t.cfg.Bar.Segments.Directory
 	case "process":
-		t.segments.Process = !t.segments.Process
+		t.cfg.Bar.Segments.Process = !t.cfg.Bar.Segments.Process
 	case "group":
-		t.segments.Group = !t.segments.Group
+		t.cfg.Bar.Segments.Group = !t.cfg.Bar.Segments.Group
 	}
 }
 
 func (t *BarTab) segmentEnabled(field string) bool {
 	switch field {
 	case "git":
-		return t.segments.Git
+		return t.cfg.Bar.Segments.Git
 	case "workspace":
-		return t.segments.Workspace
+		return t.cfg.Bar.Segments.Workspace
 	case "clock":
-		return t.segments.Clock
+		return t.cfg.Bar.Segments.Clock
 	case "lang":
-		return t.segments.Lang
+		return t.cfg.Bar.Segments.Lang
 	case "directory":
-		return t.segments.Directory
+		return t.cfg.Bar.Segments.Directory
 	case "process":
-		return t.segments.Process
+		return t.cfg.Bar.Segments.Process
 	case "group":
-		return t.segments.Group
+		return t.cfg.Bar.Segments.Group
 	}
 	return false
 }
@@ -149,20 +149,20 @@ func (t *BarTab) layoutValue(field string) string {
 	// Defaults match config.DefaultConfig().
 	switch field {
 	case "layout":
-		if t.layout == "" {
+		if t.cfg.Bar.Layout == "" {
 			return "two-line"
 		}
-		return t.layout
+		return t.cfg.Bar.Layout
 	case "top_bar":
-		if t.topBar == "" {
+		if t.cfg.Bar.TopBar == "" {
 			return "tabs"
 		}
-		return t.topBar
+		return t.cfg.Bar.TopBar
 	case "indicator":
-		if t.indicator == "" {
+		if t.cfg.Bar.Indicator == "" {
 			return "dots"
 		}
-		return t.indicator
+		return t.cfg.Bar.Indicator
 	}
 	return ""
 }
@@ -184,13 +184,10 @@ func (t *BarTab) cycleLayoutValue(field string, delta int) {
 		value := opt.Options[idx]
 		switch field {
 		case "layout":
-			t.layout = value
 			t.cfg.Bar.Layout = value
 		case "top_bar":
-			t.topBar = value
 			t.cfg.Bar.TopBar = value
 		case "indicator":
-			t.indicator = value
 			t.cfg.Bar.Indicator = value
 		}
 		return

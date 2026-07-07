@@ -6,9 +6,9 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/sahilm/fuzzy"
 
 	"github.com/donjor/zmux/internal/theme"
+	"github.com/donjor/zmux/internal/tui/filter"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/views"
@@ -218,19 +218,7 @@ func (m ThemePickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // still in the filtered view.
 func (m *ThemePickerModel) applyFilter() {
 	query := m.filter.Value()
-	if query == "" {
-		m.filtered = m.themes
-	} else {
-		names := make([]string, len(m.themes))
-		for i, ti := range m.themes {
-			names[i] = ti.Name
-		}
-		matches := fuzzy.Find(query, names)
-		m.filtered = make([]theme.ThemeInfo, len(matches))
-		for i, match := range matches {
-			m.filtered[i] = m.themes[match.Index]
-		}
-	}
+	m.filtered = filter.Fuzzy(m.themes, query, func(ti theme.ThemeInfo) string { return ti.Name })
 	// SetRows preserves cursor by stable ID when possible, then falls
 	// through the restore hierarchy (same position, first selectable).
 	m.tree.SetRows(m.buildRows())

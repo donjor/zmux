@@ -56,11 +56,11 @@ which task it is serving.
 **Tab names are per-session unique — reuse the roster name across sessions.**
 A `codex-peer` already live in another session is not your concern; never
 invent a globally-unique name to dodge a "collision." Spawns and writes are
-session-scoped (reports 039 / 016): a bare `zmux run -n <peer> -d` creates in
+session-scoped: a bare `zmux run -n <peer> -d` creates in
 *your* session and can neither land on — nor be **blocked by** — another
-session's tab, even the same roster name live in several siblings (report 016
-scoped the create-path resolve to the session, so a multi-session box no longer
-refuses the spawn with `ambiguous`). `send`/`type`/`kill` refuse to cross too —
+session's tab, even the same roster name live in several siblings. The
+create-path resolve is scoped to the session, so a multi-session box no longer
+refuses the spawn with `ambiguous`. `send`/`type`/`kill` refuse to cross too —
 an out-of-session name surfaces a clean in-session miss instead of acting on a
 sibling's pane.
 

@@ -7,8 +7,6 @@ package tabs
 // all operate on the same visible set.
 
 import (
-	"strings"
-
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
@@ -34,33 +32,15 @@ func (t *CurrentTab) enterSearchMode() (dashboard.Tab, tea.Cmd) {
 	return t, textinput.Blink
 }
 
-// handleSearchKey drives the inline search input. Typing live-filters the
-// session list; Enter applies the filter and returns to list browsing (the
-// filter stays active); Esc cancels it entirely. Arrow keys move the cursor
-// through the filtered results without leaving the input.
+// handleSearchKey drives the inline search input via the shared handler;
+// Enter/Esc leave search mode (Enter keeps the filter, Esc cancels it).
 func (t *CurrentTab) handleSearchKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	switch msg.String() {
-	case "enter":
-		t.searchQuery = strings.TrimSpace(t.searchInput.Value())
+	done, cmd := handleSearchInputKey(msg, &t.searchInput, &t.searchQuery, t.tree, func() {
+		t.tree.SetRows(t.buildRows())
+	})
+	if done {
 		t.finishSearch()
-		return t, nil
-	case "esc":
-		t.searchQuery = ""
-		t.searchInput.SetValue("")
-		t.finishSearch()
-		return t, nil
-	case "up":
-		t.tree.MoveUp()
-		return t, nil
-	case "down":
-		t.tree.MoveDown()
-		return t, nil
 	}
-
-	var cmd tea.Cmd
-	t.searchInput, cmd = t.searchInput.Update(msg)
-	t.searchQuery = strings.TrimSpace(t.searchInput.Value())
-	t.tree.SetRows(t.buildRows())
 	return t, cmd
 }
 

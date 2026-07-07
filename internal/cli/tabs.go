@@ -30,28 +30,20 @@ Examples:
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			MaybeReap(app, time.Now())
-			sessionName := ""
+			input := tabsSessionFlag
 			if len(args) > 0 {
-				sessionName = args[0]
-			} else if tabsSessionFlag != "" {
-				sessionName = tabsSessionFlag
-			} else if app.Runner.IsInsideTmux() {
-				name, err := app.Runner.DisplayMessage("", "#{session_name}")
-				if err != nil {
-					return fmt.Errorf("could not get current session")
-				}
-				sessionName = name
+				input = args[0]
 			}
-
-			if sessionName != "" {
-				target, err := resolveSessionTarget(app, sessionName)
-				if err != nil {
-					return err
-				}
-				return listTabsForSession(app, target)
+			if input == "" && !app.Runner.IsInsideTmux() {
+				return fmt.Errorf("specify a session: zmux tabs <session>\nlist sessions with: zmux ls")
 			}
-
-			return fmt.Errorf("specify a session: zmux tabs <session>\nlist sessions with: zmux ls")
+			// Empty input resolves to the current session — no second pass
+			// through the label ladder on an already-resolved name.
+			target, err := resolveSessionTarget(app, input)
+			if err != nil {
+				return err
+			}
+			return listTabsForSession(app, target)
 		},
 	}
 	cmd.Flags().StringVarP(&tabsSessionFlag, "session", "s", "", "target session")

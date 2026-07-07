@@ -137,13 +137,9 @@ func snapshotPaneSession(app *apppkg.App, paneIDs []string) (string, error) {
 		if !app.Runner.IsInsideTmux() {
 			return "", fmt.Errorf("--pane label %q requires a current tmux session", id)
 		}
-		name, err := app.Runner.DisplayMessage("", "#{session_name}")
+		name, err := currentSessionName(app)
 		if err != nil {
 			return "", fmt.Errorf("current session: %w", err)
-		}
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return "", fmt.Errorf("current session is empty")
 		}
 		return name, nil
 	}

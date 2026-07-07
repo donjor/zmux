@@ -68,7 +68,7 @@ func barList(app *apppkg.App, palette *theme.Palette) error {
 	currentPreset := cfg.Bar.Preset
 
 	if app.Runner.IsInsideTmux() {
-		return barListLive(app, palette, currentPreset)
+		return barListLive(app, palette, cfg.Bar)
 	}
 
 	// Outside tmux: static previews.
@@ -84,8 +84,9 @@ func barList(app *apppkg.App, palette *theme.Palette) error {
 }
 
 // barListLive cycles through presets on the actual tmux status bar.
-func barListLive(app *apppkg.App, palette *theme.Palette, currentPreset string) error {
+func barListLive(app *apppkg.App, palette *theme.Palette, barCfg config.BarConfig) error {
 	presets := bar.AllPresets()
+	currentPreset := barCfg.Preset
 
 	fmt.Println("  Cycling through bar presets (live preview)...")
 	fmt.Println("  Watch your status bar!")
@@ -99,7 +100,7 @@ func barListLive(app *apppkg.App, palette *theme.Palette, currentPreset string) 
 		fmt.Printf("%s%s", marker, p)
 
 		// Apply this preset to the live bar.
-		_ = bar.Apply(app.Runner, config.SelfBin(app.Profile), p, palette)
+		_ = applyBarPreset(app, p, palette, barCfg)
 
 		if p.String() == currentPreset {
 			fmt.Println("  (current)")
@@ -113,7 +114,7 @@ func barListLive(app *apppkg.App, palette *theme.Palette, currentPreset string) 
 
 	// Restore the current preset.
 	current, _ := bar.PresetFromString(currentPreset)
-	_ = bar.Apply(app.Runner, config.SelfBin(app.Profile), current, palette)
+	_ = applyBarPreset(app, current, palette, barCfg)
 
 	fmt.Printf("\n  Restored: %s\n", currentPreset)
 	fmt.Println("  Set with: zmux bar <preset>")
@@ -130,20 +131,18 @@ func barSet(app *apppkg.App, name string, palette *theme.Palette) error {
 		return err
 	}
 
-	// Apply to tmux if server is running
-	if app.Runner.ServerRunning() {
-		if err := bar.Apply(app.Runner, config.SelfBin(app.Profile), preset, palette); err != nil {
-			return fmt.Errorf("apply bar: %w", err)
-		}
-	}
-
-	// Update config
 	cfg, err := loadConfig(app.FS)
 	if err != nil {
 		return err
 	}
-
 	cfg.Bar.Preset = preset.String()
+
+	// Apply to tmux if server is running
+	if app.Runner.ServerRunning() {
+		if err := applyBarPreset(app, preset, palette, cfg.Bar); err != nil {
+			return fmt.Errorf("apply bar: %w", err)
+		}
+	}
 	cfgPath, err := config.ConfigPath(app.FS)
 	if err != nil {
 		return err

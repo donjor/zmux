@@ -241,7 +241,8 @@ func cleanupWorkspaces(app *apppkg.App) error {
 }
 
 func newWsKillCmd(app *apppkg.App) *cobra.Command {
-	return &cobra.Command{
+	var assumeYes bool
+	cmd := &cobra.Command{
 		Use:   "kill <workspace>",
 		Short: "Kill a workspace and all its sessions",
 		Args:  cobra.ExactArgs(1),
@@ -250,22 +251,18 @@ func newWsKillCmd(app *apppkg.App) *cobra.Command {
 				return err
 			}
 
-			wsName := args[0]
-			sessions := app.WorkspaceStore.SessionTargetsIn(wsName)
-
-			// Kill all live tmux sessions in this workspace.
-			for _, sess := range sessions {
-				_ = session.Kill(app.Runner, sess)
-			}
-
-			// Remove workspace from store.
-			if err := app.WorkspaceStore.DeleteWorkspace(wsName); err != nil {
+			ws, err := app.WorkspaceStore.GetWorkspace(args[0])
+			if err != nil {
 				return err
 			}
-			fmt.Printf("Killed workspace %q (%d sessions)\n", wsName, len(sessions))
-			return nil
+			if ws == nil {
+				return fmt.Errorf("workspace %q not found", args[0])
+			}
+			return killWorkspace(app, ws, assumeYes)
 		},
 	}
+	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "skip the kill confirmation prompt")
+	return cmd
 }
 
 func newWsNextCmd(app *apppkg.App) *cobra.Command {
@@ -305,12 +302,10 @@ func newWsSwitchToCmd(app *apppkg.App) *cobra.Command {
 }
 
 func cycleWorkspaceSession(app *apppkg.App, direction int) error {
-	current, err := app.Runner.DisplayMessage("", "#{session_name}")
+	root, err := currentSessionName(app)
 	if err != nil {
-		return fmt.Errorf("not inside tmux")
+		return err
 	}
-	current = strings.TrimSpace(current)
-	root := session.RootName(current)
 
 	wsName, ok := app.WorkspaceStore.WorkspaceFor(root)
 	if !ok {
@@ -342,11 +337,10 @@ func cycleWorkspaceSession(app *apppkg.App, direction int) error {
 }
 
 func switchToWorkspacePosition(app *apppkg.App, pos int) error {
-	current, err := app.Runner.DisplayMessage("", "#{session_name}")
+	root, err := currentSessionName(app)
 	if err != nil {
-		return fmt.Errorf("not inside tmux")
+		return err
 	}
-	root := session.RootName(strings.TrimSpace(current))
 
 	wsName, ok := app.WorkspaceStore.WorkspaceFor(root)
 	if !ok {
@@ -380,11 +374,10 @@ func newWsNewSessionCmd(app *apppkg.App) *cobra.Command {
 				return fmt.Errorf("session name cannot be empty")
 			}
 
-			current, err := app.Runner.DisplayMessage("", "#{session_name}")
+			root, err := currentSessionName(app)
 			if err != nil {
-				return fmt.Errorf("not inside tmux")
+				return err
 			}
-			root := session.RootName(strings.TrimSpace(current))
 
 			wsName, ok := app.WorkspaceStore.WorkspaceFor(root)
 			if !ok {

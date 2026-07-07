@@ -13,6 +13,10 @@ import (
 	"github.com/donjor/zmux/internal/tui/styles"
 )
 
+// contentPadStyle pads active-tab content on the left/right. Hoisted to package
+// scope so View() doesn't reallocate it every render frame.
+var contentPadStyle = lipgloss.NewStyle().Padding(0, 2)
+
 // Services bundles the dependencies tabs need.
 type Services struct {
 	Runner   tmux.Runner
@@ -188,10 +192,7 @@ func (m *DashboardApp) view() string {
 	if tab, ok := m.tabs[m.activeTab]; ok {
 		content := tab.View()
 		content = clampHeight(content, m.rect.Height)
-		padded := lipgloss.NewStyle().
-			Padding(0, 2).
-			Render(content)
-		b.WriteString(padded)
+		b.WriteString(contentPadStyle.Render(content))
 	}
 
 	// Help bar at the bottom.

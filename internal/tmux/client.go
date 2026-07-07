@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -8,9 +9,13 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Client implements Runner by shelling out to the tmux binary.
+// Compile-time check that Client satisfies the full Runner seam.
+var _ Runner = (*Client)(nil)
+
 type Client struct {
 	bin      string
 	endpoint Endpoint
@@ -70,15 +75,26 @@ func (c *Client) ambientSocketMismatch() error {
 	return nil
 }
 
+// runTimeout bounds every tmux invocation: a wedged tmux server would
+// otherwise hang every zmux command indefinitely. Generous — tmux commands
+// are milliseconds; only a dead server hits this.
+const runTimeout = 30 * time.Second
+
 // run executes a tmux command and returns its stdout.
 func (c *Client) run(args ...string) (string, error) {
 	if err := c.ambientSocketMismatch(); err != nil {
 		return "", err
 	}
 	full := c.buildArgs(args...)
-	cmd := exec.Command(c.bin, full...)
+	ctx, cancel := context.WithTimeout(context.Background(), runTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, c.bin, full...)
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("tmux %s: timed out after %s — is the tmux server responsive?",
+				strings.Join(full, " "), runTimeout)
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return "", fmt.Errorf("tmux %s: %w (stderr: %s)",
 				strings.Join(full, " "), err, string(exitErr.Stderr))
@@ -286,18 +302,30 @@ func (c *Client) NewWindow(session, name, dir string, opts ...WindowOpt) (string
 	// max+1 always appends past every existing window, free of that collision
 	// and identical across tmux versions. Falls back to the bare target if the
 	// window list is unreadable.
+	build := func(target string) []string {
+		a := []string{"new-window", "-P", "-F", "#{pane_id}", "-t", target, "-c", dir}
+		if o.detached {
+			a = append(a, "-d")
+		}
+		if name != "" {
+			a = append(a, "-n", name)
+		}
+		return a
+	}
+
 	target := exactSessionTarget(session)
 	if idx, err := c.nextWindowIndex(session); err == nil {
 		target = fmt.Sprintf("%s:%d", exactSessionTarget(session), idx)
 	}
-	args := []string{"new-window", "-P", "-F", "#{pane_id}", "-t", target, "-c", dir}
-	if o.detached {
-		args = append(args, "-d")
+	paneID, err := c.run(build(target)...)
+	// TOCTOU: a concurrent zmux invocation can claim our max+1 index between the
+	// scan above and the create here. Recompute and retry once on the collision.
+	if err != nil && strings.Contains(err.Error(), "in use") {
+		if idx, ierr := c.nextWindowIndex(session); ierr == nil {
+			return c.run(build(fmt.Sprintf("%s:%d", exactSessionTarget(session), idx))...)
+		}
 	}
-	if name != "" {
-		args = append(args, "-n", name)
-	}
-	return c.run(args...)
+	return paneID, err
 }
 
 func exactSessionTarget(name string) string {
@@ -328,31 +356,33 @@ func (c *Client) nextWindowIndex(session string) (int, error) {
 
 // KillWindow kills a window by session and index.
 func (c *Client) KillWindow(session string, index int) error {
-	target := fmt.Sprintf("%s:%d", session, index)
+	target := fmt.Sprintf("%s:%d", exactSessionTarget(session), index)
 	return c.runSilent("kill-window", "-t", target)
 }
 
 // RenameWindow renames a window.
 func (c *Client) RenameWindow(session, old, new string) error {
-	target := fmt.Sprintf("%s:%s", session, old)
+	target := fmt.Sprintf("%s:%s", exactSessionTarget(session), old)
 	return c.runSilent("rename-window", "-t", target, new)
 }
 
 // SelectWindow selects a window by session and index.
 func (c *Client) SelectWindow(session string, index int) error {
-	target := fmt.Sprintf("%s:%d", session, index)
+	target := fmt.Sprintf("%s:%d", exactSessionTarget(session), index)
 	return c.runSilent("select-window", "-t", target)
 }
 
-// MoveWindow moves a window from source to destination.
+// MoveWindow moves a window from source to destination. Targets may already
+// carry a ":index" suffix; exactSessionTarget only pins the session part.
 func (c *Client) MoveWindow(srcSession, dstSession string) error {
-	return c.runSilent("move-window", "-s", srcSession, "-t", dstSession)
+	return c.runSilent("move-window",
+		"-s", exactSessionTarget(srcSession), "-t", exactSessionTarget(dstSession))
 }
 
 // SwapWindow swaps two windows within a session.
 func (c *Client) SwapWindow(session string, idx1, idx2 int) error {
-	src := fmt.Sprintf("%s:%d", session, idx1)
-	dst := fmt.Sprintf("%s:%d", session, idx2)
+	src := fmt.Sprintf("%s:%d", exactSessionTarget(session), idx1)
+	dst := fmt.Sprintf("%s:%d", exactSessionTarget(session), idx2)
 	return c.runSilent("swap-window", "-s", src, "-t", dst)
 }
 
@@ -393,11 +423,6 @@ func (c *Client) ListAllPanes() ([]Pane, error) {
 		return nil, err
 	}
 	return parsePanes(out)
-}
-
-// SplitWindow splits the target window/pane. direction is "-h" or "-v".
-func (c *Client) SplitWindow(target, direction string) error {
-	return c.runSilent("split-window", direction, "-t", target)
 }
 
 // SplitPane creates a pane and returns tmux's opaque pane id, e.g. %57.
@@ -665,6 +690,33 @@ func (c *Client) ShowPaneOption(target, key string) (string, error) {
 	return c.run(args...)
 }
 
+// ShowPaneOptions expands all keys in one display-message call. Fields are
+// unit-separator (0x1f) delimited: option values can contain tabs (command
+// text), but never a control separator.
+func (c *Client) ShowPaneOptions(target string, keys []string) (map[string]string, error) {
+	if len(keys) == 0 {
+		return map[string]string{}, nil
+	}
+	parts := make([]string, len(keys))
+	for i, key := range keys {
+		parts[i] = "#{" + key + "}"
+	}
+	out, err := c.DisplayMessage(target, strings.Join(parts, "\x1f"))
+	if err != nil {
+		return nil, err
+	}
+	values := strings.Split(strings.TrimSuffix(out, "\n"), "\x1f")
+	got := make(map[string]string, len(keys))
+	for i, key := range keys {
+		if i < len(values) {
+			got[key] = values[i]
+		} else {
+			got[key] = ""
+		}
+	}
+	return got, nil
+}
+
 // ShowGlobalOption reads a global option scope-exactly (show-options -gqv),
 // returning "" when unset. Unlike DisplayMessage format expansion it needs no
 // attached client, so it's safe from a run-shell hook (the reaper throttle).
@@ -714,8 +766,19 @@ func (c *Client) SourceFile(path string) error {
 	return c.runSilent("source-file", path)
 }
 
-// DisplayPopup displays a tmux popup.
+// DisplayPopup displays a tmux popup. display-popup blocks for the popup's
+// whole lifetime, so it must not go through run()'s watchdog timeout.
 func (c *Client) DisplayPopup(args ...string) error {
-	fullArgs := append([]string{"display-popup"}, args...)
-	return c.runSilent(fullArgs...)
+	if err := c.ambientSocketMismatch(); err != nil {
+		return err
+	}
+	full := c.buildArgs(append([]string{"display-popup"}, args...)...)
+	if _, err := exec.Command(c.bin, full...).Output(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("tmux %s: %w (stderr: %s)",
+				strings.Join(full, " "), err, string(exitErr.Stderr))
+		}
+		return fmt.Errorf("tmux %s: %w", strings.Join(full, " "), err)
+	}
+	return nil
 }

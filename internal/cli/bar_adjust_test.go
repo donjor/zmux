@@ -4,8 +4,42 @@ import (
 	"testing"
 
 	"github.com/donjor/zmux/internal/bar"
+	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 )
+
+// applyBarPreset must thread the *configured* layout into the global bar
+// options and reconcile per-session status lines — a zero-value layout here
+// was the bug where `zmux bar <preset>` / `zmux theme set` silently collapsed
+// a two-line bar to single-line until the next `zmux apply`.
+func TestApplyBarPresetKeepsConfiguredLayout(t *testing.T) {
+	app := newDefaultTestApp()
+	mock := app.Runner.(*tmux.MockRunner)
+	mock.Sessions = []tmux.Session{{Name: "dev"}}
+
+	barCfg := config.BarConfig{Preset: "default", Layout: "two-line", TopBar: "tabs"}
+	if err := applyBarPreset(app, bar.Default, &theme.Palette{}, barCfg); err != nil {
+		t.Fatalf("applyBarPreset: %v", err)
+	}
+
+	// Global options must carry the two-line layout, not the zero-value
+	// single-line fallback.
+	var gotGlobalStatus string
+	for _, c := range mock.Calls {
+		if c.Method == "SetOption" && len(c.Args) == 3 && c.Args[1] == "status" {
+			gotGlobalStatus = c.Args[2]
+		}
+	}
+	if gotGlobalStatus != "2" {
+		t.Errorf("global status = %q, want %q (two-line layout lost)", gotGlobalStatus, "2")
+	}
+
+	// And per-session reconcile must have run.
+	if vals := sessionStatusSets(mock.Calls)["dev"]; len(vals) != 1 || vals[0] != "2" {
+		t.Errorf("session dev: want status=[2] from reconcile, got %v", vals)
+	}
+}
 
 // sessionStatusSets collects the per-session "status" value(s) reconcile set
 // for each session, keyed by session name.

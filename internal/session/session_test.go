@@ -234,6 +234,34 @@ func TestListSessionsCollapsesGrouped(t *testing.T) {
 	}
 }
 
+// Regression: the roots map used to hold pointers into the infos slice; an
+// append reallocation between root registration and clone merge stranded the
+// pointer, silently dropping AttachedClients increments. Enough sessions
+// between root and clone forces the realloc.
+func TestListSessionsGroupedCountSurvivesRealloc(t *testing.T) {
+	now := time.Now()
+	m := tmux.NewMockRunner()
+	m.Sessions = []tmux.Session{
+		{Name: "dev", Windows: 1, Attached: true, Activity: now, Group: "dev"},
+	}
+	for _, n := range []string{"m1", "m2", "m3", "m4", "m5", "m6", "m7"} {
+		m.Sessions = append(m.Sessions,
+			tmux.Session{Name: n, Windows: 1, Activity: now})
+	}
+	m.Sessions = append(m.Sessions,
+		tmux.Session{Name: "dev-b", Windows: 1, Attached: true, Activity: now, Group: "dev"})
+
+	sessions, err := ListSessions(m)
+	if err != nil {
+		t.Fatalf("ListSessions() error: %v", err)
+	}
+	for _, s := range sessions {
+		if s.Name == "dev" && s.AttachedClients != 2 {
+			t.Errorf("dev AttachedClients = %d, want 2 (clone increment lost to realloc)", s.AttachedClients)
+		}
+	}
+}
+
 func TestListSessionsIncludesPinnedGroupedViews(t *testing.T) {
 	now := time.Now()
 	m := tmux.NewMockRunner()

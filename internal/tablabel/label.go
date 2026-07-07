@@ -11,6 +11,10 @@ const (
 	SourcePane          = "pane"
 )
 
+// MirrorKeys are the label options mirrored onto a full tab's window; the
+// tabs reconciler clears them when a mirror outlives its tab.
+var MirrorKeys = []string{Option, SourceOption}
+
 // Format returns a tmux format for a window display name.
 //
 // Without a zmux label, it renders tmux's normal window name (#W), plus a dimmed
