@@ -139,7 +139,22 @@ changes, and network installs are consequential; decline or ask the user.
 | `codex --dangerously-bypass-approvals-and-sandbox` | default Codex peer profile |
 | `claude --dangerously-skip-permissions` | default Claude Code peer profile |
 | `agy --dangerously-skip-permissions` | default Antigravity CLI peer profile |
-| `pi` | Pi exposes all core tools by default; use its closest full-tool / auto-approve profile if one is installed |
+| `pi` (see below) | default Pi peer profile — lean role-scoped launch, written out under the table |
+
+The Pi peer launch command (single written-out home; other docs point here):
+
+```sh
+PI_SKIP_VERSION_CHECK=1 pi --offline --name pi-peer \
+  --no-context-files --no-skills --no-prompt-templates --no-extensions --no-themes \
+  --no-approve --tools read,bash \
+  --append-system-prompt /home/user/donjor/skills/pi/profiles/prompts/peer.md
+```
+
+Rationale: strips the cockpit resource chain (context files, skills, templates, extensions,
+themes) for fast startup and a small token footprint; the appended prompt file is the
+read-only role boundary; keeps sessions (no `--no-session`) so Clean Quotes still works;
+`--offline` + version-check skip drop the startup network hops. Interactive only — never
+`-p`/`--print`/JSON/RPC for peers.
 
 Peers are launched with write-capable permissions by default. A prompt or repo file can still
 induce writes, so visible terminal state gives auditability, not prevention. The guard is the
