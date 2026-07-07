@@ -54,7 +54,7 @@ Use **zmux** for work that needs a shared terminal surface:
 SSH/remote-admin retry loops use one stable visible tab:
 
 - Use `admin` or `remote-<host>`.
-- Never suffix-bump `remote-sim` → `remote-sim2` → `remote-sim3`.
+- Never suffix-bump one host into `remote-<host>2`, `remote-<host>3`, etc.
 - If quoting forces an opaque encoded/admin payload, decode/explain it first.
 - State the intended host/config mutation before running it.
 
@@ -73,7 +73,7 @@ work stays together:
 - `claude` / `codex` / `pi` / `agy` — long-lived primary agent shells, not task tabs.
 
 Do **not** mint `eval-2`, `test-run`, `build-x`, per-Playwright-lane,
-`remote-sim2`, or feature-named tabs. Bounded checks stay in your shell; odd
+numbered remote/admin tabs, or feature-named tabs. Bounded checks stay in your shell; odd
 reviewable commands and serial browser-proof batches go to `scratch`/`pw-scratch`;
 remote/manual admin goes to `admin` or one `remote-<host>` tab; the main runtime
 goes to `dev`. Re-running the same job means re-fire the same `run -n <name>`

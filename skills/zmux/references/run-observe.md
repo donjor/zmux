@@ -107,9 +107,11 @@ zmux run 'sudo apt update' -n admin -d
 # Tell the user: "sudo command is in the admin tab — enter your password."
 
 # Remote admin / SSH retries
-zmux run 'ssh sim' -n remote-sim -d
-zmux type remote-sim 'powershell -NoProfile'
-# Keep using remote-sim for retries. Do not create remote-sim2/remote-sim3.
+HOST=node-a
+zmux run "ssh $HOST" -n "remote-$HOST" -d
+zmux type "remote-$HOST" '<remote shell command>'
+# Keep using that one remote-$HOST tab for retries.
+# Do not create numbered variants for the same host.
 # If you must use an opaque encoded/admin payload, decode/explain it first.
 # Say what host/config you are about to mutate before running the command.
 ```

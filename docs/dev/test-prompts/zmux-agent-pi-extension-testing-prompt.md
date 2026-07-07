@@ -143,7 +143,7 @@ Required typed-tool path:
    - Use `zmux_run` in the worker session to run `echo pi-run-ok` in a stable `scratch` tab.
    - Use `zmux_tab_status` and `zmux_tab_inspect` on `scratch` with session `<workspace>/worker-$RUN_ID` and include the evidence.
    - Use `zmux_log` start/tail/stop on `scratch` or `worker` in the worker session. Use `zmux_log status` only as the global recording view; do not pass `session` or `tab` to `status`.
-   - Verify the remote-admin/tab-sprawl warning path without touching a real host: call `zmux_run` with a harmless `printf` command containing an encoded remote payload token and tab `remote-sim2`, then report whether the tool result warns to reuse one stable `remote-sim` tab and decode/explain opaque payloads before remote mutation.
+   - Verify the remote-admin/tab-sprawl warning path without touching a real host: call `zmux_run` with a harmless `printf` command containing an encoded remote payload token and a numbered remote tab name such as `remote-example2`, then report whether the tool result warns to reuse the unsuffixed stable tab and decode/explain opaque payloads before remote mutation.
 
 3. **Runtime lifecycle**
    - Use `zmux_runtime_ensure` in the worker session for a benign long-lived runtime tab `dev`: `sh -c 'sleep 3; echo ready-service; sleep 3600'`.
@@ -207,7 +207,7 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence.
 ### Runtime and reviewable command tools
 
 - `zmux_run` handles reviewable one-shots in a stable named tab.
-- `zmux_run` warns on numbered remote-admin tab names such as `remote-sim2`, and on opaque encoded/obfuscated remote payloads, so the report-025 failure class is covered by deterministic tests and fresh-session QA.
+- `zmux_run` warns on numbered remote-admin tab names and on opaque encoded/obfuscated remote payloads, so this failure class is covered by deterministic tests and fresh-session QA.
 - `zmux_runtime_ensure/logs/stop` handle persistent runtimes without duplicate hidden jobs.
 - Output waits return evidence and do not require hand-written sleeps/sentinels.
 - Logs can wait briefly for regex/idle output when documented.
