@@ -78,6 +78,8 @@ Logical tab and pane commands:
 ```bash
 zmux tab state <state> [tab]       # attention/failed/running/ready/done/clear
 zmux tab status <tab> --json       # lifecycle + command/turn metadata
+zmux tab inspect <tab> --json      # state + output tail + warnings
+zmux tab peer ensure <tab> --command '<cmd>' --json  # safe peer create/reuse
 zmux tab pane <tab> [--into host]  # join a tab as a pane
 zmux tab full [tab]                # promote pane-of tab back to full tab
 zmux tab hide <tab>                # park a tab in the hidden dock
@@ -103,12 +105,14 @@ Agent/scripting terminal commands:
 ```bash
 zmux run 'make test' -n tests -T 180        # reviewable one-shot
 zmux run 'python3 -m http.server' -n web -d # detached long-running tab
-zmux watch web --until 'Serving HTTP'       # wait for output
-zmux watch web -l 20                        # tail visible output
+zmux wait web --for output:'Serving HTTP' --json  # structured wait evidence
+zmux wait peer --for turn:ready --json           # fresh peer lifecycle wait
+zmux watch web -l 20                             # tail visible output
 zmux log start web --ansi                   # bounded background recording
 zmux log tail web
 zmux send web C-c
 zmux type shell 'git status'
+zmux type peer 'review this' --mark-peer-running --wait-turn ready --json
 zmux snapshot --no-png
 zmux terminal current --json
 zmux terminal capabilities
@@ -173,7 +177,7 @@ zmux exposes an agent-safe terminal control surface:
 
 - use `zmux run`, `watch`, `log`, `send`, `type`, and pane/tab verbs for visible
   terminal work;
-- use Pi typed tools from `pi-extension/` when running inside Pi, including `zmux_peer_ensure`, `zmux_tab_inspect`, and `zmux_type` peer-wait options for agent peer loops;
+- use Pi typed tools from `pi-extension/` when running inside Pi, including `zmux_peer_ensure`, `zmux_tab_inspect`, `zmux_type` peer-wait options, `zmux_callback`, and `zmux_peer_handoff` for agent peer loops;
 - use `skills/zmux/SKILL.md` for shared agent doctrine;
 - never hide long-running work behind `&`, `nohup`, `disown`, or raw tmux.
 

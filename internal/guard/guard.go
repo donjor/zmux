@@ -16,11 +16,12 @@ import (
 type Kind string
 
 const (
-	Safe        Kind = "safe"
-	DirectTmux  Kind = "direct_tmux"
-	Runtime     Kind = "runtime"
-	Background  Kind = "background"
-	Interactive Kind = "interactive"
+	Safe          Kind = "safe"
+	DirectTmux    Kind = "direct_tmux"
+	Runtime       Kind = "runtime"
+	Background    Kind = "background"
+	Interactive   Kind = "interactive"
+	HeadlessAgent Kind = "headless_agent"
 )
 
 // Decision is the enforce-mode outcome for a Kind.
@@ -89,6 +90,12 @@ var (
 	// exemption is a second per-segment regex rather than a negative match.
 	dockerComposeUpSeg = regexp.MustCompile(`^\s*docker\s+compose\s+up\b`)
 	detachFlag         = regexp.MustCompile(`(^|\s)(-d|--detach)(\s|$)`)
+
+	// headless agents bypass the visible peer/session contract. Agent prompts go
+	// through an interactive CLI in a zmux tab, never print/headless one-shots.
+	headlessAgentPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)`),
+	}
 
 	// interactive: needs shared visibility / manual input.
 	interactivePatterns = []*regexp.Regexp{
@@ -202,6 +209,12 @@ func classify(command string, opts Options, depth int) Result {
 	block, exemptSeen := scanTmux(scan, opts)
 	if block != nil {
 		return *block
+	}
+
+	for _, re := range headlessAgentPatterns {
+		if re.MatchString(scan) {
+			return Result{HeadlessAgent, Block, "peer", "agent headless/print mode bypasses visible zmux peer flow"}
+		}
 	}
 
 	for _, re := range interactivePatterns {

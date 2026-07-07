@@ -34,6 +34,7 @@ var targetSuggestion = map[string]string{
 	"open":         "zmux open <ws> [session]",
 	"runtime":      "zmux run '<cmd>' -n <name> -d   (keeps it in a visible, named tab)",
 	"interactive":  "run it in a shared tab — zmux run '<cmd>' -n admin -d, then drive it — so it stays visible",
+	"peer":         "zmux tab peer ensure <peer> --command '<agent>' --json, then zmux type <peer> '<prompt>'",
 }
 
 func newGuardCmd(app *apppkg.App) *cobra.Command {

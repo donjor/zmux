@@ -11,16 +11,9 @@
 Make agent-driven zmux work feel like supervised terminal collaboration, not a
 pile of bespoke `zmux run` / `watch` / `tab status` loops.
 
-- [ ] **Pi extension exposes first-class peer/agent inspection tools**
-  - In progress on `feat/zmux-agent-qol`.
-  - Agents should be able to inspect a peer tab, start/reuse a peer, type a
-    prompt, and wait for fresh lifecycle evidence without hand-rolled shell
-    loops.
-  - Ship typed tools for status-plus-tail inspection, peer ensure/readiness,
-    wait-aware typing, and wait/idle runtime logs; update the bash classifier and
-    extension tests so agent CLIs route through those tools.
-
 - [ ] **Agent/human pane handoff chooses and reuses the right shared surface**
+  - Built on: Pi now has first-class tab inspection, peer ensure/readiness,
+    wait-aware typing, wait/idle runtime logs, callbacks, and peer handoff tools.
   - When an agent needs human input such as a sudo password or manual command,
     inspect the current window size, tabs, panes, and existing scratch/shared
     surfaces before creating anything new.

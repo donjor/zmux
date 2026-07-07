@@ -11,7 +11,7 @@ import {
 	sessionKill,
 	sessionRun,
 } from "../zmux.js";
-import { configFor, content, resolveCwd } from "./shared.js";
+import { configFor, content, rejectHeadlessAgentPrintMode, resolveCwd } from "./shared.js";
 
 export function registerCoreTools(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -109,7 +109,7 @@ export function registerCoreTools(pi: ExtensionAPI): void {
 			tab: Type.Optional(Type.String({ description: "Stable zmux tab name (`-n`). Defaults to zmux's command-derived name." })),
 			session: Type.Optional(Type.String({ description: "Optional zmux session target (`-s`)" })),
 			cwd: Type.Optional(Type.String({ description: "Working directory for the zmux CLI process; defaults to Pi cwd" })),
-			timeoutSeconds: Type.Optional(Type.Number({ description: "Wait timeout seconds for non-detached runs; default 120" })),
+			timeoutSeconds: Type.Optional(Type.Number({ description: "Wait timeout seconds for non-detached runs; default 30" })),
 			lines: Type.Optional(Type.Number({ description: "Lines to capture while waiting/following; default is zmux's default" })),
 			detach: Type.Optional(Type.Boolean({ description: "Run detached (`-d`). For persistent servers prefer zmux_runtime_ensure." })),
 			follow: Type.Optional(Type.Boolean({ description: "Follow output (`-f`) until timeout/interruption. Usually prefer zmux_runtime_logs for later reads." })),
@@ -117,6 +117,8 @@ export function registerCoreTools(pi: ExtensionAPI): void {
 			scope: Type.Optional(Type.String({ description: "Lifecycle scope, e.g. task or daemon" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const headlessAgentError = rejectHeadlessAgentPrintMode(params.command);
+			if (headlessAgentError) return content(headlessAgentError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" });
 			const result = await runCommand({
 				command: params.command,
 				tab: params.tab,
@@ -163,6 +165,8 @@ export function registerCoreTools(pi: ExtensionAPI): void {
 			cwd: Type.Optional(Type.String({ description: "Working directory for invoking zmux; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const headlessAgentError = rejectHeadlessAgentPrintMode(params.command);
+			if (headlessAgentError) return content(headlessAgentError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" });
 			const result = await sessionRun({
 				sessionName: params.sessionName,
 				tab: params.tab,

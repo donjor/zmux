@@ -67,7 +67,7 @@ func TestJoinMovesPaneAndAnchors(t *testing.T) {
 func assertNoPeerMetadataWrites(t *testing.T, mock *tmux.MockRunner) {
 	t.Helper()
 	peerKeys := map[string]bool{
-		OptTurnState: true, OptTurnAt: true, OptPeerRole: true, OptPeerHostTab: true,
+		OptTurnState: true, OptTurnAt: true, OptTurnSeq: true, OptPeerRole: true, OptPeerHostTab: true,
 		OptPeerHostPane: true, OptPeerTopic: true, OptPeerTurns: true, OptPeerLastTurn: true,
 		OptKeepUntil: true, OptParkUntil: true,
 	}

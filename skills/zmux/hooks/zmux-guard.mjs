@@ -67,6 +67,12 @@ const RUNTIME = [
 const DOCKER_COMPOSE_UP_SEG = /^\s*docker\s+compose\s+up\b/
 const DETACH_FLAG = /(^|\s)(-d|--detach)(\s|$)/
 
+// headless agents bypass the visible peer/session contract. Agent prompts go
+// through an interactive CLI in a zmux tab, never print/headless one-shots.
+const HEADLESS_AGENT = [
+  /(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)/,
+]
+
 // interactive: needs shared visibility / manual input.
 const INTERACTIVE = [
   /(^|[;&|]\s*)sudo\b/,
@@ -147,6 +153,7 @@ const SUGGEST = {
   open: 'zmux open <ws> [session]',
   runtime: "zmux run '<cmd>' -n <name> -d   (keeps it in a visible, named tab)",
   interactive: "run it in a shared tab — zmux run '<cmd>' -n admin -d, then drive it with zmux send/type",
+  peer: "zmux tab peer ensure <peer> --command '<agent>' --json, then zmux type <peer> '<prompt>'",
 }
 
 const FLAG_WITH_ARG = new Set(['-L', '-f', '-S', '-c'])
@@ -402,6 +409,12 @@ export function classify(command, opts = {}, depth = 0) {
   const { block, exemptSeen } = scanTmux(scan, opts)
   if (block) return block
 
+  for (const re of HEADLESS_AGENT) {
+    if (re.test(scan)) {
+      return { kind: 'headless_agent', decision: 'block', target: 'peer', reason: 'agent headless/print mode bypasses visible zmux peer flow' }
+    }
+  }
+
   for (const re of INTERACTIVE) {
     if (re.test(scan)) {
       return { kind: 'interactive', decision: 'warn', target: 'interactive', reason: 'interactive/remote command — prefer a shared zmux tab so it stays visible' }
@@ -479,6 +492,19 @@ export function render(res) {
       arrow.trimEnd(),
       `Not blocking — but a sudo/ssh/REPL in a private shell is invisible to the user.`,
       `Bypass the nudge with \`ZMUX_ALLOW=1\` or \`# zmux: allow\`.`,
+    ].join('\n')
+  }
+
+  if (res.kind === 'headless_agent') {
+    return [
+      `zmux-guard: ${res.reason}.`,
+      arrow.trimEnd(),
+      ``,
+      `Do not launch agent peers with \`-p\` / \`--print\`. A peer is a visible`,
+      `interactive CLI in a zmux tab; type prompts into that session so the user`,
+      `can inspect or take over the real terminal.`,
+      ``,
+      `Genuinely need a non-peer one-shot? Prefix \`ZMUX_ALLOW=1\` or append \`# zmux: allow\`.`,
     ].join('\n')
   }
 

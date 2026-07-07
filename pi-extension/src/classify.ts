@@ -10,7 +10,8 @@ export type BashClassification =
 	| { kind: "runtime"; reason: string; suggestion: string }
 	| { kind: "interactive"; reason: string; suggestion: string }
 	| { kind: "direct_zmux"; reason: string; suggestion: string }
-	| { kind: "direct_tmux"; reason: string; suggestion: string };
+	| { kind: "direct_tmux"; reason: string; suggestion: string }
+	| { kind: "headless_agent"; reason: string; suggestion: string };
 
 const directZmuxPatterns: Array<{ re: RegExp; reason: string; tool: string }> = [
 	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+status\b[\s\S]*zmux\s+watch\b|(^|[;&|\n]\s*)zmux\s+watch\b[\s\S]*zmux\s+tab\s+status\b/u, reason: "combined tab status/output inspection has a typed tool", tool: "zmux_tab_inspect" },
@@ -274,6 +275,10 @@ function foregroundComposeUp(scan: string): boolean {
 	return false;
 }
 
+const headlessAgentPatterns: Array<{ re: RegExp; reason: string }> = [
+	{ re: /(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)/u, reason: "agent headless/print mode bypasses visible zmux peer flow" },
+];
+
 const interactivePatterns: Array<{ re: RegExp; reason: string }> = [
 	{ re: /(^|[;&|\n]\s*)sudo\b/u, reason: "sudo requires shared user interaction" },
 	{ re: /(^|[;&|\n]\s*)su\b/u, reason: "su requires shared user interaction" },
@@ -308,6 +313,10 @@ function suggestionForInteractive(command: string): string {
 
 function suggestionForDirectTool(tool: string): string {
 	return `Use the typed ${tool} tool instead of shelling out through bash.`;
+}
+
+function suggestionForHeadlessAgent(): string {
+	return "Do not launch agent peers with -p/--print. Use zmux_peer_ensure for a visible interactive CLI, then deliver prompts with zmux_type or zmux_peer_handoff.";
 }
 
 function suggestionForTmux(tool: string): string {
@@ -376,7 +385,7 @@ function stripHeredocs(command: string): string {
 // Payload kinds that represent a blockable slip on the shell surface (matching
 // the Go classifier's Block decisions) — used to decide when a recursively
 // classified `sh -c …` / here-doc payload should win.
-const blockablePayloadKinds = new Set(["direct_tmux", "runtime", "background"]);
+const blockablePayloadKinds = new Set(["direct_tmux", "runtime", "background", "headless_agent"]);
 
 export function classifyBash(command: string, config: PiZmuxConfig, depth = 0): BashClassification {
 	const normalized = command.trim();
@@ -418,6 +427,12 @@ export function classifyBash(command: string, config: PiZmuxConfig, depth = 0): 
 	// corpus README.
 	const tmuxBlock = classifyTmux(scan);
 	if (tmuxBlock) return tmuxBlock;
+
+	for (const pattern of headlessAgentPatterns) {
+		if (pattern.re.test(scan)) {
+			return { kind: "headless_agent", reason: pattern.reason, suggestion: suggestionForHeadlessAgent() };
+		}
+	}
 
 	if (config.policy.redirectInteractive) {
 		for (const pattern of interactivePatterns) {

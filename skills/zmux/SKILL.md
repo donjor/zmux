@@ -99,13 +99,13 @@ In Pi, use typed tools instead of shelling out for common zmux operations:
 
 - `zmux_current` — inspect current session/tab/pane, binary/profile, project trust, config.
 - `zmux_run` — reviewable command-in-tab one-shots.
-- `zmux_runtime_ensure` / `zmux_runtime_logs` / `zmux_runtime_stop` — persistent runtimes; logs can wait briefly for regex/idle output.
-- `zmux_callback` — explicit notification when visible tab output matches/settles; no agent-side sleeps or polling. Default delivery is `steer` so active turns can observe completion; pass `deliverAs: "followUp"` for end-turn-only handoff. `list` shows active handles plus recent completions.
-- `zmux_peer_handoff` — type into a peer and receive an output handoff when matching/idle output arrives; default delivery is `steer` unless overridden.
+- `zmux_runtime_ensure` / `zmux_runtime_logs` / `zmux_runtime_stop` — persistent runtimes; logs/readiness waits use core `zmux wait` and report the evidence basis.
+- `zmux_callback` — live-session-scoped notification when core `zmux wait` proves future output/idle evidence; no agent-side sleeps or polling. Default delivery is `steer` so active turns can observe completion; pass `deliverAs: "followUp"` for end-turn-only handoff. `list` shows active handles plus recent completions; callbacks are not durable across Pi reload/crash.
+- `zmux_peer_handoff` — type into a peer and receive a wait-backed handoff when matching/idle output arrives; default delivery is `steer` unless overridden. Treat output/idle as fallback evidence, not lifecycle readiness.
 - `zmux_interactive_type` — sudo, SSH, REPLs, database shells, manual input.
 - `zmux_tabs`, `zmux_sessions`, `zmux_session_run`, `zmux_session_kill` — tab/session control.
-- `zmux_tab_inspect` — one-call status+output evidence for peer/tab diagnosis.
-- `zmux_peer_ensure` — peer spawn/reuse + lifecycle stamp + readiness inspection.
+- `zmux_tab_inspect` — thin adapter over core `zmux tab inspect`; one-call status+output evidence for peer/tab diagnosis.
+- `zmux_peer_ensure` — thin adapter over core `zmux tab peer ensure`; safe peer spawn/reuse + lifecycle stamp + readiness inspection.
 - `zmux_tab_status` / `zmux_tab_*`, `zmux_pane_*`, `zmux_log`, `zmux_snapshot`, `zmux_terminal_current` — status, layout, lifecycle, logging, evidence. `zmux_tab_kill` accepts `session` for source-session cleanup; `zmux_pane_resize` auto-selects width vs height unless you pass `axis`.
 - `zmux_pi_reload` after Pi extension/skill/prompt/theme changes; `zmux_reload` only for zmux config/key/theme changes; `zmux_pi_respawn` only as hard fallback.
 
@@ -137,13 +137,9 @@ needed. Read `references/agent-peer.md` before running the loop.
 Minimal status-first shape:
 
 ```bash
-zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session> --scope peer
-zmux tab peer start codex-peer -s <session> --role codex --topic '<sanitized topic>'
-zmux tab status codex-peer -s <session> --json
-zmux type codex-peer '<prompt with repo/file pointers>' -s <session>
-zmux tab peer running codex-peer -s <session>
-zmux tab status codex-peer -s <session> --json   # wait for fresh turnState=ready|attention when instrumented
-zmux watch codex-peer -s <session>               # read output after state says ready, or as fallback
+zmux tab peer ensure codex-peer -s <session> --command 'codex --dangerously-bypass-approvals-and-sandbox' --role codex --topic '<sanitized topic>' --json
+zmux type codex-peer '<prompt with repo/file pointers>' -s <session> --mark-peer-running --wait-turn ready --json
+zmux tab inspect codex-peer -s <session> --json  # status + output after state says ready, or fallback evidence
 ```
 
 In Pi, prefer `zmux_peer_ensure` for spawn/reuse, `zmux_type` with `markPeerRunning`/`waitForTurnState` for peer prompts, and `zmux_tab_inspect` for status+output diagnosis. Use the `session` parameter on every peer call.
@@ -164,8 +160,8 @@ shell tab.
 - `&`, `nohup`, `disown`, or harness-native hidden-background options — use `zmux run -d` / Pi `zmux_runtime_ensure`.
 - unnamed tabs — always give reviewable work a stable purpose name.
 - raw tmux for app-level actions.
-- your own terminal sentinels, done markers, wrapper scripts, or `sleep && watch`; zmux-managed shells own command lifecycle glyphs and `watch`/log tools own observation.
+- your own terminal sentinels, done markers, wrapper scripts, or `sleep && watch`; zmux-managed shells own command lifecycle glyphs and `zmux wait` owns structured condition waits.
 - hand-rolled poll loops or `pgrep -f` / `pkill -f` self-matching patterns to await one job.
-- guessing process state — read lifecycle/command/peer state with `zmux tab status` / Pi `zmux_tab_status`; use `zmux watch`, `zmux log`, or typed Pi log tools for output only.
+- guessing process state — read lifecycle/command/peer state with `zmux tab status` / Pi `zmux_tab_status`, or use `zmux wait` for fresh state/output/idle conditions; use `zmux watch`, `zmux log`, or typed Pi log tools for output only.
 - `zmux refresh` / `zmux terminal refresh` from an agent session unless the user asked or disruption is acceptable.
 - `zmux init` inside tmux — it intentionally refuses.

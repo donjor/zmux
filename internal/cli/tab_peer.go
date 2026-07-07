@@ -84,6 +84,7 @@ Typical flow:
 	cmd.Flags().StringVar(&sourceFlag, "source", "peer", "lifecycle source label")
 	cmd.Flags().StringVar(&msgFlag, "msg", "", "optional glyph message")
 	cmd.Flags().BoolVar(&quietFlag, "quiet", false, "hook mode: never fail, never print")
+	cmd.AddCommand(newTabPeerEnsureCmd(app))
 	return cmd
 }
 

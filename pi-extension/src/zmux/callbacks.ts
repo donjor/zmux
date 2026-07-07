@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn, type ChildProcess } from "node:child_process";
 import { trimOutput } from "../shell.js";
-import { buildWatchArgs } from "./agent.js";
+import { buildWaitArgs } from "./agent.js";
 import { setTabPeer, typeText } from "./tabs.js";
 import { zmuxBin } from "./shared.js";
 
@@ -64,6 +64,9 @@ interface CallbackCompletion {
 	stdout: string;
 	stderr: string;
 	message?: string;
+	basis?: string;
+	failureKind?: string;
+	alreadyInTail?: boolean;
 }
 
 interface CompletedCallbackRecord extends CallbackCompletion {
@@ -88,8 +91,21 @@ function capBuffer(value: string, max = 24_000): string {
 	return value.slice(value.length - max);
 }
 
+function callbackOutcomeFields(stdout: string): { basis?: string; failureKind?: string; alreadyInTail?: boolean } {
+	try {
+		const parsed = JSON.parse(stdout) as { outcome?: { basis?: unknown; failureKind?: unknown; alreadyInTail?: unknown } };
+		return {
+			basis: typeof parsed.outcome?.basis === "string" ? parsed.outcome.basis : undefined,
+			failureKind: typeof parsed.outcome?.failureKind === "string" ? parsed.outcome.failureKind : undefined,
+			alreadyInTail: typeof parsed.outcome?.alreadyInTail === "boolean" ? parsed.outcome.alreadyInTail : undefined,
+		};
+	} catch {
+		return {};
+	}
+}
+
 export function buildCallbackWatchArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; timeoutSeconds?: number }): string[] {
-	return buildWatchArgs({
+	return buildWaitArgs({
 		tab: params.tab,
 		session: params.session,
 		lines: params.lines ?? 160,
@@ -107,6 +123,9 @@ export function formatCallbackMessage(done: CallbackCompletion): string {
 		heading,
 		done.message ? `message: ${done.message}` : "",
 		`session: ${done.session ?? "current"}`,
+		done.basis ? `basis: ${done.basis}` : "basis: unavailable",
+		done.failureKind ? `failure: ${done.failureKind}` : "",
+		done.alreadyInTail ? "alreadyInTail: true" : "",
 		`exit: ${done.exitCode ?? "signal"}${done.signal ? ` (${done.signal})` : ""}`,
 		output ? `output:\n${output}` : "output: <empty>",
 	].filter(Boolean).join("\n"));
@@ -129,6 +148,9 @@ function sendCallbackMessage(pi: ExtensionAPI, done: CallbackCompletion, deliver
 			exitCode: done.exitCode,
 			signal: done.signal,
 			message: done.message,
+			basis: done.basis,
+			failureKind: done.failureKind,
+			alreadyInTail: done.alreadyInTail,
 		},
 	}, { deliverAs, triggerTurn });
 }
@@ -160,6 +182,9 @@ export function listRecentCallbackCompletions(): Array<Record<string, unknown>> 
 		exitCode: completion.exitCode,
 		signal: completion.signal,
 		message: completion.message,
+		basis: completion.basis,
+		failureKind: completion.failureKind,
+		alreadyInTail: completion.alreadyInTail,
 		deliverAs: completion.deliverAs,
 		triggerTurn: completion.triggerTurn,
 	}));
@@ -228,6 +253,7 @@ export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams
 	});
 	proc.on("close", (exitCode, signal) => {
 		if (!callbacks.delete(id)) return;
+		const outcome = callbackOutcomeFields(trimOutput(stdout));
 		sendCallbackMessage(pi, {
 			id,
 			kind,
@@ -240,6 +266,9 @@ export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams
 			stdout: trimOutput(stdout),
 			stderr: trimOutput(stderr),
 			message: params.message,
+			basis: outcome.basis,
+			failureKind: outcome.failureKind,
+			alreadyInTail: outcome.alreadyInTail,
 		}, deliverAs, triggerTurn);
 	});
 	proc.on("error", (error) => {

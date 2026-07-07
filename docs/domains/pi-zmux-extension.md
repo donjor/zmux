@@ -33,7 +33,7 @@ so agents use visible zmux-managed tabs instead of hidden shell jobs or raw tmux
 
 ## Split-logic warnings
 
-- Do not duplicate shell lifecycle waiting with temp sentinels or wrapper scripts; read `zmux tab status --json` / command lifecycle state.
+- Do not duplicate shell lifecycle waiting with temp sentinels or wrapper scripts; read `zmux tab status --json` or use first-class `zmux wait` / `zmux type --wait-*` condition results.
 - Do not add a Pi typed tool without updating skill doctrine and the guard redirect map when the workflow should be tool-preferred.
 - Keep package loading settings-managed. A retired global `~/.pi/agent/extensions/pi-zmux` symlink can mask the local package.
 - Keep `zzmux` grounding isolated from live `zmux`; edge profile QA must not mutate live shell startup or agent integration links.
@@ -119,7 +119,7 @@ Sessions, tabs, panes, peers, and input:
 - `zmux_sessions`, `zmux_session_run`, `zmux_session_kill`
 - `zmux_tabs`, `zmux_tab_status`, `zmux_tab_inspect`, `zmux_tab_state`, `zmux_tab_place`,
   `zmux_tab_label`, `zmux_tab_move` (with optional source `session`), `zmux_tab_kill` (with optional source `session`), `zmux_tab_focus`
-- `zmux_peer_ensure` — peer tab spawn/reuse, lifecycle stamping, short readiness wait, and status/output evidence in one result.
+- `zmux_peer_ensure` — thin adapter over first-class `zmux tab peer ensure`; safe peer spawn/reuse, lifecycle stamping, short readiness wait, and status/output evidence in one result.
 - `zmux_pane_list`, `zmux_pane_open`, `zmux_pane_focus`, `zmux_pane_close`,
   `zmux_pane_resize` (auto axis: width for side-by-side panes, height for full-width stacked panes; pass `axis` to force one)
 - `zmux_send_keys`, `zmux_type`, `zmux_pane_send_keys`, `zmux_pane_type`; `zmux_type` can optionally mark peer turns running and wait briefly for a fresh turn state.
@@ -128,9 +128,9 @@ Runtime/output/evidence:
 
 - `zmux_run` — reviewable command-in-tab one-shots.
 - `zmux_runtime_ensure`, `zmux_runtime_logs`, `zmux_runtime_stop` — stable named
-  runtime tabs; `zmux_runtime_logs` can wait briefly for a regex or idle output instead of raw sleeps.
-- `zmux_callback` — explicit notification for a visible tab when `watch --until` or `watch --idle` completes, without agent-side sleeps/poll loops. Default delivery is `steer` so active turns can observe completion before the next model call; pass `deliverAs: "followUp"` for end-turn-only handoff. `list` reports both active handles and recent completions; delivered callbacks are top-level Pi `custom_message` entries with `customType: pi-zmux-callback`.
-- `zmux_peer_handoff` — type a peer prompt and schedule an output callback/handoff for supported or fallback peer CLIs.
+  runtime tabs; readiness/log waits route through first-class `zmux wait --json` and report the evidence basis (`outputRegex` or `idleFallback`). If a fast marker was already visible before the wait baseline, results surface `failureKind: output_regex_already_present` / `alreadyInTail: true` as tail evidence instead of a generic unproven wait.
+- `zmux_callback` — explicit live-session-scoped notification for a visible tab when first-class `zmux wait --json` proves future output or idle/quiet evidence. Default delivery is `steer` so active turns can observe completion before the next model call; pass `deliverAs: "followUp"` for end-turn-only handoff. `list` reports both active handles and recent completions; delivered callbacks are top-level Pi `custom_message` entries with `customType: pi-zmux-callback`. Callback handles are not durable across Pi reload, crash, or respawn.
+- `zmux_peer_handoff` — type a peer prompt and schedule a wait-backed callback/handoff for supported or fallback peer CLIs; the callback message names the evidence basis and must not claim lifecycle readiness from idle/output fallback alone.
 - `zmux_log` — bounded persistent tab output recording; `start`/`tail`/`stop` accept session targeting, while `status` is the global recording view and rejects session/tab filters.
 - `zmux_snapshot` — terminal/TUI evidence bundles.
 - `zmux_terminal_current` — visible desktop terminal resolution.
@@ -177,11 +177,13 @@ early with `needsUserInput` when a password or manual prompt appears and focus
 was not requested. Long-lived shells such as SSH, database REPLs, and TUI apps
 should leave `waitForExit` false and tell the user which tab needs attention.
 
-For peer turns, `zmux_type` can set `markPeerRunning` and `waitForTurnState`.
-Freshness is based on `turnAt`; an old `ready` state from a previous prompt must
-not satisfy a new wait. If readiness cannot be proven inside the short timeout,
-the tool returns `unproven` with status/output evidence rather than sleeping.
-Use `zmux_tab_inspect` for one-call diagnosis and `zmux_peer_ensure` for the
+For peer turns, `zmux_type` delegates to first-class `zmux type --json` with
+`--mark-peer-running` and `--wait-turn`. Freshness is generation-based via
+`turnSeq` (with `turnAt` retained as supporting evidence); an old `ready` state
+from a previous prompt must not satisfy a new wait. If readiness cannot be
+proven inside the short timeout, the tool returns `unproven` with status/output
+evidence rather than sleeping. Use `zmux_tab_inspect` (core `tab inspect`) for
+one-call diagnosis and `zmux_peer_ensure` (core `tab peer ensure`) for the
 spawn/reuse + status/readiness bundle.
 
 ## Grounding with zzmux

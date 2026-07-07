@@ -15,8 +15,8 @@ skills build on this; they must not duplicate the tab-driving mechanics.
 The **terminal loop builds on** `agent-peer.md` — Spawn, status-first state reads,
 output/fallback classification, Tab State, Placement, Submission Hygiene, Topic Changes,
 and Clean Quotes all apply. **Read `agent-peer.md` for the loop.** For workers, conductors
-read `zmux tab status --json` / Pi `zmux_tab_status` for `ready|failed|attention` across
-worker sessions; `watch --idle` is only the uninstrumented/output fallback. This doc covers
+read `zmux tab status --json` / Pi `zmux_tab_status` or use `zmux wait --for turn:<state>` for `ready|failed|attention` across
+worker sessions; output/idle waits are only the uninstrumented/output fallback. This doc covers
 only what a worker *inverts or adds*:
 
 | dimension | peer (agent-peer.md) | worker (this doc) |

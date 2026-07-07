@@ -1,11 +1,16 @@
 package cli
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
+	"github.com/donjor/zmux/internal/tabstate"
+	"github.com/donjor/zmux/internal/waitfor"
 	"github.com/spf13/cobra"
 )
 
@@ -55,8 +60,28 @@ Examples:
 	return cmd
 }
 
+type typeCommandOutput struct {
+	Tab        string           `json:"tab"`
+	Session    string           `json:"session,omitempty"`
+	Target     string           `json:"target"`
+	PaneID     string           `json:"paneId,omitempty"`
+	Typed      bool             `json:"typed"`
+	Outcome    *waitfor.Outcome `json:"outcome,omitempty"`
+	Status     waitfor.Status   `json:"status"`
+	OutputTail string           `json:"outputTail,omitempty"`
+	Warnings   []string         `json:"warnings,omitempty"`
+}
+
 func newTypeCmd(app *apppkg.App) *cobra.Command {
 	var sendSessionFlag string
+	var waitTurn string
+	var waitCmd string
+	var markPeerRunning bool
+	var timeoutSec int
+	var lines int
+	var source string
+	var msg string
+	var jsonOut bool
 
 	cmd := &cobra.Command{
 		Use:   "type <window> <text>",
@@ -65,11 +90,15 @@ func newTypeCmd(app *apppkg.App) *cobra.Command {
 
 Examples:
   zmux type git 'git status'
-  zmux type server 'npm run dev'`,
+  zmux type server 'npm run dev'
+  zmux type claude-peer 'review this' --mark-peer-running --wait-turn ready --json`,
 		Args: cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			windowName := args[0]
 			text := strings.Join(args[1:], " ")
+			if waitTurn != "" && waitCmd != "" {
+				return fmt.Errorf("--wait-turn and --wait-cmd cannot be combined")
+			}
 
 			sessionName, err := resolveSessionTarget(app, sendSessionFlag)
 			if err != nil {
@@ -81,8 +110,20 @@ Examples:
 				return err
 			}
 			target := rt.Target
+			paneID, _ := paneTargetForResolvedTab(app, rt)
+			baseline := waitfor.SnapshotBaseline(app.Runner, paneID)
 
 			rt.clearStale(app)
+			if markPeerRunning {
+				svc := tabstate.New(app.Runner, os.Getenv)
+				stateTarget, err := rt.stateTarget(svc)
+				if err != nil {
+					return err
+				}
+				if err := runTabPeerAction(app, svc, stateTarget, "running", tabPeerOptions{source: source, msg: msg}); err != nil {
+					return err
+				}
+			}
 
 			// Send text and Enter as separate key events with a gap between
 			// them. TUI input boxes (agent CLIs like codex) detect rapid
@@ -98,12 +139,71 @@ Examples:
 				return fmt.Errorf("type to %s: %w", target, err)
 			}
 
-			fmt.Printf("typed to %s\n", target)
+			out := typeCommandOutput{Tab: windowName, Session: sessionName, Target: target, PaneID: paneID, Typed: true}
+			var cond waitfor.Condition
+			if waitTurn != "" {
+				cond, err = waitfor.ParseCondition("turn:" + waitTurn)
+			} else if waitCmd != "" {
+				cond, err = waitfor.ParseCondition("cmd:" + waitCmd)
+			}
+			if err != nil {
+				return err
+			}
+			if cond.Kind != "" {
+				waited, _ := waitfor.Wait(context.Background(), waitfor.Request{Runner: app.Runner, Target: target, PaneID: paneID, Lines: lines, Timeout: time.Duration(timeoutSec) * time.Second, Condition: cond, Baseline: &baseline})
+				out.Outcome = &waited
+				if !waited.Met {
+					out.Warnings = append(out.Warnings, "wait not proven: "+emptyForHuman(waited.FailureKind, "unproven"))
+				}
+			}
+			out.Status = waitfor.ReadStatus(app.Runner, paneID)
+			out.OutputTail, _ = app.Runner.CapturePane(target, lines)
+			out.Warnings = uniqueStrings(append(out.Warnings, waitfor.WarningsForStatus(out.Status)...))
+			if jsonOut {
+				b, err := json.MarshalIndent(out, "", "  ")
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(b))
+				if out.Outcome != nil && !out.Outcome.Met {
+					return fmt.Errorf("type wait not met: %s", emptyForHuman(out.Outcome.FailureKind, "unproven"))
+				}
+				return nil
+			}
+			printTypeOutcome(out)
+			if out.Outcome != nil && !out.Outcome.Met {
+				return fmt.Errorf("type wait not met: %s", emptyForHuman(out.Outcome.FailureKind, "unproven"))
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&sendSessionFlag, "session", "s", "", "target session (default: current)")
+	cmd.Flags().StringVar(&waitTurn, "wait-turn", "", "fresh peer turn state to wait for after typing")
+	cmd.Flags().StringVar(&waitCmd, "wait-cmd", "", "fresh shell command state to wait for after typing")
+	cmd.Flags().BoolVar(&markPeerRunning, "mark-peer-running", false, "stamp peer lifecycle as running after typing")
+	cmd.Flags().IntVarP(&timeoutSec, "timeout", "T", 8, "wait timeout in seconds")
+	cmd.Flags().IntVarP(&lines, "lines", "l", 80, "output lines to include in wait result")
+	cmd.Flags().StringVar(&source, "source", "type", "lifecycle source label when marking peer running")
+	cmd.Flags().StringVar(&msg, "msg", "", "optional glyph message when marking peer running")
+	cmd.Flags().BoolVar(&jsonOut, "json", false, "print JSON")
 	return cmd
+}
+
+func printTypeOutcome(out typeCommandOutput) {
+	fmt.Printf("typed to %s\n", out.Target)
+	if out.Outcome != nil {
+		fmt.Printf("wait: met=%t state=%s basis=%s fresh=%t\n", out.Outcome.Met, out.Outcome.State, out.Outcome.Basis, out.Outcome.Fresh)
+	}
+	for _, warning := range out.Warnings {
+		fmt.Printf("warning: %s\n", warning)
+	}
+	if out.Outcome != nil && strings.TrimSpace(out.OutputTail) != "" {
+		fmt.Println("output:")
+		fmt.Print(out.OutputTail)
+		if !strings.HasSuffix(out.OutputTail, "\n") {
+			fmt.Println()
+		}
+	}
 }
 
 // typeGap returns how long to wait between the text and the Enter key.

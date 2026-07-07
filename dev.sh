@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # dev.sh — build + install a zmux binary for local testing.
 #
-# Usage: ./dev.sh [zmux|zzmux]   (default: zmux)
-#   zmux   build + install the live binary, refresh shell + agent integrations
-#   zzmux  build + install an identical edge binary only; it skips live shell
-#          and shared agent integrations so you can test changes without
-#          overwriting or mutating the zmux profile you're currently running
+# Usage: ./dev.sh [--dirty] [--branch] [zmux|zzmux]   (default: zmux)
+#   zmux     build + install the live binary, refresh shell + agent integrations
+#            refuses dirty or non-main/master checkouts unless explicitly
+#            escaped with --dirty / --branch
+#   zzmux    build + install an identical edge binary only; dirty worktrees and
+#            topic branches are allowed because edge installs skip live shell
+#            and shared agent integrations so you can test changes without
+#            overwriting or mutating the zmux profile you're currently running
+#
+# Guard escapes for live zmux installs only:
+#   --dirty   allow installing live zmux from a dirty worktree
+#   --branch  allow installing live zmux from a non-main/master branch
 #
 # Local config:
 #   .env            shell-style env assignments, ignored by git
@@ -95,23 +102,140 @@ run_local_hook() {
 	fi
 }
 
-TARGET="${1:-zmux}"
+usage() {
+	cat <<EOF
+usage: $0 [--dirty] [--branch] [zmux|zzmux]
+
+Targets:
+  zmux     install the live binary and refresh shell/agent integrations (default)
+  zzmux    install the edge binary only; allows dirty and topic-branch testing
+
+Live zmux guard escapes:
+  --dirty   allow installing live zmux from a dirty worktree
+  --branch  allow installing live zmux from a non-main/master branch
+EOF
+}
+
+TARGET="zmux"
+TARGET_SET=0
+ALLOW_DIRTY=0
+ALLOW_BRANCH=0
+
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		--dirty)
+			ALLOW_DIRTY=1
+			;;
+		--branch)
+			ALLOW_BRANCH=1
+			;;
+		-h | --help)
+			usage
+			exit 0
+			;;
+		zmux | zzmux)
+			if [ "$TARGET_SET" = "1" ]; then
+				printf "error: target already set to %s\n\n" "$TARGET" >&2
+				usage >&2
+				exit 2
+			fi
+			TARGET="$1"
+			TARGET_SET=1
+			;;
+		*)
+			printf "error: unknown argument: %s\n\n" "$1" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
 BIN_DIR="${ZMUX_BIN_DIR:-${ZMUX_INSTALL_BIN_DIR:-$HOME/.local/bin}}"
 SKILLS_ROOT="${ZMUX_SKILLS_ROOT:-}"
-
-case "$TARGET" in
-	zmux | zzmux) ;;
-	*)
-		printf "usage: %s [zmux|zzmux]\n" "$0" >&2
-		exit 1
-		;;
-esac
 
 bold='\033[1m'
 dim='\033[38;2;90;99;120m'
 green='\033[38;2;127;217;98m'
 yellow='\033[38;2;245;158;11m'
+red='\033[38;2;239;68;68m'
 reset='\033[0m'
+
+stable_branch_hint() {
+	if git -C "$ZMUX_ROOT" show-ref --verify --quiet refs/heads/master; then
+		printf "master"
+	elif git -C "$ZMUX_ROOT" show-ref --verify --quiet refs/heads/main; then
+		printf "main"
+	else
+		printf "main-or-master"
+	fi
+}
+
+validate_live_install_state() {
+	if [ "$TARGET" != "zmux" ]; then
+		return 0
+	fi
+
+	local dirty_status=""
+	local branch=""
+	local ref=""
+	local problems=0
+	local override_cmd="./dev.sh"
+
+	if ! git -C "$ZMUX_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		printf "${red}error${reset} refusing live zmux install: could not inspect git checkout state\n" >&2
+		printf "${dim}helpers:${reset}\n" >&2
+		printf "  ./dev.sh zzmux        # edge install is the safe test path\n" >&2
+		printf "  git status --short    # run from a real zmux checkout before live install\n" >&2
+		exit 1
+	fi
+
+	dirty_status="$(git -C "$ZMUX_ROOT" status --porcelain)"
+	branch="$(git -C "$ZMUX_ROOT" branch --show-current 2>/dev/null || true)"
+	if [ -z "$branch" ]; then
+		ref="$(git -C "$ZMUX_ROOT" rev-parse --short HEAD 2>/dev/null || printf unknown)"
+		branch="detached@$ref"
+	fi
+
+	if [ -n "$dirty_status" ] && [ "$ALLOW_DIRTY" != "1" ]; then
+		printf "${red}error${reset} refusing live zmux install from a dirty worktree\n" >&2
+		problems=1
+		override_cmd="$override_cmd --dirty"
+	fi
+
+	case "$branch" in
+		main | master) ;;
+		*)
+			if [ "$ALLOW_BRANCH" != "1" ]; then
+				printf "${red}error${reset} refusing live zmux install from non-main/master branch: %s\n" "$branch" >&2
+				problems=1
+				override_cmd="$override_cmd --branch"
+			fi
+			;;
+	esac
+
+	if [ "$problems" = "1" ]; then
+		printf "\n${dim}live zmux mutates %s/zmux plus shell/agent integrations; use zzmux for edge testing.${reset}\n" "$BIN_DIR" >&2
+		printf "${dim}helpers:${reset}\n" >&2
+		printf "  %-36s # build/install edge safely from this state\n" "./dev.sh zzmux" >&2
+		printf "  %-36s # inspect uncommitted changes\n" "git status --short" >&2
+		printf "  %-36s # return to the live-install branch\n" "git switch $(stable_branch_hint)" >&2
+		printf "  %-36s # explicit live-install escape\n" "$override_cmd zmux" >&2
+		exit 1
+	fi
+
+	if [ -n "$dirty_status" ]; then
+		printf "${yellow}warning${reset} installing live zmux from a dirty worktree because --dirty was passed\n" >&2
+	fi
+	case "$branch" in
+		main | master) ;;
+		*)
+			printf "${yellow}warning${reset} installing live zmux from %s because --branch was passed\n" "$branch" >&2
+			;;
+	esac
+}
+
+validate_live_install_state
 
 VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 

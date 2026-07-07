@@ -171,6 +171,7 @@ func NewRootCmd(a *apppkg.App, version string) *cobra.Command {
 		newTypeCmd(a),
 		newUpCmd(a),
 		newVersionCmd(version),
+		newWaitCmd(a),
 		newWatchCmd(a),
 		newWhereCmd(a),
 		newWorkspaceCmd(a),

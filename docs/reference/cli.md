@@ -47,6 +47,8 @@ zmux tabs [workspace/session]
 zmux tab label [label]
 zmux tab state <attention|failed|running|ready|done|clear> [tab]
 zmux tab status <tab> [--json]
+zmux tab inspect <tab> [--json] [-l lines]
+zmux tab peer ensure <tab> [--command cmd] [--readiness regex] [--wait-turn state] [--json]
 zmux tab pane <tab|N> [--into host] [--focus]
 zmux tab split [--focus]
 zmux tab full [tab] [--pane pane-id]
@@ -68,19 +70,24 @@ the current pane.
 
 ```bash
 zmux run '<cmd>' -n <tab> [-T seconds] [-d] [-f] [--keep] [--scope daemon]
+zmux wait <tab> --for turn:ready|cmd:done|output:<regex>|idle:<duration> [--json]
 zmux watch <tab> [-l lines] [--until pattern] [--idle seconds] [-f]
 zmux log start <tab> [--ansi] [--max-bytes n]
 zmux log status                    # global recording view; no -s/--session
 zmux log tail <tab>
 zmux log stop <tab>
 zmux send <tab> <keys...>
-zmux type <tab> '<text>'
+zmux type <tab> '<text>' [--wait-turn state|--wait-cmd state] [--mark-peer-running] [--json]
 ```
 
 Purpose: run commands in named tmux tabs, wait/follow/tail output, record a
-bounded log, or send input. `run` writes command lifecycle metadata; `watch` and
-`log tail` read terminal output; `send` and `type` mutate the target pane. Use
-`--help` for supported flags before documenting new agent workflows.
+bounded log, or send input. `run` writes command lifecycle metadata; `wait` is
+the structured condition primitive for fresh command state, fresh turn state,
+future output regex, and idle/quiet evidence; `watch` and `log tail` remain
+human-friendly output readers. `send` and `type` mutate the target pane, and
+`type` can now return structured wait outcomes for peer turns or shell command
+completion. Use `--help` for supported flags before documenting new agent
+workflows.
 
 ### Recipes
 

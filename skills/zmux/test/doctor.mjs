@@ -79,6 +79,11 @@ assert.ok(!combined.includes(':::AGENT_DONE'), 'skill/docs must not revive AGENT
 assert.match(docs['skills/zmux/references/run-observe.md'], /does not print completion sentinels/i);
 assert.match(docs['skills/zmux/references/run-observe.md'], /Do not use `watch` as lifecycle truth/i);
 assert.match(docs['skills/zmux/references/agent-peer.md'], /not the primary completion signal/i);
+assert.match(docs['skills/zmux/references/agent-peer.md'], /Never start peer agents through headless\/print one-shot modes/i);
+assert.ok(
+  !/zmux\s+(run|tab peer ensure)[^\n]*(claude|codex|pi|agy)[^\n]*(\s-p\b|\s--print\b)/.test(combined),
+  'docs must not show peer launch examples using agent -p/--print; type into visible peers instead',
+);
 assert.match(docs['skills/zmux/references/agent-peer.md'], /-s <session>/);
 assert.match(docs['skills/zmux/references/agent-peer.md'], /`session` parameter/);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /legacy `waiting` means `ready`|Legacy `waiting` means `ready`|waiting` aliases to `ready`/i);

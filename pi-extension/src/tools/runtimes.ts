@@ -14,7 +14,7 @@ import {
 	startPeerHandoff,
 	startWatchCallback,
 } from "../zmux.js";
-import { configFor, content, resolveCwd, shouldWaitForExit } from "./shared.js";
+import { configFor, content, rejectHeadlessAgentPrintMode, resolveCwd, shouldWaitForExit } from "./shared.js";
 
 export function registerRuntimeTools(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -35,6 +35,10 @@ export function registerRuntimeTools(pi: ExtensionAPI): void {
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
+			if (params.command) {
+				const headlessAgentError = rejectHeadlessAgentPrintMode(params.command);
+				if (headlessAgentError) return content(headlessAgentError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" });
+			}
 			const result = await schedulePiRespawn({
 				cwd: resolveCwd(ctx.cwd, params.cwd),
 				paneId: params.paneId,
@@ -69,6 +73,10 @@ export function registerRuntimeTools(pi: ExtensionAPI): void {
 		async execute(_id, params, _signal, _onUpdate, ctx) {
 			const config = configFor(ctx);
 			const runtime = mergeRuntimeConfig(params.name, params, config);
+			if (runtime.command) {
+				const headlessAgentError = rejectHeadlessAgentPrintMode(runtime.command);
+				if (headlessAgentError) return content(headlessAgentError, { command: runtime.command, failed: true, failureKind: "headless_agent_print_mode" });
+			}
 			if (!runtime.command) {
 				return content(`ERROR: runtime ${params.name} has no command. Pass command or add it to trusted .pi/zmux.json / .config/pi-zmux.json.`, { name: params.name, configPath: config.path, ignoredReason: config.ignoredReason });
 			}
@@ -115,11 +123,11 @@ export function registerRuntimeTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_callback",
 		label: "zmux callback",
-		description: "Start/list/cancel a session-scoped zmux output callback. Use when a visible tab should notify Pi later after new output matches a regex or the screen goes idle, instead of sleeping or polling in the agent shell.",
+		description: "Start/list/cancel a live-session-scoped zmux wait callback. Use when a visible tab should notify Pi later after new output matches a regex or the screen goes idle, instead of sleeping or polling in the agent shell.",
 		promptSnippet: "Schedule a zmux output callback",
 		promptGuidelines: [
 			"Use action=watch for explicit long-running completion/readiness handoff from a visible tab.",
-			"This starts an extension-owned zmux watch process and sends a Pi callback message when it completes; use list/cancel for cleanup.",
+			"This starts an extension-owned `zmux wait --json` process and sends a Pi callback message when it completes; callbacks are live-session scoped, not durable across reload/crash.",
 			"Default delivery is steer so active turns can see the completion before the next model call; pass deliverAs=followUp when you want an end-turn-only handoff.",
 			"Prefer waitFor for known future output and idleSeconds for generic quiet-after-output handoff. Do not use this as a hidden dev-server substitute; persistent runtimes still use zmux_runtime_ensure.",
 		],
@@ -176,7 +184,7 @@ export function registerRuntimeTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_peer_handoff",
 		label: "zmux peer handoff",
-		description: "Type a prompt into an existing peer tab and schedule a Pi callback message when the peer produces matching output or becomes idle. Use for explicit agent end-turn handoff without raw sleeps or private CLI parsing.",
+		description: "Type a prompt into an existing peer tab and schedule a Pi callback message when first-class zmux wait evidence completes. Use for explicit agent end-turn handoff without raw sleeps or private CLI parsing.",
 		promptSnippet: "Type to a peer and schedule output handoff",
 		promptGuidelines: [
 			"Use after zmux_peer_ensure when you want Pi to continue later after a peer response arrives.",
@@ -257,6 +265,8 @@ export function registerRuntimeTools(pi: ExtensionAPI): void {
 			focus: Type.Optional(Type.Boolean({ description: "Focus the tab after creating/typing; default false. Ask the user before using this for agent sessions." })),
 		}),
 		async execute(_id, params, _signal, onUpdate, ctx) {
+			const headlessAgentError = rejectHeadlessAgentPrintMode(params.command);
+			if (headlessAgentError) return content(headlessAgentError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" });
 			const tab = params.tab || "admin";
 			const waitForExit = params.waitForExit ?? shouldWaitForExit(params.command);
 			if (waitForExit || params.waitFor) {

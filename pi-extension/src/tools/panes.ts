@@ -9,7 +9,7 @@ import {
 	sendPaneKeys,
 	typePaneText,
 } from "../zmux.js";
-import { content, paneDirection, resolveCwd } from "./shared.js";
+import { content, paneDirection, rejectHeadlessAgentPrintMode, resolveCwd } from "./shared.js";
 
 export function registerPaneTools(pi: ExtensionAPI): void {
 	pi.registerTool({
@@ -75,6 +75,8 @@ export function registerPaneTools(pi: ExtensionAPI): void {
 			cwd: Type.Optional(Type.String({ description: "Working directory; defaults to Pi cwd" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
+			const headlessAgentError = rejectHeadlessAgentPrintMode(params.command);
+			if (headlessAgentError) return content(headlessAgentError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" });
 			const cwd = resolveCwd(ctx.cwd, params.cwd);
 			const result = await openPane({
 				name: params.name,

@@ -30,6 +30,7 @@ type tabStatusOutput struct {
 	RunID          string `json:"runId,omitempty"`
 	TurnState      string `json:"turnState,omitempty"`
 	TurnAt         string `json:"turnAt,omitempty"`
+	TurnSeq        string `json:"turnSeq,omitempty"`
 	PeerRole       string `json:"peerRole,omitempty"`
 	PeerTopic      string `json:"peerTopic,omitempty"`
 }
@@ -116,7 +117,12 @@ func buildTabStatus(app *apppkg.App, label, target string, rt resolvedTab) (tabS
 	status.LastExit, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdLastExit)
 	status.RunID, _ = app.Runner.ShowPaneOption(pane, tabs.OptCmdRunID)
 	status.TurnState, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnState)
+	status.TurnState = tabs.NormalizeTurnState(status.TurnState)
 	status.TurnAt, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnAt)
+	status.TurnSeq, _ = app.Runner.ShowPaneOption(pane, tabs.OptTurnSeq)
+	if status.TurnSeq == "" {
+		status.TurnSeq, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerTurns)
+	}
 	status.PeerRole, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerRole)
 	status.PeerTopic, _ = app.Runner.ShowPaneOption(pane, tabs.OptPeerTopic)
 	if cmd, _ := app.Runner.ShowPaneOption(pane, tabs.OptCmdText); cmd != "" {
@@ -187,8 +193,15 @@ func printTabStatus(status tabStatusOutput) {
 	}
 	if status.TurnState != "" {
 		line := "turn-state: " + status.TurnState
+		var details []string
 		if status.TurnAt != "" {
-			line += " (at " + status.TurnAt + ")"
+			details = append(details, "at "+status.TurnAt)
+		}
+		if status.TurnSeq != "" {
+			details = append(details, "seq "+status.TurnSeq)
+		}
+		if len(details) > 0 {
+			line += " (" + strings.Join(details, ", ") + ")"
 		}
 		fmt.Println(line)
 	}

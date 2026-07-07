@@ -77,8 +77,8 @@ zmux ls -s                 # how many sessions exist
 
 Pin that session on the spawn and every follow-up — belt-and-suspenders for
 the writes, load-bearing for the reads:
-`zmux run '…' -n <peer> -d -s <session> --scope peer`, `zmux tab status <peer> -s <session> --json`,
-`zmux watch <peer> -s <session>`, `zmux type <peer> -s <session> …`, `zmux tab peer … <peer> -s <session>`. In Pi,
+`zmux tab peer ensure <peer> -s <session> --command '…' --json`, `zmux tab inspect <peer> -s <session> --json`,
+`zmux wait <peer> -s <session> --for turn:ready --json`, `zmux type <peer> -s <session> … --wait-turn ready`, `zmux tab peer … <peer> -s <session>`. In Pi,
 use the equivalent `session` parameter on `zmux_peer_ensure`, `zmux_tab_inspect`, `zmux_run`,
 `zmux_tab_status`, `zmux_runtime_logs`, `zmux_type`, `zmux_tab_peer`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
 "X", outside the current session "Y"` on the read path when a bare name crosses —
@@ -89,7 +89,7 @@ Reuse first — but verify identity:
 ```bash
 zmux tabs <session>
 zmux pane list --joined --session --target <session> --json
-zmux watch <peer> -s <session>
+zmux tab inspect <peer> -s <session> --json
 ```
 
 If the peer tab exists, confirm it is in *this* session and on the right
@@ -104,29 +104,30 @@ pane list above. If it already contains the peer you need, route through that ro
 `tabName` with the normal resolver:
 
 ```bash
-zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n <tabName> -d -s <session> --scope peer
-zmux tab peer start <tabName> -s <session> --role codex --topic '<sanitized topic>'
-zmux tab status <tabName> -s <session> --json
-zmux watch <tabName> -s <session>   # output/startup inspection, not lifecycle truth
+zmux tab peer ensure <tabName> -s <session> --command 'codex --dangerously-bypass-approvals-and-sandbox' --role codex --topic '<sanitized topic>' --json
+zmux tab inspect <tabName> -s <session> --json   # output/startup inspection, not lifecycle truth
 ```
 
-The raw `paneID` is diagnostic; do not target it for the peer loop. `run -n
-<tabName>` preserves zmux state, logging, placement, and lifecycle behavior for
+The raw `paneID` is diagnostic; do not target it for the peer loop. `tab peer ensure`
+preserves zmux state, logging, placement, and lifecycle behavior for
 the joined tab. This does not create a new roster category or bypass tab reaping;
 it is the same roster reuse check before creating another visible peer tab.
 
 Spawn detached with the max-permission profile:
 
 ```bash
-zmux run 'codex --dangerously-bypass-approvals-and-sandbox' -n codex-peer -d -s <session> --scope peer
-zmux tab peer start codex-peer -s <session> --role codex --topic '<sanitized topic>'
-zmux tab status codex-peer -s <session> --json
-zmux watch codex-peer -s <session>   # inspect startup/interstitials if needed
+zmux tab peer ensure codex-peer -s <session> --command 'codex --dangerously-bypass-approvals-and-sandbox' --role codex --topic '<sanitized topic>' --readiness 'Codex|›|❯' --json
+zmux tab inspect codex-peer -s <session> --json   # inspect startup/interstitials if needed
 ```
 
 Do not start peers in OS read-only/workspace-write sandbox modes. The prompt is the
 read-only boundary; the CLI profile should be permissive enough that the peer can read,
 search, and inspect without permission flakiness.
+
+Never start peer agents through headless/print one-shot modes such as `pi -p`,
+`claude -p`, `claude --print`, or equivalent. A peer is a visible interactive
+CLI in a zmux tab; deliver prompts with `zmux type` / Pi `zmux_type` so the user
+can inspect and take over the real session.
 
 Startup interstitials are common. Self-updates, extension installs, auth
 changes, and network installs are consequential; decline or ask the user.
@@ -227,40 +228,42 @@ Treat a fresh peer turn as ready when status shows one of:
 - `turnState=failed` / glyph `failed` — peer turn errored; inspect the screen before trusting anything.
 - `turnState=running` / glyph `running` — the peer is still working; keep doing other in-scope work and check status again later.
 
-Freshness matters. When status carries `turnAt`, record the value after you mark/send `running` and require a later `turnAt` before trusting `ready`; otherwise an old ready state from a prior prompt can self-match. Legacy `waiting` means `ready`.
+Freshness matters. When status carries `turnSeq`, record the baseline before you mark/send `running` and require a later generation before trusting `ready`; `turnAt` is supporting evidence only. Otherwise an old ready state from a prior prompt can self-match. Legacy `waiting` means `ready`.
 
-`watch --idle` is not the primary completion signal for instrumented peers. Use it for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use `watch --until`, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT". `watch --until` observes new output after its baseline; for fast peer replies, pair it with a buffer/log grep so already-in-tail output is still valid evidence and not a retry loop.
+`zmux wait --for turn:ready --json` is the primary completion signal for instrumented peers; Pi `zmux_type(waitForTurnState)` uses the same core path. `watch --idle` is not the primary completion signal. Use `wait --for idle:` / `watch --idle` for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use output regex waits, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT". Output waits observe new output after their baseline; for fast peer replies, pair them with a buffer/log grep so already-in-tail output is still valid evidence and not a retry loop.
 
 For long peer turns, status checks are beats, not proof of correctness. A `ready` state means "the peer thinks the turn ended"; still read the answer and judge it.
 
 ## Canonical flow failure
 
-The canonical loop is: pinned peer spawn/reuse → `tab peer start` → verified prompt submit → `tab peer running` → status/readiness check → read answer → `consumed`/`park`.
+The canonical loop is: first-class peer spawn/reuse (`tab peer ensure`) → verified prompt submit (`type --mark-peer-running --wait-turn`) → status/readiness check → read answer → `consumed`/`park`.
 
 If that loop breaks, do **not** quietly switch to a different automation style.
 After at most two bounded attempts, stop the peer-driving work and diagnose the
 zmux surface itself:
 
 ```bash
-zmux tab status <peer> -s <session> --json
-zmux watch <peer> -s <session> -l 120
+zmux tab inspect <peer> -s <session> --json -l 120
+zmux wait <peer> -s <session> --for turn:ready --json -T 10
 ```
 
 In Pi, prefer `zmux_tab_inspect` for the status+output bundle and
 `zmux_peer_ensure` / `zmux_type` with short wait fields for the composed happy
-path. For long peer turns where the host should continue after the peer answers,
-use `zmux_peer_handoff`: it types the prompt and schedules an output
-callback/handoff. Treat it as a bounded output/idle handoff unless lifecycle `turnAt`
-proves true instrumented readiness.
+path. These are thin adapters over core `tab inspect`, `tab peer ensure`, and
+`type --wait-*`. For long peer turns where the host should continue after the
+peer answers, use `zmux_peer_handoff`: it types the prompt and schedules a
+wait-backed callback/handoff. Treat output/idle callback basis as fallback
+evidence unless lifecycle `turnSeq` / fresh `turnState` proves true instrumented
+readiness.
 
 Use the fields that actually describe this failure:
 
 - `lastExit != 0` or `cmdState=failed` — the peer process/command failed; inspect output and fix the clear command/core issue if obvious, otherwise report zmux/tooling as suspect.
 - `turnState` never advances after `tab peer start`/`running` — lifecycle instrumentation is broken or the peer CLI has no usable hook; report `unproven`, do not fake readiness with sleeps.
-- `turnState=ready` but `turnAt` is not newer than your `running` mark — stale ready from a prior prompt; keep waiting briefly or return `unproven`.
+- `turnState=ready` but `turnSeq` is not newer than your pre-submit baseline (with `turnAt` only supporting evidence) — stale ready from a prior prompt; keep waiting briefly or return `unproven`.
 - screen shows install/auth/update/password/UI prompt — classify as interstitial/attention, not success.
 
-`zmux doctor` is **not** the peer-process doctor; today it checks shell integration freshness. Run it only when the symptom points at stale shell hooks/lifecycle setup. Otherwise, the diagnostic path is `tab status --json` plus recent output. If the clear fix is in zmux core/tooling, fix that; if not, break out with the evidence instead of chaining `--print`, raw pane keys, manual sleeps, or `C-c` workarounds.
+`zmux doctor` is **not** the peer-process doctor; today it checks shell integration freshness. Run it only when the symptom points at stale shell hooks/lifecycle setup. Otherwise, the diagnostic path is `tab inspect --json` plus a bounded `wait` if a fresh condition is expected. If the clear fix is in zmux core/tooling, fix that; if not, break out with the evidence instead of chaining `--print`, raw pane keys, manual sleeps, or `C-c` workarounds.
 
 ## Classify fallback/output
 

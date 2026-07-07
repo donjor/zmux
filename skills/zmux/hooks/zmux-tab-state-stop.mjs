@@ -16,6 +16,10 @@
 
 import { execFileSync } from 'node:child_process'
 
+export function zmuxCommand(env = process.env) {
+  return (env.PI_ZMUX_BIN || env.ZMUX_BIN || 'zmux').trim() || 'zmux'
+}
+
 export function peerStopCommandArgs() {
   return ['tab', 'peer', 'ready', '--source', 'claude-stop']
 }
@@ -30,8 +34,9 @@ export function shouldRun(env) {
 
 function main() {
   if (!shouldRun(process.env)) return
+  const bin = zmuxCommand(process.env)
   try {
-    execFileSync('zmux', peerStopCommandArgs(), {
+    execFileSync(bin, peerStopCommandArgs(), {
       timeout: 1500,
       stdio: ['ignore', 'ignore', 'ignore'],
     })
@@ -41,7 +46,7 @@ function main() {
     // tab ready glyph path below.
   }
   try {
-    execFileSync('zmux', stopCommandArgs(), {
+    execFileSync(bin, stopCommandArgs(), {
       timeout: 1500,
       stdio: ['ignore', 'ignore', 'ignore'],
     })

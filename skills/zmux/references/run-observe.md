@@ -37,23 +37,26 @@ The first time `run`, `send`, or `type` reaches a tab by name, zmux pins that st
 
 ## Read tab state and output
 
-Use `tab status` for lifecycle/command/peer state:
+Use `tab status` / `tab inspect` for lifecycle/command/peer state and one-shot diagnosis:
 
 ```bash
 zmux tab status <tab> --json                  # machine-readable state
+zmux tab inspect <tab> --json -l 120          # state + output tail + warnings
 ```
 
-Use `watch` for output:
+Use `wait` for structured condition waits and `watch` for human output reading:
 
 ```bash
+zmux wait <tab> --for cmd:done --json         # fresh command lifecycle result
+zmux wait <tab> --for turn:ready --json       # fresh peer/agent turn result
+zmux wait <tab> --for output:'ready|listening' --json -T 60
+zmux wait <tab> --for idle:3s --json -T 300
 zmux watch <tab>                              # last 50 lines
 zmux watch <tab> -l 200                       # last 200 lines
 zmux watch <tab> -f                           # follow live
-zmux watch <tab> --idle 3 -T 300              # wait until screen is quiet
-zmux watch <tab> --until 'ready|listening' -T 60   # wait for new matching output
 ```
 
-`watch --until` snapshots the buffer at start and matches only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt. For fast responders, pair `watch --until` with a buffer/log proof (`watch -l`, `zmux_log tail`, or `zmux_tab_inspect` in Pi): if the marker is already in tail, record it as already-in-tail evidence instead of retrying blindly. Do not use `watch` as lifecycle truth when `tab status` can answer state.
+`wait --for output:<regex>` and legacy `watch --until` snapshot the buffer at start and match only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt. For fast responders, `wait --json` distinguishes an already-visible marker with `failureKind: "output_regex_already_present"` and `alreadyInTail: true`; treat that as tail evidence, not fresh future output. Pair waits with a buffer/log proof (`tab inspect`, `watch -l`, `zmux_log tail`, or `zmux_tab_inspect` in Pi) instead of retrying blindly. Do not use output/idle evidence as lifecycle truth when `tab status` or `wait --for turn:/cmd:` can answer state. Do not use `watch` as lifecycle truth.
 
 For persistent bounded recording that survives detach, use `zmux log`:
 
@@ -72,6 +75,7 @@ zmux log stop <tab>           # stop recording
 ```bash
 zmux send <tab> C-c          # raw keys: C-c, Enter, Escape, arrows, etc.
 zmux type <tab> '<text>'     # type text and submit it
+zmux type <peer> '<prompt>' --mark-peer-running --wait-turn ready --json
 ```
 
 `send` and `type` target an existing tab. Create a persistent shell first with `zmux run … -n <tab> -d` when you intend to drive it interactively.

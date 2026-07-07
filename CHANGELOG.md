@@ -7,6 +7,13 @@ versioning is semver-ish until the first public release.
 ## [Unreleased]
 > Release tag: pending | Compare: `v0.11.2...HEAD`
 
+### Added
+
+- **Core agent wait surface** `agents` `tabs` -- `zmux wait`, `zmux tab inspect`, `zmux tab peer ensure`, and `zmux type --wait-* --json` now make fresh command/turn waits, output-regex waits, idle fallback, status snapshots, and safe peer create/reuse first-class CLI behavior.
+- **Pi callback and peer-handoff tools use core waits** `agents` `pi` -- `zmux_callback` starts, lists, and cancels live-session-scoped `zmux wait --json` callbacks that notify Pi when a visible tab matches future output or goes idle; `zmux_peer_handoff` types a peer prompt and schedules the same handoff without agent-side sleeps while reporting the evidence basis.
+- **First-class peer/tab inspection composites** `agents` `pi` -- `zmux_tab_inspect`, `zmux_peer_ensure`, wait-aware `zmux_type`, and wait/idle `zmux_runtime_logs` are thin adapters over the core CLI surfaces and bundle status, output tail, freshness checks, warnings, and failure kinds so agents do not hand-roll `status`/`watch` loops.
+- **Branch-local agent-surface QA prompts** `agents` `qa` -- `docs/dev/test-prompts/` now carries fresh-session prompts for shared skill/CLI and Pi extension smoke testing against the isolated `zzmux` profile.
+
 ## [0.11.2] - 2026-07-05
 > Release tag: `v0.11.2` | Topics: `shell`, `agents`, `pi`, `tabs`, `panes`, `qa` | Compare: `v0.11.1...v0.11.2`
 

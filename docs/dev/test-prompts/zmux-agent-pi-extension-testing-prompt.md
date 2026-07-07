@@ -25,7 +25,7 @@ If you are already inside Pi and cannot relaunch with `PI_ZMUX_BIN=zzmux`, still
 ## Safety rules
 
 1. Prefer native Pi `zmux_*` tools for zmux operations. Use bounded shell only for source reads, grep inventory, and package test commands.
-2. Do not bypass the bash guard with `PI_ZMUX_ALLOW=1` or `# pi-zmux: allow` unless the test is specifically about documenting that bypass exists. Do not use the bypass to make a blocked action pass.
+2. Do not bypass the bash guard with `PI_ZMUX_ALLOW=1` or `# pi-zmux: allow` unless the test is specifically about documenting that bypass exists. Do not use the bypass to turn a blocked action into a passing check.
 3. Do not invoke `zmux_reload`, `zmux_pi_reload`, or `zmux_pi_respawn`; inspect their descriptions/docs only. These affect live config or the active Pi pane.
 4. Do not call focus-moving tools (`zmux_tab_focus`, `zmux_pane_focus`, or any `focus: true`) unless the human explicitly asks to move terminal focus.
 5. Peer/worker checks must use typed tools, not docs-only validation. This prompt authorizes exactly one bounded real nested `claude`/`codex`/`pi`/`agy` peer when `PI_ZMUX_BIN=zzmux` isolation is confirmed. If no peer CLI is available or auth blocks it, report `BLOCKED`; do not substitute a fake peer and call it pass.
@@ -136,7 +136,7 @@ Required typed-tool path:
 
 1. **Worker session birth and targeting**
    - Use `zmux_session_run` to create `worker-$RUN_ID` with tab `worker` in the current workspace. Command: `bash -lc 'sleep 3; echo worker-ready; while IFS= read -r line; do sleep 3; echo "worker-saw:$line"; done'`.
-   - Use `zmux_runtime_logs` (name/tab `worker`) or `zmux_tab_inspect` with session `<workspace>/worker-$RUN_ID` to wait for `worker-ready`. If a wait times out but the captured tail already contains the marker, record `watch_already_in_tail` as valid already-in-tail evidence and use `zmux_tab_inspect`/logs for proof; do not retry blindly.
+   - Use `zmux_runtime_logs` (name/tab `worker`) or `zmux_tab_inspect` with session `<workspace>/worker-$RUN_ID` to wait for `worker-ready`. The wait-backed tools should report an evidence `basis` such as `outputRegex` or `idleFallback`; if a wait times out but the captured tail already contains the marker, record already-in-tail evidence and use `zmux_tab_inspect`/logs for proof; do not retry blindly.
    - Use `zmux_tabs` and `zmux_pane_list` with session `<workspace>/worker-$RUN_ID` to prove the branch's `workspace/session` targeting path works through the typed wrapper.
 
 2. **Reviewable command, status, inspect, and logs**
@@ -159,9 +159,9 @@ Required typed-tool path:
    - Use `zmux_tab_peer` on `worker` with the same session and report `zmux_tab_status` / `zmux_tab_inspect` evidence.
 
 6. **Callback and peer-handoff notifications**
-   - Use `zmux_callback` with action `watch` on `worker` in session `<workspace>/worker-$RUN_ID`, `waitFor: "worker-saw:callback-$RUN_ID"`, and a short timeout. Then use `zmux_type` to send `callback-$RUN_ID`; the Pi session should receive a callback message with output evidence before the next model call because default delivery is `steer`. In JSONL, delivered callback messages are top-level `custom_message` records with `customType: "pi-zmux-callback"`, not wrapped `message` records. Report whether the callback message arrived or mark `FAIL/BLOCKED` with evidence.
+   - Use `zmux_callback` with action `watch` on `worker` in session `<workspace>/worker-$RUN_ID`, `waitFor: "worker-saw:callback-$RUN_ID"`, and a short timeout. Then use `zmux_type` to send `callback-$RUN_ID`; the Pi session should receive a callback message with output evidence and `basis: outputRegex` before the next model call because default delivery is `steer`. In JSONL, delivered callback messages are top-level `custom_message` records with `customType: "pi-zmux-callback"`, not wrapped `message` records. Report whether the callback message arrived or mark `FAIL/BLOCKED` with evidence.
    - Use `zmux_callback` action `list` before/after callback completion to prove callback handles are visible and not leaked; the list text should include active callbacks and recent completions. If a callback remains active after the proof, use action `cancel` and report it.
-   - If a real peer is available in the next step, use `zmux_peer_handoff` for one prompt instead of raw `zmux_type` when possible. It should type the prompt and deliver an output callback/handoff when the peer output matches or goes idle.
+   - If a real peer is available in the next step, use `zmux_peer_handoff` for one prompt instead of raw `zmux_type` when possible. It should type the prompt and deliver a wait-backed callback/handoff with an explicit basis when the peer output matches or goes idle.
 
 7. **Real peer composite**
    - Determine whether a supported peer CLI is available with bounded shell (`command -v claude`, then `codex`, `pi`, `agy`). This shell probe is allowed because Pi has no typed command-inventory tool.
@@ -227,9 +227,9 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence.
 ### Callback and peer composites
 
 - `zmux_callback` proves long-running completion handoff without agent-side sleeps/poll loops and leaves no leaked callback handles.
-- `zmux_peer_handoff` types the prompt and delivers an output callback/handoff, or reports `BLOCKED` when no real peer CLI/auth is available.
-- `zmux_peer_ensure` returns spawn/reuse/readiness/status/output evidence or an explicit unproven/blocked result.
-- `zmux_type` peer wait uses fresh `turnAt`, not stale `ready` state; uninstrumented nested CLIs may return `unproven` even when output proves a response.
+- `zmux_peer_handoff` types the prompt and delivers a wait-backed callback/handoff with explicit basis, or reports `BLOCKED` when no real peer CLI/auth is available.
+- `zmux_peer_ensure` returns core peer ensure spawn/reuse/readiness/status/output evidence or an explicit unproven/blocked result.
+- `zmux_type` peer wait uses fresh generation (`turnSeq`, with `turnAt` as supporting evidence), not stale `ready` state; uninstrumented nested CLIs may return `unproven` even when output proves a response.
 - `zmux_tab_inspect` is useful for one-call status+output diagnosis.
 - Unavailable real peer CLIs are `BLOCKED`, not silent passes.
 

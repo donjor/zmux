@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -18,6 +18,7 @@ try {
     autoPaneResizeAxis,
     buildCallbackWatchArgs,
     buildLogArgs,
+    clearCallbacks,
     buildPaneOpenArgs,
     buildPiReloadScript,
     buildSessionListArgs,
@@ -32,11 +33,13 @@ try {
     buildTabStatusArgs,
     buildTmuxRespawnScript,
     buildWatchArgs,
+    buildWaitArgs,
     buildZmuxRunArgs,
     detectUserInputPrompt,
     listCallbacks,
     listRecentCallbackCompletions,
     settledFreshCommandStatus,
+    startWatchCallback,
     statusWarnings,
     turnWaitOutcomeForStatus,
     watchPatternPresentInText,
@@ -45,7 +48,7 @@ try {
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
   const { reloadContinuationPath, shouldTriggerContinuation, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
-  const { shouldWaitForExit, validateLogParams } = await import(join(outDir, 'src/tools/shared.js'));
+  const { hasHeadlessAgentPrintMode, rejectHeadlessAgentPrintMode, shouldWaitForExit, validateLogParams } = await import(join(outDir, 'src/tools/shared.js'));
   const { default: registerExtension } = await import(join(outDir, 'src/index.js'));
 
   const registeredTools = [];
@@ -159,6 +162,9 @@ try {
     ['rg -n "sudo|ssh|zmux tabs" src test', 'safe'],
     ['echo "tmux send-keys -t %347 l"', 'safe'],
     ['zmux terminal capabilities', 'safe'],
+    ['claude -p "review this"', 'headless_agent'],
+    ['PI_ZMUX_BIN=zzmux pi -p "review this"', 'headless_agent'],
+    ['rg "claude -p" skills/zmux', 'safe'],
     ['sudo apt update', 'interactive'],
     ['export CLAUDE_CODE_SESSION_ID=x\nexport PI_SESSION_FILE=/tmp/session.jsonl\nsudo apt update', 'interactive'],
     ['ssh prod', 'interactive'],
@@ -196,11 +202,39 @@ try {
   console.log(`pi corpus parity: ${corpusChecked} rows matched`);
   assert.equal(stripQuotedSegments('rg -n "sudo|ssh|zmux tabs" src').includes('sudo'), false);
   assert.equal(stripQuotedSegments('rg -n "sudo|ssh|zmux tabs" src').includes('zmux tabs'), false);
+  assert.equal(hasHeadlessAgentPrintMode('claude -p "review this"'), true);
+  assert.equal(hasHeadlessAgentPrintMode('echo "; claude -p is banned"'), false);
+  assert.equal(rejectHeadlessAgentPrintMode('echo "; pi --print is banned"'), undefined);
+  assert.equal(hasHeadlessAgentPrintMode('claude --dangerously-skip-permissions'), false);
+  assert.match(rejectHeadlessAgentPrintMode('pi -p "review this"'), /do not launch agent peers/i);
+  assert.equal(rejectHeadlessAgentPrintMode('pi --model openai/gpt-5.5'), undefined);
   assert.equal(hasExplicitBypass('PI_ZMUX_ALLOW=1 zmux tabs'), true);
   assert.equal(hasExplicitBypass('zmux tabs # pi-zmux: allow'), true);
   assert.equal(hasExplicitBypass('zmux tabs'), false);
   assert.deepEqual(listCallbacks(), []);
   assert.deepEqual(listRecentCallbackCompletions(), []);
+  const fakeZmuxBin = join(outDir, 'fake-zmux-wait.sh');
+  writeFileSync(fakeZmuxBin, [
+    '#!/bin/sh',
+    'if [ "$1" = "pane" ] && [ "$2" = "current" ]; then echo "{}"; exit 0; fi',
+    'sleep 30',
+  ].join('\n'));
+  chmodSync(fakeZmuxBin, 0o755);
+  const previousZmuxBin = process.env.PI_ZMUX_BIN;
+  process.env.PI_ZMUX_BIN = fakeZmuxBin;
+  try {
+    startWatchCallback(fakePi, { id: 'cleanup-test', tab: 'bench', cwd: root, waitFor: 'DONE', timeoutSeconds: 30 });
+    assert.equal(listCallbacks().length, 1, 'callback should be active before shutdown cleanup');
+    const shutdownHandler = registeredHandlers.find((handler) => handler.event === 'session_shutdown')?.handler;
+    assert.ok(shutdownHandler, 'session_shutdown handler registered');
+    await shutdownHandler({}, { cwd: root });
+    assert.deepEqual(listCallbacks(), [], 'session shutdown should cancel active callbacks');
+    assert.deepEqual(listRecentCallbackCompletions(), [], 'shutdown cancellation should not report cancelled callbacks as completed');
+  } finally {
+    if (previousZmuxBin === undefined) delete process.env.PI_ZMUX_BIN;
+    else process.env.PI_ZMUX_BIN = previousZmuxBin;
+    clearCallbacks();
+  }
   assert.equal(autoPaneResizeAxis({ paneWidth: 80, paneHeight: 6, windowWidth: 80, windowHeight: 23 }), 'height');
   assert.equal(autoPaneResizeAxis({ paneWidth: 35, paneHeight: 23, windowWidth: 80, windowHeight: 23 }), 'width');
   assert.equal(autoPaneResizeAxis(undefined), 'width');
@@ -257,8 +291,11 @@ try {
   assert.deepEqual(buildWatchArgs({ tab: 'server', idleSeconds: 2 }), [
     'watch', 'server', '-l', '120', '--idle', '2', '-T', '10',
   ]);
+  assert.deepEqual(buildWaitArgs({ tab: 'claude-peer', session: 'zws/repo', lines: 80, waitFor: 'ready', timeoutSeconds: 8 }), [
+    'wait', 'claude-peer', '--for', 'output:ready', '-l', '80', '-T', '8', '--json', '-s', 'zws/repo',
+  ]);
   assert.deepEqual(buildCallbackWatchArgs({ tab: 'bench', session: 'repo/main', waitFor: 'DONE', timeoutSeconds: 60 }), [
-    'watch', 'bench', '-l', '160', '--until', 'DONE', '-T', '60', '-s', 'repo/main',
+    'wait', 'bench', '--for', 'output:DONE', '-l', '160', '-T', '60', '--json', '-s', 'repo/main',
   ]);
   assert.equal(watchPatternPresentInText('ready-service', 'tail\nready-service'), true);
   assert.equal(watchPatternPresentInText('[invalid', 'tail [invalid'), false);

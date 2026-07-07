@@ -109,9 +109,9 @@ else
   zzmux log stop "$SCRATCH" || true
 
   zzmux run 'while true; do sleep 1; echo ready-service; sleep 60; done' -n "$DEV" -d --scope daemon
-  zzmux watch "$DEV" --until 'ready-service' -T 30
+  zzmux wait "$DEV" --for output:'ready-service' --json -T 30
   zzmux send "$DEV" C-c
-  zzmux watch "$DEV" --idle 2 -T 20 || true
+  zzmux wait "$DEV" --for idle:2s --json -T 20 || true
 
   zzmux tab state ready "$SCRATCH" --msg 'skill smoke ready'
   zzmux tab status "$SCRATCH" --json
@@ -219,14 +219,14 @@ else
     echo "BLOCKED: no current workspace for detached worker check"
   else
     zzmux session run "$WORKER" -n worker -- bash -lc 'sleep 1; echo worker-ready; while IFS= read -r line; do sleep 1; echo "worker-saw:$line"; done'
-    zzmux watch worker -s "$WORKSPACE/$WORKER" --until 'worker-ready' -T 30
+    zzmux wait worker -s "$WORKSPACE/$WORKER" --for output:'worker-ready' --json -T 30
 
     zzmux pane list --session --target "$WORKSPACE/$WORKER"
     zzmux tab state ready worker -s "$WORKSPACE/$WORKER" --msg 'state via workspace/session'
     zzmux tab status worker -s "$WORKSPACE/$WORKER" --json
 
     zzmux type worker -s "$WORKSPACE/$WORKER" "hello-worker-$RUN_ID"
-    zzmux watch worker -s "$WORKSPACE/$WORKER" --until "worker-saw:hello-worker-$RUN_ID" -T 30
+    zzmux wait worker -s "$WORKSPACE/$WORKER" --for output:"worker-saw:hello-worker-$RUN_ID" --json -T 30
 
     zzmux tab peer ready worker -s "$WORKSPACE/$WORKER" --source e2e --msg 'worker lifecycle via -s'
     zzmux tab status worker -s "$WORKSPACE/$WORKER" --json
@@ -288,7 +288,7 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence. A documentati
 
 - `run`, `watch`, `log`, `send`, and `type` have clear examples and separation of lifecycle vs output.
 - `tab status --json` is the lifecycle/command/peer state source of truth.
-- `watch --until` and `watch --idle` are documented as output observation, not process truth. For fast markers, count already-in-tail output only when a buffer/log read proves the marker, and call it out in the report instead of retrying blindly.
+- `zmux wait --for output:/idle:` is documented as structured output/idle evidence, not process truth; `watch --until`/`--idle` remain human output tools. For fast markers, count already-in-tail output only when a buffer/log read proves the marker, and call it out in the report instead of retrying blindly.
 - No custom sentinels, wrapper scripts, or hand-rolled poll loops are recommended.
 - Reuse/restart-in-place pattern is documented.
 
@@ -303,7 +303,7 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence. A documentati
 
 ### Peer and worker flows
 
-- Peer flow uses a visible `<agent>-peer` tab, prompt-scoped lifecycle, status-first observation, and fresh `turnAt` readiness.
+- Peer flow uses a visible `<agent>-peer` tab, prompt-scoped lifecycle, status-first observation, and fresh generation (`turnSeq`, with `turnAt` as supporting evidence) readiness.
 - Peer submission hygiene is covered: read-only contract, file pointers, no huge pasted diffs when paths suffice.
 - Canonical peer-flow failure protocol is documented: stop on unproven/stale/attention instead of piling prompts.
 - Worker flow uses isolated worktrees/sessions, `zmux session run` rather than attaching/spawning blank shells, and explicit lifecycle/cleanup.

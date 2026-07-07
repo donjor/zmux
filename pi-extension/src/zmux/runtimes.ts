@@ -38,14 +38,12 @@ export async function runtimeEnsure(params: {
 	}
 
 	if (params.readiness) {
-		const timeout = String(params.timeoutSeconds ?? 90);
 		try {
-			const watch = await zmux(withSession(["watch", params.tab, "--until", params.readiness, "-T", timeout, "-l", "120"], params.session), {
-				cwd: params.cwd,
-				timeoutMs: (Number(timeout) + 5) * 1000,
-			});
-			output.push(trimOutput(watch.stdout));
-			details.ready = true;
+			const watch = await watchTabOutput({ tab: params.tab, cwd: params.cwd, session: params.session, lines: 120, waitFor: params.readiness, timeoutSeconds: params.timeoutSeconds ?? 90 });
+			output.push(watch.text);
+			details.ready = watch.details.failed !== true;
+			details.readinessBasis = watch.details.basis;
+			details.readinessFailureKind = watch.details.failureKind;
 		} catch (error) {
 			output.push(`readiness not confirmed: ${error instanceof Error ? error.message : String(error)}`);
 			details.ready = false;

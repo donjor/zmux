@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { resolve } from "node:path";
+import { stripQuotedSegments } from "../classify.js";
 import { loadConfig } from "../config.js";
 import type { LogAction, TabPlacementAction, TabPlacementDirection, TabStateAction } from "../zmux.js";
 
@@ -48,6 +49,17 @@ export function shouldWaitForExit(command: string): boolean {
 		return false;
 	}
 	return /(^|[;&|]\s*)(sudo|su)\b/u.test(trimmed);
+}
+
+const headlessAgentPrintPattern = /(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)/u;
+
+export function hasHeadlessAgentPrintMode(command: string): boolean {
+	return headlessAgentPrintPattern.test(stripQuotedSegments(command.trim()));
+}
+
+export function rejectHeadlessAgentPrintMode(command: string): string | undefined {
+	if (!hasHeadlessAgentPrintMode(command)) return undefined;
+	return "ERROR: do not launch agent peers with -p/--print. Use a visible interactive CLI in a zmux tab, then deliver prompts with zmux_type / zmux_peer_handoff.";
 }
 
 export type PaneDirection = "right" | "left" | "down" | "up";

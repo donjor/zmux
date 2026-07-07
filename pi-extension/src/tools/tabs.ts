@@ -20,6 +20,7 @@ import {
 import {
 	content,
 	logAction,
+	rejectHeadlessAgentPrintMode,
 	resolveCwd,
 	tabPlacementAction,
 	tabPlacementDirection,
@@ -136,7 +137,7 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_tab_inspect",
 		label: "zmux tab inspect",
-		description: "Inspect a zmux tab in one call: lifecycle/status JSON plus recent output tail and warnings. Prefer this over repeated tabs/status/logs calls when diagnosing agent or peer state.",
+		description: "Inspect a zmux tab via first-class `zmux tab inspect`: lifecycle/status JSON plus recent output tail and warnings. Prefer this over repeated tabs/status/logs calls when diagnosing agent or peer state.",
 		promptSnippet: "Inspect tab status plus recent output",
 		parameters: Type.Object({
 			tab: Type.String({ description: "Tab name target" }),
@@ -153,7 +154,7 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_peer_ensure",
 		label: "zmux peer ensure",
-		description: "Create/reuse a peer tab, stamp peer lifecycle metadata, wait briefly for readiness if requested, and return status plus output evidence. Use for prompt-scoped peer CLIs instead of hand-rolled run/status/watch loops.",
+		description: "Create/reuse a peer tab via first-class `zmux tab peer ensure`, stamp peer lifecycle metadata, wait briefly for readiness if requested, and return status plus output evidence. Use for prompt-scoped peer CLIs instead of hand-rolled run/status/watch loops.",
 		promptSnippet: "Ensure a peer tab and inspect readiness",
 		parameters: Type.Object({
 			tab: Type.String({ description: "Peer tab name, e.g. claude-peer or codex-peer" }),
@@ -173,6 +174,10 @@ export function registerTabTools(pi: ExtensionAPI): void {
 			restart: Type.Optional(Type.Boolean({ description: "Send C-c before starting command" })),
 		}),
 		async execute(_id, params, _signal, _onUpdate, ctx) {
+			if (params.command) {
+				const headlessAgentError = rejectHeadlessAgentPrintMode(params.command);
+				if (headlessAgentError) return content(headlessAgentError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" });
+			}
 			const result = await peerEnsure({
 				tab: params.tab,
 				command: params.command,
@@ -373,7 +378,7 @@ export function registerTabTools(pi: ExtensionAPI): void {
 	pi.registerTool({
 		name: "zmux_type",
 		label: "zmux type",
-		description: "Type text plus Enter into an existing zmux tab. For sudo/password/manual-input commands, prefer zmux_interactive_type. For peer turns, optionally mark running and wait briefly for fresh lifecycle readiness.",
+		description: "Type text plus Enter via first-class `zmux type`. For sudo/password/manual-input commands, prefer zmux_interactive_type. For peer turns, optionally mark running and wait briefly for fresh lifecycle readiness.",
 		promptSnippet: "Type text into an existing zmux tab",
 		parameters: Type.Object({
 			tab: Type.String({ description: "Target tab/window" }),

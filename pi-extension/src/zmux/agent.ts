@@ -1,7 +1,5 @@
 import { runFileStatus, trimOutput } from "../shell.js";
-import { runCommand } from "./sessions.js";
-import { delay, safeJson, withSession, zmux, zmuxBin } from "./shared.js";
-import { setTabPeer, tabStatus, type TabPeerAction, typeText } from "./tabs.js";
+import { safeJson, withSession, zmux, zmuxBin } from "./shared.js";
 
 export type TurnWaitOutcome = "accepted" | "running" | "ready" | "attention" | "failed" | "unproven";
 
@@ -59,6 +57,18 @@ export function buildWatchArgs(params: { tab: string; session?: string; lines?: 
 	return withSession(args, params.session);
 }
 
+export function buildWaitArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; timeoutSeconds?: number }): string[] {
+	if (params.waitFor && params.idleSeconds !== undefined) {
+		throw new Error("waitFor and idleSeconds cannot be combined");
+	}
+	if (!params.waitFor && params.idleSeconds === undefined) {
+		throw new Error("wait requires waitFor or idleSeconds");
+	}
+	const condition = params.waitFor ? `output:${params.waitFor}` : `idle:${params.idleSeconds}`;
+	const args = ["wait", params.tab, "--for", condition, "-l", String(params.lines ?? 120), "-T", String(params.timeoutSeconds ?? 10), "--json"];
+	return withSession(args, params.session);
+}
+
 export function watchPatternPresentInText(pattern: string | undefined, text: string): boolean {
 	if (!pattern || !text) return false;
 	try {
@@ -66,38 +76,6 @@ export function watchPatternPresentInText(pattern: string | undefined, text: str
 	} catch {
 		return false;
 	}
-}
-
-export async function watchTabOutput(params: WatchTabParams): Promise<{ text: string; details: Record<string, unknown> }> {
-	const args = buildWatchArgs(params);
-	const timeoutSeconds = params.waitFor || params.idleSeconds !== undefined ? (params.timeoutSeconds ?? 10) : undefined;
-	const result = await runFileStatus(zmuxBin(), args, {
-		cwd: params.cwd,
-		timeoutMs: timeoutSeconds !== undefined ? (timeoutSeconds + 5) * 1000 : 10_000,
-	});
-	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
-	const details: Record<string, unknown> = {
-		tab: params.tab,
-		session: params.session,
-		lines: params.lines ?? 120,
-		waitFor: params.waitFor,
-		idleSeconds: params.idleSeconds,
-		timeoutSeconds,
-		failed: result.failed,
-		zmuxExitCode: result.exitCode,
-	};
-	if (result.signal) details.signal = result.signal;
-	const patternPresentInTail = watchPatternPresentInText(params.waitFor, output);
-	if (params.waitFor) details.patternPresentInTail = patternPresentInTail;
-	if (result.timedOut) details.failureKind = "tool_timeout";
-	else if (result.failed) details.failureKind = params.waitFor || params.idleSeconds !== undefined ? "watch_unproven" : "watch_failed";
-	const notes: string[] = [];
-	if (result.failed && params.waitFor && patternPresentInTail) {
-		details.failureKind = "watch_already_in_tail";
-		details.nextAction = "Pattern is present in the captured tail but was not observed as new output after the watch baseline; use a future marker, delayed output, or tab_inspect evidence.";
-		notes.push(`NOTE: ${details.nextAction}`);
-	}
-	return { text: trimOutput([output, ...notes].filter(Boolean).join("\n")), details };
 }
 
 function recordFrom(value: unknown): Record<string, unknown> | undefined {
@@ -110,11 +88,24 @@ function stringField(status: Record<string, unknown> | undefined, field: string)
 	return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function turnAtSeconds(status: Record<string, unknown> | undefined): number | undefined {
-	const raw = stringField(status, "turnAt");
+function numberField(status: Record<string, unknown> | undefined, field: string): number | undefined {
+	const raw = stringField(status, field);
 	if (!raw) return undefined;
 	const parsed = Number(raw);
 	return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function boolField(status: Record<string, unknown> | undefined, field: string): boolean | undefined {
+	const value = status?.[field];
+	return typeof value === "boolean" ? value : undefined;
+}
+
+function turnAtSeconds(status: Record<string, unknown> | undefined): number | undefined {
+	return numberField(status, "turnAt");
+}
+
+function turnSeq(status: Record<string, unknown> | undefined): number | undefined {
+	return numberField(status, "turnSeq") ?? numberField(status, "peerTurns");
 }
 
 function normalizeTurnState(state: string): string {
@@ -132,6 +123,7 @@ export function statusWarnings(status: Record<string, unknown> | undefined, cont
 	const lastExit = stringField(status, "lastExit");
 	const turnState = stringField(status, "turnState");
 	const turnAt = turnAtSeconds(status);
+	const seq = turnSeq(status);
 	if (lastExit && lastExit !== "0") {
 		warnings.push(`last command exited with ${lastExit}`);
 		failureKind = "command_exit";
@@ -152,9 +144,13 @@ export function statusWarnings(status: Record<string, unknown> | undefined, cont
 		warnings.push("turn state is unavailable; readiness is unproven");
 		failureKind = failureKind ?? "turn_state_unavailable";
 	}
-	if (context.targetState && normalizeTurnState(context.targetState) === normalizeTurnState(turnState ?? "") && context.expectFreshAfter !== undefined && (turnAt === undefined || turnAt <= context.expectFreshAfter)) {
-		warnings.push("matching turn state is stale; readiness is unproven");
-		failureKind = failureKind ?? "stale_turn_state";
+	if (context.targetState && normalizeTurnState(context.targetState) === normalizeTurnState(turnState ?? "") && context.expectFreshAfter !== undefined) {
+		const freshBySeq = seq !== undefined && seq > context.expectFreshAfter;
+		const freshByTime = seq === undefined && turnAt !== undefined && turnAt > context.expectFreshAfter;
+		if (!freshBySeq && !freshByTime) {
+			warnings.push("matching turn state is stale; readiness is unproven");
+			failureKind = failureKind ?? "stale_turn_state";
+		}
 	}
 	return { warnings, failureKind };
 }
@@ -167,8 +163,10 @@ export function turnWaitOutcomeForStatus(status: Record<string, unknown> | undef
 	const target = targetState ? normalizeTurnState(targetState) : undefined;
 	if (target && !["running", "ready", "attention", "failed"].includes(target)) return "unproven";
 	if (target && normalizeTurnState(turnState ?? "") === target) {
+		if (expectFreshAfter === undefined) return target as TurnWaitOutcome;
+		const seq = turnSeq(status);
 		const turnAt = turnAtSeconds(status);
-		if (expectFreshAfter === undefined || (turnAt !== undefined && turnAt > expectFreshAfter)) {
+		if ((seq !== undefined && seq > expectFreshAfter) || (seq === undefined && turnAt !== undefined && turnAt > expectFreshAfter)) {
 			return target as TurnWaitOutcome;
 		}
 	}
@@ -177,164 +175,159 @@ export function turnWaitOutcomeForStatus(status: Record<string, unknown> | undef
 
 async function readStatusRecord(params: { tab: string; cwd: string; session?: string }): Promise<{ text: string; status?: Record<string, unknown>; warning?: string }> {
 	try {
-		const statusResult = await tabStatus(params);
-		const status = recordFrom(statusResult.details.status) ?? recordFrom(safeJson(statusResult.text));
-		return { text: statusResult.text, status };
+		const result = await zmux(withSession(["tab", "status", params.tab, "--json"], params.session), { cwd: params.cwd, timeoutMs: 5_000 });
+		const text = trimOutput(result.stdout || result.stderr);
+		return { text, status: recordFrom(safeJson(text)) };
 	} catch (error) {
 		return { text: "", warning: error instanceof Error ? error.message : String(error) };
 	}
 }
 
-export async function inspectTab(params: InspectTabParams): Promise<{ text: string; details: Record<string, unknown> }> {
-	const statusResult = await readStatusRecord(params);
-	let logTail = "";
-	const warnings: string[] = [];
-	if (statusResult.warning) warnings.push(`status unavailable: ${statusResult.warning}`);
-	const statusClass = statusWarnings(statusResult.status);
-	warnings.push(...statusClass.warnings);
-	let watchDetails: Record<string, unknown> | undefined;
-	try {
-		const watch = await watchTabOutput(params);
-		logTail = watch.text;
-		watchDetails = watch.details;
-		if (watch.details.failed) warnings.push("output capture failed or timed out");
-	} catch (error) {
-		warnings.push(`output capture unavailable: ${error instanceof Error ? error.message : String(error)}`);
+function outcomeFromInspect(parsed: Record<string, unknown>): { status?: Record<string, unknown>; warnings: string[]; logTail: string } {
+	const status = recordFrom(parsed.status);
+	const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w): w is string => typeof w === "string") : [];
+	const logTail = typeof parsed.outputTail === "string" ? parsed.outputTail : "";
+	return { status, warnings, logTail };
+}
+
+function waitOutcomeRecord(parsed: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+	return recordFrom(parsed?.outcome);
+}
+
+export async function watchTabOutput(params: WatchTabParams): Promise<{ text: string; details: Record<string, unknown> }> {
+	if (params.waitFor || params.idleSeconds !== undefined) {
+		const args = buildWaitArgs(params);
+		const timeoutSeconds = params.timeoutSeconds ?? 10;
+		const result = await runFileStatus(zmuxBin(), args, {
+			cwd: params.cwd,
+			timeoutMs: (timeoutSeconds + 5) * 1000,
+		});
+		const stdout = trimOutput(result.stdout);
+		const stderr = trimOutput(result.stderr);
+		const parsed = recordFrom(safeJson(stdout));
+		const outcome = waitOutcomeRecord(parsed) ?? recordFrom(safeJson(stdout));
+		const outputTail = stringField(outcome, "outputTail") ?? stdout;
+		const failureKind = stringField(outcome, "failureKind");
+		const alreadyInTail = boolField(outcome, "alreadyInTail") === true || failureKind === "output_regex_already_present" || (params.waitFor ? (outcome?.met === false && watchPatternPresentInText(params.waitFor, outputTail)) : false);
+		const details: Record<string, unknown> = {
+			tab: params.tab,
+			session: params.session,
+			lines: params.lines ?? 120,
+			waitFor: params.waitFor,
+			idleSeconds: params.idleSeconds,
+			timeoutSeconds,
+			failed: (result.failed || outcome?.met === false) && !alreadyInTail,
+			zmuxExitCode: result.exitCode,
+			basis: stringField(outcome, "basis"),
+			failureKind,
+			alreadyInTail,
+			fresh: boolField(outcome, "fresh"),
+			outcome,
+		};
+		if (result.signal) details.signal = result.signal;
+		if (result.timedOut) details.failureKind = "tool_timeout";
+		if (params.waitFor) details.patternPresentInTail = watchPatternPresentInText(params.waitFor, outputTail);
+		const note = alreadyInTail ? "output regex was already present before wait baseline" : "";
+		return { text: trimOutput([note, outputTail, alreadyInTail ? "" : stderr].filter(Boolean).join("\n")), details };
 	}
+	const args = buildWatchArgs(params);
+	const result = await runFileStatus(zmuxBin(), args, { cwd: params.cwd, timeoutMs: 10_000 });
+	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
 	const details: Record<string, unknown> = {
 		tab: params.tab,
 		session: params.session,
 		lines: params.lines ?? 120,
-		status: statusResult.status,
-		statusText: statusResult.status ? undefined : trimOutput(statusResult.text),
+		failed: result.failed,
+		zmuxExitCode: result.exitCode,
+	};
+	if (result.signal) details.signal = result.signal;
+	if (result.timedOut) details.failureKind = "tool_timeout";
+	else if (result.failed) details.failureKind = "watch_failed";
+	return { text: output, details };
+}
+
+export async function inspectTab(params: InspectTabParams): Promise<{ text: string; details: Record<string, unknown> }> {
+	const args = withSession(["tab", "inspect", params.tab, "--json", "-l", String(params.lines ?? 120)], params.session);
+	const result = await zmux(args, { cwd: params.cwd, timeoutMs: 10_000 });
+	const output = trimOutput(result.stdout || result.stderr);
+	const parsed = recordFrom(safeJson(output)) ?? {};
+	const { status, warnings, logTail } = outcomeFromInspect(parsed);
+	const details: Record<string, unknown> = {
+		tab: params.tab,
+		session: params.session,
+		lines: params.lines ?? 120,
+		status,
 		logTail,
 		warnings,
-		failureKind: statusClass.failureKind,
-		watch: watchDetails,
+		inspect: parsed,
 	};
 	const text = trimOutput([
-		statusResult.status ? `status: ${JSON.stringify(statusResult.status)}` : statusResult.text,
+		status ? `status: ${JSON.stringify(status)}` : "",
 		logTail ? `log tail:\n${logTail}` : "",
 		warnings.length > 0 ? `warnings: ${warnings.join("; ")}` : "",
 	].filter(Boolean).join("\n"));
 	return { text: text || `inspected ${params.tab}`, details };
 }
 
-async function waitForTurnState(params: { tab: string; cwd: string; session?: string; targetState: string; timeoutSeconds?: number; expectFreshAfter?: number }): Promise<{ outcome: TurnWaitOutcome; status?: Record<string, unknown>; warnings: string[]; failureKind?: string }> {
-	const timeoutSeconds = params.timeoutSeconds ?? 8;
-	const deadline = Date.now() + timeoutSeconds * 1000;
-	let latest: Record<string, unknown> | undefined;
-	let latestWarnings: string[] = [];
-	let latestFailure: string | undefined;
-	while (Date.now() <= deadline) {
-		const statusResult = await readStatusRecord(params);
-		latest = statusResult.status;
-		const classification = statusWarnings(latest, { targetState: params.targetState, expectFreshAfter: params.expectFreshAfter });
-		latestWarnings = statusResult.warning ? [`status unavailable: ${statusResult.warning}`, ...classification.warnings] : classification.warnings;
-		latestFailure = classification.failureKind;
-		const outcome = turnWaitOutcomeForStatus(latest, params.targetState, params.expectFreshAfter);
-		if (outcome === "failed" || outcome === "attention" || outcome === "ready" || outcome === normalizeTurnState(params.targetState)) {
-			return { outcome, status: latest, warnings: latestWarnings, failureKind: latestFailure };
-		}
-		await delay(500);
-	}
-	return { outcome: "unproven", status: latest, warnings: latestWarnings, failureKind: latestFailure ?? "turn_state_unproven" };
-}
-
 export async function typeTextWithWait(params: TypeTextWithWaitParams): Promise<{ text: string; details: Record<string, unknown> }> {
-	let freshAfter: number | undefined;
-	if (params.waitForTurnState) {
-		const before = await readStatusRecord(params);
-		freshAfter = turnAtSeconds(before.status) ?? Math.floor(Date.now() / 1000);
-	}
-	const typed = await typeText(params.tab, params.text, params.cwd, params.session);
-	let markStatus: Record<string, unknown> | undefined;
-	if (params.markPeerRunning) {
-		await setTabPeer({ action: "running", tab: params.tab, session: params.session, source: params.source, msg: params.message, cwd: params.cwd });
-		const marked = await readStatusRecord(params);
-		markStatus = marked.status;
-		freshAfter = turnAtSeconds(marked.status) ?? freshAfter;
-	}
-	let waitOutcome: TurnWaitOutcome = params.waitForTurnState ? "unproven" : "accepted";
-	let waitStatus: Record<string, unknown> | undefined = markStatus;
-	let warnings: string[] = [];
-	let failureKind: string | undefined;
-	if (params.waitForTurnState) {
-		const waited = await waitForTurnState({ tab: params.tab, cwd: params.cwd, session: params.session, targetState: params.waitForTurnState, timeoutSeconds: params.timeoutSeconds, expectFreshAfter: freshAfter });
-		waitOutcome = waited.outcome;
-		waitStatus = waited.status;
-		warnings = waited.warnings;
-		failureKind = waited.failureKind;
-	}
-	let logTail = "";
-	if (params.waitForTurnState || params.lines !== undefined) {
-		const watch = await watchTabOutput({ tab: params.tab, cwd: params.cwd, session: params.session, lines: params.lines ?? 80 });
-		logTail = watch.text;
-	}
+	const args = ["type", params.tab, params.text, "--json"];
+	if (params.markPeerRunning) args.push("--mark-peer-running");
+	if (params.waitForTurnState) args.push("--wait-turn", params.waitForTurnState);
+	if (params.timeoutSeconds !== undefined) args.push("-T", String(params.timeoutSeconds));
+	if (params.lines !== undefined) args.push("-l", String(params.lines));
+	if (params.source) args.push("--source", params.source);
+	if (params.message) args.push("--msg", params.message);
+	const timeoutSeconds = params.timeoutSeconds ?? (params.waitForTurnState ? 8 : 5);
+	const result = await runFileStatus(zmuxBin(), withSession(args, params.session), { cwd: params.cwd, timeoutMs: (timeoutSeconds + 5) * 1000 });
+	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+	const parsed = recordFrom(safeJson(result.stdout)) ?? {};
+	const outcome = waitOutcomeRecord(parsed);
+	const status = recordFrom(parsed.status);
+	const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w): w is string => typeof w === "string") : [];
+	const logTail = typeof parsed.outputTail === "string" ? parsed.outputTail : "";
 	const details: Record<string, unknown> = {
-		...typed.details,
+		tab: params.tab,
+		session: params.session,
 		markPeerRunning: params.markPeerRunning ?? false,
 		waitForTurnState: params.waitForTurnState,
-		timeoutSeconds: params.timeoutSeconds ?? (params.waitForTurnState ? 8 : undefined),
-		outcome: waitOutcome,
-		turnState: stringField(waitStatus, "turnState"),
-		turnAt: stringField(waitStatus, "turnAt"),
-		freshAfter,
-		status: waitStatus,
+		timeoutSeconds,
+		outcome: stringField(outcome, "state") ?? (params.waitForTurnState ? "unproven" : "accepted"),
+		basis: stringField(outcome, "basis"),
+		failureKind: stringField(outcome, "failureKind"),
+		status,
 		logTail,
 		warnings,
-		failureKind,
+		failed: result.failed,
+		zmuxExitCode: result.exitCode,
+		raw: parsed,
 	};
-	const summary = params.waitForTurnState ? `typed text into ${params.tab}; wait outcome: ${waitOutcome}` : typed.text;
-	return { text: trimOutput([summary, warnings.length > 0 ? `warnings: ${warnings.join("; ")}` : "", logTail ? `log tail:\n${logTail}` : ""].filter(Boolean).join("\n")), details };
+	const summary = params.waitForTurnState ? `typed text into ${params.tab}; wait outcome: ${details.outcome}` : `typed text into ${params.tab}`;
+	return { text: trimOutput([summary, warnings.length > 0 ? `warnings: ${warnings.join("; ")}` : "", logTail ? `log tail:\n${logTail}` : "", result.failed ? output : ""].filter(Boolean).join("\n")), details };
 }
 
 export async function peerEnsure(params: PeerEnsureParams): Promise<{ text: string; details: Record<string, unknown> }> {
-	const output: string[] = [];
-	const warnings: string[] = [];
-	const startDetails: Record<string, unknown> = {};
-	if (params.restart) {
-		try {
-			await zmux(withSession(["send", params.tab, "C-c"], params.session), { cwd: params.cwd, timeoutMs: 5_000 });
-			output.push(`sent C-c to ${params.tab}`);
-		} catch (error) {
-			warnings.push(`restart stop skipped: ${error instanceof Error ? error.message : String(error)}`);
-		}
-	}
-	if (params.command) {
-		const run = await runCommand({ command: params.command, tab: params.tab, cwd: params.cwd, session: params.session, detach: true, timeoutSeconds: params.timeoutSeconds ?? 10, lines: params.lines ?? 80, scope: "peer" });
-		output.push(run.text || `started ${params.tab}`);
-		Object.assign(startDetails, run.details);
-	}
-	try {
-		const action: TabPeerAction = "start";
-		await setTabPeer({ action, tab: params.tab, session: params.session, role: params.role, hostTab: params.hostTab, hostPane: params.hostPane, topic: params.topic, source: params.source, msg: params.message, cwd: params.cwd });
-		output.push(`peer lifecycle stamped for ${params.tab}`);
-	} catch (error) {
-		warnings.push(`peer lifecycle stamp failed: ${error instanceof Error ? error.message : String(error)}`);
-	}
-	if (params.readiness) {
-		const watch = await watchTabOutput({ tab: params.tab, cwd: params.cwd, session: params.session, lines: params.lines ?? 120, waitFor: params.readiness, timeoutSeconds: params.timeoutSeconds ?? 10 });
-		output.push(watch.text);
-		if (watch.details.failed) warnings.push("readiness pattern not proven");
-	}
-	let waitOutcome: TurnWaitOutcome | undefined;
-	let waitedStatus: Record<string, unknown> | undefined;
-	let failureKind: string | undefined;
-	if (params.waitForTurnState) {
-		const baseline = await readStatusRecord(params);
-		const waited = await waitForTurnState({ tab: params.tab, cwd: params.cwd, session: params.session, targetState: params.waitForTurnState, timeoutSeconds: params.timeoutSeconds, expectFreshAfter: turnAtSeconds(baseline.status) });
-		waitOutcome = waited.outcome;
-		waitedStatus = waited.status;
-		warnings.push(...waited.warnings);
-		failureKind = waited.failureKind;
-	}
-	const inspected = await inspectTab({ tab: params.tab, cwd: params.cwd, session: params.session, lines: params.lines ?? 120 });
-	const status = waitedStatus ?? recordFrom(inspected.details.status);
-	const classified = statusWarnings(status);
-	warnings.push(...classified.warnings);
-	failureKind = failureKind ?? classified.failureKind;
-	const uniqueWarnings = Array.from(new Set(warnings.filter(Boolean)));
+	const args = ["tab", "peer", "ensure", params.tab, "--json"];
+	if (params.command) args.push("--command", params.command);
+	if (params.role) args.push("--role", params.role);
+	if (params.hostTab) args.push("--host-tab", params.hostTab);
+	if (params.hostPane) args.push("--host-pane", params.hostPane);
+	if (params.topic) args.push("--topic", params.topic);
+	if (params.source) args.push("--source", params.source);
+	if (params.message) args.push("--msg", params.message);
+	if (params.readiness) args.push("--readiness", params.readiness);
+	if (params.waitForTurnState) args.push("--wait-turn", params.waitForTurnState);
+	if (params.timeoutSeconds !== undefined) args.push("-T", String(params.timeoutSeconds));
+	if (params.lines !== undefined) args.push("-l", String(params.lines));
+	if (params.restart) args.push("--restart");
+	const timeoutSeconds = params.timeoutSeconds ?? 10;
+	const result = await runFileStatus(zmuxBin(), withSession(args, params.session), { cwd: params.cwd, timeoutMs: (timeoutSeconds + 5) * 1000 });
+	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
+	const parsed = recordFrom(safeJson(result.stdout)) ?? {};
+	const status = recordFrom(parsed.status);
+	const outcome = waitOutcomeRecord(parsed);
+	const readiness = recordFrom(parsed.readiness);
+	const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w): w is string => typeof w === "string") : [];
+	const logTail = typeof parsed.outputTail === "string" ? parsed.outputTail : "";
 	const details: Record<string, unknown> = {
 		tab: params.tab,
 		command: params.command,
@@ -343,13 +336,17 @@ export async function peerEnsure(params: PeerEnsureParams): Promise<{ text: stri
 		topic: params.topic,
 		readiness: params.readiness,
 		waitForTurnState: params.waitForTurnState,
-		timeoutSeconds: params.timeoutSeconds ?? 10,
-		outcome: waitOutcome ?? (failureKind ? "failed" : "unproven"),
+		timeoutSeconds,
+		outcome: stringField(outcome, "state") ?? (result.failed ? "failed" : "unproven"),
+		basis: stringField(outcome, "basis") ?? stringField(readiness, "basis"),
+		failureKind: stringField(outcome, "failureKind") ?? stringField(readiness, "failureKind"),
 		status,
-		logTail: inspected.details.logTail,
-		warnings: uniqueWarnings,
-		failureKind,
-		start: startDetails,
+		logTail,
+		warnings,
+		failed: result.failed,
+		zmuxExitCode: result.exitCode,
+		raw: parsed,
 	};
-	return { text: trimOutput([...output, inspected.text, uniqueWarnings.length > 0 ? `warnings: ${uniqueWarnings.join("; ")}` : ""].filter(Boolean).join("\n")), details };
+	const summary = `peer ${parsed.created ? "created" : parsed.restarted ? "restarted" : "reused"}: ${params.tab}`;
+	return { text: trimOutput([summary, warnings.length > 0 ? `warnings: ${warnings.join("; ")}` : "", logTail ? `log tail:\n${logTail}` : "", result.failed ? output : ""].filter(Boolean).join("\n")), details };
 }

@@ -42,6 +42,7 @@ const (
 const (
 	OptTurnState    = "@zmux_turn_state"     // running | ready(waiting legacy) | attention | failed | consumed | parked
 	OptTurnAt       = "@zmux_turn_at"        // unix seconds for the latest turn-state transition
+	OptTurnSeq      = "@zmux_turn_seq"       // generation incremented when a new peer/agent turn starts
 	OptPeerRole     = "@zmux_peer_role"      // claude | codex | pi | agy | unknown
 	OptPeerHostTab  = "@zmux_peer_host_tab"  // stable host logical tab id, when known
 	OptPeerHostPane = "@zmux_peer_host_pane" // host pane id, when known

@@ -52,8 +52,8 @@ target. Contrast `zmux new` (attaches by design) — see the worker doctrine in
 
 ### Session targeting (`-s`)
 
-`-s <session>` is accepted by `run`, `watch`, `send`, `type`, `tabs`, `log`,
-`tab state`, `tab status`, `tab move`, `tab kill`, and the `tab pane/full/hide/show` placements. (`open` takes the
+`-s <session>` is accepted by `run`, `wait`, `watch`, `send`, `type`, `tabs`, `log`,
+`tab state`, `tab status`, `tab inspect`, `tab peer ensure`, `tab move`, `tab kill`, and the `tab pane/full/hide/show` placements. (`open` takes the
 workspace/session positionally; `zmux pane list --session --target <session>` uses
 `--target` for the same session forms, while `pane list --target <session>` without `--session` stays a raw tmux pane/window target.) It accepts three
 forms:
@@ -74,6 +74,8 @@ zmux tab move <tab> <dest-session>  # move a tab to another session in the works
 zmux tab label '<label>'         # set a stable zmux label for the current tab
 zmux tab label ''                # clear the label
 zmux tab status <tab> --json     # read glyph, command, and peer lifecycle state
+zmux tab inspect <tab> --json    # state + output tail + warnings in one result
+zmux tab peer ensure <tab> --command '<cmd>' --json  # safe peer create/reuse
 zmux tab kill <tab>              # kill a tab in the current session
 zmux reap --dry-run              # preview reaper decisions; human-gated cleanup/maintenance
 ```
@@ -85,7 +87,7 @@ window renaming.
 
 A zmux tab is a **stable logical unit** (id + label + state), not a window slot. It
 can live as a full window, as a pane inside another tab, or hidden in the dock —
-and `send`/`type`/`watch`/`run -n` keep reaching it by name in every placement.
+and `send`/`type`/`watch`/`wait`/`run -n` keep reaching it by name in every placement.
 
 ```bash
 zmux tab pane <tab>                      # join <tab> as a pane beside your current tab (focus-safe)
@@ -167,7 +169,7 @@ as evidence.
 Persistent, background recording of a tab's output stream to a **bounded** file. It
 keeps recording with no client attached (tmux `pipe-pane`) and self-truncates so
 disk never runs away — use it to walk away and read the stream back later. Contrast
-`zmux watch` (reads the live buffer only) and `zmux snapshot` (one-shot screen state). For lifecycle/command/peer state, prefer `zmux tab status --json` over reading screen output.
+`zmux watch` (reads the live buffer only) and `zmux snapshot` (one-shot screen state). For lifecycle/command/peer state, prefer `zmux tab status --json`, `zmux tab inspect --json`, or structured `zmux wait --for turn:/cmd:` over reading screen output.
 
 ```bash
 zmux log start <tab>                  # begin recording to a bounded file (background)

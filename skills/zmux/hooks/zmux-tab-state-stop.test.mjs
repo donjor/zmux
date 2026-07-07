@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
-import { peerStopCommandArgs, stopCommandArgs, shouldRun } from './zmux-tab-state-stop.mjs'
+import { peerStopCommandArgs, stopCommandArgs, shouldRun, zmuxCommand } from './zmux-tab-state-stop.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const hookPath = join(here, 'zmux-tab-state-stop.mjs')
@@ -34,6 +34,13 @@ test('fallback command is the quiet ready write', () => {
     'claude-stop',
     '--quiet',
   ])
+})
+
+test('uses the active profile binary when the shell exposes one', () => {
+  assert.equal(zmuxCommand({ PI_ZMUX_BIN: 'zzmux', ZMUX_BIN: 'zmux' }), 'zzmux')
+  assert.equal(zmuxCommand({ ZMUX_BIN: 'zzmux' }), 'zzmux')
+  assert.equal(zmuxCommand({ PI_ZMUX_BIN: '  ' }), 'zmux')
+  assert.equal(zmuxCommand({}), 'zmux')
 })
 
 test('runs only inside a tmux pane', () => {

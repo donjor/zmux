@@ -62,7 +62,7 @@ export function zmuxRunResultDetails(result: CommandStatusResult, output: string
 }
 
 export async function runCommand(params: ZmuxRunParams): Promise<{ text: string; details: Record<string, unknown> }> {
-	const timeoutSeconds = params.timeoutSeconds ?? 120;
+	const timeoutSeconds = params.timeoutSeconds ?? 30;
 	const timeoutMs = params.detach ? 15_000 : (timeoutSeconds + 5) * 1000;
 	const result = await runFileStatus(zmuxBin(), buildZmuxRunArgs({ ...params, timeoutSeconds }), { cwd: params.cwd, timeoutMs });
 	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));

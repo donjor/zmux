@@ -138,7 +138,11 @@ func SetTurnState(r tmux.Runner, paneID, state string, now time.Time) error {
 		{Scope: tmux.ScopePane, Target: paneID, Key: OptTurnAt, Value: strconv.FormatInt(now.Unix(), 10)},
 	}
 	if state == TurnRunning {
-		writes = append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerTurns, Value: strconv.Itoa(nextPeerTurn(r, paneID))})
+		next := nextTurnSeq(r, paneID)
+		writes = append(writes,
+			tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptTurnSeq, Value: strconv.Itoa(next)},
+			tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerTurns, Value: strconv.Itoa(next)},
+		)
 	}
 	if state == TurnRunning || state == TurnReady || state == TurnAttention || state == TurnFailed {
 		writes = append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: OptPeerLastTurn, Value: strconv.FormatInt(now.Unix(), 10)})
@@ -154,12 +158,15 @@ func NormalizeTurnState(state string) string {
 	return state
 }
 
-func nextPeerTurn(r tmux.Runner, paneID string) int {
-	cur, err := r.ShowPaneOption(paneID, OptPeerTurns)
+func nextTurnSeq(r tmux.Runner, paneID string) int {
+	cur, err := r.ShowPaneOption(paneID, OptTurnSeq)
+	if err != nil || strings.TrimSpace(cur) == "" {
+		cur, err = r.ShowPaneOption(paneID, OptPeerTurns)
+	}
 	if err != nil {
 		return 1
 	}
-	n, err := strconv.Atoi(cur)
+	n, err := strconv.Atoi(strings.TrimSpace(cur))
 	if err != nil || n < 0 {
 		return 1
 	}
