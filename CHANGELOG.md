@@ -5,7 +5,10 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.11.2...HEAD`
+> Release tag: pending | Compare: `v0.12.0...HEAD`
+
+## [0.12.0] - 2026-07-08
+> Release tag: `v0.12.0` | Topics: `agents`, `pi`, `tabs`, `wait`, `qa`, `docs` | Compare: `v0.11.2...v0.12.0`
 
 ### Added
 
@@ -13,6 +16,17 @@ versioning is semver-ish until the first public release.
 - **Pi callback and peer-handoff tools use core waits** `agents` `pi` -- `zmux_callback` starts, lists, and cancels live-session-scoped `zmux wait --json` callbacks that notify Pi when a visible tab matches future output or goes idle; `zmux_peer_handoff` types a peer prompt and schedules the same handoff without agent-side sleeps while reporting the evidence basis.
 - **First-class peer/tab inspection composites** `agents` `pi` -- `zmux_tab_inspect`, `zmux_peer_ensure`, wait-aware `zmux_type`, and wait/idle `zmux_runtime_logs` are thin adapters over the core CLI surfaces and bundle status, output tail, freshness checks, warnings, and failure kinds so agents do not hand-roll `status`/`watch` loops.
 - **Branch-local agent-surface QA prompts** `agents` `qa` -- `docs/dev/test-prompts/` now carries fresh-session prompts for shared skill/CLI and Pi extension smoke testing against the isolated `zzmux` profile.
+
+### Changed
+
+- **Agent peer launch doctrine is role-scoped** `agents` `skills` -- peer and worker references now point Pi at deterministic role-specific launch templates instead of ad hoc command rows.
+- **Core CLI internals are slimmer and more reusable** `core` `tabs` `bar` -- command helpers, tab/session targeting, bar rendering, and shared TUI/filter primitives were consolidated while retired preview/theme-download code was removed.
+
+### Fixed
+
+- **Pi peer lifecycle readiness is restored** `agents` `pi` -- the extension now publishes and waits on peer lifecycle state through dedicated lifecycle helpers, so fresh peer turns can be detected reliably.
+- **Remote tab sprawl is detected earlier** `agents` `pi` -- Pi zmux tools now warn on likely remote-tab/session sprawl and the guard fixtures cover the generalized remote-command shape.
+- **Developer skill sync uses the canonical reconciler** `dev` `skills` -- `./dev.sh` routes skill mirrors through the shared sync path instead of carrying a parallel mirror implementation.
 
 ## [0.11.2] - 2026-07-05
 > Release tag: `v0.11.2` | Topics: `shell`, `agents`, `pi`, `tabs`, `panes`, `qa` | Compare: `v0.11.1...v0.11.2`
