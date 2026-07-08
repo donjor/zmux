@@ -139,9 +139,9 @@ changes, and network installs are consequential; decline or ask the user.
 | `codex --dangerously-bypass-approvals-and-sandbox` | default Codex peer profile |
 | `claude --dangerously-skip-permissions` | default Claude Code peer profile |
 | `agy --dangerously-skip-permissions` | default Antigravity CLI peer profile |
-| `pi` (see peer launch table) | default Pi peer profile — lean role-scoped launch via installed `peer-*` binding |
+| `pi` (see peer launch templates) | default Pi peer profile — lean role-scoped launch via installed `peer-*` binding |
 
-The Pi peer launch commands live in Donjor skills `skills/peer/references/launch.md`. This zmux doc owns only the terminal mechanics: run the command in a visible tab, keep it interactive, watch lifecycle/readiness, and let the user take over.
+The deterministic Pi peer launch templates live in Donjor skills `skills/peer/references/launch.json`; `skills/peer/scripts/select-agent.mjs` renders the selected role/CLI to a `launch.shellCommand`. This zmux doc owns only the terminal mechanics: run that resolved command in a visible tab, keep it interactive, watch lifecycle/readiness, and let the user take over.
 
 Pi launches should strip the cockpit resource chain (context files, skills, templates, discovered extensions, themes) and load only the explicit `peer-lifecycle.ts` extension for zmux `agent_start`/`agent_end` readiness. Do not replace it with `--extension /home/user/donjor/zmux/pi-extension`: the package directory loads the full `pi-zmux` tool/context/guard cockpit. Keep sessions (no `--no-session`) so Clean Quotes still works; use `--offline` + version-check skip to drop startup network hops. Interactive only — never `-p`/`--print`/JSON/RPC for peers.
 
