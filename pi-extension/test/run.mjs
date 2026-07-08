@@ -51,6 +51,7 @@ try {
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
   const { hasHeadlessAgentPrintMode, rejectHeadlessAgentPrintMode, shouldWaitForExit, validateLogParams } = await import(join(outDir, 'src/tools/shared.js'));
   const { default: registerExtension } = await import(join(outDir, 'src/index.js'));
+  const { default: registerPeerLifecycleExtension } = await import(join(outDir, 'src/peer-lifecycle.js'));
 
   const registeredTools = [];
   const registeredCommands = [];
@@ -108,6 +109,21 @@ try {
   for (const eventName of ['agent_start', 'agent_end', 'session_shutdown', 'before_agent_start', 'session_start', 'tool_call']) {
     assert.ok(registeredHandlers.some((handler) => handler.event === eventName), `expected handler for ${eventName}`);
   }
+
+  const peerLifecycleTools = [];
+  const peerLifecycleCommands = [];
+  const peerLifecycleHandlers = [];
+  registerPeerLifecycleExtension({
+    registerTool(tool) { peerLifecycleTools.push(tool); },
+    registerCommand(name, options) { peerLifecycleCommands.push({ name, options }); },
+    on(event, handler) { peerLifecycleHandlers.push({ event, handler }); },
+    sendMessage() {},
+    sendUserMessage() {},
+  });
+  assert.deepEqual(peerLifecycleTools, [], 'peer lifecycle entrypoint must not register tools');
+  assert.deepEqual(peerLifecycleCommands, [], 'peer lifecycle entrypoint must not register commands');
+  assert.deepEqual(peerLifecycleHandlers.map((handler) => handler.event).sort(), ['agent_end', 'agent_start', 'session_shutdown'].sort(), 'peer lifecycle entrypoint must register only lifecycle hooks');
+
   const toolByName = Object.fromEntries(registeredTools.map((tool) => [tool.name, tool]));
   assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /Do not add your own sentinels or wrapper scripts/);
   assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /one stable.*remote/i);
