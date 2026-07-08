@@ -7,8 +7,9 @@ stays in a real, named terminal a human can watch, attach to, take over, or kill
 
 This is generic zmux doctrine: terminal mechanics + the write-capable posture only.
 It does **not** define which worktrees to spawn, how to decompose work, merge order,
-or who runs browser tests — that policy lives in the workflow skill above. Higher-level
-skills build on this; they must not duplicate the tab-driving mechanics.
+or who runs browser tests — that policy lives in the workflow skill above. Donjor's
+semantic `peer-worker` role is defined in the peer skill; this doc only explains how to
+drive a write-capable terminal lane. Higher-level skills build on this; they must not duplicate the tab-driving mechanics.
 
 ## Relationship to agent-peer
 
@@ -89,7 +90,7 @@ as the default worker launch; see Permission posture and Worker vs blanket bypas
 **Model / variant.** Set the worker's tier at spawn with the same `--model` flag per CLI as
 `agent-peer.md` → *Model / variant selection* (`claude --model …`, `codex -m …`, `agy --model …`,
 `pi --model provider/id:thinking`). *Which* tier per workstream is selection policy
-(`orchestrate` → Worker model tier). To bump a worker, **respawn** at the higher `--model`: the
+(the calling workflow decides). To bump a worker, **respawn** at the higher `--model`: the
 worktree is the durable state, so a worker is cheap to relaunch and re-brief — prefer that over
 the interactive `/model` fallback, which is for keeping a loaded peer tab's context.
 

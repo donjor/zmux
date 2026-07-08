@@ -139,25 +139,11 @@ changes, and network installs are consequential; decline or ask the user.
 | `codex --dangerously-bypass-approvals-and-sandbox` | default Codex peer profile |
 | `claude --dangerously-skip-permissions` | default Claude Code peer profile |
 | `agy --dangerously-skip-permissions` | default Antigravity CLI peer profile |
-| `pi` (see below) | default Pi peer profile — lean role-scoped launch, written out under the table |
+| `pi` (see peer launch table) | default Pi peer profile — lean role-scoped launch via installed `peer-*` binding |
 
-The Pi peer launch command (single written-out home; other docs point here):
+The Pi peer launch commands live in Donjor skills `skills/peer/references/launch.md`. This zmux doc owns only the terminal mechanics: run the command in a visible tab, keep it interactive, watch lifecycle/readiness, and let the user take over.
 
-```sh
-PI_SKIP_VERSION_CHECK=1 pi --offline --name pi-peer \
-  --no-context-files --no-skills --no-prompt-templates --no-extensions --no-themes \
-  --extension /home/user/donjor/zmux/pi-extension/src/peer-lifecycle.ts \
-  --no-approve --tools read,bash \
-  --append-system-prompt /home/user/donjor/skills/pi/profiles/prompts/peer.md
-```
-
-Rationale: strips the cockpit resource chain (context files, skills, templates, discovered extensions,
-themes) for fast startup and a small token footprint; the explicit `peer-lifecycle.ts` extension
-restores only zmux `agent_start`/`agent_end` peer readiness. Do not replace it with
-`--extension /home/user/donjor/zmux/pi-extension`: the package directory loads the full `pi-zmux`
-tool/context/guard cockpit. The appended prompt file is the read-only role boundary; keeps sessions
-(no `--no-session`) so Clean Quotes still works; `--offline` + version-check skip drop the startup
-network hops. Interactive only — never `-p`/`--print`/JSON/RPC for peers.
+Pi launches should strip the cockpit resource chain (context files, skills, templates, discovered extensions, themes) and load only the explicit `peer-lifecycle.ts` extension for zmux `agent_start`/`agent_end` readiness. Do not replace it with `--extension /home/user/donjor/zmux/pi-extension`: the package directory loads the full `pi-zmux` tool/context/guard cockpit. Keep sessions (no `--no-session`) so Clean Quotes still works; use `--offline` + version-check skip to drop startup network hops. Interactive only — never `-p`/`--print`/JSON/RPC for peers.
 
 Peers are launched with write-capable permissions by default. A prompt or repo file can still
 induce writes, so visible terminal state gives auditability, not prevention. The guard is the
@@ -169,7 +155,7 @@ Sandboxed peer launches are too flaky: bubblewrap/user-namespace failures, diffe
 semantics, and read failures waste the review loop. Do not try to make a review peer safe by
 removing its tools. Tell it what role it is playing.
 
-For a read-only review, put the boundary in the prompt:
+For a read-only engagement, put the boundary in the prompt:
 
 ```text
 Stay read-only. Inspect files and the git diff. Do not edit files, install packages,
@@ -177,12 +163,11 @@ delete files, commit, push, or spawn sub-agents. Return findings only.
 ```
 
 If a peer violates that boundary, treat the output as suspect, revert/ignore the write, and
-restart or reset the peer. Do not respond by downgrading future peers to sandboxed profiles.
+restart or reset the peer. Do not respond by downgrading future peers to sandboxed profiles. Donjor role semantics such as `peer-general`, `peer-planner`, and `peer-worker` live in the peer skill, not in zmux.
 
 ### Model / variant selection
 
-*Which* tier a role should run at is selection policy (global **Model tiering** + the `peer` /
-`orchestrate` skills). This is the mechanics: how to pin a model/variant on each CLI. Every CLI
+*Which* tier a role should run at is selection policy (global **Model tiering** + the calling workflow skill). This is the mechanics: how to pin a model/variant on each CLI. Every CLI
 takes a launch-time flag, so spawn directly at the wanted tier — no interactive step needed:
 
 | CLI | spawn at tier | variant axis |
