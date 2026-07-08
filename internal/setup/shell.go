@@ -123,7 +123,7 @@ func bashLifecycleSnippet(bin string) string {
 		"        __zmux_at_prompt=0\n" +
 		"        __zmux_use_blehook=0\n" +
 		"        __zmux_install_precmd() {\n" +
-		"            if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare \\-[^ ]*a'; then\n" +
+		"            if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare -[^ ]*a'; then\n" +
 		"                local __zmux_pc __zmux_new=()\n" +
 		"                for __zmux_pc in \"${PROMPT_COMMAND[@]}\"; do\n" +
 		"                    [ \"$__zmux_pc\" = \"__zmux_precmd\" ] && continue\n" +
