@@ -25,7 +25,7 @@ Start here when deciding which doc governs a source path.
 | QA runner or checklist specs | [dev/qa.md](dev/qa.md), [dev/agent-grounding.md](dev/agent-grounding.md) |
 | Bar density, tab row, pane headers, status-line layout | [domains/bar-density.md](domains/bar-density.md) |
 | Terminal window resolution, RGB, or evidence capture | [reference/terminal-current.md](reference/terminal-current.md), [reference/terminal-capabilities.md](reference/terminal-capabilities.md) |
-| `skills/zmux/**`, `skills/zmux/test/**`, `pi-extension/**`, agent guardrails | [domains/pi-zmux-extension.md](domains/pi-zmux-extension.md), [dev/agent-grounding.md](dev/agent-grounding.md), root [AGENTS](../AGENTS.md) |
+| `skills/zmux/**`, `skills/zmux/test/**`, `pi-zmux/**`, agent guardrails | [domains/pi-zmux-extension.md](domains/pi-zmux-extension.md), [dev/agent-grounding.md](dev/agent-grounding.md), root [AGENTS](../AGENTS.md) |
 | Repo gates, release drafts, local maintainer overrides | [dev/](dev/), [setup.md](setup.md), root [CHANGELOG](../CHANGELOG.md), root [AGENTS](../AGENTS.md) |
 
 Forward planning belongs in [ROADMAP.md](ROADMAP.md). Shipped detail belongs in

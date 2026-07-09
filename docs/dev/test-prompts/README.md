@@ -23,23 +23,23 @@ Use this split when testing:
 
   ```sh
   ./dev.sh zzmux
-  PI_ZMUX_BIN=zzmux pi -ne -e ./pi-extension
+  PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
   ```
 
-  Then paste `zmux-agent-pi-extension-testing-prompt.md` into that Pi session.
+  Then paste `zmux-agent-pi-zmux-testing-prompt.md` into that Pi session.
   `-ne` disables globally discovered extensions so the already-installed live
-  `zmux/pi-extension` cannot register duplicate `zmux_*` tools. The explicit
-  `-e ./pi-extension` still loads this branch's extension for that process, and
+  `zmux/pi-zmux` cannot register duplicate `zmux_*` tools. The explicit
+  `-e ./pi-zmux` still loads this branch's extension for that process, and
   `PI_ZMUX_BIN=zzmux` routes typed `zmux_*` tools to the isolated binary/profile.
 
 Current already-running Pi sessions will not gain new tools from `./dev.sh
 zzmux`. To test new tools there, the live package/mirror path must be refreshed
-and Pi must reload or restart; prefer the fresh `pi -ne -e ./pi-extension` path
+and Pi must reload or restart; prefer the fresh `pi -ne -e ./pi-zmux` path
 for isolated QA.
 
 ## Prompts
 
 - `zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine and safe
   `zzmux` smoke checks.
-- `zmux-agent-pi-extension-testing-prompt.md` — active Pi tool inventory,
+- `zmux-agent-pi-zmux-testing-prompt.md` — active Pi tool inventory,
   guardrails, branch-local extension behavior, and typed-tool smoke checks.

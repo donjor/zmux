@@ -285,6 +285,14 @@ if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_AGENT_INTEGRATIONS:-0}" != "1" ]; th
 		printf "${dim}skipping shared skill link; missing %s/skills${reset}\n" "$SKILLS_ROOT"
 	fi
 
+	if [ -n "$SKILLS_ROOT" ] && [ -d "$SKILLS_ROOT/pi/extensions" ]; then
+		printf "${dim}linking Pi package source...${reset} "
+		ln -sfn "$ZMUX_ROOT/pi-zmux" "$SKILLS_ROOT/pi/extensions/pi-zmux"
+		printf "${green}ok${reset}  ${dim}%s/pi/extensions/pi-zmux${reset}\n" "$SKILLS_ROOT"
+	elif [ -n "$SKILLS_ROOT" ]; then
+		printf "${dim}skipping Pi package source link; missing %s/pi/extensions${reset}\n" "$SKILLS_ROOT"
+	fi
+
 	if [ -n "$SKILLS_ROOT" ] && [ -x "$SKILLS_ROOT/sync" ] && command -v bun >/dev/null 2>&1; then
 		for harness in codex pi gemini; do
 			printf "${dim}refreshing %s skill mirror...${reset} " "$harness"

@@ -34,7 +34,7 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
 - `internal/tui/` - focused Bubble Tea UI packages; no flat root TUI package.
 - `checklists/` - committed QA walkthrough TOML specs.
 - `skills/zmux/` - shipped agent skill, Claude hooks, and peer/worker terminal doctrine.
-- `pi-extension/` - Pi TypeScript extension and tests.
+- `pi-zmux/` - Pi TypeScript extension and tests.
 - `legacy/v0/` - archived bash prototype; do not extend it.
 
 ## Gotchas

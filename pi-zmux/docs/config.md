@@ -34,7 +34,7 @@ policy/no configured runtimes.
 For objective grounding against the isolated profile, set the zmux binary:
 
 ```sh
-PI_ZMUX_BIN=zzmux pi -e ./pi-extension
+PI_ZMUX_BIN=zzmux pi -e ./pi-zmux
 ```
 
 If a low-level pane operation needs raw tmux, `PI_ZMUX_BIN=zzmux` implies

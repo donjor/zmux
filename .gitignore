@@ -38,10 +38,8 @@ demo.gif
 /.dev.local.sh
 
 # Pi extension local deps (peerDeps model — lockfile is dev-install noise, not tracked)
-/pi-extension/node_modules
-/pi-extension/package-lock.json
-/pi-extension-lite/node_modules
-/pi-extension-lite/package-lock.json
+/pi-zmux/node_modules
+/pi-zmux/package-lock.json
 
 # v0 downloaded theme cache (if v0 init is ever run)
 legacy/v0/themes/iterm2/

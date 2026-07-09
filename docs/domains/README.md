@@ -6,7 +6,7 @@ architecture map.
 ## Owned paths
 
 - `internal/bar/**` and `internal/tmux/conf.go` are covered by [bar-density.md](bar-density.md) when the change affects status-line density or pane-header display.
-- `pi-extension/**` and `skills/zmux/**` are covered by [pi-zmux-extension.md](pi-zmux-extension.md) when the change affects Pi typed tools or agent guardrails.
+- `pi-zmux/**` and `skills/zmux/**` are covered by [pi-zmux-extension.md](pi-zmux-extension.md) when the change affects Pi typed tools or agent guardrails.
 - Other source roots fall back to [../architecture.md](../architecture.md) until they gain their own domain doc.
 
 ## Invariants
@@ -33,7 +33,7 @@ architecture map.
 | Domain doc | Source area |
 | ---------- | ----------- |
 | [bar-density.md](bar-density.md) | `internal/bar/**`, status-line density behavior, pane-header display constraints. |
-| [pi-zmux-extension.md](pi-zmux-extension.md) | `pi-extension/**`, `skills/zmux/**`, Pi typed tools, and agent guardrails. |
+| [pi-zmux-extension.md](pi-zmux-extension.md) | `pi-zmux/**`, `skills/zmux/**`, Pi typed tools, and agent guardrails. |
 
 ## Read-before-edit route
 

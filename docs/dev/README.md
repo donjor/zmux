@@ -62,7 +62,7 @@ integration tests, and govulncheck.
   Run `make keys-gen` after keybinding changes.
 - QA runner/checklists: `cmd/qa/`, `internal/qa/`, `internal/tui/qapicker/`, and
   `checklists/*.toml`.
-- Agent integration: `skills/zmux/` for doctrine/hooks and `pi-extension/` for
+- Agent integration: `skills/zmux/` for doctrine/hooks and `pi-zmux/` for
   typed Pi tools.
 - Terminal evidence/capabilities: `internal/terminal`, `internal/wm`,
   `internal/snapshot`, and `internal/cli/terminal.go`.

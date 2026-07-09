@@ -143,7 +143,7 @@ changes, and network installs are consequential; decline or ask the user.
 
 The deterministic Pi peer launch templates live in Donjor skills `skills/peer/references/launch.json`; `skills/peer/scripts/select-agent.mjs` renders the selected role/CLI to a `launch.shellCommand`. This zmux doc owns only the terminal mechanics: run that resolved command in a visible tab, keep it interactive, watch lifecycle/readiness, and let the user take over.
 
-Pi launches should strip the cockpit resource chain (context files, skills, templates, discovered extensions, themes) and load only the explicit `peer-lifecycle.ts` extension for zmux `agent_start`/`agent_end` readiness. Do not replace it with `--extension /home/user/donjor/zmux/pi-extension`: the package directory loads the full `pi-zmux` tool/context/guard cockpit. Keep sessions (no `--no-session`) so Clean Quotes still works; use `--offline` + version-check skip to drop startup network hops. Interactive only — never `-p`/`--print`/JSON/RPC for peers.
+Pi launches should strip the cockpit resource chain (context files, skills, templates, discovered extensions, themes) and load only the explicit `peer-lifecycle.ts` extension for zmux `agent_start`/`agent_end` readiness. Do not replace it with `--extension /home/user/donjor/zmux/pi-zmux`: the package directory loads the full `pi-zmux` tool/context/guard cockpit. Keep sessions (no `--no-session`) so Clean Quotes still works; use `--offline` + version-check skip to drop startup network hops. Interactive only — never `-p`/`--print`/JSON/RPC for peers.
 
 Peers are launched with write-capable permissions by default. A prompt or repo file can still
 induce writes, so visible terminal state gives auditability, not prevention. The guard is the

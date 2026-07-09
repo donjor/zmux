@@ -13,10 +13,10 @@ function read(rel) {
 
 function toolNamesFromSource() {
   const files = [
-    'pi-extension/src/tools/core.ts',
-    'pi-extension/src/tools/tabs.ts',
-    'pi-extension/src/tools/panes.ts',
-    'pi-extension/src/tools/runtimes.ts',
+    'pi-zmux/src/tools/core.ts',
+    'pi-zmux/src/tools/tabs.ts',
+    'pi-zmux/src/tools/panes.ts',
+    'pi-zmux/src/tools/runtimes.ts',
   ];
   const names = new Set();
   for (const file of files) {
@@ -40,7 +40,7 @@ const skillFiles = [
   'skills/zmux/references/cli-catalog.md',
   'docs/domains/pi-zmux-extension.md',
   'docs/dev/agent-grounding.md',
-  'docs/dev/test-prompts/zmux-agent-pi-extension-testing-prompt.md',
+  'docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md',
   'docs/dev/test-prompts/zmux-agent-skill-testing-prompt.md',
 ];
 const docs = Object.fromEntries(skillFiles.map((file) => [file, read(file)]));
@@ -92,7 +92,7 @@ assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /legacy `wa
 assert.match(docs['skills/zmux/SKILL.md'], /remote-<host>2/i);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /opaque\nencoded or obfuscated payload/i);
 assert.match(docs['docs/domains/pi-zmux-extension.md'], /numbered `remote-<host>N` tab sprawl/i);
-assert.match(docs['docs/dev/test-prompts/zmux-agent-pi-extension-testing-prompt.md'], /numbered remote-admin tab names/i);
+assert.match(docs['docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md'], /numbered remote-admin tab names/i);
 
 const devSh = read('dev.sh');
 assert.ok(

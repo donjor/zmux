@@ -6,13 +6,12 @@ so agents use visible zmux-managed tabs instead of hidden shell jobs or raw tmux
 
 ## Owned paths
 
-- `pi-extension/index.ts` — package entry for Pi extension loading.
-- `pi-extension/src/**` — context injection, bash classification, zmux wrappers, and typed tool registration.
-- `pi-extension/test/**`, `pi-extension/package.json`, `pi-extension/tsconfig.json` — TypeScript validation surface.
+- `pi-zmux/index.ts` — package entry for Pi extension loading.
+- `pi-zmux/src/**` — context injection, bash classification, zmux wrappers, and typed tool registration.
+- `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
 - `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — shared agent doctrine, hooks, and doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
 - `docs/dev/test-prompts/zmux-agent-*-testing-prompt.md` — prompt-driven exploratory QA for fresh isolated sessions testing the whole agent-facing skill/Pi surface.
-- `docs/dev/test-prompts/zmux-lite-ab-testing-prompt.md` and `pi-extension-lite/scenarios/**` — WIP A/B prompt harness for comparing current `pi-zmux` with the one-tool lite candidate.
 
 ## Invariants
 
@@ -53,7 +52,8 @@ The active shared-skill source is `~/donjor/skills`. In the maintainer setup:
 
 - `~/donjor/skills/skills/zmux` symlinks to this repo's `skills/zmux`.
 - Pi consumes the generated mirror at `~/.pi/agent/skills/donjor/zmux`.
-- Pi loads this extension as a settings-managed local package from `../../donjor/zmux/pi-extension`.
+- `./dev.sh zmux` symlinks this repo's `pi-zmux/` package into `~/donjor/skills/pi/extensions/pi-zmux`.
+- Pi sync loads that settings-managed package through the skills repo registry, not directly from this repo.
 
 Refresh mirrors and package diagnostics from the repo root:
 
@@ -61,26 +61,27 @@ Refresh mirrors and package diagnostics from the repo root:
 ./dev.sh zmux
 ```
 
-`./dev.sh zmux` refreshes shared skill mirrors, removes the retired global
+`./dev.sh zmux` refreshes shared skill mirrors, links `pi-zmux/` into the
+skills repo's Pi extension registry source directory, removes the retired global
 extension symlink if present, and warns when global Pi settings still disable
 the package. It does not rewrite global Pi settings.
 
 One-off package smoke:
 
 ```bash
-pi -e ./pi-extension --help
+pi -e ./pi-zmux --help
 ```
 
 ## Package/API baseline
 
 The extension targets current Pi `0.80.x` era APIs and `@earendil-works/*`
 package names. Runtime Pi core packages are peer dependencies; local development
-uses dev dependencies from `pi-extension/package.json`.
+uses dev dependencies from `pi-zmux/package.json`.
 
 ```bash
-bun --cwd pi-extension install
-bun --cwd pi-extension run typecheck
-bun --cwd pi-extension test
+bun --cwd pi-zmux install
+bun --cwd pi-zmux run typecheck
+bun --cwd pi-zmux test
 make test-agent-surfaces
 ```
 
@@ -94,18 +95,17 @@ failure. Prompt-driven exploratory QA lives under `docs/dev/test-prompts/`:
 
 - `zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine, `zzmux`
   smoke, raw-tmux avoidance, roster/session/lifecycle/peer-worker coverage.
-- `zmux-agent-pi-extension-testing-prompt.md` — active Pi `zmux_*` tool
+- `zmux-agent-pi-zmux-testing-prompt.md` — active Pi `zmux_*` tool
   inventory, bash guardrails, typed tool smoke, peer composites, and Pi lifecycle
   safety.
-- `zmux-lite-ab-testing-prompt.md` — A/B runner instructions for comparing the
-  current 37-tool extension against the one-tool `pi-extension-lite` candidate
-  using the scenario corpus in `pi-extension-lite/scenarios/`.
 
 Use these prompts after material agent-facing changes, especially new typed tools,
 new guard classifications, peer/worker flow changes, or edits to shipped skill
 doctrine. The prompts are exploratory QA wrappers: expected behavior remains in
 this domain doc plus `skills/zmux/SKILL.md` and its references, while
-`make test-agent-surfaces` remains the deterministic gate.
+`make test-agent-surfaces` remains the deterministic gate. Experimental one-tool
+A/B candidates live in `~/donjor/skills/pi/extensions/pi-zmux-lite` until one is
+promoted back into this repo's `pi-zmux/` package.
 
 ## Tools
 
@@ -203,11 +203,11 @@ Objective extension behavior should be proven against the isolated edge profile:
 
 ```bash
 ./dev.sh zzmux
-PI_ZMUX_BIN=zzmux pi -ne -e ./pi-extension
+PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
 ```
 
 `-ne` disables globally discovered extensions so a live installed
-`zmux/pi-extension` does not conflict with the explicit branch-local extension.
+`zmux/pi-zmux` does not conflict with the explicit branch-local extension.
 When typed tools need low-level tmux operations, `zzmux` implies the isolated
 `tmux -L zzmux` socket. Override with `PI_ZMUX_TMUX_SOCKET` only for explicit
 socket diagnostics.

@@ -4,7 +4,7 @@ Single source of truth for **command classification** shared across agent guards
 
 - Go `zmux guard` / `internal/guard` (`guard_test.go`)
 - Claude PreToolUse hook (`skills/zmux/hooks/zmux-guard.mjs` test)
-- pi-extension classifier (`pi-extension/src/classify.ts` test)
+- pi-zmux classifier (`pi-zmux/src/classify.ts` test)
 
 `kind` is the **shared shell-surface category** of a command — invariant across the
 categories all three agents agree on (`tmux`, `runtime`, `background`, `interactive`,
@@ -24,7 +24,7 @@ This is a **build/test artifact, not a runtime asset** — never link it from `S
 |---|---|---|
 | Go `internal/guard` | `kind` + `decision` | canonical reference impl; also the `zmux guard` CLI |
 | Claude hook (`zmux-guard.mjs`) | `kind` + `decision` | mirrors the Go classifier line-for-line |
-| pi-extension | `kind` only | decision is kind-derived; diverges on purpose (below) |
+| pi-zmux | `kind` only | decision is kind-derived; diverges on purpose (below) |
 
 Before classifying, all three strip **quoted spans** (so `echo "tmux …"` is safe) and
 **leading env assignments** (`NODE_ENV=prod npm run dev` / `env FOO=bar …` classify on

@@ -2,7 +2,7 @@
 
 The harness-specific guardrails that enforce this skill's hygiene. Claude uses
 `skills/zmux/hooks/` (`PreToolUse` guard + tab-state hooks); Pi uses the repo's
-`pi-extension/` typed tools and bash guard. `SKILL.md` carries the invariants;
+`pi-zmux/` typed tools and bash guard. `SKILL.md` carries the invariants;
 this is the detail.
 
 ## Raw tmux → zmux verb mapping
@@ -82,7 +82,7 @@ Assume focus may move unless the command/tool explicitly says otherwise. Agent p
 
 Claude's `hooks/zmux-guard.mjs` (symlinked into `~/.claude/hooks/`) **blocks** raw
 tmux calls and prints the mapping back to you — so a slip self-corrects instead of
-silently targeting the wrong window. Pi's `pi-extension/` enforces the same doctrine
+silently targeting the wrong window. Pi's `pi-zmux/` enforces the same doctrine
 through typed tools (`zmux_run`, `zmux_runtime_ensure`, `zmux_interactive_type`,
 `zmux_peer_ensure`, `zmux_tab_inspect`, session/tab/pane/log/snapshot tools) and a `bash` tool-call guard. Both guard
 surfaces enforce the rest of this skill's

@@ -1,6 +1,6 @@
 # zmux agent skill testing prompt
 
-Use this file as a copy-paste prompt for a fresh, isolated agent session. It tests the **branch-local zmux skill docs and CLI doctrine** against an isolated `zzmux` profile. It does not require global skill mirrors to be refreshed. It does not test Pi typed-tool internals; use `zmux-agent-pi-extension-testing-prompt.md` for that.
+Use this file as a copy-paste prompt for a fresh, isolated agent session. It tests the **branch-local zmux skill docs and CLI doctrine** against an isolated `zzmux` profile. It does not require global skill mirrors to be refreshed. It does not test Pi typed-tool internals; use `zmux-agent-pi-zmux-testing-prompt.md` for that.
 
 ````text
 You are testing the zmux agent-facing skill surface in a fresh isolated session.

@@ -124,7 +124,7 @@ prompt run:
 
 - `test-prompts/zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine
   and `zzmux` smoke coverage.
-- `test-prompts/zmux-agent-pi-extension-testing-prompt.md` — active Pi tool
+- `test-prompts/zmux-agent-pi-zmux-testing-prompt.md` — active Pi tool
   inventory, bash guardrails, typed tools, and peer composite behavior.
 
 These prompts are exploratory QA wrappers, not a new behavior source of truth.

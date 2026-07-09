@@ -12,7 +12,7 @@ zmux is a Go CLI around tmux. The command tree lives under `internal/cli`, core
 tmux interaction is isolated behind `internal/tmux`, and the user-facing
 surfaces are split across focused packages for workspaces, recipes, themes, the
 status bar, logical tabs, terminal evidence, and Bubble Tea TUIs. Optional agent
-integrations live at the repository edge in `skills/zmux/` and `pi-extension/`.
+integrations live at the repository edge in `skills/zmux/` and `pi-zmux/`.
 
 ## Key components
 
@@ -30,7 +30,7 @@ zmux/
 ├── themes/iterm2/        # downloaded theme cache (gitignored; not an embed source)
 ├── tests/                # integration tests (build tag: `integration`)
 ├── skills/zmux/          # Agent skill, Claude hooks, and peer/worker doctrine
-├── pi-extension/         # Pi agent TypeScript extension (separate build)
+├── pi-zmux/         # Pi agent TypeScript extension (separate build)
 ├── legacy/v0/            # archived bash+gum prototype — see legacy/v0/README.md
 ├── .github/workflows/ci.yml # CI: lint, build, race tests, integration, vuln scan
 ├── .config/wt.toml       # Worktrunk pre-merge gate
@@ -47,7 +47,7 @@ zmux/
 ### Source area summary
 
 The active source roots are `cmd/`, `internal/`, `checklists/`, `skills/zmux/`,
-`pi-extension/`, and `tests/`. Generated or local-only state stays out of the
+`pi-zmux/`, and `tests/`. Generated or local-only state stays out of the
 tracked source map (`themes/iterm2/`, `.qa/`, profile state). The archived bash
 prototype is under `legacy/v0/`; do not extend it.
 

@@ -15,10 +15,10 @@ Best signal comes from a Pi process launched against this repo's extension and i
 
 ```sh
 ./dev.sh zzmux
-PI_ZMUX_BIN=zzmux pi -ne -e ./pi-extension
+PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
 ```
 
-`./dev.sh zzmux` installs only the edge binary/profile; it does not refresh active Pi tools, shared skill mirrors, or global package settings. `-ne` disables globally discovered extensions so the already-installed live `zmux/pi-extension` cannot register duplicate `zmux_*` tools. The explicit `-e ./pi-extension` still loads this branch's extension for the fresh Pi process, and `PI_ZMUX_BIN=zzmux` routes those tools to the isolated binary/profile.
+`./dev.sh zzmux` installs only the edge binary/profile; it does not refresh active Pi tools, shared skill mirrors, or global package settings. `-ne` disables globally discovered extensions so the already-installed live `zmux/pi-zmux` cannot register duplicate `zmux_*` tools. The explicit `-e ./pi-zmux` still loads this branch's extension for the fresh Pi process, and `PI_ZMUX_BIN=zzmux` routes those tools to the isolated binary/profile.
 
 If you are already inside Pi and cannot relaunch with `PI_ZMUX_BIN=zzmux`, still run read-only/source checks and deterministic tests, but do not run mutating typed-tool smoke tests against the live `zmux` profile. Mark those smoke checks `BLOCKED: active Pi is not isolated on zzmux`.
 
@@ -44,13 +44,13 @@ Read these files before judging behavior:
 - `skills/zmux/references/agent-peer.md`
 - `skills/zmux/references/agent-worker.md`
 - `docs/dev/agent-grounding.md`
-- `pi-extension/src/tools/index.ts`
-- `pi-extension/src/tools/core.ts`
-- `pi-extension/src/tools/tabs.ts`
-- `pi-extension/src/tools/panes.ts`
-- `pi-extension/src/tools/runtimes.ts`
-- `pi-extension/src/classify.ts`
-- `pi-extension/test/run.mjs`
+- `pi-zmux/src/tools/index.ts`
+- `pi-zmux/src/tools/core.ts`
+- `pi-zmux/src/tools/tabs.ts`
+- `pi-zmux/src/tools/panes.ts`
+- `pi-zmux/src/tools/runtimes.ts`
+- `pi-zmux/src/classify.ts`
+- `pi-zmux/test/run.mjs`
 
 Do not rely on model memory for expected behavior; cite docs/source in the report.
 
@@ -59,7 +59,7 @@ Do not rely on model memory for expected behavior; cite docs/source in the repor
 Run:
 
 ```sh
-cd pi-extension && npm run typecheck && npm test
+cd pi-zmux && npm run typecheck && npm test
 make test-agent-surfaces
 ```
 
@@ -70,7 +70,7 @@ If dependencies are missing or the command cannot run, report `BLOCKED` with std
 Enumerate the currently expected tool names from source:
 
 ```sh
-grep -Rho 'name: "zmux_[a-z_]*"' pi-extension/src/tools pi-extension/src/zmux.ts 2>/dev/null \
+grep -Rho 'name: "zmux_[a-z_]*"' pi-zmux/src/tools pi-zmux/src/zmux.ts 2>/dev/null \
   | sed 's/name: "//;s/"//' \
   | sort -u
 ```
@@ -237,7 +237,7 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence.
 
 ## Final report format
 
-Write the report to `.dump/test-prompts-report/zmux-agent-pi-extension-testing-report-<date-or-run-id>.md` (create the directory if needed), then return a short final message with the report path and verdict. The report file must contain exactly these sections:
+Write the report to `.dump/test-prompts-report/zmux-agent-pi-zmux-testing-report-<date-or-run-id>.md` (create the directory if needed), then return a short final message with the report path and verdict. The report file must contain exactly these sections:
 
 1. `Verdict` — one of `PASS`, `PASS WITH FINDINGS`, `FAIL`, or `BLOCKED`.
 2. `Environment` — repo path, branch/commit, Pi launch mode, `zmux_current` summary, `PI_ZMUX_BIN` status.
