@@ -28,6 +28,7 @@ test-integration: build
 test-agent-surfaces:
 	go test ./internal/setup ./internal/cli ./internal/tabs
 	cd pi-extension && npm run typecheck && npm test
+	cd pi-extension-lite && npm run typecheck && npm test
 	./qa lint
 	node skills/zmux/test/doctor.mjs
 

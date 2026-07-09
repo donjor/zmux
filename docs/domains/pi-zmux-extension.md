@@ -12,6 +12,7 @@ so agents use visible zmux-managed tabs instead of hidden shell jobs or raw tmux
 - `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — shared agent doctrine, hooks, and doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
 - `docs/dev/test-prompts/zmux-agent-*-testing-prompt.md` — prompt-driven exploratory QA for fresh isolated sessions testing the whole agent-facing skill/Pi surface.
+- `docs/dev/test-prompts/zmux-lite-ab-testing-prompt.md` and `pi-extension-lite/scenarios/**` — WIP A/B prompt harness for comparing current `pi-zmux` with the one-tool lite candidate.
 
 ## Invariants
 
@@ -96,6 +97,9 @@ failure. Prompt-driven exploratory QA lives under `docs/dev/test-prompts/`:
 - `zmux-agent-pi-extension-testing-prompt.md` — active Pi `zmux_*` tool
   inventory, bash guardrails, typed tool smoke, peer composites, and Pi lifecycle
   safety.
+- `zmux-lite-ab-testing-prompt.md` — A/B runner instructions for comparing the
+  current 37-tool extension against the one-tool `pi-extension-lite` candidate
+  using the scenario corpus in `pi-extension-lite/scenarios/`.
 
 Use these prompts after material agent-facing changes, especially new typed tools,
 new guard classifications, peer/worker flow changes, or edits to shipped skill

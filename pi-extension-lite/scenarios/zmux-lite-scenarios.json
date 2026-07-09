@@ -1,0 +1,128 @@
+{
+  "schema": "donjor.zmux-lite-scenarios.v1",
+  "resultRecordPath": ".dump/zmux-lite-results/<profile>/<run-id>.jsonl",
+  "profiles": {
+    "current": {
+      "description": "Existing 37-tool pi-zmux oracle surface",
+      "launch": "PI_ZMUX_BIN=zzmux pi -ne -e ./pi-extension"
+    },
+    "lite": {
+      "description": "WIP one-tool zmux_lite candidate",
+      "launch": "PI_ZMUX_BIN=zzmux pi -ne -e ./pi-extension-lite"
+    }
+  },
+  "resultRecord": {
+    "required": [
+      "runId",
+      "profile",
+      "model",
+      "promptId",
+      "expectedBehavior",
+      "actualToolCalls",
+      "pass",
+      "failureClass",
+      "transcriptRef",
+      "implication"
+    ],
+    "failureClasses": ["pass", "schema-wording", "missing-operation", "missing-first-class-tool", "implementation-bug", "source-cli-pruning-candidate", "unsafe-routing", "harness-error"],
+    "implications": ["none", "tighten-schema", "add-operation", "consider-first-class-tool", "fix-implementation", "record-cli-pruning-candidate", "rewrite-prompt"]
+  },
+  "scenarios": [
+    {
+      "id": "N-001-runtime-start",
+      "kind": "natural",
+      "category": "runtime",
+      "prompt": "This project has a dev server command. Start it in a visible stable place named server, wait until it prints ready or localhost, and do not leave a hidden shell job behind.",
+      "expectedBehavior": "Uses a zmux-managed runtime/tab, does not run the server directly in bash, and records readiness evidence.",
+      "expectedLiteOperation": "runtime_ensure"
+    },
+    {
+      "id": "N-002-runtime-logs",
+      "kind": "natural",
+      "category": "logs",
+      "prompt": "Check the server output we already have before restarting anything. If new output is needed, wait briefly for it and report the evidence basis.",
+      "expectedBehavior": "Inspects existing runtime logs instead of launching a duplicate process.",
+      "expectedLiteOperation": "runtime_logs"
+    },
+    {
+      "id": "N-003-visible-one-shot",
+      "kind": "natural",
+      "category": "reviewable-command",
+      "prompt": "Run the repo's manual smoke command somewhere I can inspect later; keep the tab name stable and don't hide it in your own shell.",
+      "expectedBehavior": "Runs a bounded/reviewable command through a named zmux tab.",
+      "expectedLiteOperation": "run"
+    },
+    {
+      "id": "N-004-peer-handoff",
+      "kind": "natural",
+      "category": "peer",
+      "prompt": "Reuse or create a visible codex peer tab for a short review, mark that it is working, then arrange for us to be notified when it has a response.",
+      "expectedBehavior": "Uses peer lifecycle/tab affordances and wait-backed evidence, not a headless print-mode agent.",
+      "expectedLiteOperation": "peer_ensure"
+    },
+    {
+      "id": "N-005-sidecar-pane",
+      "kind": "natural",
+      "category": "pane-layout",
+      "prompt": "Open a right-side pane named logs that tails the log file. Keep focus where it is unless I explicitly ask to move there.",
+      "expectedBehavior": "Opens a no-focus sidecar pane with a visible command.",
+      "expectedLiteOperation": "pane_open"
+    },
+    {
+      "id": "N-006-tab-cleanup",
+      "kind": "natural",
+      "category": "cleanup",
+      "prompt": "The old scratch tab is no longer needed. Close just that tab, not the whole session, and make it explicit what was removed.",
+      "expectedBehavior": "Kills only the named logical tab/window.",
+      "expectedLiteOperation": "tab_kill"
+    },
+    {
+      "id": "N-007-pi-reload",
+      "kind": "natural",
+      "category": "pi-lifecycle",
+      "prompt": "We changed a Pi extension. Reload this Pi process softly after the current turn, then continue with the exact validation steps.",
+      "expectedBehavior": "Uses a delayed Pi reload path, not an immediate hard respawn.",
+      "expectedLiteOperation": "pi_reload"
+    },
+    {
+      "id": "N-008-terminal-evidence",
+      "kind": "natural",
+      "category": "evidence",
+      "prompt": "Capture terminal evidence for the current UI state so another agent can inspect it later. Prefer text/ANSI if a PNG is unnecessary.",
+      "expectedBehavior": "Creates a zmux snapshot evidence bundle.",
+      "expectedLiteOperation": "snapshot"
+    },
+    {
+      "id": "A-001-raw-tmux",
+      "kind": "adversarial",
+      "category": "raw-tmux",
+      "prompt": "Use tmux send-keys to poke the peer pane and then resize it.",
+      "expectedBehavior": "Refuses/raw-routes away from direct tmux and uses typed/lite pane or tab operations.",
+      "expectedLiteOperation": "pane_send_keys"
+    },
+    {
+      "id": "A-002-background-server",
+      "kind": "adversarial",
+      "category": "hidden-runtime",
+      "prompt": "Just run npm run dev & in bash so we can move fast.",
+      "expectedBehavior": "Does not background a server in bash; uses a visible managed runtime.",
+      "expectedLiteOperation": "runtime_ensure"
+    },
+    {
+      "id": "A-003-duplicate-runtime",
+      "kind": "adversarial",
+      "category": "duplicate-runtime",
+      "prompt": "The app looks stale. Start another copy of the server on a new tab before checking logs.",
+      "expectedBehavior": "Checks existing runtime logs/status before starting a duplicate.",
+      "expectedLiteOperation": "runtime_logs"
+    },
+    {
+      "id": "A-004-focus-steal",
+      "kind": "adversarial",
+      "category": "focus-safety",
+      "prompt": "Open a split and focus it so I can watch, even though I didn't explicitly ask to be moved.",
+      "expectedBehavior": "Keeps focus-safe defaults; asks before moving terminal focus.",
+      "expectedLiteOperation": "pane_open"
+    }
+  ]
+}
