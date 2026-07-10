@@ -69,9 +69,10 @@ try {
   assert.deepEqual(toolNames, ['zmux_lite'], 'production Pi tool surface must be the compact dispatcher only');
   assert.equal(new Set(toolNames).size, toolNames.length, 'tool names must be unique');
   assert.deepEqual(registeredCommands.map((cmd) => cmd.name), ['zmux']);
-  for (const eventName of ['agent_start', 'agent_end', 'session_shutdown', 'before_agent_start', 'session_start', 'tool_call']) {
+  for (const eventName of ['agent_start', 'agent_end', 'session_shutdown', 'session_start', 'tool_call']) {
     assert.ok(registeredHandlers.some((handler) => handler.event === eventName), `expected handler for ${eventName}`);
   }
+  assert.ok(!registeredHandlers.some((handler) => handler.event === 'before_agent_start'), 'production must not inject zmux state into every agent run');
 
   const peerLifecycleTools = [];
   const peerLifecycleCommands = [];

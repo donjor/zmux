@@ -75,12 +75,6 @@ export default function (pi: ExtensionAPI): void {
 
 	registerGlyphLifecycle(pi);
 
-	pi.on("before_agent_start", async (event, ctx) => {
-		const zmuxContext = await buildContext(ctx.cwd, ctx.isProjectTrusted());
-		const current = event.systemPrompt ?? "";
-		return { systemPrompt: current ? `${current}\n\n${zmuxContext}` : zmuxContext };
-	});
-
 	pi.on("session_start", async (_event, ctx) => {
 		const reloadContinuation = takeReloadContinuation(ctx.cwd);
 		if (reloadContinuation) {

@@ -2,13 +2,13 @@
 
 The repo owns a Pi extension plus the shared zmux agent skill. The skill teaches
 terminal/session doctrine; the extension adds one compact `zmux_lite` dispatcher,
-trusted runtime context, and bash guardrails so agents use visible zmux-managed
-tabs instead of hidden shell jobs or raw tmux.
+on-demand runtime inspection, and bash guardrails so agents use visible
+zmux-managed tabs instead of hidden shell jobs or raw tmux.
 
 ## Owned paths
 
 - `pi-zmux/index.ts` — package entry for Pi extension loading.
-- `pi-zmux/src/**` — dispatcher registration, context injection, bash classification, and zmux adapters.
+- `pi-zmux/src/**` — dispatcher registration, on-demand diagnostics, bash classification, and zmux adapters.
 - `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
 - `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — shared agent doctrine, hooks, and doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
@@ -129,12 +129,13 @@ Operation groups:
   `callback_list`, `callback_cancel`, `terminal_current`, `pi_reload`,
   `pi_respawn`.
 
-The schema estimate is gated at no more than 1,200 tokens; the accepted surface
-is approximately 962. Runtime context injection is measured separately and is
-bounded by truncating configured runtime commands and visible tab output; the
-worst-case deterministic fixture is approximately 430 tokens. Bash hooks,
-lifecycle glyphs, callbacks, and continuation handlers add no prompt tokens by
-themselves.
+The schema estimate is gated at no more than 1,200 tokens; the accepted
+production surface is approximately 995. The extension does not inject runtime
+state into the model system prompt. State is read only when the agent calls a
+context operation or another operation resolves the live target it needs.
+`/zmux status` retains the full human diagnostic snapshot without adding it to
+model context. Bash hooks, lifecycle glyphs, callbacks, and continuation
+handlers add no prompt tokens by themselves.
 
 The dispatcher preserves operation-specific safety: persistent processes use
 `runtime_ensure`; sudo/manual input uses `interactive_type`; peer prompts plus

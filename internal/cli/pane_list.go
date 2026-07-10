@@ -268,7 +268,7 @@ func runPaneCurrent(app *apppkg.App, cmd *cobra.Command, flags *paneCurrentFlags
 		fmt.Fprintln(cmd.OutOrStdout(), paneID)
 		return nil
 	}
-	panes, err := app.Runner.ListWindowPanes("")
+	panes, err := app.Runner.ListWindowPanes(paneID)
 	if err != nil {
 		return err
 	}

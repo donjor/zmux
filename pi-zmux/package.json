@@ -1,6 +1,6 @@
 {
   "name": "pi-zmux",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Compact Pi dispatcher for deterministic zmux runtime and interactive terminal orchestration.",
   "private": true,
   "type": "module",

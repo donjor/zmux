@@ -177,15 +177,18 @@ func TestRunPaneCurrentPlain(t *testing.T) {
 func TestRunPaneCurrentJSON(t *testing.T) {
 	a, mock := newTestApp(t)
 	t.Setenv("TMUX_PANE", "%12")
-	mock.Panes[""] = []tmux.Pane{{ID: "%12", Title: "main", Command: "pi"}}
+	mock.Panes["%12"] = []tmux.Pane{{ID: "%12", Session: "zws_repo__main", WindowIndex: 4, WindowName: "agent", Title: "main", Command: "pi"}}
 	cmd := newPaneCurrentCmd(a)
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := runPaneCurrent(a, cmd, &paneCurrentFlags{json: true}); err != nil {
 		t.Fatalf("runPaneCurrent failed: %v", err)
 	}
-	if !strings.Contains(out.String(), `"ID": "%12"`) || !strings.Contains(out.String(), `"Title": "main"`) {
+	if !strings.Contains(out.String(), `"ID": "%12"`) || !strings.Contains(out.String(), `"Session": "zws_repo__main"`) || !strings.Contains(out.String(), `"WindowName": "agent"`) {
 		t.Fatalf("expected current pane JSON, got %s", out.String())
+	}
+	if len(mock.Calls) != 2 || mock.Calls[1].Method != "ListWindowPanes" || mock.Calls[1].Args[0] != "%12" {
+		t.Fatalf("expected pane-scoped lookup for %%12, got %#v", mock.Calls)
 	}
 }
 

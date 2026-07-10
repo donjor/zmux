@@ -66,6 +66,11 @@ hidden-dock placements. These commands mutate tmux panes/windows and pane-scoped
 `@zmux_*` metadata. Missing tab targets fail closed instead of falling back to
 the current pane.
 
+`zmux pane current --json` resolves the complete row for the calling
+`$TMUX_PANE`, even when that pane is in a visible tab other than the attached
+client's active window. This makes it safe for background agent tabs to discover
+their own session, window, cwd, and process metadata.
+
 ### Reviewable commands and output
 
 ```bash

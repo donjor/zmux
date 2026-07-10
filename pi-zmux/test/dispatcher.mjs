@@ -481,28 +481,54 @@ try {
   assert.ok(dispatcher.parameters.properties.operation.description.includes('runtime_ensure'));
   assert.match(dispatcher.parameters.properties.options.description, /waitForExit/);
 
-  const contextDirectory = join(outDir, 'context-budget');
+  assert.equal(
+    extension.registeredHandlers.filter((handler) => handler.event === 'before_agent_start').length,
+    0,
+    'production must not inject zmux state into every agent run',
+  );
+
+  const contextDirectory = join(outDir, 'context-command');
   const contextRecorderDirectory = join(outDir, 'context-recorder');
   mkdirSync(join(contextDirectory, '.pi'), { recursive: true });
   mkdirSync(contextRecorderDirectory, { recursive: true });
   writeFileSync(join(contextDirectory, '.pi/zmux.json'), JSON.stringify({
-    runtimes: Object.fromEntries(Array.from({ length: 8 }, (_, index) => [`runtime-${index}`, { command: `serve-${index} ${'x'.repeat(400)}`, tab: `tab-${index}` }])),
+    runtimes: { server: { command: 'npm run dev', tab: 'server' } },
   }));
   const contextRecorder = createCommandRecorder(contextRecorderDirectory);
   const savedContextEnv = Object.fromEntries(['PI_ZMUX_BIN', 'PI_ZMUX_TEST_LOG', 'PI_ZMUX_TEST_CURRENT_PANE', 'PI_ZMUX_TEST_TABS_OUTPUT', 'PI_ZMUX_TEST_VERSION_OUTPUT'].map((name) => [name, process.env[name]]));
-  let contextTokens;
   try {
     process.env.PI_ZMUX_BIN = contextRecorder.path;
     process.env.PI_ZMUX_TEST_LOG = contextRecorder.logPath;
     process.env.PI_ZMUX_TEST_CURRENT_PANE = JSON.stringify({ ID: '%1', Session: 'test', WindowIndex: 1, Dir: contextDirectory });
-    process.env.PI_ZMUX_TEST_TABS_OUTPUT = Array.from({ length: 30 }, (_, index) => `${index}: tab-${index} ready`).join('\n');
+    process.env.PI_ZMUX_TEST_TABS_OUTPUT = '1: pi ready\n2: server running';
     process.env.PI_ZMUX_TEST_VERSION_OUTPUT = 'zmux test';
-    const contextHandler = extension.registeredHandlers.find((handler) => handler.event === 'before_agent_start');
-    assert.ok(contextHandler, 'production context injection handler registered');
-    const contextResult = await contextHandler.handler({ systemPrompt: '' }, { cwd: contextDirectory, isProjectTrusted: () => true });
-    contextTokens = Math.ceil(contextResult.systemPrompt.length / 4);
-    assert.ok(contextTokens <= 550, `injected pi-zmux context should stay bounded, got approximately ${contextTokens} tokens`);
-    assert.match(contextResult.systemPrompt, /\[truncated\]/, 'oversized runtime or tab context should be truncated');
+    const statusCommand = extension.registeredCommands.find((command) => command.name === 'zmux');
+    assert.ok(statusCommand, '/zmux diagnostic command registered');
+    const notifications = [];
+    await statusCommand.options.handler('status', {
+      cwd: contextDirectory,
+      isProjectTrusted: () => true,
+      ui: { notify(message, level) { notifications.push({ message, level }); } },
+    });
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0].message, /^pi-zmux context:/);
+    assert.match(notifications[0].message, /current zmux: session=test pane=%1 tab=1/);
+    assert.match(notifications[0].message, /configured runtimes:\nserver: tab=server cmd=npm run dev/);
+    assert.match(notifications[0].message, /visible tabs:\n1: pi ready\n2: server running/);
+
+    writeFileSync(join(contextDirectory, '.pi/zmux.json'), JSON.stringify({
+      runtimes: Object.fromEntries(Array.from({ length: 8 }, (_, index) => [`runtime-${index}`, { command: `serve-${index} ${'x'.repeat(400)}`, tab: `tab-${index}` }])),
+    }));
+    process.env.PI_ZMUX_TEST_TABS_OUTPUT = Array.from({ length: 80 }, (_, index) => `${index}: tab-${index} ready with a deliberately long status label`).join('\n');
+    await statusCommand.options.handler('status', {
+      cwd: contextDirectory,
+      isProjectTrusted: () => true,
+      ui: { notify(message, level) { notifications.push({ message, level }); } },
+    });
+    assert.equal(notifications.length, 2);
+    assert.match(notifications[1].message, /configured runtimes:[\s\S]*\[truncated\]/);
+    assert.match(notifications[1].message, /visible tabs:[\s\S]*\[truncated\]/);
+    assert.ok(notifications[1].message.length <= 2_200, `human /zmux status diagnostic should stay bounded, got ${notifications[1].message.length} characters`);
   } finally {
     for (const [name, value] of Object.entries(savedContextEnv)) {
       if (value === undefined) delete process.env[name];
@@ -511,7 +537,7 @@ try {
   }
 
   const dispatcherContracts = await validateDispatcherContract(extension, dispatcher, outDir, ZMUX_OPERATIONS, lifecycle);
-  console.log(`pi-zmux dispatcher tests passed: tools=1 schemaTokens≈${schemaTokens} contextTokens≤${contextTokens} operations=${dispatcherContracts}`);
+  console.log(`pi-zmux dispatcher tests passed: tools=1 schemaTokens≈${schemaTokens} automaticContextTokens=0 operations=${dispatcherContracts}`);
 } finally {
   rmSync(outDir, { recursive: true, force: true });
 }

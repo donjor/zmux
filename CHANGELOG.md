@@ -7,6 +7,14 @@ versioning is semver-ish until the first public release.
 ## [Unreleased]
 > Release tag: pending | Compare: `v0.12.0...HEAD`
 
+### Changed
+
+- **Pi reads live zmux state only on demand** `agents` `pi` -- `pi-zmux` no longer injects pane, tab, runtime, and config state into every agent run. The one-tool schema remains always available, dispatcher operations resolve the live state they need, and `/zmux status` retains the full human diagnostic snapshot.
+
+### Fixed
+
+- **Background agent tabs resolve their complete current-pane row** `agents` `panes` -- `zmux pane current --json` now targets the caller's `$TMUX_PANE` instead of the attached client's active window, preserving session, window, cwd, and process metadata for Pi and peer tabs.
+
 ## [0.12.0] - 2026-07-08
 > Release tag: `v0.12.0` | Topics: `agents`, `pi`, `tabs`, `wait`, `qa`, `docs` | Compare: `v0.11.2...v0.12.0`
 

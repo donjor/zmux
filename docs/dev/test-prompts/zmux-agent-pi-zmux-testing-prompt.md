@@ -69,14 +69,16 @@ Required results:
 - shared Bash-guard corpus parity passes;
 - dispatcher contracts pass 40/40;
 - schema estimate stays at or below 1,200 tokens;
-- worst-case deterministic runtime-context fixture stays at or below 550 tokens.
+- automatic injected runtime context is zero tokens;
+- `/zmux status` still returns the full human diagnostic snapshot.
 
 ## Source and guard checks
 
 Confirm:
 
-- `src/index.ts` registers the dispatcher while retaining context injection,
-  Bash policy, glyph lifecycle, `/zmux`, and reload/respawn continuations;
+- `src/index.ts` registers the dispatcher without a `before_agent_start`
+  context hook while retaining Bash policy, glyph lifecycle, `/zmux`, and
+  reload/respawn continuations;
 - trusted project runtime config is ignored when project trust is false;
 - runtime/background Bash routes to `operation=runtime_ensure`;
 - sudo/SSH/REPL Bash routes to `operation=interactive_type`;
