@@ -79,8 +79,8 @@ Pin that session on the spawn and every follow-up — belt-and-suspenders for
 the writes, load-bearing for the reads:
 `zmux tab peer ensure <peer> -s <session> --command '…' --json`, `zmux tab inspect <peer> -s <session> --json`,
 `zmux wait <peer> -s <session> --for turn:ready --json`, `zmux type <peer> -s <session> … --wait-turn ready`, `zmux tab peer … <peer> -s <session>`. In Pi,
-use the equivalent `session` parameter on `zmux_peer_ensure`, `zmux_tab_inspect`, `zmux_run`,
-`zmux_tab_status`, `zmux_runtime_logs`, `zmux_type`, `zmux_tab_peer`, and `zmux_tab_state`. zmux prints `tab "<peer>" resolved to session
+use `options.session` on `zmux_lite` operations such as `peer_ensure`, `tab_inspect`, `run`,
+`tab_status`, `runtime_logs`, `type_text`, `tab_peer`, and `tab_state`. zmux prints `tab "<peer>" resolved to session
 "X", outside the current session "Y"` on the read path when a bare name crosses —
 seeing that means you skipped the pin.
 
@@ -126,7 +126,7 @@ search, and inspect without permission flakiness.
 
 Never start peer agents through headless/print one-shot modes such as `pi -p`,
 `claude -p`, `claude --print`, or equivalent. A peer is a visible interactive
-CLI in a zmux tab; deliver prompts with `zmux type` / Pi `zmux_type` so the user
+CLI in a zmux tab; deliver prompts with `zmux type` / Pi dispatcher `type_text` so the user
 can inspect and take over the real session.
 
 Startup interstitials are common. Self-updates, extension installs, auth
@@ -233,7 +233,7 @@ Treat a fresh peer turn as ready when status shows one of:
 
 Freshness matters. When status carries `turnSeq`, record the baseline before you mark/send `running` and require a later generation before trusting `ready`; `turnAt` is supporting evidence only. Otherwise an old ready state from a prior prompt can self-match. Legacy `waiting` means `ready`.
 
-`zmux wait --for turn:ready --json` is the primary completion signal for instrumented peers; Pi `zmux_type(waitForTurnState)` uses the same core path. `watch --idle` is not the primary completion signal. Use `wait --for idle:` / `watch --idle` for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use output regex waits, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT". Output waits observe new output after their baseline; for fast peer replies, pair them with a buffer/log grep so already-in-tail output is still valid evidence and not a retry loop.
+`zmux wait --for turn:ready --json` is the primary completion signal for instrumented peers; Pi `zmux_lite operation=type_text` with `options.waitForTurnState` uses the same core path. `watch --idle` is not the primary completion signal. Use `wait --for idle:` / `watch --idle` for startup/interstitial inspection, submission hygiene, output settling, or as the fallback for CLIs without a usable Stop/hook lifecycle. If you use output regex waits, the regex must match future peer output, not a word in your echoed prompt; `VERDICT` self-matches if your prompt says "Give VERDICT". Output waits observe new output after their baseline; for fast peer replies, pair them with a buffer/log grep so already-in-tail output is still valid evidence and not a retry loop.
 
 For long peer turns, status checks are beats, not proof of correctness. A `ready` state means "the peer thinks the turn ended"; still read the answer and judge it.
 
@@ -250,11 +250,11 @@ zmux tab inspect <peer> -s <session> --json -l 120
 zmux wait <peer> -s <session> --for turn:ready --json -T 10
 ```
 
-In Pi, prefer `zmux_tab_inspect` for the status+output bundle and
-`zmux_peer_ensure` / `zmux_type` with short wait fields for the composed happy
+In Pi, prefer dispatcher `tab_inspect` for the status+output bundle and
+`peer_ensure` / `type_text` with short wait fields for the composed happy
 path. These are thin adapters over core `tab inspect`, `tab peer ensure`, and
 `type --wait-*`. For long peer turns where the host should continue after the
-peer answers, use `zmux_peer_handoff`: it types the prompt and schedules a
+peer answers, use dispatcher `peer_handoff`: it types the prompt and schedules a
 wait-backed callback/handoff. Treat output/idle callback basis as fallback
 evidence unless lifecycle `turnSeq` / fresh `turnState` proves true instrumented
 readiness.

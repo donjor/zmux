@@ -280,7 +280,7 @@ function foregroundComposeUp(scan: string): boolean {
 // sites can't drift.
 export const HEADLESS_AGENT_PRINT_PATTERN = /(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)/u;
 export const HEADLESS_AGENT_SUGGESTION =
-	"Do not launch agent peers with -p/--print. Use zmux_peer_ensure for a visible interactive CLI, then deliver prompts with zmux_type or zmux_peer_handoff.";
+	"Do not launch agent peers with -p/--print. Use zmux_lite operation=peer_ensure for a visible interactive CLI, then operation=type_text or peer_handoff.";
 
 const headlessAgentPatterns: Array<{ re: RegExp; reason: string }> = [
 	{ re: HEADLESS_AGENT_PRINT_PATTERN, reason: "agent headless/print mode bypasses visible zmux peer flow" },
@@ -304,26 +304,43 @@ function hasBackgrounding(command: string): boolean {
 
 function suggestionForRuntime(command: string): string {
 	return [
-		"Use zmux_runtime_ensure instead of bash for software that keeps running.",
+		"Use zmux_lite operation=runtime_ensure instead of bash for software that keeps running.",
 		"Example:",
-		`  zmux_runtime_ensure({ name: "server", command: ${JSON.stringify(command)} })`,
+		`  zmux_lite({ operation: "runtime_ensure", target: "server", command: ${JSON.stringify(command)} })`,
 	].join("\n");
 }
 
 function suggestionForInteractive(command: string): string {
 	return [
-		"Use zmux_interactive_type so the user can see/respond in a shared tab.",
+		"Use zmux_lite operation=interactive_type so the user can see/respond in a shared tab.",
 		"Example:",
-		`  zmux_interactive_type({ tab: "admin", command: ${JSON.stringify(command)} })`,
+		`  zmux_lite({ operation: "interactive_type", target: "admin", command: ${JSON.stringify(command)} })`,
 	].join("\n");
 }
 
+const compactOperationAliases: Record<string, string> = {
+	zmux_callback: "callback_watch",
+	zmux_pane_list: "panes",
+	zmux_reload: "zmux_reload",
+	zmux_type: "type_text",
+};
+
+function compactOperations(tool: string): string {
+	const operations = [...tool.matchAll(/zmux_[a-z0-9_]+/gu)].map((match) => compactOperationAliases[match[0]] ?? match[0].slice("zmux_".length));
+	return [...new Set(operations)].join(" or ");
+}
+
 function suggestionForDirectTool(tool: string): string {
-	return `Use the typed ${tool} tool instead of shelling out through bash.`;
+	const operations = compactOperations(tool);
+	return operations
+		? `Use zmux_lite with operation=${operations} instead of shelling out through bash.`
+		: "Use the equivalent zmux_lite operation instead of shelling out through bash.";
 }
 
 function suggestionForTmux(tool: string): string {
-	return `Use ${tool} instead of raw tmux — zmux owns the @zmux_label pin + session/workspace bookkeeping.`;
+	const operations = compactOperations(tool);
+	const route = operations ? `zmux_lite operation=${operations}` : "the equivalent zmux_lite operation";
+	return `Use ${route} instead of raw tmux — zmux owns the @zmux_label pin + session/workspace bookkeeping.`;
 }
 
 export function stripQuotedSegments(command: string): string {

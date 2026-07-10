@@ -16,7 +16,7 @@ drive a write-capable terminal lane. Higher-level skills build on this; they mus
 The **terminal loop builds on** `agent-peer.md` — Spawn, status-first state reads,
 output/fallback classification, Tab State, Placement, Submission Hygiene, Topic Changes,
 and Clean Quotes all apply. **Read `agent-peer.md` for the loop.** For workers, conductors
-read `zmux tab status --json` / Pi `zmux_tab_status` or use `zmux wait --for turn:<state>` for `ready|failed|attention` across
+read `zmux tab status --json` / Pi dispatcher `tab_status` or use `zmux wait --for turn:<state>` for `ready|failed|attention` across
 worker sessions; output/idle waits are only the uninstrumented/output fallback. This doc covers
 only what a worker *inverts or adds*:
 
@@ -48,8 +48,8 @@ A worker is bound to a pair: **(zmux session, worktree path)**. Honor both:
     # named workspace (conductor outside tmux, or a dedicated workers ws):
     zmux session run worker-auth --workspace dev -n auth-worker -- codex -C ~/proj.auth -s workspace-write -a on-request
     ```
-  In Pi, use `zmux_session_run` for the spawn and the `session` parameter on
-  follow-up `zmux_type`, `zmux_tab_status`, `zmux_runtime_logs`, `zmux_tab_state`, and related tools.
+  In Pi, use dispatcher `session_run` for the spawn and `options.session` on
+  follow-up `type_text`, `tab_status`, `runtime_logs`, `tab_state`, and related operations.
   **Never** spawn an automated worker with `zmux new <ws> <worker-session>`: `new`
   attaches (steals the conductor's focus) and births a blank shell tab beside the CLI —
   the exact failure the `session run` spawn path exists to avoid.

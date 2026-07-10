@@ -4,10 +4,9 @@ Full command tables for sessions/workspaces, tabs, placements, panes, terminal
 capabilities, snapshots, output recording, and config. The hot operational loop (run/watch/send,
 raw-tmux guard, tab states, peer/worker) lives in `SKILL.md`; this is the
 lookup-when-you-need-it reference, routed from there at point of use. In Pi,
-prefer typed tools over shelling out: `zmux_run`, `zmux_sessions`,
-`zmux_session_run/kill`, `zmux_tabs`, `zmux_tab_inspect`, `zmux_peer_ensure`,
-`zmux_callback`, `zmux_peer_handoff`, `zmux_tab_*`, `zmux_pane_*`, `zmux_log`,
-`zmux_snapshot`, `zmux_terminal_current`, and `zmux_runtime_*` cover the agent surface below.
+prefer the one `zmux_lite` dispatcher over shelling out. Its session/tab/peer,
+pane, runtime, callback, evidence, input, and lifecycle operations cover the
+agent surface below.
 
 ## Sessions & workspaces
 

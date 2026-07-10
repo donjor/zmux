@@ -47,20 +47,20 @@ temp scripts or done markers for this. With `focus: false`, common password/manu
 prompts return early with `needsUserInput` so the agent can ask before switching focus:
 
 ```text
-zmux_interactive_type({
-  "tab": "admin",
+zmux_lite({
+  "operation": "interactive_type",
+  "target": "admin",
   "command": "sudo ufw status",
-  "waitForExit": true,
-  "timeoutSeconds": 90,
-  "focus": false
+  "options": { "waitForExit": true, "timeoutSeconds": 90, "focus": false }
 })
 ```
 
 After Pi extension/skill changes, prefer the soft Pi reload path:
 
 ```text
-zmux_pi_reload({
-  "continuationPrompt": "Reload complete; verify the updated tools and continue."
+zmux_lite({
+  "operation": "pi_reload",
+  "options": { "continuationPrompt": "Reload complete; verify the dispatcher and continue." }
 })
 ```
 
@@ -68,6 +68,6 @@ It uses zmux/tmux to type Pi's built-in `/reload` into the current Pi pane after
 a default 12s delay, then retries when Pi prints "Wait for the current response
 to finish before reloading." If the continuation prompt only says to wait for the
 user's next instruction, pi-zmux treats reload completion as a status notification
-instead of injecting a follow-up turn. `zmux_reload` is reserved for zmux's own
-config reload. Use `zmux_pi_respawn` only when soft Pi reload is unavailable or Pi
-is wedged.
+instead of injecting a follow-up turn. Dispatcher operation `zmux_reload` is
+reserved for zmux's own config reload. Use `pi_respawn` only when soft Pi reload
+is unavailable or Pi is wedged.

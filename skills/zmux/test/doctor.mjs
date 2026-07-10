@@ -11,25 +11,12 @@ function read(rel) {
   return readFileSync(join(root, rel), 'utf8');
 }
 
-function toolNamesFromSource() {
-  const files = [
-    'pi-zmux/src/tools/core.ts',
-    'pi-zmux/src/tools/tabs.ts',
-    'pi-zmux/src/tools/panes.ts',
-    'pi-zmux/src/tools/runtimes.ts',
-  ];
-  const names = new Set();
-  for (const file of files) {
-    const text = read(file);
-    for (const match of text.matchAll(/name:\s*"(zmux_[^"]+)"/g)) {
-      names.add(match[1]);
-    }
-  }
-  return names;
-}
-
-const toolNames = toolNamesFromSource();
-assert.ok(toolNames.size >= 30, `expected the Pi tool surface, got ${toolNames.size} tools`);
+const dispatcherSource = read('pi-zmux/src/dispatcher.ts');
+const toolNames = new Set([...dispatcherSource.matchAll(/name:\s*"(zmux_[^"]+)"/g)].map((match) => match[1]));
+assert.deepEqual([...toolNames], ['zmux_lite'], 'Pi must expose one compact dispatcher tool');
+const operationBlock = /export const ZMUX_OPERATIONS = \[([\s\S]*?)\] as const;/u.exec(dispatcherSource)?.[1] ?? '';
+const operations = new Set([...operationBlock.matchAll(/"([a-z0-9_]+)"/g)].map((match) => match[1]));
+assert.equal(operations.size, 40, `expected 40 dispatcher operations, got ${operations.size}`);
 
 const skillFiles = [
   'skills/zmux/SKILL.md',
@@ -46,33 +33,27 @@ const skillFiles = [
 const docs = Object.fromEntries(skillFiles.map((file) => [file, read(file)]));
 const combined = Object.values(docs).join('\n');
 
-const criticalTools = [
-  'zmux_run',
-  'zmux_runtime_ensure',
-  'zmux_runtime_logs',
-  'zmux_interactive_type',
-  'zmux_tab_status',
-  'zmux_tab_peer',
-  'zmux_type',
-  'zmux_session_run',
-  'zmux_pi_reload',
+const criticalOperations = [
+  'run',
+  'runtime_ensure',
+  'runtime_logs',
+  'interactive_type',
+  'tab_status',
+  'tab_peer',
+  'type_text',
+  'session_run',
+  'pi_reload',
 ];
-for (const name of criticalTools) {
-  assert.ok(toolNames.has(name), `critical Pi tool missing from source: ${name}`);
-  assert.ok(combined.includes(name), `critical Pi tool missing from docs/skill doctrine: ${name}`);
+for (const name of criticalOperations) {
+  assert.ok(operations.has(name), `critical dispatcher operation missing from source: ${name}`);
+  assert.ok(combined.includes(name), `critical dispatcher operation missing from docs/skill doctrine: ${name}`);
 }
 
-const allowedNonToolMentions = new Set([
-  'zmux_born',
-  'zmux_keep',
-  'zmux_label',
-  'zmux_tab',
-]);
+const allowedNonToolMentions = new Set(['zmux_born', 'zmux_keep', 'zmux_label', 'zmux_tab']);
 for (const [file, text] of Object.entries(docs)) {
   for (const match of text.matchAll(/\bzmux_[a-z0-9_]+\b/g)) {
     const name = match[0];
-    if (name.endsWith('_')) continue; // wildcard family, e.g. zmux_tab_*
-    if (allowedNonToolMentions.has(name)) continue; // tmux option names, not Pi tools
+    if (allowedNonToolMentions.has(name) || operations.has(name)) continue;
     assert.ok(toolNames.has(name), `${file} mentions ${name}, but no Pi tool by that name is registered`);
   }
 }
@@ -87,7 +68,7 @@ assert.ok(
   'docs must not show peer launch examples using agent -p/--print; type into visible peers instead',
 );
 assert.match(docs['skills/zmux/references/agent-peer.md'], /-s <session>/);
-assert.match(docs['skills/zmux/references/agent-peer.md'], /`session` parameter/);
+assert.match(docs['skills/zmux/references/agent-peer.md'], /`options\.session`/);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /legacy `waiting` means `ready`|Legacy `waiting` means `ready`|waiting` aliases to `ready`/i);
 assert.match(docs['skills/zmux/SKILL.md'], /remote-<host>2/i);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /opaque\nencoded or obfuscated payload/i);

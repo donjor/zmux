@@ -1,13 +1,14 @@
 # Pi zmux extension
 
 The repo owns a Pi extension plus the shared zmux agent skill. The skill teaches
-terminal/session doctrine; the extension adds typed Pi tools and bash guardrails
-so agents use visible zmux-managed tabs instead of hidden shell jobs or raw tmux.
+terminal/session doctrine; the extension adds one compact `zmux_lite` dispatcher,
+trusted runtime context, and bash guardrails so agents use visible zmux-managed
+tabs instead of hidden shell jobs or raw tmux.
 
 ## Owned paths
 
 - `pi-zmux/index.ts` — package entry for Pi extension loading.
-- `pi-zmux/src/**` — context injection, bash classification, zmux wrappers, and typed tool registration.
+- `pi-zmux/src/**` — dispatcher registration, context injection, bash classification, and zmux adapters.
 - `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
 - `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — shared agent doctrine, hooks, and doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
@@ -16,33 +17,34 @@ so agents use visible zmux-managed tabs instead of hidden shell jobs or raw tmux
 ## Invariants
 
 - Long-running, interactive, sudo/password, watcher, server, and TUI commands belong in zmux tabs or panes, not the agent shell.
-- Pi tools are focus-safe by default. They move terminal focus only when the user explicitly asks or after a focused confirmation.
-- Direct raw tmux app-control paths are blocked when a typed zmux or Pi tool exists.
-- `zmux_pi_reload` is the soft path after Pi extension, skill, prompt, or theme changes; `zmux_pi_respawn` is a destructive fallback.
+- Dispatcher operations are focus-safe by default. They move terminal focus only when the user explicitly asks or after a focused confirmation.
+- Direct raw tmux app-control paths are blocked when an equivalent dispatcher operation exists.
+- `zmux_lite operation=pi_reload` is the soft path after Pi extension, skill, prompt, or theme changes; `operation=pi_respawn` is a destructive fallback.
 - Persistent Pi process liveness is not a running signal. Only an active Pi turn should publish the running glyph.
 - Project config containing commands is read only when Pi marks the project trusted.
 
 ## Reusable primitives
 
+- `src/dispatcher.ts` owns the one-tool schema and its 40 operation mappings.
+- `src/exec.ts` and `src/interactive.ts` are focused dispatcher adapters over the `zmux` CLI and tmux socket.
 - `src/classify.ts` shares the guard vocabulary with the zmux skill and Claude hook tests.
-- `src/zmux/**` contains low-level wrappers for context, sessions, tabs, panes, runtimes, Pi lifecycle, agent/peer inspection, and interactive waiting.
-- `src/tools/**` groups typed Pi tool registration by core, tabs, panes, and runtimes.
+- `src/zmux/**` retains context, lifecycle, and continuation primitives used outside the model-visible schema.
 - `src/config.ts` loads trusted project config and configured runtimes.
-- `src/reload-continuation.ts` and `src/respawn-continuation.ts` build safe continuation prompts for Pi lifecycle tools.
+- `src/reload-continuation.ts` and `src/respawn-continuation.ts` build safe continuation prompts for Pi lifecycle operations.
 - `skills/zmux/references/agent-peer.md` and `agent-worker.md` own visible peer/worker terminal doctrine.
 
 ## Split-logic warnings
 
 - Do not duplicate shell lifecycle waiting with temp sentinels or wrapper scripts; read `zmux tab status --json` or use first-class `zmux wait` / `zmux type --wait-*` condition results.
-- Do not let Pi-tool wrappers silently normalize opaque remote-admin behavior: numbered `remote-<host>N` tabs and encoded/obfuscated remote payloads need deterministic warnings/tests, not just prose doctrine.
-- Do not add a Pi typed tool without updating skill doctrine and the guard redirect map when the workflow should be tool-preferred.
+- Do not let the Pi dispatcher silently normalize opaque remote-admin behavior: numbered `remote-<host>N` tab sprawl and encoded/obfuscated remote payloads need deterministic warnings/tests, not just prose doctrine.
+- Do not add a dispatcher operation without updating its contract test, skill doctrine, and the guard redirect map when the workflow should be tool-preferred.
 - Keep package loading settings-managed. A retired global `~/.pi/agent/extensions/pi-zmux` symlink can mask the local package.
 - Keep `zzmux` grounding isolated from live `zmux`; edge profile QA must not mutate live shell startup or agent integration links.
 - If a tool shells out to zmux, preserve structural non-zero results instead of crashing the extension process.
 
 ## Update triggers
 
-Update this doc when Pi package loading, typed tool names, bash guard policy,
+Update this doc when Pi package loading, dispatcher operations, bash guard policy,
 project config shape, lifecycle reporting, `zzmux` grounding, skill doctrine
 paths, or agent-surface testing prompts change.
 
@@ -95,52 +97,49 @@ failure. Prompt-driven exploratory QA lives under `docs/dev/test-prompts/`:
 
 - `zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine, `zzmux`
   smoke, raw-tmux avoidance, roster/session/lifecycle/peer-worker coverage.
-- `zmux-agent-pi-zmux-testing-prompt.md` — active Pi `zmux_*` tool
-  inventory, bash guardrails, typed tool smoke, peer composites, and Pi lifecycle
+- `zmux-agent-pi-zmux-testing-prompt.md` — active Pi dispatcher operation
+  inventory, bash guardrails, operation smoke, peer composites, and Pi lifecycle
   safety.
 
-Use these prompts after material agent-facing changes, especially new typed tools,
-new guard classifications, peer/worker flow changes, or edits to shipped skill
-doctrine. The prompts are exploratory QA wrappers: expected behavior remains in
-this domain doc plus `skills/zmux/SKILL.md` and its references, while
-`make test-agent-surfaces` remains the deterministic gate. Experimental one-tool
-A/B candidates live in `~/donjor/skills/pi/extensions/pi-zmux-lite` until one is
-promoted back into this repo's `pi-zmux/` package.
+Use these prompts after material agent-facing changes, especially new dispatcher
+operations, guard classifications, peer/worker flow changes, or edits to shipped
+skill doctrine. The prompts are exploratory QA wrappers: expected behavior
+remains in this domain doc plus `skills/zmux/SKILL.md` and its references, while
+`make test-agent-surfaces` remains the deterministic gate. The accepted one-tool
+candidate now lives in this canonical package; its Terra/medium acceptance
+artifacts remain in the skills repo.
 
-## Tools
+## Dispatcher
 
-Core inspection and config:
+Pi exposes one model-visible tool, `zmux_lite`, with 40 validated operations.
+The stable package name remains `pi-zmux`; `lite` names the compact tool surface,
+not a second installed extension.
 
-- `zmux_current` — inspect current pane/session/tabs, selected binary/profile,
-  terminal capabilities, project trust, and loaded pi-zmux config.
-- `zmux_reload` — run `zmux reload` for zmux config/key/theme changes.
-- `zmux_pi_reload` — type Pi's `/reload` into the current Pi pane after a safe
-  delay and nudge the agent after reload.
-- `zmux_pi_respawn` — hard fallback that respawns the Pi pane and discards
-  unsent input.
+Operation groups:
 
-Sessions, tabs, panes, peers, and input:
+- Context/config: `current`, `tabs`, `sessions`, `panes`, `zmux_reload`.
+- Commands/runtimes: `run`, `session_run`, `session_kill`, `runtime_ensure`,
+  `runtime_logs`, `runtime_stop`.
+- Tabs/peers: `tab_state`, `tab_peer`, `tab_status`, `tab_inspect`, `tab_label`,
+  `tab_move`, `tab_place`, `tab_kill`, `tab_focus`, `send_keys`, `type_text`,
+  `peer_ensure`, `peer_handoff`.
+- Panes/input: `pane_open`, `pane_close`, `pane_resize`, `pane_focus`,
+  `pane_send_keys`, `pane_type`, `interactive_type`.
+- Evidence/lifecycle: `log`, `snapshot`, `wait`, `callback_watch`,
+  `callback_list`, `callback_cancel`, `terminal_current`, `pi_reload`,
+  `pi_respawn`.
 
-- `zmux_sessions`, `zmux_session_run`, `zmux_session_kill`
-- `zmux_tabs`, `zmux_tab_status`, `zmux_tab_inspect`, `zmux_tab_state`, `zmux_tab_place`,
-  `zmux_tab_label`, `zmux_tab_move` (with optional source `session`), `zmux_tab_kill` (with optional source `session`), `zmux_tab_focus`
-- `zmux_tab_peer` — record semantic peer/agent-turn lifecycle metadata (start/running, ready, attention, failed, consumed, park, timestamped keep); prefer over manual glyph-only state for prompt-scoped peer tabs.
-- `zmux_peer_ensure` — thin adapter over first-class `zmux tab peer ensure`; safe peer spawn/reuse, lifecycle stamping, short readiness wait, and status/output evidence in one result.
-- `zmux_pane_list`, `zmux_pane_open`, `zmux_pane_focus`, `zmux_pane_close`,
-  `zmux_pane_resize` (auto axis: width for side-by-side panes, height for full-width stacked panes; pass `axis` to force one)
-- `zmux_send_keys`, `zmux_type`, `zmux_pane_send_keys`, `zmux_pane_type`; `zmux_type` can optionally mark peer turns running and wait briefly for a fresh turn state.
+The schema estimate is gated at no more than 1,200 tokens; the accepted surface
+is approximately 962. Runtime context injection is measured separately and is
+bounded by truncating configured runtime commands and visible tab output; the
+worst-case deterministic fixture is approximately 430 tokens. Bash hooks,
+lifecycle glyphs, callbacks, and continuation handlers add no prompt tokens by
+themselves.
 
-Runtime/output/evidence:
-
-- `zmux_run` — reviewable command-in-tab one-shots. For remote-admin retries, tool guidance and result metadata warn on numbered `remote-<host>N` tab sprawl and opaque encoded/obfuscated payloads; agents should reuse one `admin`/`remote-<host>` tab, decode/explain payloads, and state the intended remote mutation before changing host config.
-- `zmux_runtime_ensure`, `zmux_runtime_logs`, `zmux_runtime_stop` — stable named
-  runtime tabs; readiness/log waits route through first-class `zmux wait --json` and report the evidence basis (`outputRegex` or `idleFallback`). If a fast marker was already visible before the wait baseline, results surface `failureKind: output_regex_already_present` / `alreadyInTail: true` as tail evidence instead of a generic unproven wait.
-- `zmux_callback` — explicit live-session-scoped notification for a visible tab when first-class `zmux wait --json` proves future output or idle/quiet evidence. Default delivery is `steer` so active turns can observe completion before the next model call; pass `deliverAs: "followUp"` for end-turn-only handoff. `list` reports both active handles and recent completions; delivered callbacks are top-level Pi `custom_message` entries with `customType: pi-zmux-callback`. Callback handles are not durable across Pi reload, crash, or respawn.
-- `zmux_peer_handoff` — type a peer prompt and schedule a wait-backed callback/handoff for supported or fallback peer CLIs; the callback message names the evidence basis and must not claim lifecycle readiness from idle/output fallback alone.
-- `zmux_log` — bounded persistent tab output recording; `start`/`tail`/`stop` accept session targeting, while `status` is the global recording view and rejects session/tab filters.
-- `zmux_snapshot` — terminal/TUI evidence bundles.
-- `zmux_terminal_current` — visible desktop terminal resolution.
-- `zmux_interactive_type` — sudo/password/manual-input commands in visible tabs.
+The dispatcher preserves operation-specific safety: persistent processes use
+`runtime_ensure`; sudo/manual input uses `interactive_type`; peer prompts plus
+future-output callbacks use atomic `peer_handoff`; and focus-moving options stay
+false unless the user explicitly requests focus.
 
 ## Bash guardrails
 
@@ -177,25 +176,22 @@ Trusted project config can define reusable runtimes:
 }
 ```
 
-With trusted config, agents can call `zmux_runtime_ensure` by name without
-rediscovering commands or starting duplicate processes.
+With trusted config, agents can call `zmux_lite operation=runtime_ensure` by
+name without rediscovering commands or starting duplicate processes.
 
 ## Interactive and peer waiting
 
-For bounded sudo/manual commands, `zmux_interactive_type` reads a baseline
-`cmdSeq`, types the command, and waits for a fresh lifecycle result. It returns
-early with `needsUserInput` when a password or manual prompt appears and focus
-was not requested. Long-lived shells such as SSH, database REPLs, and TUI apps
-should leave `waitForExit` false and tell the user which tab needs attention.
+**Manual commands**
 
-For peer turns, `zmux_type` delegates to first-class `zmux type --json` with
-`--mark-peer-running` and `--wait-turn`. Freshness is generation-based via
-`turnSeq` (with `turnAt` retained as supporting evidence); an old `ready` state
-from a previous prompt must not satisfy a new wait. If readiness cannot be
-proven inside the short timeout, the tool returns `unproven` with status/output
-evidence rather than sleeping. Use `zmux_tab_inspect` (core `tab inspect`) for
-one-call diagnosis and `zmux_peer_ensure` (core `tab peer ensure`) for the
-spawn/reuse + status/readiness bundle.
+- `operation=interactive_type` reads baseline `cmdSeq`, types the command, and waits for fresh lifecycle evidence.
+- It returns early with `needsUserInput` when a password/manual prompt appears without requested focus.
+- Long-lived SSH, database REPL, and TUI sessions leave `options.waitForExit` false and tell the user which tab needs attention.
+
+**Peer turns**
+
+- `operation=type_text` delegates to first-class `zmux type --json` with peer-running and turn-wait options.
+- Freshness is generation-based via `turnSeq`; stale `ready` state cannot satisfy a new wait.
+- If readiness is unproven, return status/output evidence rather than sleeping. Use `tab_inspect` for diagnosis and `peer_ensure` for spawn/reuse plus readiness.
 
 ## Grounding with zzmux
 
@@ -208,6 +204,6 @@ PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
 
 `-ne` disables globally discovered extensions so a live installed
 `zmux/pi-zmux` does not conflict with the explicit branch-local extension.
-When typed tools need low-level tmux operations, `zzmux` implies the isolated
+When dispatcher operations need low-level tmux access, `zzmux` implies the isolated
 `tmux -L zzmux` socket. Override with `PI_ZMUX_TMUX_SOCKET` only for explicit
 socket diagnostics.

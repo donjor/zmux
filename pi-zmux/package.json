@@ -1,14 +1,14 @@
 {
   "name": "pi-zmux",
-  "version": "0.2.0",
-  "description": "Pi extension for deterministic zmux runtime and interactive terminal orchestration.",
+  "version": "0.3.0",
+  "description": "Compact Pi dispatcher for deterministic zmux runtime and interactive terminal orchestration.",
   "private": true,
   "type": "module",
   "pi": {
     "extensions": ["./index.ts"]
   },
   "scripts": {
-    "test": "node test/run.mjs",
+    "test": "node test/run.mjs && node test/dispatcher.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

@@ -3,8 +3,8 @@ import { classifyBash, hasExplicitBypass, shouldBlock } from "./classify.js";
 import { loadConfig } from "./config.js";
 import { shouldTriggerContinuation, takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
 import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
+import { registerZmuxDispatcher } from "./dispatcher.js";
 import { registerGlyphLifecycle } from "./lifecycle.js";
-import { registerZmuxTools } from "./tools.js";
 import { clearCallbacks, currentPane, listTabs, reloadZmux, zmux } from "./zmux.js";
 
 
@@ -25,10 +25,13 @@ async function zmuxVersion(cwd: string): Promise<string> {
 async function buildContext(cwd: string, projectTrusted: boolean): Promise<string> {
 	const config = loadConfig(cwd, { projectTrusted });
 	const [pane, tabs, version] = await Promise.all([currentPane(cwd), listTabs(cwd), zmuxVersion(cwd)]);
-	const configured = Object.entries(config.runtimes)
-		.slice(0, 8)
-		.map(([name, runtime]) => `${name}: tab=${runtime.tab ?? name}${runtime.session ? ` session=${runtime.session}` : ""}${runtime.command ? ` cmd=${runtime.command}` : ""}`)
-		.join("\n");
+	const configured = compact(
+		Object.entries(config.runtimes)
+			.slice(0, 8)
+			.map(([name, runtime]) => `${name}: tab=${runtime.tab ?? name}${runtime.session ? ` session=${runtime.session}` : ""}${runtime.command ? ` cmd=${compact(runtime.command, 120)}` : ""}`)
+			.join("\n"),
+		600,
+	);
 	let configStatus = "none";
 	if (config.path) {
 		configStatus = config.ignoredReason ? `${config.path} ignored (${config.ignoredReason})` : config.path;
@@ -39,8 +42,8 @@ async function buildContext(cwd: string, projectTrusted: boolean): Promise<strin
 		`- policy: ${config.policy.mode}; config: ${configStatus}; projectTrusted=${projectTrusted}`,
 		pane ? `- current zmux: session=${pane.Session ?? "?"} pane=${pane.ID ?? "?"} tab=${pane.WindowIndex ?? "?"} cwd=${pane.Dir ?? "?"}` : "- current zmux: unavailable/outside tmux",
 		configured ? `- configured runtimes:\n${configured}` : "- configured runtimes: none",
-		`- visible tabs:\n${compact(tabs, 900)}`,
-		"Rules: use zmux_runtime_ensure/logs/stop for software that keeps running (servers, workers, watchers, TUI demos). Use zmux_interactive_type for sudo/password/manual-input commands. Bounded checks can stay in normal bash; do not hide runtimes with &, nohup, disown, or raw tmux.",
+		`- visible tabs:\n${compact(tabs, 700)}`,
+		"Rules: use zmux_lite operation=runtime_ensure/runtime_logs/runtime_stop for persistent software, and operation=interactive_type for sudo/password/manual input. Bounded checks can stay in bash; never hide runtimes with &, nohup, disown, or raw tmux.",
 	].join("\n");
 }
 
@@ -64,7 +67,7 @@ function sendContinuation(
 }
 
 export default function (pi: ExtensionAPI): void {
-	registerZmuxTools(pi);
+	registerZmuxDispatcher(pi);
 
 	pi.on("session_shutdown", async () => {
 		clearCallbacks();

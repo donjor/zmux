@@ -56,7 +56,7 @@ zmux watch <tab> -l 200                       # last 200 lines
 zmux watch <tab> -f                           # follow live
 ```
 
-`wait --for output:<regex>` and legacy `watch --until` snapshot the buffer at start and match only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt. For fast responders, `wait --json` distinguishes an already-visible marker with `failureKind: "output_regex_already_present"` and `alreadyInTail: true`; treat that as tail evidence, not fresh future output. Pair waits with a buffer/log proof (`tab inspect`, `watch -l`, `zmux_log tail`, or `zmux_tab_inspect` in Pi) instead of retrying blindly. Do not use output/idle evidence as lifecycle truth when `tab status` or `wait --for turn:/cmd:` can answer state. Do not use `watch` as lifecycle truth.
+`wait --for output:<regex>` and legacy `watch --until` snapshot the buffer at start and match only new output after that baseline. Still choose a pattern that comes from future output, not from text you just typed or an echoed prompt. For fast responders, `wait --json` distinguishes an already-visible marker with `failureKind: "output_regex_already_present"` and `alreadyInTail: true`; treat that as tail evidence, not fresh future output. Pair waits with a buffer/log proof (`tab inspect`, `watch -l`, `zmux log tail`, or Pi dispatcher `tab_inspect`) instead of retrying blindly. Do not use output/idle evidence as lifecycle truth when `tab status` or `wait --for turn:/cmd:` can answer state. Do not use `watch` as lifecycle truth.
 
 For persistent bounded recording that survives detach, use `zmux log`:
 

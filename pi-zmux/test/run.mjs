@@ -51,6 +51,7 @@ try {
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
   const { hasHeadlessAgentPrintMode, rejectHeadlessAgentPrintMode, shouldWaitForExit, validateLogParams } = await import(join(outDir, 'src/tools/shared.js'));
   const { default: registerExtension } = await import(join(outDir, 'src/index.js'));
+  const { registerZmuxTools } = await import(join(outDir, 'src/tools.js'));
   const { default: registerPeerLifecycleExtension } = await import(join(outDir, 'src/peer-lifecycle.js'));
 
   const registeredTools = [];
@@ -65,45 +66,7 @@ try {
   };
   registerExtension(fakePi);
   const toolNames = registeredTools.map((tool) => tool.name).sort();
-  assert.deepEqual(toolNames, [
-    'zmux_callback',
-    'zmux_current',
-    'zmux_interactive_type',
-    'zmux_log',
-    'zmux_peer_ensure',
-    'zmux_peer_handoff',
-    'zmux_pane_close',
-    'zmux_pane_focus',
-    'zmux_pane_list',
-    'zmux_pane_open',
-    'zmux_pane_resize',
-    'zmux_pane_send_keys',
-    'zmux_pane_type',
-    'zmux_pi_reload',
-    'zmux_pi_respawn',
-    'zmux_reload',
-    'zmux_run',
-    'zmux_runtime_ensure',
-    'zmux_runtime_logs',
-    'zmux_runtime_stop',
-    'zmux_send_keys',
-    'zmux_session_kill',
-    'zmux_session_run',
-    'zmux_sessions',
-    'zmux_snapshot',
-    'zmux_tab_focus',
-    'zmux_tab_inspect',
-    'zmux_tab_kill',
-    'zmux_tab_label',
-    'zmux_tab_move',
-    'zmux_tab_peer',
-    'zmux_tab_place',
-    'zmux_tab_state',
-    'zmux_tab_status',
-    'zmux_tabs',
-    'zmux_terminal_current',
-    'zmux_type',
-  ].sort(), 'registered Pi tool surface drifted');
+  assert.deepEqual(toolNames, ['zmux_lite'], 'production Pi tool surface must be the compact dispatcher only');
   assert.equal(new Set(toolNames).size, toolNames.length, 'tool names must be unique');
   assert.deepEqual(registeredCommands.map((cmd) => cmd.name), ['zmux']);
   for (const eventName of ['agent_start', 'agent_end', 'session_shutdown', 'before_agent_start', 'session_start', 'tool_call']) {
@@ -124,7 +87,11 @@ try {
   assert.deepEqual(peerLifecycleCommands, [], 'peer lifecycle entrypoint must not register commands');
   assert.deepEqual(peerLifecycleHandlers.map((handler) => handler.event).sort(), ['agent_end', 'agent_start', 'session_shutdown'].sort(), 'peer lifecycle entrypoint must register only lifecycle hooks');
 
-  const toolByName = Object.fromEntries(registeredTools.map((tool) => [tool.name, tool]));
+  // Keep the legacy implementation contract tests until the compact dispatcher
+  // has passed full-package integration; these tools are not registered in production.
+  const legacyTools = [];
+  registerZmuxTools({ ...fakePi, registerTool(tool) { legacyTools.push(tool); } });
+  const toolByName = Object.fromEntries(legacyTools.map((tool) => [tool.name, tool]));
   assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /Do not add your own sentinels or wrapper scripts/);
   assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /one stable.*remote/i);
   assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /opaque encoded remote\/admin payloads/i);
@@ -205,6 +172,10 @@ try {
   for (const [command, want] of cases) {
     assert.equal(classifyBash(command, cfg).kind, want, command);
   }
+  assert.match(classifyBash('zmux pane list', cfg).suggestion, /operation=panes\b/);
+  assert.match(classifyBash('zmux type worker hello', cfg).suggestion, /operation=type_text or interactive_type/);
+  assert.match(classifyBash('tmux list-panes', cfg).suggestion, /operation=panes\b/);
+  assert.doesNotMatch(classifyBash('zmux pane list', cfg).suggestion, /operation=pane_list\b/);
 
   // Shared-corpus parity (the cross-impl drift gate). The corpus at
   // testdata/zmux-guard-corpus.jsonl is the source of truth for KIND, which is
@@ -255,9 +226,9 @@ try {
   try {
     startWatchCallback(fakePi, { id: 'cleanup-test', tab: 'bench', cwd: root, waitFor: 'DONE', timeoutSeconds: 30 });
     assert.equal(listCallbacks().length, 1, 'callback should be active before shutdown cleanup');
-    const shutdownHandler = registeredHandlers.find((handler) => handler.event === 'session_shutdown')?.handler;
-    assert.ok(shutdownHandler, 'session_shutdown handler registered');
-    await shutdownHandler({}, { cwd: root });
+    const shutdownHandlers = registeredHandlers.filter((handler) => handler.event === 'session_shutdown').map((handler) => handler.handler);
+    assert.ok(shutdownHandlers.length > 0, 'session_shutdown handler registered');
+    for (const shutdownHandler of shutdownHandlers) await shutdownHandler({}, { cwd: root });
     assert.deepEqual(listCallbacks(), [], 'session shutdown should cancel active callbacks');
     assert.deepEqual(listRecentCallbackCompletions(), [], 'shutdown cancellation should not report cancelled callbacks as completed');
   } finally {

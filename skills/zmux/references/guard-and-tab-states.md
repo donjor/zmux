@@ -76,15 +76,15 @@ do not duplicate coverage that has already passed.
 Pairs with **tab hygiene** in `SKILL.md`: spawn into the roster, reuse by purpose, tear down after.
 If a prompt creates several tabs/panes, take a cheap before/after roster (`zmux tabs`, `zmux pane list --joined --session` when relevant), then kill ad-hoc tabs as soon as evidence is captured. Keep only intentional runtimes/peers/worker sessions with a named next checkpoint.
 
-Assume focus may move unless the command/tool explicitly says otherwise. Agent paths prefer `run -d`, `session run`, `pane open --no-focus`, placement without `--focus`, and typed Pi tools whose default is focus-safe. Ask before `tab focus`, `pane focus`, or any `focus: true` option.
+Assume focus may move unless the command/tool explicitly says otherwise. Agent paths prefer `run -d`, `session run`, `pane open --no-focus`, placement without `--focus`, and Pi dispatcher operations whose default is focus-safe. Ask before `tab focus`, `pane focus`, or any `focus: true` option.
 
 ## The guard hook
 
 Claude's `hooks/zmux-guard.mjs` (symlinked into `~/.claude/hooks/`) **blocks** raw
 tmux calls and prints the mapping back to you — so a slip self-corrects instead of
 silently targeting the wrong window. Pi's `pi-zmux/` enforces the same doctrine
-through typed tools (`zmux_run`, `zmux_runtime_ensure`, `zmux_interactive_type`,
-`zmux_peer_ensure`, `zmux_tab_inspect`, session/tab/pane/log/snapshot tools) and a `bash` tool-call guard. Both guard
+through one `zmux_lite` dispatcher (`run`, `runtime_ensure`, `interactive_type`,
+`peer_ensure`, `tab_inspect`, and related operations) plus a `bash` tool-call guard. Both guard
 surfaces enforce the rest of this skill's
 hygiene: a dev server / background job (`npm run dev`, `&`, `nohup`, or any
 harness-native hidden-background option the adapter can see) is **blocked** toward a
@@ -95,7 +95,7 @@ in `zmux-guard.mjs` because it is a tool param, not a shell token.
 **Exemptions** — genuinely need the raw command (zmux development, socket inspection,
 a one-off)? Any of: prefix `ZMUX_ALLOW=1`, append `# zmux: allow`, use an explicit
 `-L <socket>`, or run from the zmux repo. Pi has its own one-shot bypass spelling
-(`PI_ZMUX_ALLOW=1` / `# pi-zmux: allow`) for its bash guard; prefer the typed tool
+(`PI_ZMUX_ALLOW=1` / `# pi-zmux: allow`) for its bash guard; prefer the dispatcher
 redirect when one exists.
 
 ## Tab lifecycle states
@@ -115,7 +115,7 @@ Mostly automatic:
   (`↩`) when a turn ends — no transcript parsing, just "the turn ended". It ships in the
   skill but, unlike the guard/context hooks, is not symlinked into the live install by
   default; register it as a `Stop` hook to enable it.
-- Prompt-scoped peers use `zmux tab peer <start|running|ready|attention|failed|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; legacy `waiting` aliases to `ready`. Answer-ready renders `↩`, while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi `zmux_tab_status`; Pi can bundle status+output via `zmux_tab_inspect`. Screen capture is the fallback/output layer.
+- Prompt-scoped peers use `zmux tab peer <start|running|ready|attention|failed|consumed|park|keep|clear-keep>` for semantic turn/retention metadata; legacy `waiting` aliases to `ready`. Answer-ready renders `↩`, while true human intervention uses attention (`●`). Agents read this with `tab status` / Pi dispatcher `tab_status`; Pi can bundle status+output with `tab_inspect`. Screen capture is the fallback/output layer.
 
 Set `attention` **manually** when handing the human a prompt they must act on (sudo,
 permission prompt). For peer tabs, prefer `zmux tab peer attention ...` so the turn state stays in sync:
