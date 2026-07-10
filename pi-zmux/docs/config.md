@@ -47,7 +47,7 @@ temp scripts or done markers for this. With `focus: false`, common password/manu
 prompts return early with `needsUserInput` so the agent can ask before switching focus:
 
 ```text
-zmux_lite({
+zmux({
   "operation": "interactive_type",
   "target": "admin",
   "command": "sudo ufw status",
@@ -58,7 +58,7 @@ zmux_lite({
 After Pi extension/skill changes, prefer the soft Pi reload path:
 
 ```text
-zmux_lite({
+zmux({
   "operation": "pi_reload",
   "options": { "continuationPrompt": "Reload complete; verify the dispatcher and continue." }
 })

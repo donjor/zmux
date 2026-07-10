@@ -1,4 +1,5 @@
 import type { PiZmuxConfig } from "./config.js";
+import { ZMUX_OPERATIONS } from "./operations.js";
 
 export function hasExplicitBypass(command: string): boolean {
 	return /(^|\s)PI_ZMUX_ALLOW=1(\s|$)/u.test(command) || /#\s*pi-zmux:\s*allow\b/iu.test(command);
@@ -13,76 +14,76 @@ export type BashClassification =
 	| { kind: "direct_tmux"; reason: string; suggestion: string }
 	| { kind: "headless_agent"; reason: string; suggestion: string };
 
-const directZmuxPatterns: Array<{ re: RegExp; reason: string; tool: string }> = [
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+status\b[\s\S]*zmux\s+watch\b|(^|[;&|\n]\s*)zmux\s+watch\b[\s\S]*zmux\s+tab\s+status\b/u, reason: "combined tab status/output inspection has a typed tool", tool: "zmux_tab_inspect" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+run\b[^\n;&|]*\s-n\s+\S*peer\b/u, reason: "peer tab startup has a typed tool", tool: "zmux_peer_ensure" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tabs\b/u, reason: "tab listing has a typed tool", tool: "zmux_tabs" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+ls\b/u, reason: "session listing has a typed tool", tool: "zmux_sessions" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+where\b/u, reason: "context inspection has a typed tool", tool: "zmux_current" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+state\b/u, reason: "tab lifecycle state has a typed tool", tool: "zmux_tab_state" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+status\b/u, reason: "tab lifecycle/command status has a typed tool", tool: "zmux_tab_status" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+peer\b/u, reason: "peer lifecycle metadata has a typed tool", tool: "zmux_tab_peer" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+label\b/u, reason: "tab labelling has a typed tool", tool: "zmux_tab_label" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+move\b/u, reason: "tab moving has a typed tool", tool: "zmux_tab_move" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+(pane|full|hide|show)\b/u, reason: "tab placement has a typed tool", tool: "zmux_tab_place" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+kill\b/u, reason: "tab cleanup has a typed tool", tool: "zmux_tab_kill" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+session\s+run\b/u, reason: "focus-safe session spawn has a typed tool", tool: "zmux_session_run" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+session\s+kill\b/u, reason: "session cleanup has a typed tool", tool: "zmux_session_kill" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+send\b/u, reason: "key sending has a typed tool", tool: "zmux_send_keys" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+type\b/u, reason: "typing has typed tools", tool: "zmux_type (optionally waitForTurnState for peers) or zmux_interactive_type" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+list\b/u, reason: "pane listing has a typed tool", tool: "zmux_pane_list" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+open\b/u, reason: "pane opening has a typed tool", tool: "zmux_pane_open" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+focus\b/u, reason: "pane focus has a typed tool", tool: "zmux_pane_focus" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+close\b/u, reason: "pane cleanup has a typed tool", tool: "zmux_pane_close" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+resize\b/u, reason: "pane resize has a typed tool", tool: "zmux_pane_resize" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+run\b/u, reason: "command-in-tab execution has a typed tool", tool: "zmux_run (or zmux_runtime_ensure for persistent runtimes)" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+watch\b/u, reason: "runtime logs and tab inspection have typed tools", tool: "zmux_runtime_logs (supports waitFor/idleSeconds) or zmux_tab_inspect" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+log\b/u, reason: "persistent tab logging has a typed tool", tool: "zmux_log" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+snapshot\b/u, reason: "terminal evidence capture has a typed tool", tool: "zmux_snapshot" },
-	{ re: /(^|[;&|\n]\s*)zmux\s+terminal\s+current\b/u, reason: "terminal target inspection has a typed tool", tool: "zmux_terminal_current" },
+const directZmuxPatterns: Array<{ re: RegExp; reason: string; routeHint: string }> = [
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+status\b[\s\S]*zmux\s+watch\b|(^|[;&|\n]\s*)zmux\s+watch\b[\s\S]*zmux\s+tab\s+status\b/u, reason: "combined tab status/output inspection has a dispatcher operation", routeHint: "tab_inspect" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+run\b[^\n;&|]*\s-n\s+\S*peer\b/u, reason: "peer tab startup has a dispatcher operation", routeHint: "peer_ensure" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tabs\b/u, reason: "tab listing has a dispatcher operation", routeHint: "tabs" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+ls\b/u, reason: "session listing has a dispatcher operation", routeHint: "sessions" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+where\b/u, reason: "context inspection has a dispatcher operation", routeHint: "current" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+state\b/u, reason: "tab lifecycle state has a dispatcher operation", routeHint: "tab_state" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+status\b/u, reason: "tab lifecycle/command status has a dispatcher operation", routeHint: "tab_status" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+peer\b/u, reason: "peer lifecycle metadata has a dispatcher operation", routeHint: "tab_peer" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+label\b/u, reason: "tab labelling has a dispatcher operation", routeHint: "tab_label" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+move\b/u, reason: "tab moving has a dispatcher operation", routeHint: "tab_move" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+(pane|full|hide|show)\b/u, reason: "tab placement has a dispatcher operation", routeHint: "tab_place" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+tab\s+kill\b/u, reason: "tab cleanup has a dispatcher operation", routeHint: "tab_kill" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+session\s+run\b/u, reason: "focus-safe session spawn has a dispatcher operation", routeHint: "session_run" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+session\s+kill\b/u, reason: "session cleanup has a dispatcher operation", routeHint: "session_kill" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+send\b/u, reason: "key sending has a dispatcher operation", routeHint: "send_keys" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+type\b/u, reason: "typing has dispatcher operations", routeHint: "type_text interactive_type" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+list\b/u, reason: "pane listing has a dispatcher operation", routeHint: "panes" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+open\b/u, reason: "pane opening has a dispatcher operation", routeHint: "pane_open" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+focus\b/u, reason: "pane focus has a dispatcher operation", routeHint: "pane_focus" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+close\b/u, reason: "pane cleanup has a dispatcher operation", routeHint: "pane_close" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+pane\s+resize\b/u, reason: "pane resize has a dispatcher operation", routeHint: "pane_resize" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+run\b/u, reason: "command-in-tab execution has a dispatcher operation", routeHint: "run runtime_ensure" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+watch\b/u, reason: "runtime logs and tab inspection have dispatcher operations", routeHint: "runtime_logs tab_inspect" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+log\b/u, reason: "persistent tab logging has a dispatcher operation", routeHint: "log" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+snapshot\b/u, reason: "terminal evidence capture has a dispatcher operation", routeHint: "snapshot" },
+	{ re: /(^|[;&|\n]\s*)zmux\s+terminal\s+current\b/u, reason: "terminal target inspection has a dispatcher operation", routeHint: "terminal_current" },
 ];
 
 // Raw tmux app-subcommands that have a zmux equivalent. The KEY SET mirrors
 // internal/guard/guard.go's tmuxTargets exactly (the shared corpus is the drift
-// gate); the redirect text points at pi's typed tool where one exists, or the
+// gate); the redirect text points at pi's dispatcher operation where one exists, or the
 // zmux CLI otherwise. Subcommands absent here (info, has-session, display-message)
 // have no clean equivalent and pass through as safe.
-const tmuxSubcommandRedirects: Record<string, { reason: string; tool: string }> = {
-	"capture-pane": { reason: "reading pane output has a typed tool", tool: "the zmux_runtime_logs typed tool" },
-	capturep: { reason: "reading pane output has a typed tool", tool: "the zmux_runtime_logs typed tool" },
-	"send-keys": { reason: "pane key sending has a typed tool", tool: "the zmux_pane_send_keys / zmux_pane_type typed tools" },
-	send: { reason: "key sending has a typed tool", tool: "the zmux_send_keys / zmux_type typed tools" },
-	"list-windows": { reason: "tab listing has a typed tool", tool: "the zmux_tabs typed tool" },
-	lsw: { reason: "tab listing has a typed tool", tool: "the zmux_tabs typed tool" },
-	"list-sessions": { reason: "session listing has a typed tool", tool: "the zmux_sessions typed tool" },
-	ls: { reason: "session listing has a typed tool", tool: "the zmux_sessions typed tool" },
-	"list-panes": { reason: "pane listing has a typed tool", tool: "the zmux_pane_list typed tool" },
-	lsp: { reason: "pane listing has a typed tool", tool: "the zmux_pane_list typed tool" },
-	"split-window": { reason: "pane opening has a typed tool", tool: "the zmux_pane_open typed tool" },
-	splitw: { reason: "pane opening has a typed tool", tool: "the zmux_pane_open typed tool" },
-	"select-pane": { reason: "pane focus has a typed tool", tool: "the zmux_pane_focus typed tool" },
-	selectp: { reason: "pane focus has a typed tool", tool: "the zmux_pane_focus typed tool" },
-	"kill-pane": { reason: "pane cleanup has a typed tool", tool: "the zmux_pane_close typed tool" },
-	killp: { reason: "pane cleanup has a typed tool", tool: "the zmux_pane_close typed tool" },
-	"resize-pane": { reason: "pane resize has a typed tool", tool: "the zmux_pane_resize typed tool" },
-	resizep: { reason: "pane resize has a typed tool", tool: "the zmux_pane_resize typed tool" },
-	"new-window": { reason: "starting work in a tab has a typed tool", tool: "the zmux_run typed tool (or zmux_runtime_ensure for persistent runtimes)" },
-	neww: { reason: "starting work in a tab has a typed tool", tool: "the zmux_run typed tool (or zmux_runtime_ensure for persistent runtimes)" },
-	"kill-window": { reason: "tab cleanup has a typed tool", tool: "the zmux_tab_kill typed tool" },
-	killw: { reason: "tab cleanup has a typed tool", tool: "the zmux_tab_kill typed tool" },
-	"rename-window": { reason: "tab labelling has a typed tool", tool: "the zmux_tab_label typed tool" },
-	renamew: { reason: "tab labelling has a typed tool", tool: "the zmux_tab_label typed tool" },
-	"move-window": { reason: "tab moving has a typed tool", tool: "the zmux_tab_move typed tool" },
-	movew: { reason: "tab moving has a typed tool", tool: "the zmux_tab_move typed tool" },
-	"select-window": { reason: "tab focus has a typed tool", tool: "the zmux_tab_focus typed tool" },
-	selectw: { reason: "tab focus has a typed tool", tool: "the zmux_tab_focus typed tool" },
-	"new-session": { reason: "session creation belongs in zmux", tool: "the zmux_session_run typed tool for command-backed sessions, or the zmux CLI `zmux new` for attaching user sessions" },
-	new: { reason: "session creation belongs in zmux", tool: "the zmux_session_run typed tool for command-backed sessions, or the zmux CLI `zmux new` for attaching user sessions" },
-	"kill-session": { reason: "session cleanup has a typed tool", tool: "the zmux_session_kill typed tool" },
-	"attach-session": { reason: "attaching belongs in zmux", tool: "the zmux CLI `zmux open` (no typed attach tool yet)" },
-	attach: { reason: "attaching belongs in zmux", tool: "the zmux CLI `zmux open` (no typed attach tool yet)" },
-	"switch-client": { reason: "client switching belongs in zmux", tool: "the zmux CLI `zmux open` (no typed switch tool yet)" },
-	switchc: { reason: "client switching belongs in zmux", tool: "the zmux CLI `zmux open` (no typed switch tool yet)" },
+const tmuxSubcommandRedirects: Record<string, { reason: string; routeHint: string }> = {
+	"capture-pane": { reason: "reading pane output has a dispatcher operation", routeHint: "the runtime_logs dispatcher operation" },
+	capturep: { reason: "reading pane output has a dispatcher operation", routeHint: "the runtime_logs dispatcher operation" },
+	"send-keys": { reason: "pane key sending has a dispatcher operation", routeHint: "the pane_send_keys / pane_type dispatcher operations" },
+	send: { reason: "key sending has a dispatcher operation", routeHint: "the send_keys / type_text dispatcher operations" },
+	"list-windows": { reason: "tab listing has a dispatcher operation", routeHint: "the tabs dispatcher operation" },
+	lsw: { reason: "tab listing has a dispatcher operation", routeHint: "the tabs dispatcher operation" },
+	"list-sessions": { reason: "session listing has a dispatcher operation", routeHint: "the sessions dispatcher operation" },
+	ls: { reason: "session listing has a dispatcher operation", routeHint: "the sessions dispatcher operation" },
+	"list-panes": { reason: "pane listing has a dispatcher operation", routeHint: "the panes dispatcher operation" },
+	lsp: { reason: "pane listing has a dispatcher operation", routeHint: "the panes dispatcher operation" },
+	"split-window": { reason: "pane opening has a dispatcher operation", routeHint: "the pane_open dispatcher operation" },
+	splitw: { reason: "pane opening has a dispatcher operation", routeHint: "the pane_open dispatcher operation" },
+	"select-pane": { reason: "pane focus has a dispatcher operation", routeHint: "the pane_focus dispatcher operation" },
+	selectp: { reason: "pane focus has a dispatcher operation", routeHint: "the pane_focus dispatcher operation" },
+	"kill-pane": { reason: "pane cleanup has a dispatcher operation", routeHint: "the pane_close dispatcher operation" },
+	killp: { reason: "pane cleanup has a dispatcher operation", routeHint: "the pane_close dispatcher operation" },
+	"resize-pane": { reason: "pane resize has a dispatcher operation", routeHint: "the pane_resize dispatcher operation" },
+	resizep: { reason: "pane resize has a dispatcher operation", routeHint: "the pane_resize dispatcher operation" },
+	"new-window": { reason: "starting work in a tab has a dispatcher operation", routeHint: "the run dispatcher operation (or runtime_ensure for persistent runtimes)" },
+	neww: { reason: "starting work in a tab has a dispatcher operation", routeHint: "the run dispatcher operation (or runtime_ensure for persistent runtimes)" },
+	"kill-window": { reason: "tab cleanup has a dispatcher operation", routeHint: "the tab_kill dispatcher operation" },
+	killw: { reason: "tab cleanup has a dispatcher operation", routeHint: "the tab_kill dispatcher operation" },
+	"rename-window": { reason: "tab labelling has a dispatcher operation", routeHint: "the tab_label dispatcher operation" },
+	renamew: { reason: "tab labelling has a dispatcher operation", routeHint: "the tab_label dispatcher operation" },
+	"move-window": { reason: "tab moving has a dispatcher operation", routeHint: "the tab_move dispatcher operation" },
+	movew: { reason: "tab moving has a dispatcher operation", routeHint: "the tab_move dispatcher operation" },
+	"select-window": { reason: "tab focus has a dispatcher operation", routeHint: "tab_focus" },
+	selectw: { reason: "tab focus has a dispatcher operation", routeHint: "tab_focus" },
+	"new-session": { reason: "session creation belongs in zmux", routeHint: "the session_run dispatcher operation for command-backed sessions, or the zmux CLI `zmux new` for attaching user sessions" },
+	new: { reason: "session creation belongs in zmux", routeHint: "the session_run dispatcher operation for command-backed sessions, or the zmux CLI `zmux new` for attaching user sessions" },
+	"kill-session": { reason: "session cleanup has a dispatcher operation", routeHint: "the session_kill dispatcher operation" },
+	"attach-session": { reason: "attaching belongs in zmux", routeHint: "the zmux CLI `zmux open` (no dispatcher attach operation)" },
+	attach: { reason: "attaching belongs in zmux", routeHint: "the zmux CLI `zmux open` (no dispatcher attach operation)" },
+	"switch-client": { reason: "client switching belongs in zmux", routeHint: "the zmux CLI `zmux open` (no dispatcher switch operation)" },
+	switchc: { reason: "client switching belongs in zmux", routeHint: "the zmux CLI `zmux open` (no dispatcher switch operation)" },
 };
 
 const tmuxFlagWithArg = new Set(["-L", "-f", "-S", "-c"]);
@@ -152,7 +153,7 @@ function classifyTmux(scan: string): BashClassification | null {
 		if (hasSocketFlag(args)) continue; // socket-scoped (zzmux/profile) → exempt
 		const redirect = tmuxSubcommandRedirects[tmuxSubcommand(args.join(" "))];
 		if (redirect) {
-			return { kind: "direct_tmux", reason: redirect.reason, suggestion: suggestionForTmux(redirect.tool) };
+			return { kind: "direct_tmux", reason: redirect.reason, suggestion: suggestionForTmux(redirect.routeHint) };
 		}
 		// unmapped subcommand (info, has-session, ...) — no zmux verb; keep scanning
 	}
@@ -276,11 +277,11 @@ function foregroundComposeUp(scan: string): boolean {
 }
 
 // Single source of truth for the headless-agent print-mode guard: the pattern
-// and the remediation string are shared with tools/shared.ts so the two block
+// and the remediation string are shared with safety.ts so the two block
 // sites can't drift.
 export const HEADLESS_AGENT_PRINT_PATTERN = /(^|[;&|\n]\s*)(claude|codex|pi|agy)\b[^\n;&|]*(\s-p\b|\s--print\b)/u;
 export const HEADLESS_AGENT_SUGGESTION =
-	"Do not launch agent peers with -p/--print. Use zmux_lite operation=peer_ensure for a visible interactive CLI, then operation=type_text or peer_handoff.";
+	"Do not launch agent peers with -p/--print. Use zmux operation=peer_ensure for a visible interactive CLI, then operation=type_text or peer_handoff.";
 
 const headlessAgentPatterns: Array<{ re: RegExp; reason: string }> = [
 	{ re: HEADLESS_AGENT_PRINT_PATTERN, reason: "agent headless/print mode bypasses visible zmux peer flow" },
@@ -304,42 +305,34 @@ function hasBackgrounding(command: string): boolean {
 
 function suggestionForRuntime(command: string): string {
 	return [
-		"Use zmux_lite operation=runtime_ensure instead of bash for software that keeps running.",
+		"Use zmux operation=runtime_ensure instead of bash for software that keeps running.",
 		"Example:",
-		`  zmux_lite({ operation: "runtime_ensure", target: "server", command: ${JSON.stringify(command)} })`,
+		`  zmux({ operation: "runtime_ensure", target: "server", command: ${JSON.stringify(command)} })`,
 	].join("\n");
 }
 
 function suggestionForInteractive(command: string): string {
 	return [
-		"Use zmux_lite operation=interactive_type so the user can see/respond in a shared tab.",
+		"Use zmux operation=interactive_type so the user can see/respond in a shared tab.",
 		"Example:",
-		`  zmux_lite({ operation: "interactive_type", target: "admin", command: ${JSON.stringify(command)} })`,
+		`  zmux({ operation: "interactive_type", target: "admin", command: ${JSON.stringify(command)} })`,
 	].join("\n");
 }
 
-const compactOperationAliases: Record<string, string> = {
-	zmux_callback: "callback_watch",
-	zmux_pane_list: "panes",
-	zmux_reload: "zmux_reload",
-	zmux_type: "type_text",
-};
-
-function compactOperations(tool: string): string {
-	const operations = [...tool.matchAll(/zmux_[a-z0-9_]+/gu)].map((match) => compactOperationAliases[match[0]] ?? match[0].slice("zmux_".length));
-	return [...new Set(operations)].join(" or ");
+function compactOperations(route: string): string {
+	return ZMUX_OPERATIONS.filter((operation) => new RegExp(`(^|[^a-z0-9_])${operation}([^a-z0-9_]|$)`, "u").test(route)).join(" or ");
 }
 
-function suggestionForDirectTool(tool: string): string {
-	const operations = compactOperations(tool);
+function suggestionForDirectTool(route: string): string {
+	const operations = compactOperations(route);
 	return operations
-		? `Use zmux_lite with operation=${operations} instead of shelling out through bash.`
-		: "Use the equivalent zmux_lite operation instead of shelling out through bash.";
+		? `Use zmux with operation=${operations} instead of shelling out through bash.`
+		: "Use the equivalent zmux operation instead of shelling out through bash.";
 }
 
-function suggestionForTmux(tool: string): string {
-	const operations = compactOperations(tool);
-	const route = operations ? `zmux_lite operation=${operations}` : "the equivalent zmux_lite operation";
+function suggestionForTmux(routeHint: string): string {
+	const operations = compactOperations(routeHint);
+	const route = operations ? `zmux operation=${operations}` : "the equivalent zmux operation";
 	return `Use ${route} instead of raw tmux — zmux owns the @zmux_label pin + session/workspace bookkeeping.`;
 }
 
@@ -436,7 +429,7 @@ export function classifyBash(command: string, config: PiZmuxConfig, depth = 0): 
 
 	for (const pattern of directZmuxPatterns) {
 		if (pattern.re.test(scan)) {
-			return { kind: "direct_zmux", reason: pattern.reason, suggestion: suggestionForDirectTool(pattern.tool) };
+			return { kind: "direct_zmux", reason: pattern.reason, suggestion: suggestionForDirectTool(pattern.routeHint) };
 		}
 	}
 

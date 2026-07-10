@@ -27,3 +27,10 @@ ADR 0004 supersedes this decision only for automatic runtime-context injection.
 The stable diagnostic builder and `/zmux status` command remain; live pane, tab,
 runtime, and config state is no longer appended to every model system prompt.
 All other preserved cockpit infrastructure remains in force.
+
+## Promotion closure
+
+Release v0.13.0 completed the promotion: the sole model-visible tool is named
+`zmux`, the package version is 0.4.0, and the retired 37-tool registration modules
+were removed after canonical dispatcher tests and managed-profile verification.
+The experiment's separate package/name is no longer a runtime or source surface.

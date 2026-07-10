@@ -4,7 +4,7 @@ Full command tables for sessions/workspaces, tabs, placements, panes, terminal
 capabilities, snapshots, output recording, and config. The hot operational loop (run/watch/send,
 raw-tmux guard, tab states, peer/worker) lives in `SKILL.md`; this is the
 lookup-when-you-need-it reference, routed from there at point of use. In Pi,
-prefer the one `zmux_lite` dispatcher over shelling out. Its session/tab/peer,
+prefer the one `zmux` dispatcher over shelling out. Its session/tab/peer,
 pane, runtime, callback, evidence, input, and lifecycle operations cover the
 agent surface below.
 

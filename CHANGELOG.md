@@ -5,10 +5,14 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.12.0...HEAD`
+> Release tag: pending | Compare: `v0.13.0...HEAD`
+
+## [0.13.0] - 2026-07-11
+> Release tag: `v0.13.0` | Topics: `agents`, `pi`, `panes`, `release` | Compare: `v0.12.0...v0.13.0`
 
 ### Changed
 
+- **Canonical Pi tool is now simply `zmux`** `agents` `pi` -- the accepted 40-operation dispatcher is the sole `pi-zmux` model surface. The experimental suffix and retired 37-tool implementation modules are gone; `~/donjor/zmux/pi-zmux` is the implementation source of truth.
 - **Pi reads live zmux state only on demand** `agents` `pi` -- `pi-zmux` no longer injects pane, tab, runtime, and config state into every agent run. The one-tool schema remains always available, dispatcher operations resolve the live state they need, and `/zmux status` retains the full human diagnostic snapshot.
 
 ### Fixed

@@ -10,8 +10,8 @@ process or terminal state that should **outlive a single command**, be **visible
 the user**, or need **interactive control**. For bounded one-shot reads, builds,
 and tests whose captured output is the whole artifact, your normal shell is fine.
 
-You are likely already inside a zmux-managed session. In Pi, prefer the typed
-`zmux_*` tools for the same operations; in other harnesses, use `zmux` CLI verbs.
+You are likely already inside a zmux-managed session. In Pi, prefer the canonical
+`zmux` dispatcher and select its operation; in other harnesses, use `zmux` CLI verbs.
 
 ## Route
 
@@ -35,7 +35,7 @@ zmux verb instead: `watch`/`send`/`type` over `capture-pane`/`send-keys`,
 `split-window`, `run -n` over `new-window`.
 
 Harness guardrails backstop this doctrine. Claude has hook-backed blocking; Pi
-has typed tools plus a bash guard. The full mapping table, bypasses, and lifecycle
+has the canonical dispatcher plus a bash guard. The full mapping table, bypasses, and lifecycle
 state details live in `references/guard-and-tab-states.md`.
 
 ### Use zmux for reviewability, not duration
@@ -108,7 +108,7 @@ tab is pure overhead.
 
 ## Pi dispatcher
 
-Pi exposes one compact `zmux_lite` tool. Select its `operation` instead of
+Pi exposes one canonical `zmux` tool. Select its `operation` instead of
 shelling out:
 
 - inspect/control: `current`, `tabs`, `sessions`, `panes`, `run`, `session_run`, `session_kill`;
@@ -151,7 +151,7 @@ zmux type codex-peer '<prompt with repo/file pointers>' -s <session> --mark-peer
 zmux tab inspect codex-peer -s <session> --json  # status + output after state says ready, or fallback evidence
 ```
 
-In Pi, use `zmux_lite` operations `peer_ensure` for spawn/reuse, `type_text` with `options.markPeerRunning`/`waitForTurnState` for peer prompts, and `tab_inspect` for status+output diagnosis. Pass `options.session` on every peer call.
+In Pi, use `zmux` operations `peer_ensure` for spawn/reuse, `type_text` with `options.markPeerRunning`/`waitForTurnState` for peer prompts, and `tab_inspect` for status+output diagnosis. Pass `options.session` on every peer call.
 
 ## Agent worker
 
@@ -166,11 +166,11 @@ shell tab.
 
 ## Never
 
-- `&`, `nohup`, `disown`, or harness-native hidden-background options — use `zmux run -d` / Pi `zmux_lite operation=runtime_ensure`.
+- `&`, `nohup`, `disown`, or harness-native hidden-background options — use `zmux run -d` / Pi `zmux operation=runtime_ensure`.
 - unnamed tabs — always give reviewable work a stable purpose name.
 - raw tmux for app-level actions.
 - your own terminal sentinels, done markers, wrapper scripts, or `sleep && watch`; zmux-managed shells own command lifecycle glyphs and `zmux wait` owns structured condition waits.
 - hand-rolled poll loops or `pgrep -f` / `pkill -f` self-matching patterns to await one job.
-- guessing process state — read lifecycle/command/peer state with `zmux tab status` / Pi `zmux_lite operation=tab_status`, or use `zmux wait` for fresh state/output/idle conditions; use `zmux watch`, `zmux log`, or dispatcher log operations for output only.
+- guessing process state — read lifecycle/command/peer state with `zmux tab status` / Pi `zmux operation=tab_status`, or use `zmux wait` for fresh state/output/idle conditions; use `zmux watch`, `zmux log`, or dispatcher log operations for output only.
 - `zmux refresh` / `zmux terminal refresh` from an agent session unless the user asked or disruption is acceptable.
 - `zmux init` inside tmux — it intentionally refuses.

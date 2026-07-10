@@ -7,6 +7,23 @@ import assert from 'node:assert/strict';
 const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 const outDir = mkdtempSync(join(tmpdir(), 'pi-zmux-test-'));
 try {
+  const harnessFiles = [
+    'references/testing/README.md',
+    'references/testing/host-prompt.md',
+    'references/testing/host-flow.md',
+    'references/testing/prompts.md',
+    'fixtures/config-project/.pi/zmux.json',
+    'fixtures/config-project/README.md',
+    'fixtures/dev-server/package.json',
+    'fixtures/dev-server/server.mjs',
+    'fixtures/dev-server/logs/app.txt',
+  ];
+  for (const path of harnessFiles) {
+    assert.ok(existsSync(join(root, path)), `canonical testing harness file missing: ${path}`);
+  }
+  const checkpoints = readFileSync(join(root, 'references/testing/prompts.md'), 'utf8').match(/^## [NA]-\d{3} /gm) ?? [];
+  assert.equal(checkpoints.length, 19, 'canonical testing flow must retain all 19 accepted checkpoints');
+
   const tsc = join(root, 'node_modules/.bin/tsc');
   const compile = spawnSync(tsc, ['-p', join(root, 'tsconfig.json'), '--outDir', outDir, '--noEmit', 'false'], { stdio: 'inherit' });
   assert.equal(compile.status, 0, 'TypeScript compile failed');
@@ -35,23 +52,20 @@ try {
     buildWatchArgs,
     buildWaitArgs,
     buildZmuxRunArgs,
-    detectUserInputPrompt,
     listCallbacks,
     listRecentCallbackCompletions,
-    settledFreshCommandStatus,
     startWatchCallback,
     statusWarnings,
-    turnWaitOutcomeForStatus,
     watchPatternPresentInText,
     zmuxRunResultDetails,
     zmuxRunSafetyWarnings,
   } = await import(join(outDir, 'src/zmux.js'));
+  const { detectUserInputPrompt } = await import(join(outDir, 'src/interactive.js'));
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
   const { reloadContinuationPath, shouldTriggerContinuation, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));
   const { respawnContinuationPath, takeRespawnContinuation, writeRespawnContinuation } = await import(join(outDir, 'src/respawn-continuation.js'));
-  const { hasHeadlessAgentPrintMode, rejectHeadlessAgentPrintMode, shouldWaitForExit, validateLogParams } = await import(join(outDir, 'src/tools/shared.js'));
+  const { hasHeadlessAgentPrintMode, rejectHeadlessAgentPrintMode, shouldWaitForExit } = await import(join(outDir, 'src/safety.js'));
   const { default: registerExtension } = await import(join(outDir, 'src/index.js'));
-  const { registerZmuxTools } = await import(join(outDir, 'src/tools.js'));
   const { default: registerPeerLifecycleExtension } = await import(join(outDir, 'src/peer-lifecycle.js'));
 
   const registeredTools = [];
@@ -66,7 +80,7 @@ try {
   };
   registerExtension(fakePi);
   const toolNames = registeredTools.map((tool) => tool.name).sort();
-  assert.deepEqual(toolNames, ['zmux_lite'], 'production Pi tool surface must be the compact dispatcher only');
+  assert.deepEqual(toolNames, ['zmux'], 'production Pi tool surface must expose only the canonical dispatcher');
   assert.equal(new Set(toolNames).size, toolNames.length, 'tool names must be unique');
   assert.deepEqual(registeredCommands.map((cmd) => cmd.name), ['zmux']);
   for (const eventName of ['agent_start', 'agent_end', 'session_shutdown', 'session_start', 'tool_call']) {
@@ -88,14 +102,6 @@ try {
   assert.deepEqual(peerLifecycleCommands, [], 'peer lifecycle entrypoint must not register commands');
   assert.deepEqual(peerLifecycleHandlers.map((handler) => handler.event).sort(), ['agent_end', 'agent_start', 'session_shutdown'].sort(), 'peer lifecycle entrypoint must register only lifecycle hooks');
 
-  // Keep the legacy implementation contract tests until the compact dispatcher
-  // has passed full-package integration; these tools are not registered in production.
-  const legacyTools = [];
-  registerZmuxTools({ ...fakePi, registerTool(tool) { legacyTools.push(tool); } });
-  const toolByName = Object.fromEntries(legacyTools.map((tool) => [tool.name, tool]));
-  assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /Do not add your own sentinels or wrapper scripts/);
-  assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /one stable.*remote/i);
-  assert.match(toolByName.zmux_run.promptGuidelines.join('\n'), /opaque encoded remote\/admin payloads/i);
   const encodedRemoteMutation = Buffer.from("Set-Content /etc/example.env 'TOKEN=redacted'", 'utf16le').toString('base64');
   const remoteRunWarnings = zmuxRunSafetyWarnings({
     command: `ssh node-a "remote-admin -EncodedCommand ${encodedRemoteMutation}"`,
@@ -107,18 +113,6 @@ try {
   assert.match(remoteRunWarnings.text, /about to change.*node-a/i, 'remote env mutation should require an explicit pre-change status');
   assert.equal(remoteRunWarnings.details.recommendedTab, 'remote-example');
   assert.match(remoteRunWarnings.details.decodedRemoteCommandPreview, /Set-Content/);
-  assert.match(toolByName.zmux_tab_status.description, /do not set glyphs/);
-  assert.match(toolByName.zmux_tab_inspect.description, /status JSON plus recent output/);
-  assert.match(toolByName.zmux_peer_ensure.description, /peer lifecycle metadata/);
-  assert.match(toolByName.zmux_type.parameters.properties.waitForTurnState.description, /fresh turn state/);
-  assert.match(toolByName.zmux_runtime_logs.parameters.properties.waitFor.description, /Regex to wait/);
-  assert.match(toolByName.zmux_callback.description, /notify Pi later/);
-  assert.match(toolByName.zmux_peer_handoff.description, /Pi callback message/);
-  assert.match(toolByName.zmux_pane_resize.description, /auto-selects width.*height/);
-  assert.match(toolByName.zmux_pane_resize.parameters.properties.axis.description, /auto.*width.*height/);
-  assert.match(toolByName.zmux_tab_kill.parameters.properties.session.description, /Source session/);
-  assert.match(toolByName.zmux_interactive_type.description, /sudo, ssh, REPLs/);
-  assert.match(toolByName.zmux_interactive_type.parameters.properties.waitForExit.description, /defaults true.*false for long interactive shells/);
   assert.equal(shouldWaitForExit('ssh onyxrock'), false);
   assert.equal(shouldWaitForExit('bash --norc'), false);
   assert.equal(shouldWaitForExit('sudo ufw status'), true);
@@ -247,12 +241,6 @@ try {
   assert.equal(detectUserInputPrompt('Enter passphrase for key ~/.ssh/id_ed25519:')?.kind, 'password');
   assert.equal(detectUserInputPrompt('Are you sure you want to continue connecting (yes/no/[fingerprint])?')?.kind, 'ssh_confirm');
   assert.equal(detectUserInputPrompt('Status: inactive'), undefined);
-  assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '7', cmdState: 'done', lastExit: '0' }, 7), { fresh: false, settled: false, state: 'done', cmdSeq: 7 });
-  assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '8', cmdState: 'running' }, 7), { fresh: true, settled: false, state: 'running', cmdSeq: 8 });
-  assert.deepEqual(settledFreshCommandStatus({ cmdSeq: '8', cmdState: 'failed', lastExit: '2' }, 7), { fresh: true, settled: true, state: 'failed', exitCode: 2, cmdSeq: 8 });
-  assert.equal(turnWaitOutcomeForStatus({ turnState: 'ready', turnAt: '100' }, 'ready', 100), 'unproven');
-  assert.equal(turnWaitOutcomeForStatus({ turnState: 'ready', turnAt: '101' }, 'ready', 100), 'ready');
-  assert.equal(turnWaitOutcomeForStatus({ turnState: 'failed', turnAt: '101' }, 'ready', 100), 'failed');
   assert.deepEqual(statusWarnings({ turnState: 'ready', turnAt: '100' }, { targetState: 'ready', expectFreshAfter: 100 }), {
     warnings: ['matching turn state is stale; readiness is unproven'],
     failureKind: 'stale_turn_state',
@@ -307,7 +295,6 @@ try {
   assert.deepEqual(buildTabKillArgs({ tab: 'api', session: 'repo/main' }), ['tab', 'kill', 'api', '-s', 'repo/main']);
   assert.deepEqual(buildLogArgs({ action: 'tail', tab: 'server', session: 'zws/repo', lines: 40 }), ['log', 'tail', 'server', '-n', '40', '-s', 'zws/repo']);
   assert.deepEqual(buildLogArgs({ action: 'status', tab: 'server', session: 'zws/repo', lines: 40 }), ['log', 'status']);
-  assert.throws(() => validateLogParams('status', { session: 'zws/repo' }), /session is not valid for zmux_log status/);
   assert.deepEqual(buildSnapshotArgs({ noPng: true, panes: ['%1', '%2'], lines: 120, out: '/tmp/snap', json: true }), [
     'snapshot', '--no-png', '--pane', '%1', '--pane', '%2', '--lines', '120', '--out', '/tmp/snap', '--json',
   ]);

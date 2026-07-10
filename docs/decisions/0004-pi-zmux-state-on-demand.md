@@ -10,7 +10,7 @@ bounded worst-case fixture measured approximately 430 tokens in addition to the
 approximately 995-token dispatcher schema.
 
 The injection was inherited infrastructure, not a fix for compact-dispatcher
-failures. The isolated lite profile registered only the dispatcher, had no
+failures. The isolated compact candidate registered only the dispatcher, had no
 context-injection hook, and passed the complete Terra/medium matrix 19/19. Its
 evidence-driven fixes were operation behavior and targeted tool guidance:
 readiness handling, atomic peer handoff, callback freshness, lifecycle
@@ -27,7 +27,7 @@ session/socket lifecycle and invalidation complexity.
 
 Do not inject live zmux state into the model system prompt.
 
-Keep one model-visible `zmux_lite` dispatcher. Resolve state on demand:
+Keep one model-visible `zmux` dispatcher. Resolve state on demand:
 
 - agents call `current`, `tabs`, `sessions`, `panes`, `tab_status`, or
   `tab_inspect` when a request actually needs broad inspection;

@@ -5,7 +5,9 @@ import { shouldTriggerContinuation, takeReloadContinuation, type ReloadContinuat
 import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
 import { registerZmuxDispatcher } from "./dispatcher.js";
 import { registerGlyphLifecycle } from "./lifecycle.js";
-import { clearCallbacks, currentPane, listTabs, reloadZmux, zmux } from "./zmux.js";
+import { clearCallbacks } from "./zmux/callbacks.js";
+import { currentPane, listTabs, reloadZmux } from "./zmux/context.js";
+import { zmux } from "./zmux/shared.js";
 
 
 function compact(value: string, max = 1200): string {
@@ -43,7 +45,7 @@ async function buildContext(cwd: string, projectTrusted: boolean): Promise<strin
 		pane ? `- current zmux: session=${pane.Session ?? "?"} pane=${pane.ID ?? "?"} tab=${pane.WindowIndex ?? "?"} cwd=${pane.Dir ?? "?"}` : "- current zmux: unavailable/outside tmux",
 		configured ? `- configured runtimes:\n${configured}` : "- configured runtimes: none",
 		`- visible tabs:\n${compact(tabs, 700)}`,
-		"Rules: use zmux_lite operation=runtime_ensure/runtime_logs/runtime_stop for persistent software, and operation=interactive_type for sudo/password/manual input. Bounded checks can stay in bash; never hide runtimes with &, nohup, disown, or raw tmux.",
+		"Rules: use zmux operation=runtime_ensure/runtime_logs/runtime_stop for persistent software, and operation=interactive_type for sudo/password/manual input. Bounded checks can stay in bash; never hide runtimes with &, nohup, disown, or raw tmux.",
 	].join("\n");
 }
 

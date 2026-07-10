@@ -8,7 +8,7 @@ You are testing the branch-local zmux Pi extension in a fresh isolated Pi sessio
 
 ## Mission
 
-Run live E2E QA for the canonical `pi-zmux` package and its single `zmux_lite`
+Run live E2E QA for the canonical `pi-zmux` package and its single `zmux`
 dispatcher. Write a structured evidence report under `.dump/test-prompts-report/`.
 Do not edit source, commit, push, install live hooks, or touch the live `zmux`
 profile.
@@ -29,7 +29,7 @@ PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
 
 ## Safety
 
-1. Use `zmux_lite` for every zmux operation; bounded Bash is only for source reads and deterministic package gates.
+1. Use `zmux` for every zmux operation; bounded Bash is only for source reads and deterministic package gates.
 2. Never use `PI_ZMUX_ALLOW=1` or `# pi-zmux: allow` to turn a blocked action into a pass.
 3. Inspect but do not execute `zmux_reload`, `pi_reload`, or `pi_respawn`.
 4. Keep every `focus` option false. Do not call `tab_focus` or `pane_focus`.
@@ -64,7 +64,7 @@ make test-agent-surfaces
 
 Required results:
 
-- exactly one registered Pi tool: `zmux_lite`;
+- exactly one registered Pi tool: `zmux`;
 - exactly 40 dispatcher operations;
 - shared Bash-guard corpus parity passes;
 - dispatcher contracts pass 40/40;

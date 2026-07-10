@@ -1,0 +1,12 @@
+{
+  "runtimes": {
+    "configured-worker": {
+      "command": "node -e \"console.log('CONFIG_READY'); setInterval(() => {}, 1000)\"",
+      "tab": "configured-worker",
+      "cwd": ".",
+      "readiness": "CONFIG_READY",
+      "timeoutSeconds": 30,
+      "kind": "worker"
+    }
+  }
+}

@@ -312,7 +312,7 @@ For each item, report `PASS`, `FAIL`, or `BLOCKED`, with evidence. A documentati
 
 ### Pi boundary awareness
 
-- Skill docs tell Pi users to prefer typed `zmux_*` tools.
+- Skill docs tell Pi users to prefer the canonical `zmux` dispatcher.
 - Skill docs do not duplicate Pi extension internals unnecessarily.
 - Shared doctrine and Pi extension docs are linked consistently.
 

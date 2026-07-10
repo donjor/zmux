@@ -138,7 +138,7 @@ function sendCallbackMessage(pi: ExtensionAPI, done: CallbackCompletion, deliver
 		content: formatCallbackMessage(done),
 		display: true,
 		details: {
-			kind: "zmux_callback",
+			kind: "callback_watch",
 			id: done.id,
 			callbackKind: done.kind,
 			tab: done.tab,

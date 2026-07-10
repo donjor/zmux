@@ -73,7 +73,7 @@ export function zmuxRunSafetyWarnings(params: ZmuxRunParams): { text: string; de
 		details.remoteMutationLikely = true;
 	}
 
-	return { text: warnings.length ? `zmux_run safety warning:\n${warnings.map((warning) => `- ${warning}`).join("\n")}` : "", details };
+	return { text: warnings.length ? `zmux run safety warning:\n${warnings.map((warning) => `- ${warning}`).join("\n")}` : "", details };
 }
 
 export function zmuxRunResultDetails(result: CommandStatusResult, output: string): Record<string, unknown> {

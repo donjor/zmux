@@ -1,7 +1,7 @@
 # Pi zmux extension
 
 The repo owns a Pi extension plus the shared zmux agent skill. The skill teaches
-terminal/session doctrine; the extension adds one compact `zmux_lite` dispatcher,
+terminal/session doctrine; the extension adds one compact `zmux` dispatcher,
 on-demand runtime inspection, and bash guardrails so agents use visible
 zmux-managed tabs instead of hidden shell jobs or raw tmux.
 
@@ -10,6 +10,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 - `pi-zmux/index.ts` — package entry for Pi extension loading.
 - `pi-zmux/src/**` — dispatcher registration, on-demand diagnostics, bash classification, and zmux adapters.
 - `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
+- `pi-zmux/references/testing/**`, `pi-zmux/fixtures/**` — durable host-driven sequential regression flow and deterministic live fixtures.
 - `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — shared agent doctrine, hooks, and doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
 - `docs/dev/test-prompts/zmux-agent-*-testing-prompt.md` — prompt-driven exploratory QA for fresh isolated sessions testing the whole agent-facing skill/Pi surface.
@@ -19,7 +20,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 - Long-running, interactive, sudo/password, watcher, server, and TUI commands belong in zmux tabs or panes, not the agent shell.
 - Dispatcher operations are focus-safe by default. They move terminal focus only when the user explicitly asks or after a focused confirmation.
 - Direct raw tmux app-control paths are blocked when an equivalent dispatcher operation exists.
-- `zmux_lite operation=pi_reload` is the soft path after Pi extension, skill, prompt, or theme changes; `operation=pi_respawn` is a destructive fallback.
+- `zmux operation=pi_reload` is the soft path after Pi extension, skill, prompt, or theme changes; `operation=pi_respawn` is a destructive fallback.
 - Persistent Pi process liveness is not a running signal. Only an active Pi turn should publish the running glyph.
 - Project config containing commands is read only when Pi marks the project trusted.
 
@@ -105,15 +106,20 @@ Use these prompts after material agent-facing changes, especially new dispatcher
 operations, guard classifications, peer/worker flow changes, or edits to shipped
 skill doctrine. The prompts are exploratory QA wrappers: expected behavior
 remains in this domain doc plus `skills/zmux/SKILL.md` and its references, while
-`make test-agent-surfaces` remains the deterministic gate. The accepted one-tool
-candidate now lives in this canonical package; its Terra/medium acceptance
-artifacts remain in the skills repo.
+`make test-agent-surfaces` remains the deterministic gate.
+
+The accepted one-tool candidate's 19 behavioral checkpoints are preserved as a
+lightweight package regression flow under `pi-zmux/references/testing/`. A host
+drives one ordinary visible Pi worker through the main chain and judges real
+terminal state after each prompt; one disposable worker covers the trusted-project
+and hard-respawn checks. The flow requires no custom agent/profile, run IDs, JSONL,
+or transcript schema. Historical Terra/medium acceptance artifacts remain in the
+skills repo.
 
 ## Dispatcher
 
-Pi exposes one model-visible tool, `zmux_lite`, with 40 validated operations.
-The stable package name remains `pi-zmux`; `lite` names the compact tool surface,
-not a second installed extension.
+Pi exposes one model-visible tool, `zmux`, with 40 validated operations.
+The canonical package and tool are both named for zmux; this is the sole model-visible tool surface.
 
 Operation groups:
 
@@ -177,7 +183,7 @@ Trusted project config can define reusable runtimes:
 }
 ```
 
-With trusted config, agents can call `zmux_lite operation=runtime_ensure` by
+With trusted config, agents can call `zmux operation=runtime_ensure` by
 name without rediscovering commands or starting duplicate processes.
 
 ## Interactive and peer waiting

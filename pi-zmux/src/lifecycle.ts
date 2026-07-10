@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { currentPane, setTabPeer, setTabState } from "./zmux.js";
+import { currentPane } from "./zmux/context.js";
+import { setTabPeer, setTabState } from "./zmux/tabs.js";
 
 type LifecycleState = "running" | "ready" | "clear";
 type LifecycleSurface = "glyph" | "peer-turn";

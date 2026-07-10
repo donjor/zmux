@@ -177,7 +177,7 @@ zmux exposes an agent-safe terminal control surface:
 
 - use `zmux run`, `watch`, `log`, `send`, `type`, and pane/tab verbs for visible
   terminal work;
-- use Pi typed tools from `pi-zmux/` when running inside Pi, including `zmux_peer_ensure`, `zmux_tab_inspect`, `zmux_type` peer-wait options, `zmux_callback`, and `zmux_peer_handoff` for agent peer loops;
+- use the canonical Pi `zmux` dispatcher from `pi-zmux/` when running inside Pi; select operations such as `peer_ensure`, `tab_inspect`, `type_text`, `callback_watch`, and `peer_handoff` for agent peer loops;
 - use `skills/zmux/SKILL.md` for shared agent doctrine;
 - never hide long-running work behind `&`, `nohup`, `disown`, or raw tmux.
 

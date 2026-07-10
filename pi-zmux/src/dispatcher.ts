@@ -5,57 +5,17 @@ import { Type } from "typebox";
 import { loadConfig, mergeRuntimeConfig, type RuntimeConfig } from "./config.js";
 import { runTmux, runZmux, zmuxBin } from "./exec.js";
 import { interactiveType } from "./interactive.js";
-import { rejectHeadlessAgentPrintMode, shouldWaitForExit } from "./tools/shared.js";
+import { isZmuxOperation, ZMUX_OPERATIONS, type ZmuxOperation } from "./operations.js";
+import { rejectHeadlessAgentPrintMode, shouldWaitForExit } from "./safety.js";
 import { resizePane } from "./zmux/panes.js";
 import { zmuxRunSafetyWarnings } from "./zmux/sessions.js";
 import { schedulePiReload, schedulePiRespawn } from "./zmux/pi-lifecycle.js";
 
-export const ZMUX_OPERATIONS = [
-  "current",
-  "tabs",
-  "sessions",
-  "panes",
-  "run",
-  "session_run",
-  "session_kill",
-  "runtime_ensure",
-  "runtime_logs",
-  "runtime_stop",
-  "tab_state",
-  "tab_peer",
-  "tab_status",
-  "tab_inspect",
-  "tab_label",
-  "tab_move",
-  "tab_place",
-  "tab_kill",
-  "tab_focus",
-  "send_keys",
-  "type_text",
-  "peer_ensure",
-  "peer_handoff",
-  "pane_open",
-  "pane_close",
-  "pane_resize",
-  "pane_focus",
-  "pane_send_keys",
-  "pane_type",
-  "log",
-  "snapshot",
-  "wait",
-  "callback_watch",
-  "callback_list",
-  "callback_cancel",
-  "interactive_type",
-  "terminal_current",
-  "zmux_reload",
-  "pi_reload",
-  "pi_respawn",
-] as const;
+export { ZMUX_OPERATIONS } from "./operations.js";
 
-type Operation = (typeof ZMUX_OPERATIONS)[number];
+type Operation = ZmuxOperation;
 
-type LiteParams = {
+type ZmuxParams = {
   operation: string;
   target?: string;
   command?: string;
@@ -75,7 +35,7 @@ const callbacks = new Map<string, CallbackRecord>();
 const paramsSchema = Type.Object(
   {
     operation: Type.String({
-      description: `Required zmux action. One of: ${ZMUX_OPERATIONS.join(", ")}. Prefer outcome names over legacy tool names.`,
+      description: `Required zmux action. One of: ${ZMUX_OPERATIONS.join(", ")}. Prefer the documented operation names.`,
     }),
     target: Type.Optional(Type.String({ description: "Primary tab/session/pane/runtime target, depending on operation." })),
     command: Type.Optional(Type.String({ description: "Shell command for run/session_run/runtime_ensure/pane_open/interactive_type." })),
@@ -88,10 +48,6 @@ const paramsSchema = Type.Object(
   },
   { additionalProperties: false },
 );
-
-function isOperation(value: string): value is Operation {
-  return (ZMUX_OPERATIONS as readonly string[]).includes(value);
-}
 
 function optString(options: Record<string, unknown>, key: string): string | undefined {
   const value = options[key];
@@ -123,12 +79,12 @@ function optStringArray(options: Record<string, unknown>, key: string): string[]
   return value;
 }
 
-function requireTarget(params: LiteParams, noun = "target"): string {
+function requireTarget(params: ZmuxParams, noun = "target"): string {
   if (!params.target?.trim()) throw new Error(`${noun} is required for operation ${params.operation}`);
   return params.target.trim();
 }
 
-function requireCommand(params: LiteParams): string {
+function requireCommand(params: ZmuxParams): string {
   if (!params.command?.trim()) throw new Error(`command is required for operation ${params.operation}`);
   return params.command;
 }
@@ -146,7 +102,7 @@ function requireChoice(value: string, label: string, choices: readonly string[])
   return value;
 }
 
-function cwdFor(defaultCwd: string, params: LiteParams): string {
+function cwdFor(defaultCwd: string, params: ZmuxParams): string {
   return params.cwd || defaultCwd;
 }
 
@@ -154,8 +110,8 @@ function timeoutMs(options: Record<string, unknown>, fallbackSeconds = 30): numb
   return (optNumber(options, "timeoutSeconds") ?? fallbackSeconds) * 1000;
 }
 
-function buildArgs(params: LiteParams): string[] {
-  if (!isOperation(params.operation)) throw new Error(`unknown zmux_lite operation ${params.operation}`);
+function buildArgs(params: ZmuxParams): string[] {
+  if (!isZmuxOperation(params.operation)) throw new Error(`unknown zmux operation ${params.operation}`);
   const options = params.options ?? {};
   const target = params.target;
   const action = optString(options, "action");
@@ -447,7 +403,7 @@ function buildWaitArgs(target: string, options: Record<string, unknown>): string
 
 function formatResult(operation: string, args: string[], stdout: string, stderr: string): string {
   const body = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n");
-  return body || `zmux_lite ${operation} completed: ${args.join(" ")}`;
+  return body || `zmux ${operation} completed: ${args.join(" ")}`;
 }
 
 function outputMatches(pattern: string, stdout: string, stderr: string): boolean {
@@ -459,11 +415,11 @@ function outputMatches(pattern: string, stdout: string, stderr: string): boolean
 }
 
 type RuntimeResolution = {
-  params: LiteParams;
+  params: ZmuxParams;
   details: { runtimeName: string; configPath?: string; ignoredReason?: string };
 };
 
-function resolveRuntimeParams(params: LiteParams, defaultCwd: string, projectTrusted: boolean): RuntimeResolution | undefined {
+function resolveRuntimeParams(params: ZmuxParams, defaultCwd: string, projectTrusted: boolean): RuntimeResolution | undefined {
   if (params.operation !== "runtime_ensure" && params.operation !== "runtime_logs" && params.operation !== "runtime_stop") return undefined;
   const runtimeName = requireTarget(params, "runtime name");
   const options = params.options ?? {};
@@ -512,9 +468,9 @@ function content(text: string, details: Record<string, unknown> = {}) {
   };
 }
 
-function startLiteCallback(
+function startCallback(
   pi: ExtensionAPI,
-  params: LiteParams,
+  params: ZmuxParams,
   cwd: string,
   signal: AbortSignal | undefined,
   kind: "callback_watch" | "peer_handoff" = "callback_watch",
@@ -561,7 +517,7 @@ function startLiteCallback(
     pi.sendMessage(
       {
         customType: "pi-zmux-callback",
-        content: `zmux_lite callback ${id} failed: ${error.message}`,
+        content: `zmux callback ${id} failed: ${error.message}`,
         display: true,
         details: { id, kind, args, code: null, signal: null, target, failed: true },
       },
@@ -571,14 +527,14 @@ function startLiteCallback(
   return { id, kind, args, target };
 }
 
-async function executeSpecial(pi: ExtensionAPI, params: LiteParams, defaultCwd: string, signal?: AbortSignal) {
+async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: string, signal?: AbortSignal) {
   const options = params.options ?? {};
   const cwd = cwdFor(defaultCwd, params);
   if (params.operation === "callback_list") {
     return content(
       callbacks.size
         ? [...callbacks.values()].map((record) => `- ${record.id}: ${record.target} started ${record.startedAt}`).join("\n")
-        : "no active zmux_lite callbacks",
+        : "no active zmux callbacks",
       { callbacks: [...callbacks.keys()] },
     );
   }
@@ -586,14 +542,14 @@ async function executeSpecial(pi: ExtensionAPI, params: LiteParams, defaultCwd: 
     const id = params.target || optString(options, "id");
     if (!id) throw new Error("target or options.id is required for callback_cancel");
     const record = callbacks.get(id);
-    if (!record) return content(`no active zmux_lite callback ${id}`, { id, cancelled: false });
+    if (!record) return content(`no active zmux callback ${id}`, { id, cancelled: false });
     record.process.kill("SIGTERM");
     callbacks.delete(id);
-    return content(`cancelled zmux_lite callback ${id}`, { id, cancelled: true });
+    return content(`cancelled zmux callback ${id}`, { id, cancelled: true });
   }
   if (params.operation === "callback_watch") {
-    const callback = startLiteCallback(pi, params, cwd, signal);
-    return content(`started zmux_lite callback ${callback.id} for ${callback.target}`, callback);
+    const callback = startCallback(pi, params, cwd, signal);
+    return content(`started zmux callback ${callback.id} for ${callback.target}`, callback);
   }
   if (params.operation === "peer_handoff") {
     const target = requireTarget(params, "peer tab");
@@ -605,12 +561,12 @@ async function executeSpecial(pi: ExtensionAPI, params: LiteParams, defaultCwd: 
     if (waitFor && text.includes(waitFor)) {
       throw new Error("peer_handoff waitFor marker must not appear verbatim in options.text; split or rephrase the marker so the echoed prompt cannot self-match");
     }
-    const callbackParams: LiteParams = {
+    const callbackParams: ZmuxParams = {
       operation: "callback_watch",
       target,
       options: { ...options, idleSeconds: waitFor ? undefined : (idleSeconds ?? 3) },
     };
-    let callback = waitFor ? startLiteCallback(pi, callbackParams, cwd, signal, "peer_handoff") : undefined;
+    let callback = waitFor ? startCallback(pi, callbackParams, cwd, signal, "peer_handoff") : undefined;
     const typeArgs = buildArgs({
       operation: "type_text",
       target,
@@ -630,9 +586,9 @@ async function executeSpecial(pi: ExtensionAPI, params: LiteParams, defaultCwd: 
       }
       throw new Error([typed.stdout.trim(), typed.stderr.trim()].filter(Boolean).join("\n") || `peer_handoff type failed for ${target}`);
     }
-    callback ??= startLiteCallback(pi, callbackParams, cwd, signal, "peer_handoff");
+    callback ??= startCallback(pi, callbackParams, cwd, signal, "peer_handoff");
     return content(
-      [formatResult("type_text", typeArgs, typed.stdout, typed.stderr), `started zmux_lite peer handoff ${callback.id} for ${target}`].join("\n"),
+      [formatResult("type_text", typeArgs, typed.stdout, typed.stderr), `started zmux peer handoff ${callback.id} for ${target}`].join("\n"),
       { ...callback, typeArgs, markPeerRunning: optBool(options, "markPeerRunning") ?? true },
     );
   }
@@ -681,13 +637,13 @@ async function executeSpecial(pi: ExtensionAPI, params: LiteParams, defaultCwd: 
 
 export function registerZmuxDispatcher(pi: ExtensionAPI): void {
   pi.registerTool({
-    name: "zmux_lite",
+    name: "zmux",
     label: "zmux",
     description:
-      "One compact dispatcher for zmux terminal/session work: choose an operation, provide a primary target/command, and keep focus-moving options false unless the user explicitly asked.",
-    promptSnippet: "Dispatch zmux terminal/session/runtime operations through one compact tool",
+      "Canonical zmux dispatcher for terminal/session work: choose an operation, provide a primary target/command, and keep focus-moving options false unless the user explicitly asked.",
+    promptSnippet: "Dispatch canonical zmux terminal/session/runtime operations",
     promptGuidelines: [
-      "Use zmux_lite instead of bash/raw tmux for runtimes, visible tabs, panes, sessions, waits, peers, and Pi lifecycle; never background long-running commands.",
+      "Use zmux instead of bash/raw tmux for runtimes, visible tabs, panes, sessions, waits, peers, and Pi lifecycle; never background long-running commands.",
       "Map: dev server -> runtime_ensure; existing output -> runtime_logs; visible one-shot -> run; sidecar -> pane_open; named tab cleanup -> tab_kill.",
       "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text and options.waitFor; it marks the peer running by default. Never send type_text then callback_watch, and split/rephrase the waitFor marker so it is not repeated verbatim in text and cannot self-match the echoed prompt.",
       "For sudo, ssh, passwords, REPLs, database shells, and other manual input, use interactive_type and never generic run; target admin (or the named shared tab), keep focus false by default, and set options.waitForExit for bounded privileged commands.",
@@ -700,7 +656,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       "For remote/admin runs, reuse one stable admin/remote-host tab, decode opaque payloads, and state the intended host mutation before changing remote config.",
     ],
     parameters: paramsSchema,
-    async execute(_id, inputParams: LiteParams, signal, onUpdate, ctx) {
+    async execute(_id, inputParams: ZmuxParams, signal, onUpdate, ctx) {
       const runtime = resolveRuntimeParams(inputParams, ctx.cwd, ctx.isProjectTrusted());
       const params = runtime?.params ?? inputParams;
       const options = params.options ?? {};
@@ -753,7 +709,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       let text = [runSafety?.text, restartText, formatResult(params.operation, args, result.stdout, result.stderr)].filter(Boolean).join("\n");
       if (failed) {
         const processOutput = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
-        throw new Error(processOutput || `zmux_lite ${params.operation} failed: ${args.join(" ")}`);
+        throw new Error(processOutput || `zmux ${params.operation} failed: ${args.join(" ")}`);
       }
       const details: Record<string, unknown> = { operation: params.operation, args, cwd, exitCode: result.code, ...runtime?.details, ...runSafety?.details };
       if (restartStopped !== undefined) details.restartStopped = restartStopped;

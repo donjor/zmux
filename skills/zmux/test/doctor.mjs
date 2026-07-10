@@ -12,9 +12,10 @@ function read(rel) {
 }
 
 const dispatcherSource = read('pi-zmux/src/dispatcher.ts');
-const toolNames = new Set([...dispatcherSource.matchAll(/name:\s*"(zmux_[^"]+)"/g)].map((match) => match[1]));
-assert.deepEqual([...toolNames], ['zmux_lite'], 'Pi must expose one compact dispatcher tool');
-const operationBlock = /export const ZMUX_OPERATIONS = \[([\s\S]*?)\] as const;/u.exec(dispatcherSource)?.[1] ?? '';
+const operationsSource = read('pi-zmux/src/operations.ts');
+const toolNames = new Set([...dispatcherSource.matchAll(/name:\s*"(zmux)"/g)].map((match) => match[1]));
+assert.deepEqual([...toolNames], ['zmux'], 'Pi must expose one canonical dispatcher tool');
+const operationBlock = /export const ZMUX_OPERATIONS = \[([\s\S]*?)\] as const;/u.exec(operationsSource)?.[1] ?? '';
 const operations = new Set([...operationBlock.matchAll(/"([a-z0-9_]+)"/g)].map((match) => match[1]));
 assert.equal(operations.size, 40, `expected 40 dispatcher operations, got ${operations.size}`);
 

@@ -108,11 +108,11 @@ function readCommandLog(path) {
   return readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 
-async function executeLite(tool, params, cwd = '/repo', projectTrusted = true) {
+async function executeDispatcher(tool, params, cwd = '/repo', projectTrusted = true) {
   return tool.execute('dispatcher-contract', params, undefined, undefined, { cwd, isProjectTrusted: () => projectTrusted });
 }
 
-async function validateDispatcherContract(lite, liteTool, testDirectory, liteOperations, lifecycle) {
+async function validateDispatcherContract(extension, dispatcherTool, testDirectory, dispatcherOperations, lifecycle) {
   const recorder = createCommandRecorder(testDirectory);
   const previousBin = process.env.PI_ZMUX_BIN;
   const previousLog = process.env.PI_ZMUX_TEST_LOG;
@@ -127,10 +127,10 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
   const respawnCwd = join(testDirectory, 'respawn-cwd');
   spawnSync('mkdir', ['-p', fakeBin, contextCwd, commandCwd, paneCwd, respawnCwd]);
   symlinkSync(recorder.path, join(fakeBin, 'tmux'));
-  const execute = (params) => executeLite(liteTool, params, contextCwd);
+  const execute = (params) => executeDispatcher(dispatcherTool, params, contextCwd);
   process.env.PI_ZMUX_BIN = recorder.path;
   process.env.PI_ZMUX_TEST_LOG = recorder.logPath;
-  process.env.PI_ZMUX_TMUX_SOCKET = 'lite-test';
+  process.env.PI_ZMUX_TMUX_SOCKET = 'extension-test';
   process.env.PATH = `${fakeBin}:${previousPath}`;
 
   const cases = [
@@ -215,7 +215,7 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
       { args: ['watch', 'configured-tab', '-l', '120', '--until', 'READY', '-T', '12', '-s', 's2'], cwd: commandCwd },
     ]);
 
-    const untrusted = await executeLite(liteTool, { operation: 'runtime_ensure', target: 'configured' }, contextCwd, false);
+    const untrusted = await executeDispatcher(dispatcherTool, { operation: 'runtime_ensure', target: 'configured' }, contextCwd, false);
     assert.match(toolText(untrusted), /runtime configured has no command/);
     assert.equal(untrusted.details.ignoredReason, 'project-untrusted');
 
@@ -299,7 +299,7 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     assert.equal(paneResizeAuto.details.axis, 'height');
     assert.match(toolText(paneResizeAuto), /height to 40%/);
     assert.deepEqual(readCommandLog(recorder.logPath).map((entry) => entry.args), [
-      ['-L', 'lite-test', 'display-message', '-p', '-t', '%7', '#{pane_width} #{pane_height} #{window_width} #{window_height}'],
+      ['-L', 'extension-test', 'display-message', '-p', '-t', '%7', '#{pane_width} #{pane_height} #{window_width} #{window_height}'],
       ['pane', 'resize', '%7', '--height', '40%'],
     ]);
     delete process.env.PI_ZMUX_TEST_PANE_DIMENSIONS;
@@ -307,14 +307,14 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     writeFileSync(recorder.logPath, '');
     const paneKeys = await execute({ operation: 'pane_send_keys', target: '%7', options: { keys: ['C-c', 'Enter'], timeoutSeconds: 3 } });
     assert.deepEqual(paneKeys.details, { pane: '%7', keys: ['C-c', 'Enter'] });
-    assert.deepEqual(readCommandLog(recorder.logPath), [{ args: ['-L', 'lite-test', 'send-keys', '-t', '%7', 'C-c', 'Enter'], cwd: contextCwd }]);
+    assert.deepEqual(readCommandLog(recorder.logPath), [{ args: ['-L', 'extension-test', 'send-keys', '-t', '%7', 'C-c', 'Enter'], cwd: contextCwd }]);
 
     writeFileSync(recorder.logPath, '');
     const paneType = await execute({ operation: 'pane_type', target: '%7', options: { text: 'echo hi' } });
     assert.match(toolText(paneType), /typed text into pane %7/);
     assert.deepEqual(readCommandLog(recorder.logPath).map((entry) => entry.args), [
-      ['-L', 'lite-test', 'send-keys', '-t', '%7', '-l', 'echo hi'],
-      ['-L', 'lite-test', 'send-keys', '-t', '%7', 'Enter'],
+      ['-L', 'extension-test', 'send-keys', '-t', '%7', '-l', 'echo hi'],
+      ['-L', 'extension-test', 'send-keys', '-t', '%7', 'Enter'],
     ]);
 
     const reloadScript = lifecycle.buildPiReloadScript({ cwd: contextCwd, pane: '%8', delayMs: 0, retryAttempts: 2, retryDelayMs: 1_500 });
@@ -328,10 +328,10 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     assert.equal(reload.details.retryAttempts, 1);
     assert.ok(existsSync(reload.details.continuationPath));
     assert.doesNotMatch(JSON.stringify(reload.details), /reload-helper|--keep/);
-    const sessionStart = lite.registeredHandlers.find((handler) => handler.event === 'session_start');
+    const sessionStart = extension.registeredHandlers.find((handler) => handler.event === 'session_start');
     assert.ok(sessionStart, 'session_start continuation handler registered');
     await sessionStart.handler({}, { cwd: contextCwd, ui: { notify() {} } });
-    assert.ok(lite.sentMessages.some(({ message }) => message.customType === 'pi-zmux-reload-continuation' && message.content === 'continue reload smoke'));
+    assert.ok(extension.sentMessages.some(({ message }) => message.customType === 'pi-zmux-reload-continuation' && message.content === 'continue reload smoke'));
 
     const respawnScript = lifecycle.buildPiRespawnScript({ cwd: respawnCwd, pane: '%9', command: 'pi -c', delayMs: 0 });
     assert.match(respawnScript, /respawn-pane.*%9.*pi -c/);
@@ -342,7 +342,7 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     assert.ok(existsSync(respawn.details.continuationPath));
     assert.ok(existsSync(respawn.details.continuationHandoff));
     await sessionStart.handler({}, { cwd: respawnCwd, ui: { notify() {} } });
-    assert.ok(lite.sentMessages.some(({ message }) => message.customType === 'pi-zmux-respawn-continuation' && message.content === 'continue respawn smoke'));
+    assert.ok(extension.sentMessages.some(({ message }) => message.customType === 'pi-zmux-respawn-continuation' && message.content === 'continue respawn smoke'));
     await assert.rejects(() => execute({ operation: 'pi_respawn', target: '%9', command: 'pi -c', options: { continuationPrompt: 'invalid combination' } }), /cannot be combined/);
 
     process.env.PI_ZMUX_TEST_CURRENT_PANE = JSON.stringify({ ID: '%10' });
@@ -372,8 +372,8 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     const callback = await execute({ operation: 'callback_watch', target: 'work', options: { id: 'callback-complete', waitFor: 'DONE', lines: 25, timeoutSeconds: 6, deliverAs: 'followUp', triggerTurn: false } });
     assert.equal(callback.details.id, 'callback-complete');
     assert.deepEqual(callback.details.args, ['wait', 'work', '--for', 'output:DONE', '-l', '25', '-T', '6', '--json']);
-    await waitFor(() => lite.sentMessages.some(({ message }) => message.details?.id === 'callback-complete'), 'callback completion message was not delivered');
-    const callbackMessage = lite.sentMessages.find(({ message }) => message.details?.id === 'callback-complete');
+    await waitFor(() => extension.sentMessages.some(({ message }) => message.details?.id === 'callback-complete'), 'callback completion message was not delivered');
+    const callbackMessage = extension.sentMessages.find(({ message }) => message.details?.id === 'callback-complete');
     assert.deepEqual(callbackMessage.options, { deliverAs: 'followUp', triggerTurn: false });
 
     process.env.PI_ZMUX_TEST_HOLD = '1';
@@ -382,23 +382,23 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     const active = await execute({ operation: 'callback_list' });
     assert.match(toolText(active), /callback-cancel/);
     await assert.rejects(() => execute({ operation: 'callback_watch', target: 'other', options: { id: 'callback-cancel', waitFor: 'DONE' } }), /callback id already exists/);
-    const cancelledMessageCount = lite.sentMessages.filter(({ message }) => message.details?.id === 'callback-cancel').length;
+    const cancelledMessageCount = extension.sentMessages.filter(({ message }) => message.details?.id === 'callback-cancel').length;
     const cancelled = await execute({ operation: 'callback_cancel', target: 'callback-cancel' });
     assert.deepEqual(cancelled.details, { id: 'callback-cancel', cancelled: true });
     const empty = await execute({ operation: 'callback_list' });
     assert.doesNotMatch(toolText(empty), /callback-cancel/);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
-    assert.equal(lite.sentMessages.filter(({ message }) => message.details?.id === 'callback-cancel').length, cancelledMessageCount, 'cancelled callbacks must not deliver completion messages');
+    assert.equal(extension.sentMessages.filter(({ message }) => message.details?.id === 'callback-cancel').length, cancelledMessageCount, 'cancelled callbacks must not deliver completion messages');
     await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work' }), /requires waitFor or idleSeconds/);
     await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work', options: { waitFor: 'DONE', idleSeconds: 1 } }), /cannot be combined/);
     await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work', options: { waitFor: 'DONE', deliverAs: 'later' } }), /deliverAs must be one of/);
 
     const shutdownCallback = await execute({ operation: 'callback_watch', target: 'work', options: { id: 'callback-shutdown', idleSeconds: 1 } });
     assert.equal(shutdownCallback.details.id, 'callback-shutdown');
-    const shutdown = lite.registeredHandlers.find((handler) => handler.event === 'session_shutdown');
+    const shutdown = extension.registeredHandlers.find((handler) => handler.event === 'session_shutdown');
     shutdown.handler();
     const afterShutdown = await execute({ operation: 'callback_list' });
-    assert.equal(toolText(afterShutdown), 'no active zmux_lite callbacks');
+    assert.equal(toolText(afterShutdown), 'no active zmux callbacks');
     delete process.env.PI_ZMUX_TEST_HOLD;
 
     const noFocus = await execute({ operation: 'tab_place', target: 'child', options: { action: 'pane', into: 'host', focus: false } });
@@ -406,7 +406,7 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     const paneNoFocus = await execute({ operation: 'pane_open', target: 'sidecar', command: 'htop' });
     assert.ok(paneNoFocus.details.args.includes('--no-focus'));
 
-    await assert.rejects(() => execute({ operation: 'unknown' }), /unknown zmux_lite operation/);
+    await assert.rejects(() => execute({ operation: 'unknown' }), /unknown zmux operation/);
     await assert.rejects(() => execute({ operation: 'run' }), /command is required/);
     await assert.rejects(() => execute({ operation: 'tab_kill' }), /tab is required/);
     await assert.rejects(() => execute({ operation: 'send_keys', target: 'work', options: { keys: 'C-c' } }), /must be an array of strings/);
@@ -435,7 +435,7 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     assert.deepEqual(plainLogs.details.args, ['watch', 'plain', '-l', '120']);
 
     process.env.PI_ZMUX_BIN = '/bin/false';
-    await assert.rejects(() => execute({ operation: 'current' }), /zmux_lite current failed: pane current --json/);
+    await assert.rejects(() => execute({ operation: 'current' }), /zmux current failed: pane current --json/);
   } finally {
     if (previousBin === undefined) delete process.env.PI_ZMUX_BIN; else process.env.PI_ZMUX_BIN = previousBin;
     if (previousLog === undefined) delete process.env.PI_ZMUX_TEST_LOG; else process.env.PI_ZMUX_TEST_LOG = previousLog;
@@ -445,7 +445,7 @@ async function validateDispatcherContract(lite, liteTool, testDirectory, liteOpe
     if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
   }
 
-  assert.equal(cases.length + 9, liteOperations.length, 'every dispatcher operation must have a deterministic contract test');
+  assert.equal(cases.length + 9, dispatcherOperations.length, 'every dispatcher operation must have a deterministic contract test');
   return cases.length + 9;
 }
 
@@ -462,14 +462,14 @@ try {
 
   const extension = fakePi();
   registerExtension(extension.api);
-  assert.deepEqual(extension.registeredTools.map((tool) => tool.name), ['zmux_lite'], 'production profile must expose exactly one dispatcher tool');
+  assert.deepEqual(extension.registeredTools.map((tool) => tool.name), ['zmux'], 'production profile must expose exactly one canonical dispatcher tool');
   assert.ok(extension.registeredHandlers.some((handler) => handler.event === 'session_shutdown'), 'production profile must clean callback children on shutdown');
 
   const schemaTokens = extension.registeredTools.reduce((sum, tool) => sum + toolTokenEstimate(tool), 0);
   assert.ok(schemaTokens <= 1200, `dispatcher schema estimate should stay near the 1k target, got ${schemaTokens}`);
 
   const dispatcher = extension.registeredTools[0];
-  assert.match(dispatcher.description, /one compact dispatcher/i);
+  assert.match(dispatcher.description, /canonical zmux dispatcher/i);
   const guidelines = dispatcher.promptGuidelines.join('\n');
   assert.match(guidelines, /do not start duplicate/i);
   assert.match(guidelines, /another.*copy.*before.*logs.*runtime_logs.*existing/is);
