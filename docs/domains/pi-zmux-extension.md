@@ -27,6 +27,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 ## Reusable primitives
 
 - `src/dispatcher.ts` owns the one-tool schema and its 40 operation mappings.
+- `src/rendering.ts` owns compact/expanded native tool-call and result presentation, including destination trees, lifecycle evidence, narrow-width wrapping, and sensitive-input redaction.
 - `src/exec.ts` and `src/interactive.ts` are focused dispatcher adapters over the `zmux` CLI and tmux socket.
 - `src/classify.ts` shares the guard vocabulary with the zmux skill and Claude hook tests.
 - `src/zmux/**` retains context, lifecycle, and continuation primitives used outside the model-visible schema.
@@ -110,11 +111,12 @@ remains in this domain doc plus `skills/zmux/SKILL.md` and its references, while
 
 The accepted one-tool candidate's 19 behavioral checkpoints are preserved as a
 lightweight package regression flow under `pi-zmux/references/testing/`. A host
-drives one ordinary visible Pi worker through the main chain and judges real
+drives one visible Terra/medium Pi worker through the main chain and judges real
 terminal state after each prompt; one disposable worker covers the trusted-project
-and hard-respawn checks. The flow requires no custom agent/profile, run IDs, JSONL,
-or transcript schema. Historical Terra/medium acceptance artifacts remain in the
-skills repo.
+and hard-respawn checks. The flow distinguishes clean passes from safe recovered
+friction, uses exact test-owned teardown, and requires no custom agent/profile,
+run IDs, JSONL, or transcript schema. Historical promotion artifacts remain in
+the skills repo.
 
 ## Dispatcher
 
@@ -145,8 +147,11 @@ handlers add no prompt tokens by themselves.
 
 The dispatcher preserves operation-specific safety: persistent processes use
 `runtime_ensure`; sudo/manual input uses `interactive_type`; peer prompts plus
-future-output callbacks use atomic `peer_handoff`; and focus-moving options stay
-false unless the user explicitly requests focus.
+future-output callbacks use atomic `peer_handoff`; literal pane keys remain
+separate from submit-with-Enter pane typing; and focus-moving options stay false
+unless the user explicitly requests focus. Native call/result rendering keeps
+collapsed output readable while expanded views retain structured operation,
+argv, cwd, lifecycle, and evidence details.
 
 ## Bash guardrails
 

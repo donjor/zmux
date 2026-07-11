@@ -7,6 +7,14 @@ versioning is semver-ish until the first public release.
 ## [Unreleased]
 > Release tag: pending | Compare: `v0.13.0...HEAD`
 
+### Added
+
+- **Readable Pi dispatcher calls and results** `agents` `pi` — the single `zmux` tool now renders compact operation, destination, lifecycle, and evidence summaries with expanded raw metadata, narrow-terminal wrapping, and sensitive-input redaction.
+
+### Fixed
+
+- **Lightweight live Pi regression routing** `agents` `pi` `qa` — the canonical Terra/medium host flow now uses detached visible workers, exact test-owned cleanup, regex-safe peer callbacks, bounded one-shot execution, unambiguous focus and literal-pane-input prompts, and targeted guidance for named-pane resolution.
+
 ## [0.13.0] - 2026-07-11
 > Release tag: `v0.13.0` | Topics: `agents`, `pi`, `panes`, `release` | Compare: `v0.12.0...v0.13.0`
 
