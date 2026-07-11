@@ -151,7 +151,10 @@ future-output callbacks use atomic `peer_handoff`; literal pane keys remain
 separate from submit-with-Enter pane typing; and focus-moving options stay false
 unless the user explicitly requests focus. Native call/result rendering keeps
 collapsed output readable while expanded views retain structured operation,
-argv, cwd, lifecycle, and evidence details.
+argv, cwd, lifecycle, and evidence details. Successful wait and callback
+completions summarize their match basis and freshness instead of returning the
+captured output tail to the model; expanded wait views retain the raw JSON for
+human diagnosis.
 
 ## Bash guardrails
 

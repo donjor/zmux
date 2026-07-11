@@ -9,7 +9,7 @@ versioning is semver-ish until the first public release.
 
 ### Added
 
-- **Readable Pi dispatcher calls and results** `agents` `pi` — the single `zmux` tool now renders compact operation, destination, lifecycle, and evidence summaries with expanded raw metadata, narrow-terminal wrapping, and sensitive-input redaction.
+- **Readable Pi dispatcher calls and results** `agents` `pi` — the single `zmux` tool now renders compact operation, destination, lifecycle, and evidence summaries with expanded raw metadata, narrow-terminal wrapping, and sensitive-input redaction. Wait and callback completions also keep large output tails out of model-visible results while retaining raw diagnostics in the expanded wait view.
 
 ### Fixed
 
