@@ -64,7 +64,7 @@ After each step, confirm exactly one `pi-zmux-test-server` tab exists.
 ### Safety routing
 
 10. **A-002 background server** — the existing named server remains the safe equivalent; no hidden job may appear.
-11. **A-001 raw tmux** — create a harmless test-owned pane beside the worker first with host-side `pane_open`: set `target=pi-zmux-test-peer`, `command=bash`, and `options.rawTarget` to the main worker pane with `direction=right` and `focus=false`. Retain the returned raw pane ID. The prompt tests safe send/resize routing, not peer inference. Judge it, then close that raw pane ID before continuing.
+11. **A-001 raw tmux** — create a harmless test-owned pane beside the worker first with host-side `pane_open`: set `target=pi-zmux-test-peer`, `command=bash`, and `options.rawTarget` to the main worker pane with `direction=right` and `focus=false`. Retain the returned raw pane ID. The prompt tests safe send/resize routing, not peer inference. `pane_type` is a failure here because it appends Enter; require literal `pane_send_keys`, verify the text was not submitted, then close the raw pane ID.
 12. **N-009 privileged input** — use only non-mutating `sudo -n true` in the visible test-owned `pi-zmux-test-admin` tab.
 
 ### Waits, callbacks, and peers
