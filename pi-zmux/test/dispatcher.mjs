@@ -373,7 +373,11 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     delete process.env.PI_ZMUX_TEST_HOLD;
     await assert.rejects(
       () => execute({ operation: 'peer_handoff', target: 'peer', options: { text: 'reply with DONE', waitFor: 'DONE' } }),
-      /waitFor marker must not appear verbatim/,
+      /waitFor pattern must not match options\.text/,
+    );
+    await assert.rejects(
+      () => execute({ operation: 'peer_handoff', target: 'peer', options: { text: 'reply with PEER_RESPONSE_OK: main', waitFor: 'PEER_RESPONSE_[O]K:' } }),
+      /waitFor pattern must not match options\.text/,
     );
 
     writeFileSync(recorder.logPath, '');

@@ -559,8 +559,8 @@ async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: 
     const waitFor = optString(options, "waitFor");
     const idleSeconds = optNumber(options, "idleSeconds");
     if (waitFor && idleSeconds !== undefined) throw new Error("peer_handoff waitFor and idleSeconds cannot be combined");
-    if (waitFor && text.includes(waitFor)) {
-      throw new Error("peer_handoff waitFor marker must not appear verbatim in options.text; split or rephrase the marker so the echoed prompt cannot self-match");
+    if (waitFor && outputMatches(waitFor, text, "")) {
+      throw new Error("peer_handoff waitFor pattern must not match options.text; split or rephrase the outgoing marker so echoed prompt text cannot self-match");
     }
     const callbackParams: ZmuxParams = {
       operation: "callback_watch",
@@ -649,7 +649,8 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text and options.waitFor; it marks the peer running by default. Never send type_text then callback_watch, and split/rephrase the waitFor marker so it is not repeated verbatim in text and cannot self-match the echoed prompt.",
       "For sudo, ssh, passwords, REPLs, database shells, and other manual input, use interactive_type and never generic run; target admin (or the named shared tab), keep focus false by default, and set options.waitForExit for bounded privileged commands.",
       "For runtime_ensure, set target to the runtime/tab name, command to the dev/watch command, cwd to the project/fixture directory, and options.waitFor/readiness to ready|localhost when the user asks to wait for readiness.",
-      "For wait/callback_watch, options.waitFor is the output regex only (never prefix output:); set exactly one of waitFor or idleSeconds, never put the callback marker in options.text, and do not block or poll after registration.",
+      "For wait/callback_watch, options.waitFor is the output regex only (never prefix output:); set exactly one of waitFor or idleSeconds, never let the callback pattern match outgoing text, and do not block or poll after registration.",
+      "For a named joined pane, call panes with the session to resolve its raw %pane id, then pass that id to pane close/resize/send/type operations.",
       "For a soft Pi reload, call pi_reload and omit target; it resolves this Pi pane, and its continuation proves completion, while terminal_current only diagnoses the desktop terminal. For pi_reload/pi_respawn continuation, use options.continuationPrompt; never use callback-only deliverAs/triggerTurn.",
       "Start with operation=sessions or tabs when target/session is ambiguous; never operate on a generic tab name like scratch unless the prompt names the exact tab/session.",
       "Never set focus:true unless the user explicitly wants terminal focus moved; if the prompt says focus but also says it was not explicitly requested, keep focus false or refuse.",
@@ -715,7 +716,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
         restartStopped = !(stopped.timedOut || stopped.code !== 0);
         restartText = restartStopped ? `sent C-c to ${params.target}` : `restart stop skipped: ${formatResult("runtime_stop", stopArgs, stopped.stdout, stopped.stderr)}`;
       }
-      const result = await runZmux(args, { cwd, signal, timeoutMs: timeoutMs(options) });
+      const result = await runZmux(args, { cwd, signal, timeoutMs: timeoutMs(options, params.operation === "run" ? 130 : 30) });
       const failed = result.timedOut || result.code !== 0;
       let text = [runSafety?.text, restartText, formatResult(params.operation, args, result.stdout, result.stderr)].filter(Boolean).join("\n");
       if (failed) {

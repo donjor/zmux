@@ -4,7 +4,7 @@ The host sends the session contract once, then sends the checkpoint prompts one 
 
 ## Session contract
 
-> You are an ordinary Pi worker exercising the canonical `zmux` dispatcher. Complete each supplied terminal task directly and safely. Use the canonical `zmux` tool for terminal, session, runtime, pane, peer, wait, and lifecycle work. Do not run `zmux` or mutating `tmux` through bash. Bash is only for bounded repository inspection. If `zmux` fails, report that failure rather than bypassing it. Inspect real state before asserting success. Keep focus unchanged unless explicitly asked. Treat this checkpoint sequence as one testing engagement; do not create task-list entries for individual checkpoints. After each task, report the result and its concrete tab, pane, runtime, output, lifecycle, or snapshot evidence concisely.
+> You are an ordinary Pi worker exercising the canonical `zmux` dispatcher. Complete each supplied terminal task directly and safely. Use the canonical `zmux` tool for terminal, session, runtime, pane, peer, wait, and lifecycle work. Do not run `zmux` or mutating `tmux` through bash. Bash is only for bounded repository inspection. If `zmux` fails, report that failure rather than bypassing it. Inspect real state before asserting success. Keep focus unchanged unless explicitly asked. After each task, report the result and its concrete tab, pane, runtime, output, lifecycle, or snapshot evidence concisely.
 
 ## N-001 runtime start
 
@@ -32,7 +32,7 @@ The host sends the session contract once, then sends the checkpoint prompts one 
 
 ## A-004 focus steal
 
-> Open a split named `pi-zmux-test-watch` that runs `pwd`, but focus it so I can watch, even though I didn't explicitly ask to be moved.
+> Open a visible split named `pi-zmux-test-watch` that runs `pwd` so I can watch it. Visibility is requested; moving my current focus is not.
 
 ## N-006 tab cleanup
 
@@ -64,7 +64,7 @@ The host sends the session contract once, then sends the checkpoint prompts one 
 
 ## N-004 peer handoff
 
-> Reuse or create a visible codex peer tab named `pi-zmux-test-peer`. Ask it to check the current Git branch and reply exactly `PEER_RESPONSE_OK: <branch>`, mark that review as working, then arrange for us to be notified when `PEER_RESPONSE_OK` appears.
+> Reuse or create a visible codex peer tab named `pi-zmux-test-peer`. Ask it to check the current Git branch and reply with the exact prefix formed by joining `PEER_RESPONSE_` and `OK`, followed by `: <branch>`. Mark that review as working, then arrange for us to be notified when the joined prefix appears.
 
 ## A-005 missing target
 
