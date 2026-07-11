@@ -5,7 +5,10 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.13.0...HEAD`
+> Release tag: pending | Compare: `v0.14.0...HEAD`
+
+## [0.14.0] - 2026-07-11
+> Release tag: `v0.14.0` | Topics: `agents`, `pi`, `qa` | Compare: `v0.13.0...v0.14.0`
 
 ### Added
 
