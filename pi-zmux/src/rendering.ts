@@ -461,7 +461,8 @@ function expandedMetadata(metadata: DisplayMetadata, details: ZmuxResultDetails,
     const value = details[key];
     if (["string", "number", "boolean"].includes(typeof value)) rows.push([key, String(value)]);
   }
-  if (output) rows.push(["output", metadata.input?.sensitive ? "[sensitive output redacted]" : output]);
+  const expandedOutput = metadata.raw.output ?? output;
+  if (expandedOutput) rows.push(["output", metadata.input?.sensitive ? "[sensitive output redacted]" : expandedOutput]);
   return rows.filter((row): row is [string, string] => row[1] !== undefined && row[1] !== "");
 }
 

@@ -97,6 +97,8 @@ if (args.includes('display-message') && process.env.PI_ZMUX_TEST_PANE_DIMENSIONS
   console.log(process.env.PI_ZMUX_TEST_RUN_OUTPUT);
 } else if (args[0] === 'watch' && (process.env.PI_ZMUX_TEST_WATCH_OUTPUT || process.env.PI_ZMUX_TEST_WATCH_BEFORE || process.env.PI_ZMUX_TEST_WATCH_AFTER)) {
   console.log(existsSync(typedMarker) ? (process.env.PI_ZMUX_TEST_WATCH_AFTER || process.env.PI_ZMUX_TEST_WATCH_OUTPUT) : (process.env.PI_ZMUX_TEST_WATCH_BEFORE || process.env.PI_ZMUX_TEST_WATCH_OUTPUT));
+} else if (args[0] === 'wait' && process.env.PI_ZMUX_TEST_WAIT_OUTPUT) {
+  console.log(process.env.PI_ZMUX_TEST_WAIT_OUTPUT);
 } else if (process.env.PI_ZMUX_TEST_HOLD === '1' && args[0] === 'wait') {
   process.on('SIGTERM', () => process.exit(0));
   setInterval(() => {}, 1_000);
@@ -123,6 +125,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
   const previousLog = process.env.PI_ZMUX_TEST_LOG;
   const previousHold = process.env.PI_ZMUX_TEST_HOLD;
   const previousRunOutput = process.env.PI_ZMUX_TEST_RUN_OUTPUT;
+  const previousWaitOutput = process.env.PI_ZMUX_TEST_WAIT_OUTPUT;
   const previousSocket = process.env.PI_ZMUX_TMUX_SOCKET;
   const previousPath = process.env.PATH;
   const fakeBin = join(testDirectory, 'bin');
@@ -381,12 +384,36 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     );
 
     writeFileSync(recorder.logPath, '');
+    const oversizedWaitOutput = JSON.stringify({
+      tab: 'work',
+      session: 'session-a',
+      target: '%8',
+      outcome: {
+        met: true,
+        basis: 'outputRegex',
+        state: 'DONE',
+        fresh: true,
+        status: { paneId: '%8', cmdState: 'running', cmdSeq: '2', runId: 'run-8' },
+        outputTail: Array.from({ length: 200 }, (_, index) => `TAIL_${index}`).join('\n'),
+      },
+    });
+    process.env.PI_ZMUX_TEST_WAIT_OUTPUT = oversizedWaitOutput;
+    const compactWait = await execute({ operation: 'wait', target: 'work', options: { waitFor: 'DONE' } });
+    assert.equal(toolText(compactWait), 'wait matched work\noutputRegex · DONE · fresh');
+    assert.ok(toolText(compactWait).length < 100, 'wait content must stay compact');
+    assert.doesNotMatch(toolText(compactWait), /TAIL_199/);
+    assert.equal(compactWait.details.evidenceBasis, 'outputRegex');
+    assert.equal(compactWait.details.display.raw.output, oversizedWaitOutput, 'expanded display must retain raw wait diagnostics');
+
     const callback = await execute({ operation: 'callback_watch', target: 'work', options: { id: 'callback-complete', waitFor: 'DONE', lines: 25, timeoutSeconds: 6, deliverAs: 'followUp', triggerTurn: false } });
     assert.equal(callback.details.id, 'callback-complete');
     assert.deepEqual(callback.details.args, ['wait', 'work', '--for', 'output:DONE', '-l', '25', '-T', '6', '--json']);
     await waitFor(() => extension.sentMessages.some(({ message }) => message.details?.id === 'callback-complete'), 'callback completion message was not delivered');
     const callbackMessage = extension.sentMessages.find(({ message }) => message.details?.id === 'callback-complete');
     assert.deepEqual(callbackMessage.options, { deliverAs: 'followUp', triggerTurn: false });
+    assert.equal(callbackMessage.message.content, 'wait matched work\noutputRegex · DONE · fresh');
+    assert.doesNotMatch(callbackMessage.message.content, /TAIL_199/);
+    delete process.env.PI_ZMUX_TEST_WAIT_OUTPUT;
 
     process.env.PI_ZMUX_TEST_HOLD = '1';
     const cancellable = await execute({ operation: 'callback_watch', target: 'work', options: { id: 'callback-cancel', idleSeconds: 1 } });
@@ -455,6 +482,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     if (previousLog === undefined) delete process.env.PI_ZMUX_TEST_LOG; else process.env.PI_ZMUX_TEST_LOG = previousLog;
     if (previousHold === undefined) delete process.env.PI_ZMUX_TEST_HOLD; else process.env.PI_ZMUX_TEST_HOLD = previousHold;
     if (previousRunOutput === undefined) delete process.env.PI_ZMUX_TEST_RUN_OUTPUT; else process.env.PI_ZMUX_TEST_RUN_OUTPUT = previousRunOutput;
+    if (previousWaitOutput === undefined) delete process.env.PI_ZMUX_TEST_WAIT_OUTPUT; else process.env.PI_ZMUX_TEST_WAIT_OUTPUT = previousWaitOutput;
     if (previousSocket === undefined) delete process.env.PI_ZMUX_TMUX_SOCKET; else process.env.PI_ZMUX_TMUX_SOCKET = previousSocket;
     if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
   }

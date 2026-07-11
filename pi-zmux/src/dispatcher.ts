@@ -415,6 +415,53 @@ function outputMatches(pattern: string, stdout: string, stderr: string): boolean
   }
 }
 
+type WaitSummary = {
+  text: string;
+  details: Record<string, unknown>;
+};
+
+function summarizeWaitOutput(raw: string): WaitSummary {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const outcome = parsed.outcome;
+    if (!outcome || typeof outcome !== "object" || Array.isArray(outcome)) return { text: raw, details: {} };
+    const result = outcome as Record<string, unknown>;
+    const met = result.met === true;
+    const basis = typeof result.basis === "string" ? result.basis : undefined;
+    const state = typeof result.state === "string" ? result.state : undefined;
+    const fresh = result.fresh === true;
+    const status = result.status && typeof result.status === "object" && !Array.isArray(result.status)
+      ? result.status as Record<string, unknown>
+      : undefined;
+    const tab = typeof parsed.tab === "string" ? parsed.tab : undefined;
+    const session = typeof parsed.session === "string" ? parsed.session : undefined;
+    const paneId = typeof status?.paneId === "string"
+      ? status.paneId
+      : typeof parsed.target === "string" && parsed.target.startsWith("%")
+        ? parsed.target
+        : undefined;
+    const evidence = [basis, state, fresh ? "fresh" : undefined].filter(Boolean).join(" · ");
+    return {
+      text: [`wait ${met ? "matched" : "did not match"}${tab ? ` ${tab}` : ""}`, evidence].filter(Boolean).join("\n"),
+      details: {
+        waitMet: met,
+        ready: met,
+        evidenceBasis: basis,
+        waitState: state,
+        fresh,
+        tab,
+        session,
+        paneId,
+        cmdState: typeof status?.cmdState === "string" ? status.cmdState : undefined,
+        cmdSeq: typeof status?.cmdSeq === "string" ? status.cmdSeq : undefined,
+        runId: typeof status?.runId === "string" ? status.runId : undefined,
+      },
+    };
+  } catch {
+    return { text: raw, details: {} };
+  }
+}
+
 type RuntimeResolution = {
   params: ZmuxParams;
   details: { runtimeName: string; configPath?: string; ignoredReason?: string };
@@ -503,12 +550,14 @@ function startCallback(
   callbacks.set(id, { id, target, startedAt: new Date().toISOString(), process: child });
   child.on("close", (code, exitSignal) => {
     if (!callbacks.delete(id)) return;
+    const rawOutput = formatResult(kind, args, stdout, stderr);
+    const summary = summarizeWaitOutput(rawOutput);
     pi.sendMessage(
       {
         customType: "pi-zmux-callback",
-        content: formatResult(kind, args, stdout, stderr),
+        content: summary.text,
         display: true,
-        details: { id, kind, args, code, signal: exitSignal, target },
+        details: { id, kind, args, code, signal: exitSignal, target, ...summary.details },
       },
       { deliverAs, triggerTurn: optBool(options, "triggerTurn") ?? true },
     );
@@ -718,12 +767,14 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       }
       const result = await runZmux(args, { cwd, signal, timeoutMs: timeoutMs(options, params.operation === "run" ? 130 : 30) });
       const failed = result.timedOut || result.code !== 0;
-      let text = [runSafety?.text, restartText, formatResult(params.operation, args, result.stdout, result.stderr)].filter(Boolean).join("\n");
+      const rawResultText = formatResult(params.operation, args, result.stdout, result.stderr);
+      const waitSummary = params.operation === "wait" ? summarizeWaitOutput(rawResultText) : undefined;
+      let text = [runSafety?.text, restartText, waitSummary?.text ?? rawResultText].filter(Boolean).join("\n");
       if (failed) {
         const processOutput = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
         throw new Error(processOutput || `zmux ${params.operation} failed: ${args.join(" ")}`);
       }
-      const details: Record<string, unknown> = { operation: params.operation, args, cwd, exitCode: result.code, ...runtime?.details, ...runSafety?.details };
+      const details: Record<string, unknown> = { operation: params.operation, args, cwd, exitCode: result.code, ...runtime?.details, ...runSafety?.details, ...waitSummary?.details };
       if (restartStopped !== undefined) details.restartStopped = restartStopped;
       if (params.operation === "runtime_ensure") {
         const readiness = optString(options, "readiness") ?? optString(options, "waitFor");
@@ -740,7 +791,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
           details.readinessBasis = "fresh-watch";
         }
       }
-      return withDisplayMetadata(content(text, details), params, cwd, { args, exitCode: result.code, output: text });
+      return withDisplayMetadata(content(text, details), params, cwd, { args, exitCode: result.code, output: params.operation === "wait" ? rawResultText : text });
     },
     renderCall(args, theme, context) {
       const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
