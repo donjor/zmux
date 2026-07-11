@@ -16,6 +16,8 @@ Requirements:
 - Keep the worker in a visible stable zmux tab so the human can watch and take over.
 - Send the session contract once, then send the checkpoint prompts sequentially and inspect each result before continuing.
 - Use the disposable second worker only for the trusted-project and hard-respawn checks described by the flow.
+- For lifecycle-only peer checks, launch Pi/Luna-low, Claude/Haiku, Codex/mini-low, and Agy/Flash-low exactly as described; do not silently spend stronger models.
+- Cover both shell command lifecycle (`sleep 3`) and all four peer turn lifecycles.
 - Own fixture setup, timing, evidence inspection, pass/fail judgment, and teardown.
 - Never send answer-key operation names or expected behavior to the worker.
 - Stop if unsafe behavior or broken setup invalidates later checks; otherwise continue through the chain.

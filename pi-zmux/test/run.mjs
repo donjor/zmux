@@ -284,6 +284,9 @@ try {
   assert.deepEqual(buildWaitArgs({ tab: 'claude-peer', session: 'zws/repo', lines: 80, waitFor: 'ready', timeoutSeconds: 8 }), [
     'wait', 'claude-peer', '--for', 'output:ready', '-l', '80', '-T', '8', '--json', '-s', 'zws/repo',
   ]);
+  assert.deepEqual(buildWaitArgs({ tab: 'claude-peer', session: 'zws/repo', turnState: 'ready', timeoutSeconds: 90 }), [
+    'wait', 'claude-peer', '--for', 'turn:ready', '-l', '120', '-T', '90', '--json', '-s', 'zws/repo',
+  ]);
   assert.deepEqual(buildCallbackWatchArgs({ tab: 'bench', session: 'repo/main', waitFor: 'DONE', timeoutSeconds: 60 }), [
     'wait', 'bench', '--for', 'output:DONE', '-l', '160', '-T', '60', '--json', '-s', 'repo/main',
   ]);

@@ -1,10 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { Type } from "typebox";
 import { loadConfig, mergeRuntimeConfig, type RuntimeConfig } from "./config.js";
-import { runTmux, runZmux, zmuxBin } from "./exec.js";
+import { runTmux, runZmux } from "./exec.js";
 import { interactiveType } from "./interactive.js";
 import { isZmuxOperation, ZMUX_OPERATIONS, type ZmuxOperation } from "./operations.js";
 import {
@@ -15,6 +14,14 @@ import {
   type ZmuxParams,
 } from "./rendering.js";
 import { rejectHeadlessAgentPrintMode, shouldWaitForExit } from "./safety.js";
+import { summarizeWaitOutput } from "./wait-summary.js";
+import {
+  cancelCallback,
+  listCallbacks,
+  listRecentCallbackCompletions,
+  startPeerHandoff,
+  startWatchCallback,
+} from "./zmux/callbacks.js";
 import { resizePane } from "./zmux/panes.js";
 import { zmuxRunSafetyWarnings } from "./zmux/sessions.js";
 import { schedulePiReload, schedulePiRespawn } from "./zmux/pi-lifecycle.js";
@@ -22,15 +29,6 @@ import { schedulePiReload, schedulePiRespawn } from "./zmux/pi-lifecycle.js";
 export { ZMUX_OPERATIONS } from "./operations.js";
 
 type Operation = ZmuxOperation;
-
-type CallbackRecord = {
-  id: string;
-  target: string;
-  startedAt: string;
-  process: ChildProcess;
-};
-
-const callbacks = new Map<string, CallbackRecord>();
 
 const paramsSchema = Type.Object(
   {
@@ -67,6 +65,15 @@ function optBool(options: Record<string, unknown>, key: string): boolean | undef
   const value = options[key];
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new Error(`options.${key} must be a boolean`);
+  return value;
+}
+
+function optDeliverAs(options: Record<string, unknown>): "steer" | "followUp" | "nextTurn" | undefined {
+  const value = optString(options, "deliverAs");
+  if (value === undefined) return undefined;
+  if (value !== "steer" && value !== "followUp" && value !== "nextTurn") {
+    throw new Error("options.deliverAs must be one of: steer, followUp, nextTurn");
+  }
   return value;
 }
 
@@ -415,53 +422,6 @@ function outputMatches(pattern: string, stdout: string, stderr: string): boolean
   }
 }
 
-type WaitSummary = {
-  text: string;
-  details: Record<string, unknown>;
-};
-
-function summarizeWaitOutput(raw: string): WaitSummary {
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const outcome = parsed.outcome;
-    if (!outcome || typeof outcome !== "object" || Array.isArray(outcome)) return { text: raw, details: {} };
-    const result = outcome as Record<string, unknown>;
-    const met = result.met === true;
-    const basis = typeof result.basis === "string" ? result.basis : undefined;
-    const state = typeof result.state === "string" ? result.state : undefined;
-    const fresh = result.fresh === true;
-    const status = result.status && typeof result.status === "object" && !Array.isArray(result.status)
-      ? result.status as Record<string, unknown>
-      : undefined;
-    const tab = typeof parsed.tab === "string" ? parsed.tab : undefined;
-    const session = typeof parsed.session === "string" ? parsed.session : undefined;
-    const paneId = typeof status?.paneId === "string"
-      ? status.paneId
-      : typeof parsed.target === "string" && parsed.target.startsWith("%")
-        ? parsed.target
-        : undefined;
-    const evidence = [basis, state, fresh ? "fresh" : undefined].filter(Boolean).join(" · ");
-    return {
-      text: [`wait ${met ? "matched" : "did not match"}${tab ? ` ${tab}` : ""}`, evidence].filter(Boolean).join("\n"),
-      details: {
-        waitMet: met,
-        ready: met,
-        evidenceBasis: basis,
-        waitState: state,
-        fresh,
-        tab,
-        session,
-        paneId,
-        cmdState: typeof status?.cmdState === "string" ? status.cmdState : undefined,
-        cmdSeq: typeof status?.cmdSeq === "string" ? status.cmdSeq : undefined,
-        runId: typeof status?.runId === "string" ? status.runId : undefined,
-      },
-    };
-  } catch {
-    return { text: raw, details: {} };
-  }
-}
-
 type RuntimeResolution = {
   params: ZmuxParams;
   details: { runtimeName: string; configPath?: string; ignoredReason?: string };
@@ -516,90 +476,41 @@ function content(text: string, details: Record<string, unknown> = {}) {
   };
 }
 
-function startCallback(
-  pi: ExtensionAPI,
-  params: ZmuxParams,
-  cwd: string,
-  signal: AbortSignal | undefined,
-  kind: "callback_watch" | "peer_handoff" = "callback_watch",
-) {
-  const options = params.options ?? {};
-  const waitFor = optString(options, "waitFor");
-  const idleSeconds = optNumber(options, "idleSeconds");
-  if (waitFor && idleSeconds !== undefined) throw new Error("callback waitFor and idleSeconds cannot be combined");
-  if (!waitFor && idleSeconds === undefined) throw new Error("callback watch requires waitFor or idleSeconds");
-  const deliverAs = optString(options, "deliverAs") ?? "steer";
-  if (deliverAs !== "steer" && deliverAs !== "followUp" && deliverAs !== "nextTurn") {
-    throw new Error("options.deliverAs must be one of: steer, followUp, nextTurn");
-  }
-  const target = requireTarget(params, "tab");
-  const args = buildWaitArgs(target, options);
-  const id = optString(options, "id") ?? `zmux-${kind}-${Date.now()}`;
-  if (callbacks.has(id)) throw new Error(`callback id already exists: ${id}`);
-  const child = spawn(zmuxBin(), args, { cwd, stdio: ["ignore", "pipe", "pipe"], signal });
-  let stdout = "";
-  let stderr = "";
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-  child.stdout.on("data", (chunk) => {
-    stdout += String(chunk);
-  });
-  child.stderr.on("data", (chunk) => {
-    stderr += String(chunk);
-  });
-  callbacks.set(id, { id, target, startedAt: new Date().toISOString(), process: child });
-  child.on("close", (code, exitSignal) => {
-    if (!callbacks.delete(id)) return;
-    const rawOutput = formatResult(kind, args, stdout, stderr);
-    const summary = summarizeWaitOutput(rawOutput);
-    pi.sendMessage(
-      {
-        customType: "pi-zmux-callback",
-        content: summary.text,
-        display: true,
-        details: { id, kind, args, code, signal: exitSignal, target, ...summary.details },
-      },
-      { deliverAs, triggerTurn: optBool(options, "triggerTurn") ?? true },
-    );
-  });
-  child.on("error", (error) => {
-    if (!callbacks.delete(id)) return;
-    pi.sendMessage(
-      {
-        customType: "pi-zmux-callback",
-        content: `zmux callback ${id} failed: ${error.message}`,
-        display: true,
-        details: { id, kind, args, code: null, signal: null, target, failed: true },
-      },
-      { deliverAs, triggerTurn: optBool(options, "triggerTurn") ?? true },
-    );
-  });
-  return { id, kind, args, target };
-}
-
 async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: string, signal?: AbortSignal) {
   const options = params.options ?? {};
   const cwd = cwdFor(defaultCwd, params);
   if (params.operation === "callback_list") {
-    return content(
-      callbacks.size
-        ? [...callbacks.values()].map((record) => `- ${record.id}: ${record.target} started ${record.startedAt}`).join("\n")
-        : "no active zmux callbacks",
-      { callbacks: [...callbacks.keys()] },
-    );
+    const active = listCallbacks();
+    const completed = listRecentCallbackCompletions();
+    const activeText = active.length
+      ? active.map((record) => `- ${record.id}: ${record.tab} started ${record.startedAt}`).join("\n")
+      : "no active zmux callbacks";
+    const recentText = completed.length
+      ? `recent:\n${completed.map((record) => `- ${record.id}: ${record.status} for ${record.tab} at ${record.finishedAt}`).join("\n")}`
+      : "";
+    return content([activeText, recentText].filter(Boolean).join("\n"), { callbacks: active, completed });
   }
   if (params.operation === "callback_cancel") {
     const id = params.target || optString(options, "id");
     if (!id) throw new Error("target or options.id is required for callback_cancel");
-    const record = callbacks.get(id);
-    if (!record) return content(`no active zmux callback ${id}`, { id, cancelled: false });
-    record.process.kill("SIGTERM");
-    callbacks.delete(id);
-    return content(`cancelled zmux callback ${id}`, { id, cancelled: true });
+    const cancelled = cancelCallback(id);
+    return content(cancelled ? `cancelled zmux callback ${id}` : `no active zmux callback ${id}`, { id, cancelled });
   }
   if (params.operation === "callback_watch") {
-    const callback = startCallback(pi, params, cwd, signal);
-    return content(`started zmux callback ${callback.id} for ${callback.target}`, callback);
+    const callback = startWatchCallback(pi, {
+      id: optString(options, "id"),
+      tab: requireTarget(params, "tab"),
+      cwd,
+      session: optString(options, "session"),
+      lines: optNumber(options, "lines"),
+      waitFor: optString(options, "waitFor"),
+      idleSeconds: optNumber(options, "idleSeconds"),
+      timeoutSeconds: optNumber(options, "timeoutSeconds"),
+      message: optString(options, "message"),
+      deliverAs: optDeliverAs(options),
+      triggerTurn: optBool(options, "triggerTurn"),
+    });
+    return content(callback.text, callback.details);
   }
   if (params.operation === "peer_handoff") {
     const target = requireTarget(params, "peer tab");
@@ -611,36 +522,23 @@ async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: 
     if (waitFor && outputMatches(waitFor, text, "")) {
       throw new Error("peer_handoff waitFor pattern must not match options.text; split or rephrase the outgoing marker so echoed prompt text cannot self-match");
     }
-    const callbackParams: ZmuxParams = {
-      operation: "callback_watch",
-      target,
-      options: { ...options, idleSeconds: waitFor ? undefined : (idleSeconds ?? 3) },
-    };
-    let callback = waitFor ? startCallback(pi, callbackParams, cwd, signal, "peer_handoff") : undefined;
-    const typeArgs = buildArgs({
-      operation: "type_text",
-      target,
-      options: {
-        text,
-        session: optString(options, "session"),
-        markPeerRunning: optBool(options, "markPeerRunning") ?? true,
-        source: optString(options, "source"),
-        message: optString(options, "message"),
-      },
+    const handoff = await startPeerHandoff(pi, {
+      id: optString(options, "id"),
+      tab: target,
+      text,
+      cwd,
+      session: optString(options, "session"),
+      lines: optNumber(options, "lines"),
+      waitFor,
+      idleSeconds,
+      timeoutSeconds: optNumber(options, "timeoutSeconds"),
+      markPeerRunning: optBool(options, "markPeerRunning"),
+      source: optString(options, "source"),
+      message: optString(options, "message"),
+      deliverAs: optDeliverAs(options),
+      triggerTurn: optBool(options, "triggerTurn"),
     });
-    const typed = await runZmux(typeArgs, { cwd, signal, timeoutMs: timeoutMs(options, 10) });
-    if (typed.timedOut || typed.code !== 0) {
-      if (callback) {
-        callbacks.get(callback.id)?.process.kill("SIGTERM");
-        callbacks.delete(callback.id);
-      }
-      throw new Error([typed.stdout.trim(), typed.stderr.trim()].filter(Boolean).join("\n") || `peer_handoff type failed for ${target}`);
-    }
-    callback ??= startCallback(pi, callbackParams, cwd, signal, "peer_handoff");
-    return content(
-      [formatResult("type_text", typeArgs, typed.stdout, typed.stderr), `started zmux peer handoff ${callback.id} for ${target}`].join("\n"),
-      { ...callback, typeArgs, markPeerRunning: optBool(options, "markPeerRunning") ?? true },
-    );
+    return content(handoff.text, handoff.details);
   }
   if (params.operation === "pane_resize" && (!optString(options, "axis") || optString(options, "axis") === "auto")) {
     const size = optString(options, "size");
@@ -695,10 +593,10 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
     promptGuidelines: [
       "Use zmux instead of bash/raw tmux for runtimes, visible tabs, panes, sessions, waits, peers, and Pi lifecycle; never background long-running commands.",
       "Map: dev server -> runtime_ensure; existing output -> runtime_logs; visible one-shot -> run; sidecar -> pane_open; named tab cleanup -> tab_kill.",
-      "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text and options.waitFor; it marks the peer running by default. Never send type_text then callback_watch, and split/rephrase the waitFor marker so it is not repeated verbatim in text and cannot self-match the echoed prompt.",
+      "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text. It marks the peer running, waits for fresh turn:ready lifecycle, and returns through a follow-up notification by default. Use options.waitFor only as an output-regex fallback for an uninstrumented peer; never send type_text then callback_watch.",
       "For sudo, ssh, passwords, REPLs, database shells, and other manual input, use interactive_type and never generic run; target admin (or the named shared tab), keep focus false by default, and set options.waitForExit for bounded privileged commands.",
       "For runtime_ensure, set target to the runtime/tab name, command to the dev/watch command, cwd to the project/fixture directory, and options.waitFor/readiness to ready|localhost when the user asks to wait for readiness.",
-      "For wait/callback_watch, options.waitFor is the output regex only (never prefix output:); set exactly one of waitFor or idleSeconds, never let the callback pattern match outgoing text, and do not block or poll after registration.",
+      "For wait/callback_watch, options.waitFor is the output regex only (never prefix output:); set exactly one of waitFor or idleSeconds, never let the callback pattern match outgoing text, and do not block or poll after registration. deliverAs=nextTurn cannot trigger a continuation; use steer/followUp when triggerTurn is true.",
       "For a named joined pane, call current, then panes with options.session set to that current session; match its TITLE and use the raw %pane id. For literal unsubmitted text use pane_send_keys with options.keys as a string array; pane_type appends Enter.",
       "For a soft Pi reload, call pi_reload and omit target; it resolves this Pi pane, and its continuation proves completion, while terminal_current only diagnoses the desktop terminal. For pi_reload/pi_respawn continuation, use options.continuationPrompt; never use callback-only deliverAs/triggerTurn.",
       "Start with operation=sessions or tabs when target/session is ambiguous; never operate on a generic tab name like scratch unless the prompt names the exact tab/session.",
@@ -805,8 +703,4 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
     },
   });
 
-  pi.on("session_shutdown", () => {
-    for (const record of callbacks.values()) record.process.kill("SIGTERM");
-    callbacks.clear();
-  });
 }

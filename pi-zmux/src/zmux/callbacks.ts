@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn, type ChildProcess } from "node:child_process";
 import { trimOutput } from "../shell.js";
+import { summarizeWaitOutput } from "../wait-summary.js";
 import { buildWaitArgs } from "./agent.js";
 import { setTabPeer, typeText } from "./tabs.js";
 import { zmuxBin } from "./shared.js";
@@ -16,6 +17,7 @@ export interface WatchCallbackParams {
 	lines?: number;
 	waitFor?: string;
 	idleSeconds?: number;
+	turnState?: string;
 	timeoutSeconds?: number;
 	message?: string;
 	deliverAs?: CallbackDeliverAs;
@@ -104,13 +106,14 @@ function callbackOutcomeFields(stdout: string): { basis?: string; failureKind?: 
 	}
 }
 
-export function buildCallbackWatchArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; timeoutSeconds?: number }): string[] {
+export function buildCallbackWatchArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; turnState?: string; timeoutSeconds?: number }): string[] {
 	return buildWaitArgs({
 		tab: params.tab,
 		session: params.session,
 		lines: params.lines ?? 160,
 		waitFor: params.waitFor,
 		idleSeconds: params.idleSeconds,
+		turnState: params.turnState,
 		timeoutSeconds: params.timeoutSeconds ?? 300,
 	});
 }
@@ -133,9 +136,11 @@ export function formatCallbackMessage(done: CallbackCompletion): string {
 
 function sendCallbackMessage(pi: ExtensionAPI, done: CallbackCompletion, deliverAs: CallbackDeliverAs, triggerTurn: boolean): void {
 	rememberCallbackCompletion(done, deliverAs, triggerTurn);
+	const summary = summarizeWaitOutput(done.stdout);
+	const compactSuccess = done.exitCode === 0 && summary.details.waitMet !== undefined;
 	pi.sendMessage({
 		customType: "pi-zmux-callback",
-		content: formatCallbackMessage(done),
+		content: compactSuccess ? summary.text : formatCallbackMessage(done),
 		display: true,
 		details: {
 			kind: "callback_watch",
@@ -151,6 +156,7 @@ function sendCallbackMessage(pi: ExtensionAPI, done: CallbackCompletion, deliver
 			basis: done.basis,
 			failureKind: done.failureKind,
 			alreadyInTail: done.alreadyInTail,
+			...summary.details,
 		},
 	}, { deliverAs, triggerTurn });
 }
@@ -213,23 +219,24 @@ export function clearCallbacks(): void {
 }
 
 export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams, kind: "watch" | "peer_handoff" = "watch"): { text: string; details: Record<string, unknown> } {
-	if (params.waitFor && params.idleSeconds !== undefined) {
-		throw new Error("waitFor and idleSeconds cannot be combined");
-	}
-	if (!params.waitFor && params.idleSeconds === undefined) {
-		throw new Error("callback watch requires waitFor or idleSeconds");
+	const conditions = [params.waitFor !== undefined, params.idleSeconds !== undefined, params.turnState !== undefined].filter(Boolean).length;
+	if (conditions !== 1) {
+		throw new Error("callback watch requires exactly one of waitFor, idleSeconds, or turnState");
 	}
 	const id = callbackId(kind === "peer_handoff" ? "peer-handoff" : "callback", params.id);
 	if (callbacks.has(id)) throw new Error(`callback id already exists: ${id}`);
 	const args = buildCallbackWatchArgs(params);
+	const deliverAs = params.deliverAs ?? (kind === "peer_handoff" ? "followUp" : "steer");
+	const triggerTurn = params.triggerTurn ?? true;
+	if (deliverAs === "nextTurn" && triggerTurn) {
+		throw new Error('deliverAs "nextTurn" never triggers a turn; use "steer" or "followUp", or set triggerTurn false');
+	}
 	const startedAt = new Date().toISOString();
 	const proc = spawn(zmuxBin(), args, {
 		cwd: params.cwd,
 		env: process.env,
 		stdio: ["ignore", "pipe", "pipe"],
 	});
-	const deliverAs = params.deliverAs ?? "steer";
-	const triggerTurn = params.triggerTurn ?? true;
 	const handle: CallbackHandle = {
 		id,
 		kind,
@@ -294,7 +301,7 @@ export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams
 }
 
 export async function startPeerHandoff(pi: ExtensionAPI, params: PeerHandoffParams): Promise<{ text: string; details: Record<string, unknown> }> {
-	const idleSeconds = params.waitFor ? params.idleSeconds : (params.idleSeconds ?? 3);
+	const useLifecycle = params.waitFor === undefined && params.idleSeconds === undefined;
 	const callbackParams: WatchCallbackParams = {
 		id: params.id,
 		tab: params.tab,
@@ -302,25 +309,34 @@ export async function startPeerHandoff(pi: ExtensionAPI, params: PeerHandoffPara
 		session: params.session,
 		lines: params.lines ?? 200,
 		waitFor: params.waitFor,
-		idleSeconds,
+		idleSeconds: params.idleSeconds,
+		turnState: useLifecycle ? "ready" : undefined,
 		timeoutSeconds: params.timeoutSeconds ?? 300,
 		message: params.message ?? "peer handoff ready",
 		deliverAs: params.deliverAs,
 		triggerTurn: params.triggerTurn,
 	};
-	if (params.markPeerRunning) {
-		await setTabPeer({ action: "running", tab: params.tab, session: params.session, source: params.source ?? "pi-zmux-handoff", msg: params.message, cwd: params.cwd });
+	const markPeerRunning = params.markPeerRunning ?? true;
+	const callback = startWatchCallback(pi, callbackParams, "peer_handoff");
+	try {
+		if (markPeerRunning) {
+			await setTabPeer({ action: "running", tab: params.tab, session: params.session, source: params.source ?? "pi-zmux-handoff", msg: params.message, cwd: params.cwd });
+		}
+		const typed = await typeText(params.tab, params.text, params.cwd, params.session);
+		return {
+			text: trimOutput([typed.text, callback.text].join("\n")),
+			details: {
+				...typed.details,
+				...callback.details,
+				callback: callback.details,
+				markPeerRunning,
+				waitFor: params.waitFor,
+				idleSeconds: params.idleSeconds,
+				turnState: useLifecycle ? "ready" : undefined,
+			},
+		};
+	} catch (error) {
+		cancelCallback(String(callback.details.id));
+		throw error;
 	}
-	let callback: { text: string; details: Record<string, unknown> } | undefined;
-	if (params.waitFor) {
-		callback = startWatchCallback(pi, callbackParams, "peer_handoff");
-	}
-	const typed = await typeText(params.tab, params.text, params.cwd, params.session);
-	if (!callback) {
-		callback = startWatchCallback(pi, callbackParams, "peer_handoff");
-	}
-	return {
-		text: trimOutput([typed.text, callback.text].join("\n")),
-		details: { ...typed.details, callback: callback.details, markPeerRunning: params.markPeerRunning ?? false, waitFor: params.waitFor, idleSeconds },
-	};
 }

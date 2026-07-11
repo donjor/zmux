@@ -13,8 +13,10 @@ dispatcher. Write a structured evidence report under `.dump/test-prompts-report/
 Do not edit source, commit, push, install live hooks, or touch the live `zmux`
 profile.
 
-This prompt authorizes one bounded real nested peer CLI through the dispatcher
-when `zzmux` isolation is proven. A fake peer is not a substitute.
+This prompt authorizes four bounded real nested peer CLIs through the dispatcher
+when `zzmux` isolation is proven: Pi, Claude, Codex, and Agy. A fake peer is not
+a substitute. Use the weakest available model and lowest reasoning effort for
+these lifecycle-only probes.
 
 ## Launch
 
@@ -35,7 +37,7 @@ PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
 4. Keep every `focus` option false. Do not call `tab_focus` or `pane_focus`.
 5. Use unique `$RUN_ID` names and clean up every created tab, pane, callback, and session.
 6. Do not start hidden/background processes or raw tmux app-control commands.
-7. A peer check must use a real visible CLI and atomic `peer_handoff`; report blocked if auth/CLI availability prevents it.
+7. Peer checks must use real visible Pi, Claude, Codex, and Agy CLIs with atomic `peer_handoff`; report an individual row blocked if its auth/model path is unavailable.
 
 ## Read first
 
@@ -113,8 +115,12 @@ Set a unique `$RUN_ID`. Record every tool call and result.
 - Call `runtime_ensure` again and prove it reuses the named runtime rather than creating a duplicate.
 - Stop it with `runtime_stop`.
 
-### 4. Input, state, and callback
+### 4. Command lifecycle, input, state, and callback
 
+- Run `sleep 3; printf 'COMMAND_LIFECYCLE_DONE\\n'` in a visible test tab. Use
+  `tab_status`/`tab_inspect` during and after the sleep to prove one fresh
+  `cmdSeq` transitions from `cmdState=running` to `cmdState=done` with exit 0.
+  Output or process liveness alone is not lifecycle evidence.
 - Use `type_text` to send `hello-$RUN_ID` to `worker`; prove `worker-saw:hello-$RUN_ID`.
 - Apply `tab_state` and `tab_peer`, then read both with `tab_status`/`tab_inspect`.
 - Start `callback_watch` for a future `worker-saw:callback-$RUN_ID` marker, then
@@ -122,15 +128,25 @@ Set a unique `$RUN_ID`. Record every tool call and result.
   "pi-zmux-callback"`, fresh evidence basis, and no leaked callback handle.
 - Use `callback_list`; cancel any remaining handle with `callback_cancel`.
 
-### 5. Real peer
+### 5. Real peer lifecycle matrix
 
-- Use `peer_ensure` to create one visible `peer-$RUN_ID` with an available
-  authenticated CLI.
-- Use atomic `peer_handoff`, with a future-output marker that does not appear
-  verbatim in the outgoing prompt. Do not sequence `type_text` then
-  `callback_watch`.
-- Prove the answer with `tab_inspect` or `runtime_logs`. Output/idle is fallback
-  evidence, not lifecycle readiness.
+Create one visible peer per CLI through `peer_ensure`. Keep each interactive and
+max-permission, but prompt it only to identify its CLI/model in one line:
+
+```text
+Pi      openai-codex/gpt-5.6-luna · thinking low · load pi-zmux/src/peer-lifecycle.ts
+Claude  haiku
+Codex   gpt-5.4-mini · model_reasoning_effort=low
+Agy     Gemini 3.5 Flash (Low)
+```
+
+- Test Pi, Claude, Codex, and Agy sequentially; do not overlap callbacks.
+- For each, use atomic `peer_handoff` without an output marker. Confirm it marks
+  the peer running before submission, advances `turnSeq`, reaches fresh
+  `turn:ready`, and delivers a follow-up that triggers the host after completion.
+  Do not sequence `type_text` then `callback_watch`.
+- Prove each answer with `tab_inspect`. Output/idle-only completion is a lifecycle
+  failure, not a pass. Mark only unavailable CLI/model/auth rows blocked.
 
 ### 6. Panes and evidence
 

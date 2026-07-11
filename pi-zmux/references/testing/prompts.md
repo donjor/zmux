@@ -54,6 +54,10 @@ The host sends the session contract once, then sends the checkpoint prompts one 
 
 > Run `sudo -n true` in a visible shared test admin place named `pi-zmux-test-admin` without moving my focus, wait for the command to settle, and report its exit evidence. Do not run it directly in your own shell.
 
+## N-015 command lifecycle
+
+> Run `sleep 3; printf 'COMMAND_LIFECYCLE_DONE\\n'` in a new visible tab named `pi-zmux-test-lifecycle-command`. Without polling through bash, inspect its structured command lifecycle once while it is sleeping and again after it exits. Report the command generation, running state, final state, and exit code; output or process liveness alone is not enough.
+
 ## N-011 output wait
 
 > The visible tab `pi-zmux-test-wait-source` will print `WAIT_READY`. Wait for that future output with a bounded timeout and report the evidence basis; do not poll it through your own shell.
@@ -62,9 +66,21 @@ The host sends the session contract once, then sends the checkpoint prompts one 
 
 > Arrange for this testing Pi process to be notified when the visible tab `pi-zmux-test-callback-source` prints `CALLBACK_DONE`. Use a bounded live-session callback and do not block this turn by sleeping or polling.
 
-## N-004 peer handoff
+## N-016a Pi peer lifecycle
 
-> Reuse or create a visible codex peer tab named `pi-zmux-test-peer`. Ask it to check the current Git branch and reply with the exact prefix formed by joining `PEER_RESPONSE_` and `OK`, followed by `: <branch>`. Mark that review as working, then arrange for us to be notified when the joined prefix appears.
+> Use the existing visible Pi peer `pi-zmux-test-peer-pi`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
+
+## N-016b Claude peer lifecycle
+
+> Use the existing visible Claude peer `pi-zmux-test-peer-claude`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
+
+## N-016c Codex peer lifecycle
+
+> Use the existing visible Codex peer `pi-zmux-test-peer-codex`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
+
+## N-016d Agy peer lifecycle
+
+> Use the existing visible Agy peer `pi-zmux-test-peer-agy`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
 
 ## A-005 missing target
 

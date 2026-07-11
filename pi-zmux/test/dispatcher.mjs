@@ -368,12 +368,33 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     const peerHandoff = await execute({ operation: 'peer_handoff', target: 'peer', options: { id: 'peer-handoff-test', text: 'check branch', waitFor: 'PEER_RESPONSE_OK', lines: 30, timeoutSeconds: 7, markPeerRunning: true, source: 'test', message: 'branch check' } });
     assert.equal(peerHandoff.details.id, 'peer-handoff-test');
     assert.deepEqual(peerHandoff.details.args, ['wait', 'peer', '--for', 'output:PEER_RESPONSE_OK', '-l', '30', '-T', '7', '--json']);
-    assert.deepEqual(peerHandoff.details.typeArgs, ['type', 'peer', 'check branch', '--mark-peer-running', '--source', 'test', '--msg', 'branch check']);
-    const peerHandoffCommands = readCommandLog(recorder.logPath).map((entry) => JSON.stringify(entry.args));
-    assert.ok(peerHandoffCommands.includes(JSON.stringify(peerHandoff.details.args)));
-    assert.ok(peerHandoffCommands.includes(JSON.stringify(peerHandoff.details.typeArgs)));
+    assert.equal(peerHandoff.details.deliverAs, 'followUp');
+    assert.equal(peerHandoff.details.triggerTurn, true);
+    let peerHandoffCommands = readCommandLog(recorder.logPath).map((entry) => entry.args);
+    assert.equal(peerHandoffCommands.length, 3);
+    assert.deepEqual(peerHandoffCommands.at(-1), ['type', 'peer', 'check branch']);
+    assert.ok(peerHandoffCommands.slice(0, -1).some((args) => JSON.stringify(args) === JSON.stringify(peerHandoff.details.args)));
+    assert.ok(peerHandoffCommands.slice(0, -1).some((args) => JSON.stringify(args) === JSON.stringify(['tab', 'peer', 'running', 'peer', '--source', 'test', '--msg', 'branch check'])));
     await execute({ operation: 'callback_cancel', target: 'peer-handoff-test' });
+
+    writeFileSync(recorder.logPath, '');
+    const lifecycleHandoff = await execute({ operation: 'peer_handoff', target: 'peer', options: { id: 'peer-lifecycle-test', text: 'review branch', timeoutSeconds: 9 } });
+    assert.equal(lifecycleHandoff.details.turnState, 'ready');
+    assert.deepEqual(lifecycleHandoff.details.args, ['wait', 'peer', '--for', 'turn:ready', '-l', '200', '-T', '9', '--json']);
+    peerHandoffCommands = readCommandLog(recorder.logPath).map((entry) => entry.args);
+    assert.equal(peerHandoffCommands.length, 3);
+    assert.deepEqual(peerHandoffCommands.at(-1), ['type', 'peer', 'review branch']);
+    assert.ok(peerHandoffCommands.slice(0, -1).some((args) => JSON.stringify(args) === JSON.stringify(lifecycleHandoff.details.args)));
+    assert.ok(peerHandoffCommands.slice(0, -1).some((args) => JSON.stringify(args) === JSON.stringify(['tab', 'peer', 'running', 'peer', '--source', 'pi-zmux-handoff'])));
+    await execute({ operation: 'callback_cancel', target: 'peer-lifecycle-test' });
     delete process.env.PI_ZMUX_TEST_HOLD;
+
+    writeFileSync(recorder.logPath, '');
+    await assert.rejects(
+      () => execute({ operation: 'peer_handoff', target: 'peer', options: { text: 'review branch', deliverAs: 'nextTurn', triggerTurn: true } }),
+      /nextTurn.*never triggers a turn/,
+    );
+    assert.deepEqual(readCommandLog(recorder.logPath), [], 'invalid handoff options must not mark the peer running or submit text');
     await assert.rejects(
       () => execute({ operation: 'peer_handoff', target: 'peer', options: { text: 'reply with DONE', waitFor: 'DONE' } }),
       /waitFor pattern must not match options\.text/,
@@ -428,9 +449,13 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     assert.doesNotMatch(toolText(empty), /callback-cancel/);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
     assert.equal(extension.sentMessages.filter(({ message }) => message.details?.id === 'callback-cancel').length, cancelledMessageCount, 'cancelled callbacks must not deliver completion messages');
-    await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work' }), /requires waitFor or idleSeconds/);
-    await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work', options: { waitFor: 'DONE', idleSeconds: 1 } }), /cannot be combined/);
+    await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work' }), /requires exactly one of waitFor, idleSeconds, or turnState/);
+    await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work', options: { waitFor: 'DONE', idleSeconds: 1 } }), /requires exactly one of waitFor, idleSeconds, or turnState/);
     await assert.rejects(() => execute({ operation: 'callback_watch', target: 'work', options: { waitFor: 'DONE', deliverAs: 'later' } }), /deliverAs must be one of/);
+    await assert.rejects(
+      () => execute({ operation: 'callback_watch', target: 'work', options: { waitFor: 'DONE', deliverAs: 'nextTurn', triggerTurn: true } }),
+      /nextTurn.*never triggers a turn/,
+    );
 
     const shutdownCallback = await execute({ operation: 'callback_watch', target: 'work', options: { id: 'callback-shutdown', idleSeconds: 1 } });
     assert.equal(shutdownCallback.details.id, 'callback-shutdown');
@@ -523,8 +548,8 @@ try {
   assert.match(guidelines, /do not start duplicate/i);
   assert.match(guidelines, /another.*copy.*before.*logs.*runtime_logs.*existing/is);
   assert.match(guidelines, /sudo.*interactive_type.*never.*run/is);
-  assert.match(guidelines, /callback_watch.*waitFor.*idleSeconds.*never.*text/is);
-  assert.match(guidelines, /peer_handoff.*waitFor.*never.*type_text.*callback_watch/is);
+  assert.match(guidelines, /callback_watch.*waitFor.*idleSeconds.*nextTurn.*cannot trigger/is);
+  assert.match(guidelines, /peer_handoff.*turn:ready.*follow-up.*waitFor.*fallback.*never.*type_text.*callback_watch/is);
   assert.match(guidelines, /pi_reload.*omit.*target.*continuation.*proves.*completion.*terminal_current/is);
   assert.match(guidelines, /pi_reload.*pi_respawn.*continuationPrompt.*never.*deliverAs/is);
   assert.match(guidelines, /named joined pane.*current.*options\.session.*TITLE.*pane_send_keys.*string array.*pane_type.*Enter/is);

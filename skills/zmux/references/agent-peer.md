@@ -254,10 +254,15 @@ In Pi, prefer dispatcher `tab_inspect` for the status+output bundle and
 `peer_ensure` / `type_text` with short wait fields for the composed happy
 path. These are thin adapters over core `tab inspect`, `tab peer ensure`, and
 `type --wait-*`. For long peer turns where the host should continue after the
-peer answers, use dispatcher `peer_handoff`: it types the prompt and schedules a
-wait-backed callback/handoff. Treat output/idle callback basis as fallback
-evidence unless lifecycle `turnSeq` / fresh `turnState` proves true instrumented
-readiness.
+peer answers, use dispatcher `peer_handoff`: it arms a fresh `turn:ready`
+lifecycle callback, marks the peer running, then types the prompt. The completion
+is delivered as a follow-up that triggers the host by default. Omit `options.waitFor`
+for instrumented peers; output-regex or idle callbacks are explicit fallbacks for
+peers without usable lifecycle hooks. The live lifecycle matrix currently proves
+Pi and Claude native completion; Codex and Agy answer but remain `running`, so
+callers must pass `idleSeconds` for those CLIs until native turn-end adapters land.
+`deliverAs: "nextTurn"` never triggers a continuation and must not be paired with
+`triggerTurn: true`.
 
 Use the fields that actually describe this failure:
 

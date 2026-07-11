@@ -109,12 +109,15 @@ skill doctrine. The prompts are exploratory QA wrappers: expected behavior
 remains in this domain doc plus `skills/zmux/SKILL.md` and its references, while
 `make test-agent-surfaces` remains the deterministic gate.
 
-The accepted one-tool candidate's 19 behavioral checkpoints are preserved as a
-lightweight package regression flow under `pi-zmux/references/testing/`. A host
-drives one visible Terra/medium Pi worker through the main chain and judges real
-terminal state after each prompt; one disposable worker covers the trusted-project
-and hard-respawn checks. The flow distinguishes clean passes from safe recovered
-friction, uses exact test-owned teardown, and requires no custom agent/profile,
+The accepted one-tool candidate's behavioral checkpoints are preserved and
+extended as a lightweight package regression flow under
+`pi-zmux/references/testing/`. A host drives one visible Terra/medium Pi worker
+through the main chain and judges real terminal state after each prompt; one
+disposable worker covers the trusted-project and hard-respawn checks. Dedicated
+lifecycle probes cover a three-second shell command plus low-tier Pi, Claude,
+Codex, and Agy peers without spending judgment-tier models. The flow distinguishes
+clean passes from safe recovered friction, uses exact test-owned teardown, and
+requires no custom agent/profile,
 run IDs, JSONL, or transcript schema. Historical promotion artifacts remain in
 the skills repo.
 
@@ -146,10 +149,13 @@ model context. Bash hooks, lifecycle glyphs, callbacks, and continuation
 handlers add no prompt tokens by themselves.
 
 The dispatcher preserves operation-specific safety: persistent processes use
-`runtime_ensure`; sudo/manual input uses `interactive_type`; peer prompts plus
-future-output callbacks use atomic `peer_handoff`; literal pane keys remain
-separate from submit-with-Enter pane typing; and focus-moving options stay false
-unless the user explicitly requests focus. Native call/result rendering keeps
+`runtime_ensure`; sudo/manual input uses `interactive_type`; atomic
+`peer_handoff` arms a fresh `turn:ready` lifecycle callback, marks the peer
+running, and only then submits before the default follow-up continuation;
+output-regex and idle callbacks are explicit fallbacks; literal pane keys remain
+separate from
+submit-with-Enter pane typing; and focus-moving options stay false unless the
+user explicitly requests focus. Native call/result rendering keeps
 collapsed output readable while expanded views retain structured operation,
 argv, cwd, lifecycle, and evidence details. Successful wait and callback
 completions summarize their match basis and freshness instead of returning the
@@ -205,6 +211,15 @@ name without rediscovering commands or starting duplicate processes.
 **Peer turns**
 
 - `operation=type_text` delegates to first-class `zmux type --json` with peer-running and turn-wait options.
+- `operation=peer_handoff` arms `zmux wait --for turn:ready`, sets `running`,
+  then submits. Completion uses `deliverAs: "followUp"` with `triggerTurn: true`
+  unless explicitly changed.
+- Pi and Claude currently publish native turn-end lifecycle. Codex and Agy
+  complete visible answers without advancing `turnState`; callers use explicit
+  `idleSeconds` fallback for those CLIs, while the regression matrix keeps their
+  native-lifecycle rows failing until adapters land.
+- `deliverAs: "nextTurn"` is rejected when `triggerTurn` is true because Pi
+  ignores turn triggers for next-turn delivery.
 - Freshness is generation-based via `turnSeq`; stale `ready` state cannot satisfy a new wait.
 - If readiness is unproven, return status/output evidence rather than sleeping. Use `tab_inspect` for diagnosis and `peer_ensure` for spawn/reuse plus readiness.
 

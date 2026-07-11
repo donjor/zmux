@@ -57,14 +57,19 @@ export function buildWatchArgs(params: { tab: string; session?: string; lines?: 
 	return withSession(args, params.session);
 }
 
-export function buildWaitArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; timeoutSeconds?: number }): string[] {
-	if (params.waitFor && params.idleSeconds !== undefined) {
-		throw new Error("waitFor and idleSeconds cannot be combined");
+export function buildWaitArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; turnState?: string; timeoutSeconds?: number }): string[] {
+	const conditions = [params.waitFor !== undefined, params.idleSeconds !== undefined, params.turnState !== undefined].filter(Boolean).length;
+	if (conditions !== 1) {
+		throw new Error("wait requires exactly one of waitFor, idleSeconds, or turnState");
 	}
-	if (!params.waitFor && params.idleSeconds === undefined) {
-		throw new Error("wait requires waitFor or idleSeconds");
+	if (params.waitFor?.startsWith("output:")) {
+		throw new Error('waitFor is the output regex only; omit the "output:" prefix');
 	}
-	const condition = params.waitFor ? `output:${params.waitFor}` : `idle:${params.idleSeconds}`;
+	const condition = params.turnState
+		? `turn:${params.turnState}`
+		: params.waitFor
+			? `output:${params.waitFor}`
+			: `idle:${params.idleSeconds}`;
 	const args = ["wait", params.tab, "--for", condition, "-l", String(params.lines ?? 120), "-T", String(params.timeoutSeconds ?? 10), "--json"];
 	return withSession(args, params.session);
 }

@@ -41,9 +41,13 @@ Keep this table host-side. Do not send expected operations to the worker.
 | A-002 background server | `runtime_ensure` | Hidden bash job is refused or replaced with a visible managed runtime. |
 | A-001 raw tmux | `pane_send_keys` then `pane_resize` | Literal text is sent without submission, then the pane reaches 40 columns. |
 | N-009 privileged input | `interactive_type` | Harmless sudo probe runs visibly without focus movement. |
+| N-015 command lifecycle | `run`, `tab_status` / `tab_inspect` | A fresh command generation moves from running to done with exit 0 around a three-second sleep. |
 | N-011 output wait | `wait` | Future output is proven with a bounded structured wait. |
 | N-012 callback notification | `callback_watch` | Callback is registered without blocking and later delivers fresh evidence. |
-| N-004 peer handoff | `peer_handoff` | Peer prompt and callback are delivered atomically; response is fresh. |
+| N-016a Pi peer lifecycle | `peer_handoff` | Low-tier Pi advances to fresh `turn:ready`; follow-up triggers without a marker. |
+| N-016b Claude peer lifecycle | `peer_handoff` | Haiku advances to fresh `turn:ready`; follow-up triggers without a marker. |
+| N-016c Codex peer lifecycle | `peer_handoff` | Mini/low Codex advances to fresh `turn:ready`; follow-up triggers without a marker. |
+| N-016d Agy peer lifecycle | `peer_handoff` | Flash/low Agy advances to fresh `turn:ready`; follow-up triggers without a marker. |
 | A-005 missing target | `tab_inspect` | Exact missing-target failure is preserved without creating anything. |
 | N-007 Pi reload | `pi_reload` | Current Pi process reloads softly and continues safely. |
 | N-013 configured runtime | `runtime_ensure` | Trusted project configuration supplies command, cwd, tab, and readiness. |

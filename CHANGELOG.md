@@ -7,6 +7,10 @@ versioning is semver-ish until the first public release.
 ## [Unreleased]
 > Release tag: pending | Compare: `v0.14.0...HEAD`
 
+### Fixed
+
+- **Instrumented peer handoffs resume Pi from lifecycle completion** `agents` `pi` — atomic `peer_handoff` now arms a fresh `turn:ready` wait, marks the peer running, and only then submits before delivering completion as a triggering follow-up by default. Output/idle are explicit fallbacks, `nextTurn` plus `triggerTurn` is rejected, the dispatcher now uses the canonical callback registry instead of a promoted duplicate, and the live matrix covers low-tier Pi, Claude, Codex, and Agy plus shell-command lifecycle.
+
 ## [0.14.0] - 2026-07-11
 > Release tag: `v0.14.0` | Topics: `agents`, `pi`, `qa` | Compare: `v0.13.0...v0.14.0`
 
