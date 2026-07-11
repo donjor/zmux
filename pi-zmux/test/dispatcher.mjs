@@ -499,7 +499,7 @@ try {
   assert.match(guidelines, /peer_handoff.*waitFor.*never.*type_text.*callback_watch/is);
   assert.match(guidelines, /pi_reload.*omit.*target.*continuation.*proves.*completion.*terminal_current/is);
   assert.match(guidelines, /pi_reload.*pi_respawn.*continuationPrompt.*never.*deliverAs/is);
-  assert.match(guidelines, /pane_send_keys.*without submission.*pane_type.*Enter/is);
+  assert.match(guidelines, /named joined pane.*current.*options\.session.*TITLE.*pane_send_keys.*string array.*pane_type.*Enter/is);
   assert.ok(dispatcher.parameters.properties.operation.description.includes('runtime_ensure'));
   assert.match(dispatcher.parameters.properties.options.description, /waitForExit/);
   assert.equal(typeof dispatcher.renderCall, 'function', 'dispatcher must provide a native call renderer');
