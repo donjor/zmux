@@ -393,6 +393,7 @@ function buildWaitArgs(target: string, options: Record<string, unknown>): string
   const idleSeconds = optNumber(options, "idleSeconds");
   if (waitFor && idleSeconds !== undefined) throw new Error("waitFor and idleSeconds cannot be combined");
   if (!waitFor && idleSeconds === undefined) throw new Error("wait requires waitFor or idleSeconds");
+  if (waitFor?.startsWith("output:")) throw new Error('options.waitFor is the output regex only; omit the "output:" prefix');
   args.push("--for", waitFor ? `output:${waitFor}` : `idle:${idleSeconds}`);
   pushOpt(args, "-l", optNumber(options, "lines") ?? 160);
   pushOpt(args, "-T", optNumber(options, "timeoutSeconds") ?? 300);
@@ -648,7 +649,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text and options.waitFor; it marks the peer running by default. Never send type_text then callback_watch, and split/rephrase the waitFor marker so it is not repeated verbatim in text and cannot self-match the echoed prompt.",
       "For sudo, ssh, passwords, REPLs, database shells, and other manual input, use interactive_type and never generic run; target admin (or the named shared tab), keep focus false by default, and set options.waitForExit for bounded privileged commands.",
       "For runtime_ensure, set target to the runtime/tab name, command to the dev/watch command, cwd to the project/fixture directory, and options.waitFor/readiness to ready|localhost when the user asks to wait for readiness.",
-      "For callback_watch, set target to the tab and exactly one of options.waitFor or options.idleSeconds; never put the match marker in options.text, and return the callback id without blocking or polling.",
+      "For wait/callback_watch, options.waitFor is the output regex only (never prefix output:); set exactly one of waitFor or idleSeconds, never put the callback marker in options.text, and do not block or poll after registration.",
       "For a soft Pi reload, call pi_reload and omit target; it resolves this Pi pane, and its continuation proves completion, while terminal_current only diagnoses the desktop terminal. For pi_reload/pi_respawn continuation, use options.continuationPrompt; never use callback-only deliverAs/triggerTurn.",
       "Start with operation=sessions or tabs when target/session is ambiguous; never operate on a generic tab name like scratch unless the prompt names the exact tab/session.",
       "Never set focus:true unless the user explicitly wants terminal focus moved; if the prompt says focus but also says it was not explicitly requested, keep focus false or refuse.",

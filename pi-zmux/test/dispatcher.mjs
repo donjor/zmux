@@ -424,6 +424,8 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     await assert.rejects(() => execute({ operation: 'runtime_logs', target: 'server', options: { waitFor: 'READY', idleSeconds: 1 } }), /cannot be combined/);
     await assert.rejects(() => execute({ operation: 'wait', target: 'server' }), /requires waitFor or idleSeconds/);
     await assert.rejects(() => execute({ operation: 'wait', target: 'server', options: { waitFor: 'READY', idleSeconds: 1 } }), /cannot be combined/);
+    await assert.rejects(() => execute({ operation: 'wait', target: 'server', options: { waitFor: 'output:READY' } }), /output regex only.*omit.*output:/);
+    await assert.rejects(() => execute({ operation: 'callback_watch', target: 'server', options: { waitFor: 'output:READY' } }), /output regex only.*omit.*output:/);
     await assert.rejects(() => execute({ operation: 'tab_state', target: 'work', options: { state: 'mystery' } }), /state must be one of/);
     await assert.rejects(() => execute({ operation: 'tab_peer', target: 'work', options: { action: 'mystery' } }), /action must be one of/);
     await assert.rejects(() => execute({ operation: 'tab_place', target: 'work', options: { action: 'sideways' } }), /action must be one of/);

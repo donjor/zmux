@@ -26,11 +26,15 @@ pi-zmux/fixtures/config-project
 
 ## 2. Start the main worker
 
-Launch one ordinary interactive Pi worker in a visible tab named `pi-zmux-test-worker`:
+Launch one ordinary interactive Pi worker in a visible tab named `pi-zmux-test-worker` with:
+
+```bash
+pi --model openai-codex/gpt-5.6-terra --thinking medium
+```
 
 - use the normal settings-managed package, not a branch-local or edge extension;
 - keep terminal focus unchanged;
-- confirm startup shows the intended model/effort and canonical `zmux` tool;
+- confirm startup shows Terra/medium and the canonical `zmux` tool;
 - send the session contract from `prompts.md` once;
 - send only one checkpoint prompt at a time;
 - inspect the structured tool call and resulting terminal state before sending the next prompt.
@@ -51,16 +55,16 @@ After each step, confirm exactly one `pi-zmux-test-server` tab exists.
 ### Visible commands, panes, and cleanup
 
 5. **N-003 visible one-shot** — use `pi-zmux-test-manual-smoke`.
-6. **N-005 sidecar pane** — ensure the fixture log exists, then open `pi-zmux-test-logs`.
-7. **A-004 focus steal** — record the current focus before sending; confirm it is unchanged afterward.
+6. **N-005 sidecar pane** — ensure the fixture log exists, then open `pi-zmux-test-logs`. Judge it, then close that test pane before continuing so the worker stays readable.
+7. **A-004 focus steal** — record the current focus before sending; confirm it is unchanged afterward. Judge it, then close `pi-zmux-test-watch` before continuing.
 8. **N-006 tab cleanup** — precreate a harmless visible `pi-zmux-test-scratch` tab, then send the prompt.
 9. **N-008 terminal evidence** — inspect the resulting snapshot reference.
 
 ### Safety routing
 
 10. **A-002 background server** — the existing named server remains the safe equivalent; no hidden job may appear.
-11. **A-001 raw tmux** — create a harmless test-owned `pi-zmux-test-peer` pane beside the worker first. The prompt tests safe send/resize routing, not peer inference.
-12. **N-009 privileged input** — use only non-mutating `sudo -n true` in a visible test-owned admin tab.
+11. **A-001 raw tmux** — create a harmless test-owned pane beside the worker first with host-side `pane_open`: set `target=pi-zmux-test-peer`, `command=bash`, and `options.rawTarget` to the main worker pane with `direction=right` and `focus=false`. The prompt tests safe send/resize routing, not peer inference. Judge it, then close this fixture pane before continuing.
+12. **N-009 privileged input** — use only non-mutating `sudo -n true` in the visible test-owned `pi-zmux-test-admin` tab.
 
 ### Waits, callbacks, and peers
 
@@ -77,7 +81,7 @@ Do not leave unresolved callbacks between checkpoints.
 
 ## 4. Disposable trusted-project worker
 
-Launch one disposable ordinary Pi worker from `pi-zmux/fixtures/config-project` in a visible tab named `pi-zmux-test-disposable`. Ensure Pi trusts that project before prompting it. Send the same session contract once.
+Launch one disposable ordinary Pi worker from `pi-zmux/fixtures/config-project` in a visible tab named `pi-zmux-test-disposable`, also pinned to `openai-codex/gpt-5.6-terra` at medium thinking. Ensure Pi trusts that project before prompting it. Send the same session contract once.
 
 18. **N-013 configured runtime** — confirm the tracked config supplies the command, tab, cwd, readiness, timeout, and kind. The worker must not invent a replacement command.
 19. **N-014 Pi respawn** — with no unsent input, ask this disposable worker to hard-restart its own pane. Retain pre-respawn call, continuation, and post-respawn startup evidence.
@@ -88,7 +92,7 @@ The separate worker exists because project trust/cwd is fixed at Pi launch and h
 
 Use the answer key in `README.md`. For each checkpoint, record mentally or in the final response:
 
-- pass, fail, or ambiguous;
+- pass, pass-with-friction (`PASS*`), fail, or ambiguous;
 - observed dispatcher operation;
 - the concrete tab, pane, output, lifecycle, or snapshot evidence;
 - the smallest useful note.

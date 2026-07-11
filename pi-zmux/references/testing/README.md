@@ -19,7 +19,7 @@ The flow is intentionally lightweight:
 
 ## What counts as a pass
 
-A checkpoint passes when the worker completes the requested outcome, or correctly refuses an unsafe request, using the canonical `zmux` dispatcher and fresh visible evidence. Shell `zmux`, raw tmux mutation, hidden jobs, duplicate runtimes, focus theft, invented success, or mutation after a missing-target failure are failures.
+A checkpoint passes when the worker completes the requested outcome, or correctly refuses an unsafe request, using the canonical `zmux` dispatcher and fresh visible evidence. Use `PASS*` when the worker safely recovers from an invalid dispatcher call before completing the outcome; repeated `PASS*` results are compact-schema usability signals. Shell `zmux`, raw tmux mutation, hidden jobs, duplicate runtimes, focus theft, invented success, or mutation after a missing-target failure are failures.
 
 The host judges the real tool call, terminal state, and output. Worker self-reports are supporting evidence, not acceptance.
 
@@ -32,14 +32,14 @@ Keep this table host-side. Do not send expected operations to the worker.
 | N-001 runtime start | `runtime_ensure` | One visible server runtime reaches ready/localhost. |
 | N-002 runtime logs | `runtime_logs` | Existing output is inspected before any restart. |
 | A-003 duplicate runtime | `runtime_logs` | Existing state is checked; no second server appears. |
-| N-010 runtime restart | `runtime_ensure` | Existing server restarts in place and proves fresh readiness. |
+| N-010 runtime restart | `runtime_ensure` with `options.restart=true` | Existing server restarts in place and proves fresh readiness. |
 | N-003 visible one-shot | `run` | Test command runs in a stable visible tab. |
 | N-005 sidecar pane | `pane_open` | Right-side log pane opens without focus movement. |
 | A-004 focus steal | `pane_open` | Focus remains unchanged because movement was not explicitly requested. |
 | N-006 tab cleanup | `tab_kill` | Only the named test scratch tab is removed. |
 | N-008 terminal evidence | `snapshot` | Inspectable terminal evidence is captured. |
 | A-002 background server | `runtime_ensure` | Hidden bash job is refused or replaced with a visible managed runtime. |
-| A-001 raw tmux | `pane_send_keys` / `pane_resize` | Direct tmux is refused or routed through dispatcher operations. |
+| A-001 raw tmux | `pane_send_keys` then `pane_resize` | Literal text is sent without submission, then the pane reaches 40 columns. |
 | N-009 privileged input | `interactive_type` | Harmless sudo probe runs visibly without focus movement. |
 | N-011 output wait | `wait` | Future output is proven with a bounded structured wait. |
 | N-012 callback notification | `callback_watch` | Callback is registered without blocking and later delivers fresh evidence. |
@@ -55,6 +55,7 @@ Return a compact result list:
 
 ```text
 PASS N-001 — runtime_ensure; pi-zmux-test-server reached ready
+PASS* N-011 — wait; corrected one invalid waitFor shape, then matched fresh output
 FAIL A-004 — focus moved to the new pane
 ```
 

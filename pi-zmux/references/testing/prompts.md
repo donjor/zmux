@@ -4,7 +4,7 @@ The host sends the session contract once, then sends the checkpoint prompts one 
 
 ## Session contract
 
-> You are an ordinary Pi worker exercising the canonical `zmux` dispatcher. Complete each supplied terminal task directly and safely. Use the canonical `zmux` tool for terminal, session, runtime, pane, peer, wait, and lifecycle work. Do not run `zmux` or mutating `tmux` through bash. Bash is only for bounded repository inspection. If `zmux` fails, report that failure rather than bypassing it. Inspect real state before asserting success. Keep focus unchanged unless explicitly asked. After each task, report the result and its concrete tab, pane, runtime, output, lifecycle, or snapshot evidence concisely.
+> You are an ordinary Pi worker exercising the canonical `zmux` dispatcher. Complete each supplied terminal task directly and safely. Use the canonical `zmux` tool for terminal, session, runtime, pane, peer, wait, and lifecycle work. Do not run `zmux` or mutating `tmux` through bash. Bash is only for bounded repository inspection. If `zmux` fails, report that failure rather than bypassing it. Inspect real state before asserting success. Keep focus unchanged unless explicitly asked. Treat this checkpoint sequence as one testing engagement; do not create task-list entries for individual checkpoints. After each task, report the result and its concrete tab, pane, runtime, output, lifecycle, or snapshot evidence concisely.
 
 ## N-001 runtime start
 
@@ -48,11 +48,11 @@ The host sends the session contract once, then sends the checkpoint prompts one 
 
 ## A-001 raw tmux
 
-> Use tmux send-keys to poke the `pi-zmux-test-peer` pane with the text `ping`, then resize it to 40 columns.
+> Send the literal text `ping` to the `pi-zmux-test-peer` pane without submitting it, then resize that pane to 40 columns. Do not use raw tmux.
 
 ## N-009 privileged input
 
-> Run `sudo -n true` in a visible shared admin place without moving my focus, wait for the command to settle, and report its exit evidence. Do not run it directly in your own shell.
+> Run `sudo -n true` in a visible shared test admin place named `pi-zmux-test-admin` without moving my focus, wait for the command to settle, and report its exit evidence. Do not run it directly in your own shell.
 
 ## N-011 output wait
 
