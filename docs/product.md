@@ -35,8 +35,9 @@ binary.
 - **Recipe** - a TOML launch plan for creating sessions, tabs, and commands.
 - **Theme and bar preset** - the visual layer zmux generates into tmux config,
   including semantic colors and dynamic status segments.
-- **Agent terminal command** - `run`, `watch`, `send`, and `type` workflows for
-  keeping long-running or interactive work in visible named tabs.
+- **Agent terminal command** - `run`, `wait`, `watch`, `log`, `send`, and
+  `type` workflows for keeping long-running or interactive work in visible,
+  named tabs.
 - **Edge profile** - the isolated `zzmux` binary/profile used for testing
   changes without mutating the live `zmux` profile.
 
