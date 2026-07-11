@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-tui": "^0.80.2",
     "typebox": "^1.1.24"
   },
   "devDependencies": {

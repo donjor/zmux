@@ -58,6 +58,11 @@ function toolText(result) {
   return result.content.map((item) => item.text).join('\n');
 }
 
+function nonDisplayDetails(details) {
+  const { display: _display, ...rest } = details;
+  return rest;
+}
+
 async function waitFor(predicate, message, timeoutMs = 2_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -173,6 +178,9 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
       const result = await execute(params);
       assert.deepEqual(result.details.args, expectedArgs, `${name} dispatcher mapping drifted`);
       assert.equal(result.details.cwd, params.cwd ?? contextCwd, `${name} cwd drifted`);
+      assert.equal(result.details.display.operation, name, `${name} display metadata drifted`);
+      assert.equal(result.details.display.raw.cwd, params.cwd ?? contextCwd, `${name} display cwd drifted`);
+      assert.deepEqual(result.details.display.raw.args, expectedArgs, `${name} expanded argv metadata drifted`);
       const commands = readCommandLog(recorder.logPath);
       assert.deepEqual(commands, [{ args: expectedArgs, cwd: params.cwd ?? contextCwd }], `${name} process contract drifted`);
     }
@@ -222,7 +230,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     writeFileSync(recorder.logPath, '');
     const guarded = await execute({ operation: 'runtime_ensure', target: 'unsafe', command: 'pi -p "review"' });
     assert.match(toolText(guarded), /Do not launch agent peers with -p\/--print/);
-    assert.deepEqual(guarded.details, { command: 'pi -p "review"', failed: true, failureKind: 'headless_agent_print_mode' });
+    assert.deepEqual(nonDisplayDetails(guarded.details), { command: 'pi -p "review"', failed: true, failureKind: 'headless_agent_print_mode' });
     assert.deepEqual(readCommandLog(recorder.logPath), []);
 
     writeFileSync(recorder.logPath, '');
@@ -236,7 +244,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
 
     writeFileSync(recorder.logPath, '');
     const interactive = await execute({ operation: 'interactive_type', target: 'admin', command: 'ssh prod', options: { session: 's1', focus: false } });
-    assert.deepEqual(interactive.details, { tab: 'admin', command: 'ssh prod', waitForExit: false, focus: false, session: 's1' });
+    assert.deepEqual(nonDisplayDetails(interactive.details), { tab: 'admin', command: 'ssh prod', waitForExit: false, focus: false, session: 's1' });
     assert.match(toolText(interactive), /without changing focus/);
     assert.deepEqual(readCommandLog(recorder.logPath).map((entry) => entry.args), [
       ['tab', 'status', 'admin', '--json', '-s', 's1'],
@@ -306,7 +314,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
 
     writeFileSync(recorder.logPath, '');
     const paneKeys = await execute({ operation: 'pane_send_keys', target: '%7', options: { keys: ['C-c', 'Enter'], timeoutSeconds: 3 } });
-    assert.deepEqual(paneKeys.details, { pane: '%7', keys: ['C-c', 'Enter'] });
+    assert.deepEqual(nonDisplayDetails(paneKeys.details), { pane: '%7', keys: ['C-c', 'Enter'] });
     assert.deepEqual(readCommandLog(recorder.logPath), [{ args: ['-L', 'extension-test', 'send-keys', '-t', '%7', 'C-c', 'Enter'], cwd: contextCwd }]);
 
     writeFileSync(recorder.logPath, '');
@@ -384,7 +392,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     await assert.rejects(() => execute({ operation: 'callback_watch', target: 'other', options: { id: 'callback-cancel', waitFor: 'DONE' } }), /callback id already exists/);
     const cancelledMessageCount = extension.sentMessages.filter(({ message }) => message.details?.id === 'callback-cancel').length;
     const cancelled = await execute({ operation: 'callback_cancel', target: 'callback-cancel' });
-    assert.deepEqual(cancelled.details, { id: 'callback-cancel', cancelled: true });
+    assert.deepEqual(nonDisplayDetails(cancelled.details), { id: 'callback-cancel', cancelled: true });
     const empty = await execute({ operation: 'callback_list' });
     assert.doesNotMatch(toolText(empty), /callback-cancel/);
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 50));
@@ -458,6 +466,13 @@ try {
   const { default: registerExtension } = await import(join(compiledOut, 'index.js'));
   const { ZMUX_OPERATIONS } = await import(join(compiledOut, 'src/dispatcher.js'));
   const piLifecycle = await import(join(compiledOut, 'src/zmux/pi-lifecycle.js'));
+  const {
+    OPERATION_DESCRIPTORS,
+    buildDisplayMetadata,
+    formatZmuxCall,
+    formatZmuxResult,
+  } = await import(join(compiledOut, 'src/rendering.js'));
+  const { visibleWidth } = await import('@earendil-works/pi-tui');
   const lifecycle = { ...piLifecycle, buildPiRespawnScript: piLifecycle.buildTmuxRespawnScript };
 
   const extension = fakePi();
@@ -480,6 +495,79 @@ try {
   assert.match(guidelines, /pi_reload.*pi_respawn.*continuationPrompt.*never.*deliverAs/is);
   assert.ok(dispatcher.parameters.properties.operation.description.includes('runtime_ensure'));
   assert.match(dispatcher.parameters.properties.options.description, /waitForExit/);
+  assert.equal(typeof dispatcher.renderCall, 'function', 'dispatcher must provide a native call renderer');
+  assert.equal(typeof dispatcher.renderResult, 'function', 'dispatcher must provide a native result renderer');
+
+  const plainTheme = {
+    fg(_color, text) { return text; },
+    bold(text) { return text; },
+    italic(text) { return `_${text}_`; },
+  };
+  assert.deepEqual(Object.keys(OPERATION_DESCRIPTORS).sort(), [...ZMUX_OPERATIONS].sort(), 'every dispatcher operation must have a renderer descriptor');
+  for (const operation of ZMUX_OPERATIONS) {
+    const rendered = formatZmuxCall({ operation }, false, plainTheme);
+    assert.match(rendered, new RegExp(OPERATION_DESCRIPTORS[operation].verb.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${operation} must render its operation verb`);
+  }
+
+  const typedText = 'Review the current output in full before restarting anything.';
+  const typeRenderArgs = { operation: 'type_text', target: 'pi-peer', options: { session: 'main', text: typedText, waitForTurnState: 'ready', focus: false } };
+  const typeCall = formatZmuxCall(typeRenderArgs, false, plainTheme);
+  assert.match(typeCall, /^┫ 󱂬 zmux ┣  󰅐 type text/, 'every call heading must carry the top-level zmux identity chip');
+  assert.match(typeCall, / main\n└─ 󰓩 pi-peer/, 'tab destination must render as a tree');
+  assert.ok(typeCall.includes(`_${typedText}_`), 'typed text must render in italics and in full');
+  assert.doesNotMatch(typeCall, new RegExp(`"${typedText}"`), 'typed text must not be quoted');
+  assert.match(typeCall, /wait for ready · focus unchanged/);
+
+  const hugeText = Array.from({ length: 22 }, (_, index) => `line ${index} ${'x'.repeat(70)}`).join('\n');
+  const hugeArgs = { operation: 'peer_handoff', target: 'pi-peer', options: { session: 'main', text: hugeText } };
+  const hugeCollapsed = formatZmuxCall(hugeArgs, false, plainTheme);
+  assert.doesNotMatch(hugeCollapsed, new RegExp(`_${hugeText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_`), 'exceptionally large text may collapse');
+  assert.match(hugeCollapsed, /characters · 22 lines · Ctrl\+O to show all/);
+  assert.ok(formatZmuxCall(hugeArgs, true, plainTheme).includes(`_${hugeText}_`), 'expanded rendering must restore the full payload');
+
+  const secret = 'token=do-not-render';
+  const secretCall = formatZmuxCall({ operation: 'pane_type', target: '%272', options: { text: secret, sensitive: true } }, true, plainTheme);
+  assert.match(secretCall, /sensitive input redacted/);
+  assert.doesNotMatch(secretCall, /do-not-render/);
+  assert.doesNotMatch(secretCall, /%272/, 'collapsed call UI must not expose raw pane ids');
+  const secretDisplay = buildDisplayMetadata({ operation: 'pane_type', target: '%272', options: { text: secret, sensitive: true } }, '/repo', {}, { args: ['tmux-type', '%272', secret], exitCode: 0, output: 'typed' });
+  const secretExpanded = formatZmuxResult({ content: [{ type: 'text', text: 'typed' }], details: { display: secretDisplay } }, { operation: 'pane_type', target: '%272', options: { text: secret, sensitive: true } }, { expanded: true, isPartial: false }, false, plainTheme);
+  assert.doesNotMatch(secretExpanded, /do-not-render/, 'expanded metadata must redact sensitive argv');
+
+  const paneParams = { operation: 'pane_resize', target: '%272', options: { size: '40%', axis: 'height' } };
+  const paneDisplay = buildDisplayMetadata(paneParams, '/repo', { axis: 'height' }, { args: ['pane', 'resize', '%272', '--height', '40%'], exitCode: 0, output: '{"status":"done"}' });
+  const paneResult = { content: [{ type: 'text', text: '{"status":"done"}' }], details: { display: paneDisplay } };
+  const paneCollapsed = formatZmuxResult(paneResult, paneParams, { expanded: false, isPartial: false }, false, plainTheme);
+  assert.match(paneCollapsed, /^┫ 󱂬 zmux ┣  ✓ resize pane done/, 'every result heading must carry the top-level zmux identity chip');
+  assert.match(paneCollapsed, /󰏤 pane/);
+  assert.doesNotMatch(paneCollapsed, /%272|\{"status"/, 'collapsed results must hide raw ids and JSON');
+  const paneExpanded = formatZmuxResult(paneResult, paneParams, { expanded: true, isPartial: false }, false, plainTheme);
+  assert.match(paneExpanded, /pane\s+%272/);
+  assert.match(paneExpanded, /argv\s+pane resize %272 --height 40%/);
+
+  const tabsParams = { operation: 'tabs', options: { session: 'main' } };
+  const tabsResult = { content: [{ type: 'text', text: '1: pi ready\n2: api running' }], details: { display: buildDisplayMetadata(tabsParams, '/repo', {}, { output: '1: pi ready\n2: api running' }) } };
+  const tabsRendered = formatZmuxResult(tabsResult, tabsParams, { expanded: false, isPartial: false }, false, plainTheme);
+  assert.match(tabsRendered, / main\n├─ 󰓩 1: pi ready\n└─ 󰓩 2: api running/, 'tab lists must extend the destination tree');
+
+  const renderContext = {
+    args: typeRenderArgs,
+    lastComponent: undefined,
+    expanded: false,
+    state: {},
+    toolCallId: 'render-smoke',
+    invalidate() {},
+    cwd: '/repo',
+    executionStarted: false,
+    argsComplete: true,
+    isPartial: false,
+    showImages: false,
+    isError: false,
+  };
+  const narrowCall = dispatcher.renderCall(typeRenderArgs, plainTheme, renderContext);
+  for (const line of narrowCall.render(24)) {
+    assert.ok(visibleWidth(line) <= 24, `narrow renderer overflowed: ${JSON.stringify(line)}`);
+  }
 
   assert.equal(
     extension.registeredHandlers.filter((handler) => handler.event === 'before_agent_start').length,

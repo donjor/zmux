@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { Type } from "typebox";
@@ -6,6 +7,13 @@ import { loadConfig, mergeRuntimeConfig, type RuntimeConfig } from "./config.js"
 import { runTmux, runZmux, zmuxBin } from "./exec.js";
 import { interactiveType } from "./interactive.js";
 import { isZmuxOperation, ZMUX_OPERATIONS, type ZmuxOperation } from "./operations.js";
+import {
+  formatZmuxCall,
+  formatZmuxResult,
+  withDisplayMetadata,
+  type RenderResult as ZmuxRenderResult,
+  type ZmuxParams,
+} from "./rendering.js";
 import { rejectHeadlessAgentPrintMode, shouldWaitForExit } from "./safety.js";
 import { resizePane } from "./zmux/panes.js";
 import { zmuxRunSafetyWarnings } from "./zmux/sessions.js";
@@ -14,14 +22,6 @@ import { schedulePiReload, schedulePiRespawn } from "./zmux/pi-lifecycle.js";
 export { ZMUX_OPERATIONS } from "./operations.js";
 
 type Operation = ZmuxOperation;
-
-type ZmuxParams = {
-  operation: string;
-  target?: string;
-  command?: string;
-  cwd?: string;
-  options?: Record<string, unknown>;
-};
 
 type CallbackRecord = {
   id: string;
@@ -661,11 +661,21 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       const params = runtime?.params ?? inputParams;
       const options = params.options ?? {};
       if (params.operation === "runtime_ensure" && !params.command) {
-        return content(`ERROR: runtime ${runtime?.details.runtimeName ?? params.target ?? "unknown"} has no command. Pass command or add it to trusted .pi/zmux.json / .config/pi-zmux.json.`, runtime?.details);
+        return withDisplayMetadata(
+          content(`ERROR: runtime ${runtime?.details.runtimeName ?? params.target ?? "unknown"} has no command. Pass command or add it to trusted .pi/zmux.json / .config/pi-zmux.json.`, { ...runtime?.details, failed: true }),
+          params,
+          cwdFor(ctx.cwd, params),
+        );
       }
       if (params.command) {
         const headlessError = rejectHeadlessAgentPrintMode(params.command);
-        if (headlessError) return content(headlessError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" });
+        if (headlessError) {
+          return withDisplayMetadata(
+            content(headlessError, { command: params.command, failed: true, failureKind: "headless_agent_print_mode" }),
+            params,
+            cwdFor(ctx.cwd, params),
+          );
+        }
       }
       if (params.operation === "interactive_type") {
         const tab = params.target || "admin";
@@ -686,10 +696,10 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
           focus: optBool(options, "focus"),
           session: optString(options, "session"),
         });
-        return content(result.text, result.details);
+        return withDisplayMetadata(content(result.text, result.details), params, cwdFor(ctx.cwd, params), { output: result.text });
       }
       const special = await executeSpecial(pi, params, ctx.cwd, signal);
-      if (special) return special;
+      if (special) return withDisplayMetadata(special, params, cwdFor(ctx.cwd, params), { output: special.content.map((item) => item.text).join("\n") });
       const cwd = cwdFor(ctx.cwd, params);
       const args = buildArgs(params);
       const runSafety = params.operation === "run"
@@ -728,7 +738,17 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
           details.readinessBasis = "fresh-watch";
         }
       }
-      return content(text, details);
+      return withDisplayMetadata(content(text, details), params, cwd, { args, exitCode: result.code, output: text });
+    },
+    renderCall(args, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      text.setText(formatZmuxCall(args as ZmuxParams, context.expanded, theme));
+      return text;
+    },
+    renderResult(result, options, theme, context) {
+      const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
+      text.setText(formatZmuxResult(result as ZmuxRenderResult, context.args as ZmuxParams, options, context.isError, theme));
+      return text;
     },
   });
 
