@@ -1,5 +1,5 @@
-import type { AgentToolUpdateCallback, ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import type { AgentToolUpdateCallback, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { resolve } from "node:path";
 import { Type } from "typebox";
 import { loadConfig, mergeRuntimeConfig, type RuntimeConfig } from "./config.js";
@@ -42,7 +42,7 @@ const paramsSchema = Type.Object(
     cwd: Type.Optional(Type.String({ description: "Working directory for the zmux CLI process; defaults to Pi cwd." })),
     options: Type.Optional(
       Type.Record(Type.String(), Type.Any(), {
-        description: "Operation-specific options: tab/session, lines, waitFor/readiness, waitForExit, idleSeconds, timeoutSeconds, focus, state/action, direction/size, keys/text, destination/workspace, restart, deliverAs/triggerTurn, continuationPrompt/retryAttempts, rawTarget.",
+        description: "Operation-specific options: tab/session, lines, waitFor/readiness, waitForExit/trackCompletion/completionTimeoutSeconds, idleSeconds, timeoutSeconds, focus, state/action, direction/size, keys/text, destination/workspace, restart, deliverAs/triggerTurn, continuationPrompt/retryAttempts, rawTarget.",
       }),
     ),
   },
@@ -98,6 +98,36 @@ function requireCommand(params: ZmuxParams): string {
   return params.command;
 }
 
+function runTabName(params: ZmuxParams): string {
+  const configured = optString(params.options ?? {}, "tab") ?? params.target;
+  if (configured?.trim()) return configured.trim();
+  return requireCommand(params).trim().split(/\s+/u)[0] || "task";
+}
+
+type CommandLifecycleBaseline = { exists?: boolean; cmdSeq?: number; unavailable?: string };
+
+async function commandLifecycleBaseline(params: ZmuxParams, cwd: string, signal?: AbortSignal): Promise<CommandLifecycleBaseline> {
+  const args = ["tab", "status", runTabName(params), "--json"];
+  pushSession(args, optString(params.options ?? {}, "session"));
+  try {
+    const result = await runZmux(args, { cwd, signal, timeoutMs: 5_000 });
+    if (result.timedOut) return { unavailable: "status_timeout" };
+    if (result.code !== 0) {
+      const error = [result.stdout, result.stderr].join("\n");
+      return /(?:no tab|not found)/iu.test(error) ? { exists: false } : { unavailable: "status_failed" };
+    }
+    if (!result.stdout.trim()) return { unavailable: "status_empty" };
+    const parsed = JSON.parse(result.stdout) as Record<string, unknown>;
+    const status = parsed.status && typeof parsed.status === "object" ? parsed.status as Record<string, unknown> : parsed;
+    const rawSeq = status.cmdSeq;
+    const cmdSeq = typeof rawSeq === "number" ? rawSeq : typeof rawSeq === "string" ? Number(rawSeq) : undefined;
+    if (cmdSeq === undefined || !Number.isFinite(cmdSeq)) return { unavailable: "cmd_seq_missing" };
+    return { exists: true, cmdSeq };
+  } catch {
+    return { unavailable: "status_invalid" };
+  }
+}
+
 function pushOpt(args: string[], flag: string, value: string | number | undefined): void {
   if (value !== undefined && value !== "") args.push(flag, String(value));
 }
@@ -149,11 +179,15 @@ function buildArgs(params: ZmuxParams): string[] {
       const detach = optBool(options, "detach");
       const waitForExit = optBool(options, "waitForExit");
       const focus = optBool(options, "focus");
+      const trackCompletion = optBool(options, "trackCompletion");
+      // Pi-only completion tracking does not emit a CLI flag, but still validates its option here.
+      optNumber(options, "completionTimeoutSeconds");
       const state = optString(options, "state") ?? optString(options, "action");
       if (state !== undefined) throw new Error("run lifecycle is automatic; use tab_state for explicit lifecycle mutation");
       if (focus === true) throw new Error("run does not accept options.focus=true; omit it for normal creation or call tab_focus explicitly");
       if (detach === true && waitForExit === true) throw new Error("options.detach=true and options.waitForExit=true are contradictory for run");
       if (detach === false && waitForExit === false) throw new Error("options.detach=false and options.waitForExit=false are contradictory for run");
+      if (trackCompletion !== undefined && detach !== true && waitForExit !== false) throw new Error("options.trackCompletion requires a detached run");
 
       const args = ["run", "--command", requireCommand(params)];
       pushOpt(args, "-n", optString(options, "tab") ?? target);
@@ -493,22 +527,52 @@ type ForegroundProgress = {
   stop(): void;
 };
 
-let callbackStatusSetter: ((text: string | undefined) => void) | undefined;
-const sharedCallbackActivitySink: CallbackActivitySink = {
-  set(text) {
-    callbackStatusSetter?.(text);
-  },
-};
+const CALLBACK_ACTIVITY_WIDGET_KEY = "pi-zmux-waits";
+let callbackActivityPresenter: CallbackActivitySink | undefined;
 
-function callbackActivitySinkFor(mode: "tui" | "rpc" | "json" | "print", setStatus: (text: string | undefined) => void): CallbackActivitySink | undefined {
-  if (mode !== "tui") return undefined;
-  callbackStatusSetter = setStatus;
-  return sharedCallbackActivitySink;
+export function installZmuxDispatcherActivity(ctx: Pick<ExtensionContext, "mode" | "ui">): void {
+  try {
+    callbackActivityPresenter?.set(undefined);
+  } catch {
+    // A replaced TUI may leave a stale presenter; installation must still recover.
+  }
+  callbackActivityPresenter = undefined;
+  if (ctx.mode !== "tui") return;
+
+  let currentText: string | undefined;
+  let requestRender: (() => void) | undefined;
+  const presenter: CallbackActivitySink = {
+    set(text) {
+      currentText = text;
+      requestRender?.();
+    },
+  };
+  callbackActivityPresenter = presenter;
+  ctx.ui.setWidget(CALLBACK_ACTIVITY_WIDGET_KEY, (tui, theme) => {
+    requestRender = () => tui.requestRender();
+    return {
+      render(width: number) {
+        if (!currentText) return [];
+        return [truncateToWidth(theme.fg("warning", currentText), Math.max(1, width))];
+      },
+      invalidate() {},
+      dispose() {
+        requestRender = undefined;
+      },
+    };
+  }, { placement: "aboveEditor" });
+}
+
+function callbackActivitySinkFor(mode: "tui" | "rpc" | "json" | "print"): CallbackActivitySink | undefined {
+  return mode === "tui" ? callbackActivityPresenter : undefined;
 }
 
 export function clearZmuxDispatcherActivity(): void {
-  callbackStatusSetter?.(undefined);
-  callbackStatusSetter = undefined;
+  try {
+    callbackActivityPresenter?.set(undefined);
+  } catch {
+    // Session teardown must not fail because an old TUI presenter was disposed.
+  }
 }
 
 function initialProgressPhase(params: ZmuxParams): string {
@@ -603,6 +667,8 @@ async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: 
       lines: optNumber(options, "lines"),
       waitFor: optString(options, "waitFor"),
       idleSeconds: optNumber(options, "idleSeconds"),
+      commandState: optString(options, "commandState"),
+      allowStale: optBool(options, "allowStale"),
       timeoutSeconds: optNumber(options, "timeoutSeconds"),
       message: optString(options, "message"),
       deliverAs: optDeliverAs(options),
@@ -694,7 +760,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
     promptGuidelines: [
       "Use zmux instead of bash/raw tmux for runtimes, visible tabs, panes, sessions, waits, peers, and Pi lifecycle; never background long-running commands.",
       "Map: dev server -> runtime_ensure; existing output -> runtime_logs; visible one-shot -> run; sidecar -> pane_open; named tab cleanup -> tab_kill.",
-      "For run, options.focus=false preserves the current tab and options.waitForExit=false detaches and returns immediately. For later notification, register callback_watch after the detached run; shell hooks own lifecycle state automatically.",
+      "For run, options.focus=false preserves the current tab. Every detached run automatically tracks command lifecycle and reports completion. Set options.trackCompletion=false only for fire-and-forget commands expected never to return; use options.completionTimeoutSeconds for finite work expected to exceed the one-day default.",
       "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text. It marks the peer running, waits for fresh turn:ready lifecycle, and returns through a follow-up notification by default. Use options.waitFor only as an output-regex fallback for an uninstrumented peer; never send type_text then callback_watch.",
       "For sudo, ssh, passwords, REPLs, database shells, and other manual input, use interactive_type and never generic run; target admin (or the named shared tab), keep focus false by default, and set options.waitForExit for bounded privileged commands.",
       "For runtime_ensure, set target to the runtime/tab name, command to the dev/watch command, cwd to the project/fixture directory, and options.waitFor/readiness to ready|localhost when the user asks to wait for readiness.",
@@ -713,7 +779,8 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       const options = params.options ?? {};
       const cwd = cwdFor(ctx.cwd, params);
       const progress = createForegroundProgress(params, cwd, ctx.mode, onUpdate);
-      const activitySink = callbackActivitySinkFor(ctx.mode, (text) => ctx.ui.setStatus("pi-zmux-waits", text));
+      if (ctx.mode === "tui" && !callbackActivityPresenter) installZmuxDispatcherActivity(ctx);
+      const activitySink = callbackActivitySinkFor(ctx.mode);
       try {
       if (params.operation === "runtime_ensure" && !params.command) {
         return withDisplayMetadata(
@@ -754,6 +821,10 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       const runSafety = params.operation === "run"
         ? zmuxRunSafetyWarnings({ command: requireCommand(params), cwd, tab: params.target, session: optString(options, "session") })
         : undefined;
+      const trackDetachedRunCompletion = params.operation === "run"
+        && (optBool(options, "waitForExit") === false || optBool(options, "detach") === true)
+        && optBool(options, "trackCompletion") !== false;
+      const runBaseline = trackDetachedRunCompletion ? await commandLifecycleBaseline(params, cwd, signal) : undefined;
       let restartText = "";
       let restartStopped: boolean | undefined;
       if (params.operation === "runtime_ensure" && optBool(options, "restart")) {
@@ -779,6 +850,37 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       }
       const details: Record<string, unknown> = { operation: params.operation, args, cwd, exitCode: result.code, ...runtime?.details, ...runSafety?.details, ...waitSummary?.details };
       if (restartStopped !== undefined) details.restartStopped = restartStopped;
+      if (trackDetachedRunCompletion) {
+        const tab = runTabName(params);
+        try {
+          const callback = startWatchCallback(pi, {
+            tab,
+            cwd,
+            session: optString(options, "session"),
+            lines: optNumber(options, "lines"),
+            commandState: "done",
+            allowStale: runBaseline?.exists === false,
+            freshAfter: runBaseline?.cmdSeq,
+            timeoutSeconds: optNumber(options, "completionTimeoutSeconds") ?? 86_400,
+            message: "automatic run completion",
+            deliverAs: "followUp",
+            triggerTurn: true,
+            activitySink,
+            continueOnRunningTimeout: true,
+          });
+          text = [text, callback.text].filter(Boolean).join("\n");
+          details.status = "scheduled";
+          details.completionTracking = "automatic";
+          details.completionBaseline = runBaseline;
+          details.callback = callback.details;
+        } catch (error) {
+          const warning = `completion tracking unavailable: ${error instanceof Error ? error.message : String(error)}`;
+          text = [text, warning].filter(Boolean).join("\n");
+          details.status = "attention";
+          details.completionTracking = "unavailable";
+          details.completionTrackingWarning = warning;
+        }
+      }
       if (params.operation === "runtime_ensure") {
         const readiness = optString(options, "readiness") ?? optString(options, "waitFor");
         if (readiness && outputMatches(readiness, result.stdout, result.stderr)) {

@@ -22,11 +22,15 @@ export interface WatchCallbackParams {
 	waitFor?: string;
 	idleSeconds?: number;
 	turnState?: string;
+	commandState?: string;
+	allowStale?: boolean;
+	freshAfter?: number;
 	timeoutSeconds?: number;
 	message?: string;
 	deliverAs?: CallbackDeliverAs;
 	triggerTurn?: boolean;
 	activitySink?: CallbackActivitySink;
+	continueOnRunningTimeout?: boolean;
 }
 
 export interface PeerHandoffParams {
@@ -61,6 +65,8 @@ interface CallbackHandle {
 	condition: string;
 	deadlineAt: number;
 	activitySink?: CallbackActivitySink;
+	continueOnRunningTimeout: boolean;
+	attempts: number;
 }
 
 interface CallbackCompletion {
@@ -94,8 +100,9 @@ let activityInterval: ReturnType<typeof setInterval> | undefined;
 const renderedActivitySinks = new Set<CallbackActivitySink>();
 const activityFrames = ["◐", "◓", "◑", "◒"];
 
-function callbackCondition(params: Pick<WatchCallbackParams, "waitFor" | "idleSeconds" | "turnState">): string {
-	if (params.turnState) return `waiting for ${params.turnState}`;
+function callbackCondition(params: Pick<WatchCallbackParams, "waitFor" | "idleSeconds" | "turnState" | "commandState">): string {
+	if (params.turnState) return `waiting for turn ${params.turnState}`;
+	if (params.commandState) return `waiting for command ${params.commandState}`;
 	if (params.waitFor) return `waiting for /${params.waitFor}/`;
 	return `waiting for ${params.idleSeconds}s idle`;
 }
@@ -103,7 +110,9 @@ function callbackCondition(params: Pick<WatchCallbackParams, "waitFor" | "idleSe
 function formatRemaining(deadlineAt: number): string {
 	const seconds = Math.max(0, Math.ceil((deadlineAt - Date.now()) / 1000));
 	if (seconds < 60) return `${seconds}s`;
-	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+	return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function setCallbackActivity(sink: CallbackActivitySink, text: string | undefined): boolean {
@@ -155,11 +164,12 @@ function capBuffer(value: string, max = 24_000): string {
 	return value.slice(value.length - max);
 }
 
-function callbackOutcomeFields(stdout: string): { basis?: string; failureKind?: string; alreadyInTail?: boolean } {
+function callbackOutcomeFields(stdout: string): { basis?: string; state?: string; failureKind?: string; alreadyInTail?: boolean } {
 	try {
-		const parsed = JSON.parse(stdout) as { outcome?: { basis?: unknown; failureKind?: unknown; alreadyInTail?: unknown } };
+		const parsed = JSON.parse(stdout) as { outcome?: { basis?: unknown; state?: unknown; failureKind?: unknown; alreadyInTail?: unknown } };
 		return {
 			basis: typeof parsed.outcome?.basis === "string" ? parsed.outcome.basis : undefined,
+			state: typeof parsed.outcome?.state === "string" ? parsed.outcome.state : undefined,
 			failureKind: typeof parsed.outcome?.failureKind === "string" ? parsed.outcome.failureKind : undefined,
 			alreadyInTail: typeof parsed.outcome?.alreadyInTail === "boolean" ? parsed.outcome.alreadyInTail : undefined,
 		};
@@ -168,7 +178,7 @@ function callbackOutcomeFields(stdout: string): { basis?: string; failureKind?: 
 	}
 }
 
-export function buildCallbackWatchArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; turnState?: string; timeoutSeconds?: number }): string[] {
+export function buildCallbackWatchArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; turnState?: string; commandState?: string; timeoutSeconds?: number; allowStale?: boolean; freshAfter?: number }): string[] {
 	return buildWaitArgs({
 		tab: params.tab,
 		session: params.session,
@@ -176,13 +186,21 @@ export function buildCallbackWatchArgs(params: { tab: string; session?: string; 
 		waitFor: params.waitFor,
 		idleSeconds: params.idleSeconds,
 		turnState: params.turnState,
+		commandState: params.commandState,
 		timeoutSeconds: params.timeoutSeconds ?? 300,
+		allowStale: params.allowStale,
+		freshAfter: params.freshAfter,
 	});
 }
 
 export function formatCallbackMessage(done: CallbackCompletion): string {
 	const ok = done.exitCode === 0;
-	const heading = ok ? `zmux callback ${done.id} completed for ${done.tab}` : `zmux callback ${done.id} finished unproven for ${done.tab}`;
+	const concreteFailure = done.failureKind === "cmd_failed" || done.failureKind === "cmd_exit" || done.failureKind === "command_failed" || done.failureKind === "command_exit" || done.failureKind === "turn_failed";
+	const heading = ok
+		? `zmux callback ${done.id} completed for ${done.tab}`
+		: concreteFailure
+			? `zmux callback ${done.id} failed for ${done.tab}`
+			: `zmux callback ${done.id} finished unproven for ${done.tab}`;
 	const output = trimOutput([done.stdout, done.stderr ? `stderr:\n${done.stderr}` : ""].filter(Boolean).join("\n"));
 	return trimOutput([
 		heading,
@@ -239,6 +257,8 @@ export function listCallbacks(): Array<Record<string, unknown>> {
 		triggerTurn: handle.triggerTurn,
 		condition: handle.condition,
 		deadlineAt: new Date(handle.deadlineAt).toISOString(),
+		continueOnRunningTimeout: handle.continueOnRunningTimeout,
+		attempts: handle.attempts,
 	}));
 }
 
@@ -287,9 +307,9 @@ export function clearCallbacks(): void {
 }
 
 export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams, kind: "watch" | "peer_handoff" = "watch"): { text: string; details: Record<string, unknown> } {
-	const conditions = [params.waitFor !== undefined, params.idleSeconds !== undefined, params.turnState !== undefined].filter(Boolean).length;
+	const conditions = [params.waitFor !== undefined, params.idleSeconds !== undefined, params.turnState !== undefined, params.commandState !== undefined].filter(Boolean).length;
 	if (conditions !== 1) {
-		throw new Error("callback watch requires exactly one of waitFor, idleSeconds, or turnState");
+		throw new Error("callback watch requires exactly one of waitFor, idleSeconds, turnState, or commandState");
 	}
 	const id = callbackId(kind === "peer_handoff" ? "peer-handoff" : "callback", params.id);
 	if (callbacks.has(id)) throw new Error(`callback id already exists: ${id}`);
@@ -303,11 +323,12 @@ export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams
 	const timeoutSeconds = params.timeoutSeconds ?? 300;
 	const condition = callbackCondition(params);
 	const deadlineAt = Date.now() + timeoutSeconds * 1000;
-	const proc = spawn(zmuxBin(), args, {
+	const spawnWait = () => spawn(zmuxBin(), args, {
 		cwd: params.cwd,
 		env: process.env,
 		stdio: ["ignore", "pipe", "pipe"],
 	});
+	const proc = spawnWait();
 	const handle: CallbackHandle = {
 		id,
 		kind,
@@ -322,58 +343,79 @@ export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams
 		condition,
 		deadlineAt,
 		activitySink: params.activitySink,
+		continueOnRunningTimeout: params.continueOnRunningTimeout ?? false,
+		attempts: 1,
 	};
 	callbacks.set(id, handle);
 	refreshCallbackActivity();
-	let stdout = "";
-	let stderr = "";
-	proc.stdout.on("data", (chunk) => {
-		stdout = capBuffer(stdout + String(chunk));
-	});
-	proc.stderr.on("data", (chunk) => {
-		stderr = capBuffer(stderr + String(chunk));
-	});
-	proc.on("close", (exitCode, signal) => {
-		if (!callbacks.delete(id)) return;
-		refreshCallbackActivity();
-		const outcome = callbackOutcomeFields(trimOutput(stdout));
-		sendCallbackMessage(pi, {
-			id,
-			kind,
-			tab: params.tab,
-			session: params.session,
-			startedAt,
-			finishedAt: new Date().toISOString(),
-			exitCode,
-			signal,
-			stdout: trimOutput(stdout),
-			stderr: trimOutput(stderr),
-			message: params.message,
-			basis: outcome.basis,
-			failureKind: outcome.failureKind,
-			alreadyInTail: outcome.alreadyInTail,
-		}, deliverAs, triggerTurn);
-	});
-	proc.on("error", (error) => {
-		if (!callbacks.delete(id)) return;
-		refreshCallbackActivity();
-		sendCallbackMessage(pi, {
-			id,
-			kind,
-			tab: params.tab,
-			session: params.session,
-			startedAt,
-			finishedAt: new Date().toISOString(),
-			exitCode: null,
-			signal: null,
-			stdout,
-			stderr: error instanceof Error ? error.message : String(error),
-			message: params.message,
-		}, deliverAs, triggerTurn);
-	});
+	const attachWait = (child: ChildProcess): void => {
+		let stdout = "";
+		let stderr = "";
+		child.stdout?.on("data", (chunk) => {
+			stdout = capBuffer(stdout + String(chunk));
+		});
+		child.stderr?.on("data", (chunk) => {
+			stderr = capBuffer(stderr + String(chunk));
+		});
+		child.on("close", (exitCode, signal) => {
+			if (callbacks.get(id) !== handle) return;
+			const outcome = callbackOutcomeFields(trimOutput(stdout));
+			const timedOutWhileRunning = outcome.state === "running" && outcome.failureKind?.endsWith("_unproven") === true;
+			if (handle.continueOnRunningTimeout && timedOutWhileRunning) {
+				try {
+					const next = spawnWait();
+					handle.proc = next;
+					handle.attempts += 1;
+					handle.deadlineAt = Date.now() + timeoutSeconds * 1000;
+					refreshCallbackActivity();
+					attachWait(next);
+					return;
+				} catch (error) {
+					stderr = trimOutput([stderr, `failed to continue callback: ${error instanceof Error ? error.message : String(error)}`].filter(Boolean).join("\n"));
+				}
+			}
+			callbacks.delete(id);
+			refreshCallbackActivity();
+			sendCallbackMessage(pi, {
+				id,
+				kind,
+				tab: params.tab,
+				session: params.session,
+				startedAt,
+				finishedAt: new Date().toISOString(),
+				exitCode,
+				signal,
+				stdout: trimOutput(stdout),
+				stderr: trimOutput(stderr),
+				message: params.message,
+				basis: outcome.basis,
+				failureKind: outcome.failureKind,
+				alreadyInTail: outcome.alreadyInTail,
+			}, deliverAs, triggerTurn);
+		});
+		child.on("error", (error) => {
+			if (callbacks.get(id) !== handle) return;
+			callbacks.delete(id);
+			refreshCallbackActivity();
+			sendCallbackMessage(pi, {
+				id,
+				kind,
+				tab: params.tab,
+				session: params.session,
+				startedAt,
+				finishedAt: new Date().toISOString(),
+				exitCode: null,
+				signal: null,
+				stdout,
+				stderr: error instanceof Error ? error.message : String(error),
+				message: params.message,
+			}, deliverAs, triggerTurn);
+		});
+	};
+	attachWait(proc);
 	return {
 		text: `scheduled zmux ${kind === "peer_handoff" ? "peer handoff" : "callback"} ${id} for ${params.tab}`,
-		details: { id, kind, tab: params.tab, session: params.session, args, startedAt, deadlineAt: new Date(deadlineAt).toISOString(), condition, deliverAs, triggerTurn, message: params.message },
+		details: { id, kind, tab: params.tab, session: params.session, args, startedAt, deadlineAt: new Date(deadlineAt).toISOString(), condition, deliverAs, triggerTurn, message: params.message, continueOnRunningTimeout: handle.continueOnRunningTimeout },
 	};
 }
 
@@ -393,6 +435,7 @@ export async function startPeerHandoff(pi: ExtensionAPI, params: PeerHandoffPara
 		deliverAs: params.deliverAs,
 		triggerTurn: params.triggerTurn,
 		activitySink: params.activitySink,
+		continueOnRunningTimeout: useLifecycle,
 	};
 	const markPeerRunning = params.markPeerRunning ?? true;
 	const callback = startWatchCallback(pi, callbackParams, "peer_handoff");

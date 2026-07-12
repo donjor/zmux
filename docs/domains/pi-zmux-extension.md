@@ -154,12 +154,16 @@ handlers add no prompt tokens by themselves.
 The dispatcher preserves operation-specific safety:
 
 - persistent processes use `runtime_ensure`;
-- `run` maps `focus:false` to focus-preserving creation and `waitForExit:false`
-  to detached execution, rejects contradictory combinations, and leaves lifecycle
-  state to the shell hooks;
+- `run` maps `focus:false` to focus-preserving creation; every detached run
+  automatically arms a shell-lifecycle completion callback and later reports its
+  evidence, while `trackCompletion:false` is reserved for work expected never to
+  return; `completionTimeoutSeconds` independently controls the one-day wait
+  window, which renews silently while the command is still running;
 - sudo/manual input uses `interactive_type`;
 - atomic `peer_handoff` arms a fresh `turn:ready` callback, marks the peer
-  running, and only then submits before the default follow-up continuation;
+  running, and only then submits before the default follow-up continuation; if
+  its wait window expires while the peer is still `running`, Pi-zmux silently
+  arms the next lifecycle wait instead of emitting a terminal unproven result;
 - output-regex and idle callbacks are explicit fallbacks;
 - literal pane keys remain separate from submit-with-Enter pane typing;
 - focus-moving options stay false unless the user explicitly requests focus.
@@ -170,9 +174,15 @@ phase/countdown feedback; the completed card presents its operation,
 destination, input, options, and evidence once. Expanded views retain structured
 operation, argv, cwd, lifecycle, and raw evidence details.
 
-Scheduled background callbacks publish one aggregate footer status until
-completion, cancellation, session replacement, or shutdown, then deliver through a compact native
-`pi-zmux-callback` renderer. Successful wait and callback completions summarize
+Scheduled background callbacks—including core-owned detached-run completion
+tracking—publish one aggregate above-editor widget line immediately above tasks
+without using footer status or periodic model messages. The component occupies
+no rows while inactive and remains visible across running-state wait renewals,
+then clears on completion, cancellation, session replacement, or shutdown.
+Terminal outcomes deliver through a compact native `pi-zmux-callback` renderer. Models do not need to issue a second `callback_watch`
+for ordinary detached runs. New tabs tolerate completion before callback spawn;
+reused tabs capture the pre-run `cmdSeq` and require a newer lifecycle generation,
+so an old `done` state cannot satisfy the new run. Successful wait and callback completions summarize
 their match basis and freshness instead of returning captured output tails to
 the model; expanded wait/callback views retain raw diagnostics for human
 inspection.
@@ -227,7 +237,7 @@ name without rediscovering commands or starting duplicate processes.
 
 - `operation=type_text` delegates to first-class `zmux type --json` with peer-running and turn-wait options.
 - `operation=peer_handoff` arms `zmux wait --for turn:ready`, sets `running`,
-  then submits. The aggregate Pi footer keeps the scheduled wait visible after
+  then submits. The aggregate Pi activity widget keeps the scheduled wait visible after
   the tool returns. Completion clears it and uses `deliverAs: "followUp"` with
   `triggerTurn: true` unless explicitly changed.
 - Pi and Claude currently publish native turn-end lifecycle. Codex and Agy

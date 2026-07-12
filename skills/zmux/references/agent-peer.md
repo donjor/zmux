@@ -256,7 +256,9 @@ path. These are thin adapters over core `tab inspect`, `tab peer ensure`, and
 `type --wait-*`. For long peer turns where the host should continue after the
 peer answers, use dispatcher `peer_handoff`: it arms a fresh `turn:ready`
 lifecycle callback, marks the peer running, then types the prompt. The completion
-is delivered as a follow-up that triggers the host by default. Omit `options.waitFor`
+is delivered as a follow-up that triggers the host by default. If a lifecycle wait
+window expires while the peer still reports `running`, Pi-zmux silently replaces
+it and keeps the same visible activity alive; do not issue a second watcher. Omit `options.waitFor`
 for instrumented peers; output-regex or idle callbacks are explicit fallbacks for
 peers without usable lifecycle hooks. The live lifecycle matrix currently proves
 Pi and Claude native completion; Codex and Agy answer but remain `running`, so

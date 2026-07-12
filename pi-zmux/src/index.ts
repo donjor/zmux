@@ -4,7 +4,7 @@ import { classifyBash, hasExplicitBypass, shouldBlock } from "./classify.js";
 import { loadConfig } from "./config.js";
 import { shouldTriggerContinuation, takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
 import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
-import { clearZmuxDispatcherActivity, registerZmuxDispatcher } from "./dispatcher.js";
+import { clearZmuxDispatcherActivity, installZmuxDispatcherActivity, registerZmuxDispatcher } from "./dispatcher.js";
 import { registerGlyphLifecycle } from "./lifecycle.js";
 import { formatZmuxCallbackMessage } from "./rendering.js";
 import { clearCallbacks } from "./zmux/callbacks.js";
@@ -88,6 +88,7 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		clearCallbacks();
 		clearZmuxDispatcherActivity();
+		installZmuxDispatcherActivity(ctx);
 		const reloadContinuation = takeReloadContinuation(ctx.cwd);
 		if (reloadContinuation) {
 			const sent = sendContinuation(pi, "reload", reloadContinuation);

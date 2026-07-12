@@ -112,9 +112,9 @@ Pi exposes one canonical `zmux` tool. Select its `operation` instead of
 shelling out:
 
 - inspect/control: `current`, `tabs`, `sessions`, `panes`, `run`, `session_run`, `session_kill`;
-- `run` focus/wait: `options.focus=false` preserves the current tab; `options.waitForExit=false` detaches and returns immediately;
+- `run` focus/wait: `options.focus=false` preserves the current tab; every detached run returns immediately, shows aggregate completion activity above the tasks surface, and reports shell-lifecycle evidence automatically; set `options.trackCompletion=false` only when the command is expected never to return; `options.completionTimeoutSeconds` controls the independent one-day wait window, which renews silently while the command remains running;
 - persistent work: `runtime_ensure`, `runtime_logs`, `runtime_stop`;
-- peers/tabs: `peer_ensure`, `peer_handoff`, `type_text`, `tab_inspect`, `tab_status`, `tab_state`, `tab_peer`, `tab_place`, `tab_kill`;
+- peers/tabs: `peer_ensure`, `peer_handoff`, `type_text`, `tab_inspect`, `tab_status`, `tab_state`, `tab_peer`, `tab_place`, `tab_kill`; lifecycle `peer_handoff` waits renew silently when their window expires while the peer is still running, so do not add replacement watchers;
 - panes/input: `pane_open`, `pane_resize`, `pane_close`, `interactive_type`;
 - waits/evidence: `wait`, `callback_watch`, `log`, `snapshot`, `terminal_current`;
 - lifecycle: `pi_reload` after Pi extension/skill/prompt/theme changes, `zmux_reload` only for zmux config/key/theme changes, and `pi_respawn` only as a hard fallback.

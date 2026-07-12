@@ -218,11 +218,13 @@ function inferLifecycle(details: Record<string, unknown>, failed: boolean): Disp
     ? "failed"
     : details.ready === true || statusValue === "ready"
       ? "ready"
-      : statusValue === "running"
-        ? "running"
-        : statusValue === "attention"
-          ? "attention"
-          : "done";
+      : statusValue === "scheduled"
+        ? "scheduled"
+        : statusValue === "running"
+          ? "running"
+          : statusValue === "attention"
+            ? "attention"
+            : "done";
   return {
     status,
     phase: typeof details.phase === "string" ? details.phase : undefined,
@@ -330,6 +332,7 @@ const OPTION_LABELS: Record<string, (value: unknown) => string | undefined> = {
   labelTab: (value) => value === true ? "label tab" : undefined,
   ansi: (value) => value === true ? "ANSI" : undefined,
   waitForExit: (value) => typeof value === "boolean" ? (value ? "wait for exit" : "do not wait for exit") : undefined,
+  trackCompletion: (value) => typeof value === "boolean" ? (value ? "track completion" : "no completion tracking") : undefined,
   markPeerRunning: (value) => value === true ? "mark peer running" : undefined,
   deliverAs: (value) => typeof value === "string" ? `deliver ${value}` : undefined,
   triggerTurn: (value) => typeof value === "boolean" ? (value ? "trigger turn" : "no turn trigger") : undefined,
@@ -551,12 +554,16 @@ export function formatZmuxCallbackMessage(
   const started = typeof details.startedAt === "string" ? Date.parse(details.startedAt) : Number.NaN;
   const finished = typeof details.finishedAt === "string" ? Date.parse(details.finishedAt) : Number.NaN;
   const elapsed = Number.isFinite(started) && Number.isFinite(finished) ? Math.max(0, (finished - started) / 1000) : undefined;
-  const glyph = met ? "✓" : "!";
+  const failureKind = typeof details.failureKind === "string" ? details.failureKind : undefined;
+  const concreteFailure = failureKind === "cmd_failed" || failureKind === "cmd_exit" || failureKind === "command_failed" || failureKind === "command_exit" || failureKind === "turn_failed";
+  const glyph = met ? "✓" : concreteFailure ? "✗" : "!";
   const label = met
     ? callbackKind === "peer_handoff" ? `${tab} ready` : `${tab} callback matched`
-    : `${tab} completion unproven`;
+    : concreteFailure
+      ? `${tab} callback failed`
+      : `${tab} completion unproven`;
   const evidence = [basis, state, fresh, elapsed !== undefined ? `${formatDuration(elapsed)} elapsed` : undefined].filter(Boolean).join(" · ");
-  const blocks = [theme.fg(met ? "success" : "warning", theme.bold(`${glyph} ${label}`))];
+  const blocks = [theme.fg(met ? "success" : concreteFailure ? "error" : "warning", theme.bold(`${glyph} ${label}`))];
   if (evidence) blocks.push(theme.fg("toolOutput", evidence));
   if (expanded) {
     const rows: Array<[string, string | undefined]> = [

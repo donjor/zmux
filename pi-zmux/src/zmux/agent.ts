@@ -57,20 +57,24 @@ export function buildWatchArgs(params: { tab: string; session?: string; lines?: 
 	return withSession(args, params.session);
 }
 
-export function buildWaitArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; turnState?: string; timeoutSeconds?: number }): string[] {
-	const conditions = [params.waitFor !== undefined, params.idleSeconds !== undefined, params.turnState !== undefined].filter(Boolean).length;
+export function buildWaitArgs(params: { tab: string; session?: string; lines?: number; waitFor?: string; idleSeconds?: number; turnState?: string; commandState?: string; timeoutSeconds?: number; allowStale?: boolean; freshAfter?: number }): string[] {
+	const conditions = [params.waitFor !== undefined, params.idleSeconds !== undefined, params.turnState !== undefined, params.commandState !== undefined].filter(Boolean).length;
 	if (conditions !== 1) {
-		throw new Error("wait requires exactly one of waitFor, idleSeconds, or turnState");
+		throw new Error("wait requires exactly one of waitFor, idleSeconds, turnState, or commandState");
 	}
 	if (params.waitFor?.startsWith("output:")) {
 		throw new Error('waitFor is the output regex only; omit the "output:" prefix');
 	}
 	const condition = params.turnState
 		? `turn:${params.turnState}`
-		: params.waitFor
-			? `output:${params.waitFor}`
-			: `idle:${params.idleSeconds}`;
+		: params.commandState
+			? `cmd:${params.commandState}`
+			: params.waitFor
+				? `output:${params.waitFor}`
+				: `idle:${params.idleSeconds}`;
 	const args = ["wait", params.tab, "--for", condition, "-l", String(params.lines ?? 120), "-T", String(params.timeoutSeconds ?? 10), "--json"];
+	if (params.allowStale) args.push("--allow-stale");
+	if (params.freshAfter !== undefined) args.push("--fresh-after", String(params.freshAfter));
 	return withSession(args, params.session);
 }
 

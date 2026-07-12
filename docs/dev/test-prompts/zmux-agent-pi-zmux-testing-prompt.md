@@ -75,7 +75,7 @@ Required results:
 - `/zmux status` still returns the full human diagnostic snapshot;
 - completed tool boxes show one consolidated zmux card, while a deliberately
   delayed foreground wait updates in place with phase and remaining time;
-- scheduled callbacks show one aggregate footer status that clears on
+- scheduled callbacks show one aggregate above-tasks widget line that clears on
   completion, cancellation, session replacement, and shutdown.
 
 ## Source and guard checks
@@ -129,12 +129,12 @@ Set a unique `$RUN_ID`. Record every tool call and result.
 - Apply `tab_state` and `tab_peer`, then read both with `tab_status`/`tab_inspect`.
 - Start `callback_watch` for a future `worker-saw:callback-$RUN_ID` marker.
   Before sending the input, confirm the scheduled tool card settles while an
-  aggregate Pi-zmux footer remains visible and counts down. Then send the input
-  and confirm the footer clears and a compact top-level message with
+  aggregate Pi-zmux activity line remains visible above tasks and counts down.
+  Then send the input and confirm the widget clears and a compact top-level message with
   `customType: "pi-zmux-callback"` reports fresh evidence without leaking a
   callback handle.
 - Start and cancel one additional held callback; prove cancellation clears the
-  footer without delivering a completion message. Use `callback_list` and
+  widget without delivering a completion message. Use `callback_list` and
   `callback_cancel` for cleanup.
 
 ### 5. Real peer lifecycle matrix
@@ -153,17 +153,24 @@ Agy     Gemini 3.5 Flash (Low)
 - For each, use atomic `peer_handoff` without an output marker. Confirm it marks
   the peer running before submission, advances `turnSeq`, reaches fresh
   `turn:ready`, and delivers a follow-up that triggers the host after completion.
-  Do not sequence `type_text` then `callback_watch`.
+  On one instrumented peer, use a deliberately short timeout and a prompt that
+  remains active beyond it; confirm no terminal `unproven` message is delivered,
+  the above-tasks activity remains, and a replacement wait eventually reports
+  the real completion. Do not sequence `type_text` then `callback_watch`.
 - Prove each answer with `tab_inspect`. Output/idle-only completion is a lifecycle
   failure, not a pass. Mark only unavailable CLI/model/auth rows blocked.
 
 ### 6. Panes and evidence
 
-- Create a throwaway command tab with `run`, `options.focus:false`, and
-  `options.waitForExit:false`; register `callback_watch` for a future output
-  marker. Confirm `run` returns immediately, the current tab does not change,
-  the card reports both guarantees, and the callback later delivers fresh
-  completion evidence. Do not set `options.state`; shell hooks own lifecycle.
+- Create a throwaway finite command tab with `run`, `options.focus:false`, and
+  `options.waitForExit:false`. Do not issue a second `callback_watch`. Confirm
+  `run` returns immediately, the current tab does not change, the card remains
+  scheduled, an aggregate line above tasks tracks `command done`, and a follow-up
+  later delivers shell-lifecycle completion evidence before the widget clears.
+- Create one harmless command expected not to return, detach it with
+  `options.trackCompletion:false`, and confirm no automatic callback/widget is
+  armed; stop and clean it explicitly. Do not set `options.state`; shell hooks
+  own lifecycle.
 - Create a throwaway `side` tab with `run`, then use `tab_place` to join and
   restore/clean it without focus.
 - Exercise `pane_open`, `panes`, `pane_resize` with `options.axis: "auto"`, and
