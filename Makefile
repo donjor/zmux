@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS = -ldflags "-X main.version=$(VERSION)"
 
-.PHONY: build build-zzmux test test-race test-integration test-agent-surfaces vuln lint fmt hooks install install-zzmux clean keys-gen
+.PHONY: build build-zzmux gen-doctrine check-doctrine test test-race test-integration test-agent-surfaces vuln lint fmt hooks install install-zzmux clean keys-gen
 
 build:
 	go build $(LDFLAGS) -o zmux ./cmd/zmux/
@@ -14,6 +14,13 @@ build-zzmux:
 keys-gen:
 	go run ./cmd/zmux keys gen
 
+gen-doctrine:
+	node agent-doctrine/generate.mjs --write
+
+check-doctrine:
+	node --test agent-doctrine/generate.test.mjs
+	node agent-doctrine/generate.mjs --check
+
 test:
 	go test ./...
 
@@ -25,7 +32,7 @@ test-race:
 test-integration: build
 	go test -tags integration ./tests/...
 
-test-agent-surfaces:
+test-agent-surfaces: check-doctrine
 	go test ./internal/setup ./internal/cli ./internal/tabs
 	cd pi-zmux && npm run typecheck && npm test
 	./qa lint

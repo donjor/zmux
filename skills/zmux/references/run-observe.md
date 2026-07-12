@@ -1,5 +1,7 @@
 # Run & observe with zmux
 
+Shared outcomes live in `shared-doctrine.generated.md`; this reference owns their Claude CLI mechanics.
+
 Use this when you need concrete `zmux` verbs after the hot rules in `SKILL.md` decide that work belongs in a visible terminal.
 
 ## Context and session targeting

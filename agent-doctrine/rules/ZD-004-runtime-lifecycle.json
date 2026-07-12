@@ -1,0 +1,13 @@
+{
+  "id": "ZD-004",
+  "title": "Own runtime lifecycle by stable name",
+  "invariant": "A server or watcher is started once in a stable target, inspected before replacement, restarted in place when requested, and stopped explicitly.",
+  "sharedInstruction": "Use one stable named runtime: inspect existing output before starting another copy, restart in place when requested, and stop it explicitly.",
+  "appliesTo": ["claude", "pi"],
+  "projection": {
+    "claude": { "mechanism": "zmux run/watch/send lifecycle", "enforcement": "instruction", "promptGuideline": null },
+    "pi": { "mechanism": "runtime_ensure/runtime_logs/runtime_stop composite", "enforcement": "composite", "promptGuideline": "For servers/watchers, use runtime_ensure/logs/stop. If asked for another copy before checking logs, use runtime_logs on the existing target first and do not start duplicate processes." }
+  },
+  "caveats": { "claude": ["Readiness is output evidence, not durable health."], "pi": ["Configured runtimes require a trusted project before commands are loaded."] },
+  "verifyRefs": ["skills/zmux/references/run-observe.md", "pi-zmux/test/dispatcher.mjs"]
+}

@@ -10,21 +10,27 @@ process or terminal state that should **outlive a single command**, be **visible
 the user**, or need **interactive control**. For bounded one-shot reads, builds,
 and tests whose captured output is the whole artifact, your normal shell is fine.
 
-You are likely already inside a zmux-managed session. In Pi, prefer the canonical
-`zmux` dispatcher and select its operation; in other harnesses, use `zmux` CLI verbs.
+You are likely already inside a zmux-managed session. This full skill is the
+Claude/portable projection; Pi receives the same shared outcomes through the canonical
+`zmux` dispatcher and its generated guidance rather than loading this skill.
 
 ## Route
 
 | Need | Read / use |
 | --- | --- |
-| Concrete run/watch/send/type examples | `references/run-observe.md` |
+| Canonical shared behavioral outcomes | `references/shared-doctrine.generated.md` |
+| Concrete Claude CLI run/watch/send/type examples | `references/run-observe.md` |
 | Full CLI catalog, `-s` forms, snapshots, panes, config | `references/cli-catalog.md` |
 | Guard mapping, roster details, lifecycle glyphs | `references/guard-and-tab-states.md` |
 | Real CLI as prompt-scoped review peer | `references/agent-peer.md` |
 | Real CLI as write-capable worktree worker | `references/agent-worker.md` |
 | Testing the shipped agent/Pi surface while developing zmux | repo-root `docs/dev/test-prompts/` |
 
-## Core invariants
+## Claude mechanics layered on shared doctrine
+
+Read `references/shared-doctrine.generated.md` first. The sections below provide the
+Claude CLI, hook, roster, and recovery mechanics for those generated outcomes; they are
+not a second source of cross-harness truth.
 
 ### Never reach past zmux to raw tmux
 

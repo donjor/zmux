@@ -1,5 +1,7 @@
 # Guard & tab states (the zmux hooks layer)
 
+Shared outcomes live in `shared-doctrine.generated.md`; this reference owns Claude hook, guard, roster, and lifecycle mechanics.
+
 The harness-specific guardrails that enforce this skill's hygiene. Claude uses
 `skills/zmux/hooks/` (`PreToolUse` guard + tab-state hooks); Pi uses the repo's
 the canonical `pi-zmux/` dispatcher and bash guard. `SKILL.md` carries the invariants;

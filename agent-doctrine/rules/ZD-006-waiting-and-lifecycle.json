@@ -1,0 +1,13 @@
+{
+  "id": "ZD-006",
+  "title": "Use bounded first-class evidence",
+  "invariant": "Completion and readiness are proven by fresh lifecycle or output evidence, never polling, elapsed time, process existence, or echoed prompt text.",
+  "sharedInstruction": "Use bounded first-class lifecycle or future-output waits; do not poll, sleep as proof, treat process liveness as completion, or accept a marker already present in the prompt tail.",
+  "appliesTo": ["claude", "pi"],
+  "projection": {
+    "claude": { "mechanism": "zmux wait/status/watch with fresh baselines", "enforcement": "instruction", "promptGuideline": null },
+    "pi": { "mechanism": "wait/callback_watch plus structured command and turn state", "enforcement": "typed-operation", "promptGuideline": "For wait/callback_watch, choose exactly one of waitFor or idleSeconds with a bounded timeout; waitFor is the regex only, outgoing text must not satisfy future evidence, and deliverAs=nextTurn cannot trigger a continuation." }
+  },
+  "caveats": { "claude": ["Idle is a fallback for uninstrumented programs, not lifecycle truth."], "pi": ["deliverAs=nextTurn cannot trigger a continuation; use steer or followUp when triggerTurn is true."] },
+  "verifyRefs": ["skills/zmux/references/run-observe.md", "pi-zmux/test/dispatcher.mjs"]
+}

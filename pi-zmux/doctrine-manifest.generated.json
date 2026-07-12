@@ -1,0 +1,163 @@
+{
+  "schema": "zmux.doctrine-manifest.v1",
+  "generated": true,
+  "coverageComplete": true,
+  "digest": "sha256:bfac7794cfe05ae9202920a2f977da809c144b5aa1829579790741e4262dbb84",
+  "piRuleIds": [
+    "ZD-001",
+    "ZD-002",
+    "ZD-003",
+    "ZD-004",
+    "ZD-005",
+    "ZD-006",
+    "ZD-007",
+    "ZD-008",
+    "ZD-009",
+    "ZD-010",
+    "ZD-011",
+    "ZD-012"
+  ],
+  "promptRuleIds": [
+    "ZD-001",
+    "ZD-002",
+    "ZD-003",
+    "ZD-004",
+    "ZD-005",
+    "ZD-006",
+    "ZD-011"
+  ],
+  "piRules": [
+    {
+      "id": "ZD-001",
+      "enforcement": "guard",
+      "mechanism": "One typed zmux dispatcher plus Bash guard",
+      "promptProjected": true
+    },
+    {
+      "id": "ZD-002",
+      "enforcement": "typed-operation",
+      "mechanism": "sessions/tabs/current plus options.session",
+      "promptProjected": true
+    },
+    {
+      "id": "ZD-003",
+      "enforcement": "typed-operation",
+      "mechanism": "focus options default false",
+      "promptProjected": true
+    },
+    {
+      "id": "ZD-004",
+      "enforcement": "composite",
+      "mechanism": "runtime_ensure/runtime_logs/runtime_stop composite",
+      "promptProjected": true
+    },
+    {
+      "id": "ZD-005",
+      "enforcement": "composite",
+      "mechanism": "interactive_type composite",
+      "promptProjected": true
+    },
+    {
+      "id": "ZD-006",
+      "enforcement": "typed-operation",
+      "mechanism": "wait/callback_watch plus structured command and turn state",
+      "promptProjected": true
+    },
+    {
+      "id": "ZD-007",
+      "enforcement": "typed-operation",
+      "mechanism": "panes and pane_* operations plus snapshot",
+      "promptProjected": false
+    },
+    {
+      "id": "ZD-008",
+      "enforcement": "composite",
+      "mechanism": "peer_ensure plus atomic peer_handoff",
+      "promptProjected": false
+    },
+    {
+      "id": "ZD-009",
+      "enforcement": "guard",
+      "mechanism": "Headless launch rejection plus tab_peer/tab_kill",
+      "promptProjected": false
+    },
+    {
+      "id": "ZD-010",
+      "enforcement": "typed-operation",
+      "mechanism": "Typed target resolution plus tab_kill/session_kill",
+      "promptProjected": false
+    },
+    {
+      "id": "ZD-011",
+      "enforcement": "guard",
+      "mechanism": "Dispatcher safety warnings and interactive routing",
+      "promptProjected": true
+    },
+    {
+      "id": "ZD-012",
+      "enforcement": "composite",
+      "mechanism": "pi_reload and pi_respawn composites",
+      "promptProjected": false
+    }
+  ],
+  "piScenarioIds": [
+    "ZS-001",
+    "ZS-002",
+    "ZS-003",
+    "ZS-004",
+    "ZS-005",
+    "ZS-006",
+    "ZS-007",
+    "ZS-008",
+    "ZS-009",
+    "ZS-010",
+    "ZS-011",
+    "ZS-012",
+    "ZS-013",
+    "ZS-014",
+    "ZS-015",
+    "ZS-016"
+  ],
+  "dispatcherOperations": [
+    "callback_cancel",
+    "callback_list",
+    "callback_watch",
+    "current",
+    "interactive_type",
+    "log",
+    "pane_close",
+    "pane_focus",
+    "pane_open",
+    "pane_resize",
+    "pane_send_keys",
+    "pane_type",
+    "panes",
+    "peer_ensure",
+    "peer_handoff",
+    "pi_reload",
+    "pi_respawn",
+    "run",
+    "runtime_ensure",
+    "runtime_logs",
+    "runtime_stop",
+    "send_keys",
+    "session_kill",
+    "session_run",
+    "sessions",
+    "snapshot",
+    "tab_focus",
+    "tab_inspect",
+    "tab_kill",
+    "tab_label",
+    "tab_move",
+    "tab_peer",
+    "tab_place",
+    "tab_state",
+    "tab_status",
+    "tabs",
+    "terminal_current",
+    "type_text",
+    "wait",
+    "zmux_reload"
+  ]
+}

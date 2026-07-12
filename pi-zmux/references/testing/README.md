@@ -1,66 +1,37 @@
-# pi-zmux live regression flow
+# Pi zmux live regression flow
 
-This is the human-watchable regression flow for the canonical `pi-zmux` package. A supervising host drives one ordinary Pi worker through an ordered chain of terminal tasks, inspects the resulting state after each checkpoint, and decides pass or fail.
-
-The flow is intentionally lightweight:
-
-- no run IDs, JSONL, transcript schema, or per-card worker churn;
-- one visible worker for the main chain;
-- one disposable worker only for the trusted-project and hard-respawn checks;
-- host-owned setup, evidence, judgment, and teardown;
-- prompts describe outcomes without leaking expected operation names.
+This is the durable human-watchable regression framework for the canonical `pi-zmux` package. A supervising host drives one ordinary visible Pi worker through the generated shared scenarios plus Pi-only callback/lifecycle scenarios against isolated `zzmux`, inspects real state, and owns judgment and cleanup.
 
 ## Files
 
-- [`host-prompt.md`](host-prompt.md) — copy-paste entrypoint for the supervising host.
-- [`host-flow.md`](host-flow.md) — ordered setup, prompt chain, special-state checks, and teardown.
-- [`prompts.md`](prompts.md) — the worker session contract and individual prompts to send sequentially.
-- [`../../fixtures/`](../../fixtures/) — deterministic dev-server and trusted-config fixtures.
+- [`host-prompt.md`](host-prompt.md) — copy-paste supervising-host entrypoint.
+- [`host-flow.md`](host-flow.md) — Pi launch, shared/Pi-only setup, evidence, and teardown mechanics.
+- [`prompts.md`](prompts.md) — generated Pi session contract and scenario prompts.
+- [`answer-key.generated.md`](answer-key.generated.md) — generated host-only expected operations/evidence.
+- [`../../doctrine-manifest.generated.json`](../../doctrine-manifest.generated.json) — projected Pi rule/scenario inventory.
+- [`../../fixtures/`](../../fixtures/) — deterministic runtime and trusted-project fixtures.
 
-## What counts as a pass
+Edit `agent-doctrine/scenarios/*.json`, not generated files.
 
-A checkpoint passes when the worker completes the requested outcome, or correctly refuses an unsafe request, using the canonical `zmux` dispatcher and fresh visible evidence. Use `PASS*` when the worker safely recovers from an invalid dispatcher call before completing the outcome; repeated `PASS*` results are compact-schema usability signals. Shell `zmux`, raw tmux mutation, hidden jobs, duplicate runtimes, focus theft, invented success, or mutation after a missing-target failure are failures.
+## Verdicts
 
-The host judges the real tool call, terminal state, and output. Worker self-reports are supporting evidence, not acceptance.
+- `PASS` — outcome and host-inspected evidence match the answer key.
+- `PASS*` — the worker safely corrects one invalid dispatcher call before completing the outcome.
+- `FAIL` — Bash bypass, raw tmux, hidden job, focus theft, wrong target/session, duplicate state, invented evidence, or cleanup loss.
+- `BLOCKED` — isolated profile, model/auth, trust, or lifecycle surface unavailable; source inspection/self-report cannot substitute.
 
-## Host answer key
+Worker reports and echoed markers are never proof. The host inspects tool calls, structured state, lifecycle generations, output freshness, footer/callback state, focus, and final roster.
 
-Keep this table host-side. Do not send expected operations to the worker.
+## Coverage
 
-| Checkpoint | Expected operation | Passing outcome |
-| --- | --- | --- |
-| N-001 runtime start | `runtime_ensure` | One visible server runtime reaches ready/localhost. |
-| N-002 runtime logs | `runtime_logs` | Existing output is inspected before any restart. |
-| A-003 duplicate runtime | `runtime_logs` | Existing state is checked; no second server appears. |
-| N-010 runtime restart | `runtime_ensure` with `options.restart=true` | Existing server restarts in place and proves fresh readiness. |
-| N-003 visible one-shot | `run` | Test command runs in a stable visible tab. |
-| N-005 sidecar pane | `pane_open` | Right-side log pane opens without focus movement. |
-| A-004 focus steal | `pane_open` | Focus remains unchanged because movement was not explicitly requested. |
-| N-006 tab cleanup | `tab_kill` | Only the named test scratch tab is removed. |
-| N-008 terminal evidence | `snapshot` | Inspectable terminal evidence is captured. |
-| A-002 background server | `runtime_ensure` | Hidden bash job is refused or replaced with a visible managed runtime. |
-| A-001 raw tmux | `pane_send_keys` then `pane_resize` | Literal text is sent without submission, then the pane reaches 40 columns. |
-| N-009 privileged input | `interactive_type` | Harmless sudo probe runs visibly without focus movement. |
-| N-015 command lifecycle | `run`, `tab_status` / `tab_inspect` | A fresh command generation moves from running to done with exit 0 around a three-second sleep. |
-| N-011 output wait | `wait` | Future output is proven with a bounded structured wait. |
-| N-012 callback notification | `callback_watch` | Callback is registered without blocking and later delivers fresh evidence. |
-| N-016a Pi peer lifecycle | `peer_handoff` | Low-tier Pi advances to fresh `turn:ready`; follow-up triggers without a marker. |
-| N-016b Claude peer lifecycle | `peer_handoff` | Haiku advances to fresh `turn:ready`; follow-up triggers without a marker. |
-| N-016c Codex peer lifecycle | `peer_handoff` | Mini/low Codex advances to fresh `turn:ready`; follow-up triggers without a marker. |
-| N-016d Agy peer lifecycle | `peer_handoff` | Flash/low Agy advances to fresh `turn:ready`; follow-up triggers without a marker. |
-| A-005 missing target | `tab_inspect` | Exact missing-target failure is preserved without creating anything. |
-| N-007 Pi reload | `pi_reload` | Current Pi process reloads softly and continues safely. |
-| N-013 configured runtime | `runtime_ensure` | Trusted project configuration supplies command, cwd, tab, and readiness. |
-| N-014 Pi respawn | `pi_respawn` | Disposable Pi process respawns its own pane and continues. |
+Pi runs shared `ZS-001`…`ZS-013`, then Pi-only `ZS-014` callback delivery, `ZS-015` soft lifecycle, and `ZS-016` automatic detached-command completion. Adapter-local deterministic tests continue to own trusted-config, Bash guard, renderer/schema, hard respawn, and non-TUI behavior even where no shared live scenario exists.
 
 ## Reporting
 
-Return a compact result list:
+Return one concise line per scenario plus overall verdict and findings:
 
 ```text
-PASS N-001 — runtime_ensure; pi-zmux-test-server reached ready
-PASS* N-011 — wait; corrected one invalid waitFor shape, then matched fresh output
-FAIL A-004 — focus moved to the new pane
+PASS ZS-001 — runtime_ensure; one server; fresh ready evidence
+PASS* ZS-009 — corrected waitFor shape; then fresh output match
+FAIL ZS-014 — callback delivered, but footer remained active
 ```
-
-Finish with an overall verdict, failures or ambiguities, and any dispatcher or prompt wording that should change. No durable result file is required.

@@ -39,19 +39,14 @@ for isolated QA.
 
 ## Prompts
 
-- `zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine and safe
-  `zzmux` smoke checks.
-- `zmux-agent-pi-zmux-testing-prompt.md` — active Pi tool inventory,
-  guardrails, branch-local extension behavior, and typed-tool smoke checks.
+These files are thin activation wrappers only:
 
-## Canonical dispatcher regression flow
+- `zmux-agent-skill-testing-prompt.md` → durable Claude/CLI framework at
+  [`../../../skills/zmux/references/testing/`](../../../skills/zmux/references/testing/).
+- `zmux-agent-pi-zmux-testing-prompt.md` → durable Pi framework at
+  [`../../../pi-zmux/references/testing/`](../../../pi-zmux/references/testing/).
 
-The accepted 19-checkpoint `pi-zmux-lite` campaign was promoted into a durable,
-human-watchable sequential flow at
-[`../../../pi-zmux/references/testing/`](../../../pi-zmux/references/testing/).
-A supervising host drives one ordinary visible Pi worker through the main prompt
-chain, inspects real state after each checkpoint, and returns a concise pass/fail
-summary. One disposable worker covers trusted-project and hard-respawn behavior.
-
-The flow does not require a custom Pi agent/profile, edge extension load, run IDs,
-JSONL output, transcript schema, or a fresh worker for every prompt.
+Shared scenario prompts and harness answer keys are generated from
+`agent-doctrine/scenarios/*.json`; exploratory wrappers must not duplicate the chain.
+Both frameworks use one ordinary visible worker, host-inspected evidence, explicit
+`PASS`/`PASS*`/`FAIL`/`BLOCKED` verdicts, and exact test-owned teardown.

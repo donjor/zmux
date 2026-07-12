@@ -7,11 +7,13 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 
 ## Owned paths
 
+- `agent-doctrine/**` — neutral shared rules/scenarios and deterministic generator.
+- `docs/domains/agent-doctrine-matrix.generated.md` — generated capability/caveat review matrix.
 - `pi-zmux/index.ts` — package entry for Pi extension loading.
 - `pi-zmux/src/**` — dispatcher registration, on-demand diagnostics, bash classification, and zmux adapters.
 - `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
-- `pi-zmux/references/testing/**`, `pi-zmux/fixtures/**` — durable host-driven sequential regression flow and deterministic live fixtures.
-- `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — shared agent doctrine, hooks, and doctrine doctor.
+- `pi-zmux/references/testing/**`, `pi-zmux/fixtures/**` — generated prompts/answer keys, Pi host mechanics, and deterministic live fixtures.
+- `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — Claude mechanics/hooks, generated shared projection/framework, and the single doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
 - `docs/dev/test-prompts/zmux-agent-*-testing-prompt.md` — prompt-driven exploratory QA for fresh isolated sessions testing the whole agent-facing skill/Pi surface.
 
@@ -39,7 +41,8 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 
 - Do not duplicate shell lifecycle waiting with temp sentinels or wrapper scripts; read `zmux tab status --json` or use first-class `zmux wait` / `zmux type --wait-*` condition results.
 - Do not let the Pi dispatcher silently normalize opaque remote-admin behavior: numbered `remote-<host>N` tab sprawl and encoded/obfuscated remote payloads need deterministic warnings/tests, not just prose doctrine.
-- Do not add a dispatcher operation without updating its contract test, skill doctrine, and the guard redirect map when the workflow should be tool-preferred.
+- Do not hand-edit generated doctrine, prompt, answer-key, manifest, or matrix files; edit `agent-doctrine/`, run `make gen-doctrine`, and commit every changed projection.
+- Do not add a dispatcher operation without updating its contract test, neutral mechanism records, and the guard redirect map when the workflow should be tool-preferred.
 - Keep package loading settings-managed. A retired global `~/.pi/agent/extensions/pi-zmux` symlink can mask the local package.
 - Keep `zzmux` grounding isolated from live `zmux`; edge profile QA must not mutate live shell startup or agent integration links.
 - If a tool shells out to zmux, preserve structural non-zero results instead of crashing the extension process.
@@ -58,12 +61,16 @@ The active shared-skill source is `~/donjor/skills`. In the maintainer setup:
 - Pi consumes the generated mirror at `~/.pi/agent/skills/donjor/zmux`.
 - `./dev.sh zmux` symlinks this repo's `pi-zmux/` package into `~/donjor/skills/pi/extensions/pi-zmux`.
 - Pi sync loads that settings-managed package through the skills repo registry, not directly from this repo.
+- That registry classifies `pi-zmux` as the Pi-only replacement for `zmux`, keeps `peer` backed, and validates `doctrine-manifest.generated.json` before suppressing the full skill. Claude still installs the full skill.
 
-Refresh mirrors and package diagnostics from the repo root:
+Refresh generated outputs explicitly, then mirrors and package diagnostics:
 
 ```bash
+make gen-doctrine
 ./dev.sh zmux
 ```
+
+`./dev.sh zmux` performs only a non-mutating freshness check and aborts before live mutation when outputs are stale. It never regenerates them. `./dev.sh zzmux` remains binary-only and skips this live-sync gate.
 
 `./dev.sh zmux` refreshes shared skill mirrors, links `pi-zmux/` into the
 skills repo's Pi extension registry source directory, removes the retired global
@@ -89,13 +96,13 @@ npm --prefix pi-zmux test
 make test-agent-surfaces
 ```
 
-`make test-agent-surfaces` runs the extension typecheck/tests, QA lint, and the
-shipped zmux skill doctrine doctor.
+`make test-agent-surfaces` first runs generator tests and byte-freshness checks,
+then extension typecheck/tests, QA lint, and the shipped zmux skill doctrine doctor.
 
 ## Agent-surface test prompts
 
 Deterministic checks are not enough to catch every agent-routing and fresh-session
-failure. Prompt-driven exploratory QA lives under `docs/dev/test-prompts/`:
+failure. Thin activation wrappers live under `docs/dev/test-prompts/`:
 
 - `zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine, `zzmux`
   smoke, raw-tmux avoidance, roster/session/lifecycle/peer-worker coverage.
@@ -105,22 +112,17 @@ failure. Prompt-driven exploratory QA lives under `docs/dev/test-prompts/`:
 
 Use these prompts after material agent-facing changes, especially new dispatcher
 operations, guard classifications, peer/worker flow changes, or edits to shipped
-skill doctrine. The prompts are exploratory QA wrappers: expected behavior
-remains in this domain doc plus `skills/zmux/SKILL.md` and its references, while
+skill doctrine. The wrappers route to durable Claude and Pi frameworks. Shared prompt/outcome bodies
+come from `agent-doctrine/scenarios/*.json`; generated host answer keys stay hidden
+from workers, while harness-specific launch, inspection, and teardown stay handwritten.
 `make test-agent-surfaces` remains the deterministic gate.
 
-The accepted one-tool candidate's behavioral checkpoints are preserved and
-extended as a lightweight package regression flow under
-`pi-zmux/references/testing/`.
+The Claude framework lives at `skills/zmux/references/testing/`; the Pi framework
+lives at `pi-zmux/references/testing/`.
 
-- A host drives one visible Terra/medium Pi worker through the main chain and
-  judges real terminal state after each prompt.
-- One disposable worker covers trusted-project and hard-respawn checks.
-- Dedicated lifecycle probes cover a three-second shell command plus low-tier
-  Pi, Claude, Codex, and Agy peers without spending judgment-tier models.
-- The flow distinguishes clean passes from safe recovered friction, uses exact
-  test-owned teardown, and requires no custom profile, run IDs, JSONL, or
-  transcript schema.
+- The Claude framework drives one visible Sonnet worker; the Pi framework drives one visible Terra/medium worker.
+- Both consume the same 13 shared scenario prompts; Pi adds callback and soft-lifecycle scenarios, while package tests retain trusted-config, guard, renderer, and hard-respawn coverage.
+- Hosts inspect real state, use low-tier lifecycle peers, distinguish clean passes from safe recovered friction, and own exact teardown.
 
 Historical promotion artifacts remain in the skills repo.
 
@@ -144,7 +146,7 @@ Operation groups:
   `pi_respawn`.
 
 The schema estimate is gated at no more than 1,200 tokens; the current
-production surface is approximately 1,148. The extension does not inject runtime
+production surface is approximately 1,128. The extension does not inject runtime
 state into the model system prompt. State is read only when the agent calls a
 context operation or another operation resolves the live target it needs.
 `/zmux status` retains the full human diagnostic snapshot without adding it to

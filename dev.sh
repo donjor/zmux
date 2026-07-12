@@ -237,6 +237,17 @@ validate_live_install_state() {
 
 validate_live_install_state
 
+if [ "$TARGET" = "zmux" ]; then
+	printf "${dim}checking generated agent doctrine...${reset} "
+	if node "$ZMUX_ROOT/agent-doctrine/generate.mjs" --check >/dev/null; then
+		printf "${green}ok${reset}\n"
+	else
+		printf "${red}stale${reset}\n" >&2
+		printf "error: generated agent doctrine is stale; run make gen-doctrine and commit the outputs before live sync\n" >&2
+		exit 1
+	fi
+fi
+
 VERSION="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
 
 # Build

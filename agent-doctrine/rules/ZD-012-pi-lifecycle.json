@@ -1,0 +1,13 @@
+{
+  "id": "ZD-012",
+  "title": "Reload or respawn only the resolved Pi process",
+  "invariant": "Pi lifecycle actions target the current Pi pane safely and require a continuation to prove replacement completion.",
+  "sharedInstruction": "After Pi package changes, prefer a soft reload; use hard respawn only when needed, resolve the current Pi pane rather than the desktop terminal, and require a continuation as completion proof.",
+  "appliesTo": ["pi"],
+  "divergenceReason": "Claude does not expose Pi extension reload/respawn lifecycle operations.",
+  "projection": {
+    "pi": { "mechanism": "pi_reload and pi_respawn composites", "enforcement": "composite", "promptGuideline": null }
+  },
+  "caveats": { "pi": ["terminal_current diagnoses desktop terminal attachment; it does not identify the Pi pane."] },
+  "verifyRefs": ["docs/domains/pi-zmux-extension.md", "pi-zmux/test/dispatcher.mjs"]
+}

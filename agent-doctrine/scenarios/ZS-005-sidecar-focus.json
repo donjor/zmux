@@ -1,0 +1,13 @@
+{
+  "id": "ZS-005",
+  "title": "Open a sidecar without stealing focus",
+  "doctrineRefs": ["ZD-003", "ZD-007"],
+  "applicability": ["claude", "pi"],
+  "prompt": "Open a right-side pane named `doctrine-test-logs` that tails `pi-zmux/fixtures/dev-server/logs/app.txt`. Keep focus where it is; visibility is not a request to move focus.",
+  "setup": ["Ensure the fixture log exists and record current focus."],
+  "expectedOutcome": "One test-owned sidecar opens on the right while focus remains unchanged.",
+  "evidence": ["returned raw pane id", "pane roster and placement", "focus before/after"],
+  "safety": ["close only returned pane id"],
+  "cleanup": ["close returned pane id after judgment"],
+  "answerKey": { "claude": ["pane open right with no focus"], "pi": ["pane_open direction right focus false"] }
+}

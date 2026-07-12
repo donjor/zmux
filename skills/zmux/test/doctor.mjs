@@ -1,11 +1,22 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const root = join(here, '..', '..', '..');
+
+const doctrineCheck = spawnSync(process.execPath, [join(root, 'agent-doctrine/generate.mjs'), '--check'], {
+  cwd: root,
+  encoding: 'utf8',
+});
+assert.equal(
+  doctrineCheck.status,
+  0,
+  ['agent doctrine generation/validation failed', doctrineCheck.stdout, doctrineCheck.stderr].filter(Boolean).join('\n'),
+);
 
 function read(rel) {
   return readFileSync(join(root, rel), 'utf8');
@@ -19,6 +30,43 @@ const operationBlock = /export const ZMUX_OPERATIONS = \[([\s\S]*?)\] as const;/
 const operations = new Set([...operationBlock.matchAll(/"([a-z0-9_]+)"/g)].map((match) => match[1]));
 assert.equal(operations.size, 40, `expected 40 dispatcher operations, got ${operations.size}`);
 
+const doctrineManifest = JSON.parse(read('pi-zmux/doctrine-manifest.generated.json'));
+assert.equal(doctrineManifest.schema, 'zmux.doctrine-manifest.v1');
+assert.deepEqual(doctrineManifest.dispatcherOperations, [...operations].sort(), 'doctrine manifest operation inventory drifted');
+assert.equal(new Set(doctrineManifest.piRuleIds).size, doctrineManifest.piRuleIds.length, 'Pi doctrine manifest contains duplicate rule ids');
+
+const scenarioRecords = readdirSync(join(root, 'agent-doctrine/scenarios'))
+  .filter((name) => name.endsWith('.json'))
+  .sort()
+  .map((name) => JSON.parse(read(`agent-doctrine/scenarios/${name}`)));
+const claudePrompts = read('skills/zmux/references/testing/prompts.md');
+const piPrompts = read('pi-zmux/references/testing/prompts.md');
+const claudeAnswerKey = read('skills/zmux/references/testing/answer-key.generated.md');
+const piAnswerKey = read('pi-zmux/references/testing/answer-key.generated.md');
+const claudeHostFlow = read('skills/zmux/references/testing/host-flow.md');
+const piHostFlow = read('pi-zmux/references/testing/host-flow.md');
+for (const scenario of scenarioRecords) {
+  const workerPrompt = `> ${scenario.prompt}`;
+  for (const [harness, prompts, answerKey, hostFlow] of [
+    ['claude', claudePrompts, claudeAnswerKey, claudeHostFlow],
+    ['pi', piPrompts, piAnswerKey, piHostFlow],
+  ]) {
+    const applicable = scenario.applicability.includes(harness);
+    assert.equal(prompts.includes(workerPrompt), applicable, `${scenario.id} ${harness} prompt projection drifted`);
+    assert.equal(answerKey.includes(`### ${scenario.id} ·`), applicable, `${scenario.id} ${harness} answer key drifted`);
+    assert.equal(hostFlow.includes(scenario.id), applicable, `${scenario.id} ${harness} host flow inventory drifted`);
+  }
+}
+assert.deepEqual(
+  doctrineManifest.piScenarioIds,
+  scenarioRecords.filter((scenario) => scenario.applicability.includes('pi')).map((scenario) => scenario.id),
+  'Pi scenario manifest drifted',
+);
+assert.ok(!claudePrompts.includes('**Claude mechanics:**'), 'Claude worker prompts must not leak the host answer key');
+assert.ok(!piPrompts.includes('**Pi mechanics:**'), 'Pi worker prompts must not leak the host answer key');
+assert.match(dispatcherSource, /import \{ SHARED_ZMUX_PROMPT_GUIDELINES \} from "\.\/generated\/doctrine\.js";/);
+assert.match(dispatcherSource, /promptGuidelines:\s*\[\s*\.\.\.SHARED_ZMUX_PROMPT_GUIDELINES,/);
+
 const skillFiles = [
   'skills/zmux/SKILL.md',
   'skills/zmux/references/run-observe.md',
@@ -26,6 +74,8 @@ const skillFiles = [
   'skills/zmux/references/agent-peer.md',
   'skills/zmux/references/agent-worker.md',
   'skills/zmux/references/cli-catalog.md',
+  'skills/zmux/references/shared-doctrine.generated.md',
+  'docs/domains/agent-doctrine-matrix.generated.md',
   'docs/domains/pi-zmux-extension.md',
   'docs/dev/agent-grounding.md',
   'docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md',
@@ -68,13 +118,22 @@ assert.ok(
   !/zmux\s+(run|tab peer ensure)[^\n]*(claude|codex|pi|agy)[^\n]*(\s-p\b|\s--print\b)/.test(combined),
   'docs must not show peer launch examples using agent -p/--print; type into visible peers instead',
 );
+assert.match(docs['skills/zmux/SKILL.md'], /references\/shared-doctrine\.generated\.md/);
+for (const file of [
+  'skills/zmux/references/run-observe.md',
+  'skills/zmux/references/guard-and-tab-states.md',
+  'skills/zmux/references/agent-peer.md',
+  'skills/zmux/references/agent-worker.md',
+]) {
+  assert.match(docs[file], /shared-doctrine\.generated\.md/, `${file} must route shared outcomes to the generated reference`);
+}
 assert.match(docs['skills/zmux/references/agent-peer.md'], /-s <session>/);
 assert.match(docs['skills/zmux/references/agent-peer.md'], /`options\.session`/);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /legacy `waiting` means `ready`|Legacy `waiting` means `ready`|waiting` aliases to `ready`/i);
 assert.match(docs['skills/zmux/SKILL.md'], /remote-<host>2/i);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /opaque\nencoded or obfuscated payload/i);
 assert.match(docs['docs/domains/pi-zmux-extension.md'], /numbered `remote-<host>N` tab sprawl/i);
-assert.match(docs['docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md'], /numbered remote-admin tab names/i);
+assert.match(docs['skills/zmux/references/shared-doctrine.generated.md'], /avoid numbered tab sprawl|stable admin or remote-host/i);
 
 const devSh = read('dev.sh');
 assert.ok(
@@ -83,4 +142,4 @@ assert.ok(
 );
 assert.match(docs['docs/dev/agent-grounding.md'], /\.\/dev\.sh zzmux\s+# build \+ install the edge binary \(binary only/i);
 
-console.log(`zmux skill doctor passed (${toolNames.size} Pi tools, ${skillFiles.length} docs checked)`);
+console.log(`zmux skill doctor passed (${toolNames.size} Pi tools, ${doctrineManifest.piRuleIds.length} Pi doctrine rules, ${scenarioRecords.length} scenarios, ${skillFiles.length} docs checked)`);

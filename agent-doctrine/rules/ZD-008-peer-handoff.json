@@ -1,0 +1,13 @@
+{
+  "id": "ZD-008",
+  "title": "Drive visible peers through fresh lifecycle",
+  "invariant": "A peer is a visible interactive CLI; prompts are submitted only after inspection and completion is fresh lifecycle truth when instrumentation exists.",
+  "sharedInstruction": "Reuse one visible interactive peer, inspect its composer before sending, mark it running, and accept completion only from a newer ready lifecycle generation; use output or idle only for uninstrumented fallback.",
+  "appliesTo": ["claude", "pi"],
+  "projection": {
+    "claude": { "mechanism": "peer ensure/type/wait/status/inspect sequence", "enforcement": "instruction", "promptGuideline": null },
+    "pi": { "mechanism": "peer_ensure plus atomic peer_handoff", "enforcement": "composite", "promptGuideline": null }
+  },
+  "caveats": { "claude": ["The peer skill owns when and which peer to select."], "pi": ["The peer skill still owns selection, roles, and engagement policy."] },
+  "verifyRefs": ["skills/zmux/references/agent-peer.md", "pi-zmux/test/dispatcher.mjs"]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "ZS-008",
+  "title": "Prove command lifecycle structurally",
+  "doctrineRefs": ["ZD-001", "ZD-006"],
+  "applicability": ["claude", "pi"],
+  "prompt": "Run `sleep 3; printf 'DOCTRINE_COMMAND_DONE\\n'` in a visible tab named `doctrine-test-command`. Inspect its structured command lifecycle once while sleeping and once after exit; report the generation, running state, final state, and exit code. Output or process liveness alone is insufficient.",
+  "setup": ["Remove stale doctrine-test-command target."],
+  "expectedOutcome": "One fresh command generation transitions from running to done with exit zero.",
+  "evidence": ["fresh command generation", "running state", "done state and exit code"],
+  "safety": ["bounded command"],
+  "cleanup": ["kill doctrine-test-command"],
+  "answerKey": { "claude": ["run then session-pinned status inspections"], "pi": ["run then tab_status/tab_inspect"] }
+}

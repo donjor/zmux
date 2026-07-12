@@ -24,7 +24,9 @@ make build                 # compile ./cmd/zmux
 make test                  # unit tests
 make test-race             # race detector suite; mirrors Worktrunk merge gate
 make test-integration      # integration tests; builds first
-make test-agent-surfaces   # Pi extension + QA lint + skill doctrine doctor
+make gen-doctrine          # explicitly rewrite committed Claude/Pi projections
+make check-doctrine        # generator tests + non-mutating byte freshness
+make test-agent-surfaces   # doctrine gate + Pi extension + QA lint + single doctor
 make lint                  # go vet + golangci-lint + gofumpt check
 make fmt                   # gofumpt formatting
 make vuln                  # govulncheck
@@ -62,8 +64,8 @@ integration tests, and govulncheck.
   Run `make keys-gen` after keybinding changes.
 - QA runner/checklists: `cmd/qa/`, `internal/qa/`, `internal/tui/qapicker/`, and
   `checklists/*.toml`.
-- Agent integration: `skills/zmux/` for doctrine/hooks and `pi-zmux/` for
-  typed Pi tools.
+- Agent integration: `agent-doctrine/` for shared truth, `skills/zmux/` for
+  Claude mechanics/hooks, and `pi-zmux/` for typed Pi operations/generated guidance.
 - Terminal evidence/capabilities: `internal/terminal`, `internal/wm`,
   `internal/snapshot`, and `internal/cli/terminal.go`.
 

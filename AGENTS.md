@@ -12,6 +12,9 @@ make build            # compile ./cmd/zmux
 make test             # unit tests
 make test-race        # race-detector suite used by the pre-push gate
 make test-integration # integration tests; builds first
+make gen-doctrine     # explicitly rewrite committed agent projections
+make check-doctrine   # generator tests + non-mutating freshness check
+make test-agent-surfaces # doctrine + Pi package + QA + single doctor
 make lint             # go vet + golangci-lint + gofumpt check
 make fmt              # gofumpt formatting
 make vuln             # govulncheck
@@ -27,14 +30,15 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
 ## Layout
 
 - `cmd/zmux/` - thin launcher; command implementation lives under `internal/cli`.
+- `agent-doctrine/` - neutral terminal rules/scenarios and deterministic Claude/Pi generator.
 - `cmd/qa/` - repo-local QA walkthrough runner invoked by `./qa`.
 - `internal/` - Go implementation; side effects sit behind typed interfaces.
 - `internal/tabs` + `internal/tabstate` - logical tabs, placement, and glyph state.
 - `internal/tmux` - tmux boundary; use `tmux.Runner`, never direct tmux exec.
 - `internal/tui/` - focused Bubble Tea UI packages; no flat root TUI package.
 - `checklists/` - committed QA walkthrough TOML specs.
-- `skills/zmux/` - shipped agent skill, Claude hooks, and peer/worker terminal doctrine.
-- `pi-zmux/` - Pi TypeScript extension and tests.
+- `skills/zmux/` - Claude skill/hooks plus committed generated doctrine/testing projection.
+- `pi-zmux/` - Pi extension, generated compact guidance/testing projection, and tests.
 - `legacy/v0/` - archived bash prototype; do not extend it.
 
 ## Gotchas
@@ -60,6 +64,9 @@ or tmux behavior, also run `make build` and the relevant `./qa` checklist.
   `make lint` plus `make test-race`. Use `wt merge` so the gate runs.
 - Long-running or interactive processes belong in zmux tabs, not the agent
   shell. Use `zmux run -n`, `zmux watch`, `zmux send`, and `zmux type`.
+- Author shared agent outcomes/scenarios only under `agent-doctrine/`; never
+  hand-edit generated skill/Pi projections. `./dev.sh zmux` checks freshness but
+  does not regenerate, while `./dev.sh zzmux` remains binary-only.
 
 ## References
 

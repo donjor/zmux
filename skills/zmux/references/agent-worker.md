@@ -1,5 +1,7 @@
 # Agent Worker Doctrine
 
+Shared outcomes live in `shared-doctrine.generated.md`; this reference owns write-capable worker mechanics for Claude and CLI consumers.
+
 Drive an official agent CLI (`codex`, `claude`, `pi`, `agy`, etc.) in a zmux tab as an
 **autonomous worker bound to an isolated git worktree**. Unlike a peer (prompt-scoped
 reviewer), a worker *writes and runs code* — that is the job. The whole exchange

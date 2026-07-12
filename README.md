@@ -178,8 +178,9 @@ zmux exposes an agent-safe terminal control surface:
 
 - use `zmux run`, `watch`, `log`, `send`, `type`, and pane/tab verbs for visible
   terminal work;
-- use the canonical Pi `zmux` dispatcher from `pi-zmux/` when running inside Pi; select operations such as `peer_ensure`, `tab_inspect`, `type_text`, `callback_watch`, and `peer_handoff` for agent peer loops;
-- use `skills/zmux/SKILL.md` for shared agent doctrine;
+- use the canonical Pi `zmux` dispatcher from `pi-zmux/`; Pi replaces the full skill with compact generated guidance while the shared `peer` skill still owns selection policy;
+- use the full `skills/zmux/SKILL.md` in Claude and other skill-capable harnesses;
+- edit shared outcomes and live scenarios only under `agent-doctrine/`, then commit every generated projection;
 - never hide long-running work behind `&`, `nohup`, `disown`, or raw tmux.
 
 Detailed agent and Pi integration docs:
@@ -192,6 +193,8 @@ Detailed agent and Pi integration docs:
 
 ```bash
 make build
+make gen-doctrine       # explicit write
+make check-doctrine     # non-mutating validation
 make test
 make test-race
 make test-integration

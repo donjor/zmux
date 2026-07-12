@@ -7,6 +7,15 @@ versioning is semver-ish until the first public release.
 ## [Unreleased]
 > Release tag: pending | Compare: `v0.14.0...HEAD`
 
+### Added
+
+- **Shared agent doctrine registry and projections** `agents` `skills` `pi` — `agent-doctrine/` now owns neutral terminal rules and live scenarios, deterministically generating the Claude reference, compact Pi guidance, capability matrix, package coverage manifest, and both harnesses’ worker prompts/host answer keys. `make check-doctrine`, the single doctrine doctor, and live `./dev.sh zmux` reject stale or incomplete projections without regenerating them.
+- **Symmetric visible host/peer regression frameworks** `agents` `qa` — durable Claude and Pi flows drive ordinary visible workers against isolated `zzmux`, share 13 scenario prompts, keep harness mechanics/answer keys host-only, preserve Pi-only callback/lifecycle cases, and require real state evidence plus exact cleanup.
+
+### Changed
+
+- **Pi-zmux now replaces the full zmux skill only in Pi** `agents` `pi` — the generated dispatcher guidance carries shared terminal outcomes while the compact one-tool/40-operation/no-injection contract remains intact. Claude retains the complete skill, and `peer` continues owning selection/engagement policy through a Pi-native dispatcher route.
+
 ### Fixed
 
 - **Detached Pi runs own their completion reporting** `agents` `pi` — every detached `run` now automatically arms a shell-lifecycle callback, keeps aggregate activity visible above the task list, and triggers a compact evidence-backed follow-up without relying on a second model tool call; reused tabs require a newer pre-run command generation, concrete command failures render as failures, `completionTimeoutSeconds` controls an independent one-day wait window that renews silently while the command remains running, and `trackCompletion:false` is the explicit opt-out for commands expected never to return.

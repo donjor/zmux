@@ -1,0 +1,13 @@
+{
+  "id": "ZD-011",
+  "title": "Make remote mutation legible",
+  "invariant": "Remote/admin work reuses one stable host target and states the decoded intended mutation before execution.",
+  "sharedInstruction": "Reuse one stable admin or remote-host target, avoid numbered tab sprawl, decode opaque payloads, and state the intended host mutation before changing remote configuration.",
+  "appliesTo": ["claude", "pi"],
+  "projection": {
+    "claude": { "mechanism": "Skill doctrine and guard warnings", "enforcement": "guard", "promptGuideline": null },
+    "pi": { "mechanism": "Dispatcher safety warnings and interactive routing", "enforcement": "guard", "promptGuideline": "For remote/admin runs, reuse one stable admin/remote-host tab, decode opaque payloads, and state the intended host mutation before changing remote config." }
+  },
+  "caveats": { "claude": [], "pi": ["Warnings do not infer whether a decoded mutation is authorized."] },
+  "verifyRefs": ["skills/zmux/SKILL.md", "pi-zmux/test/dispatcher.mjs"]
+}

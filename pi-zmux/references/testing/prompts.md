@@ -1,99 +1,73 @@
-# Worker prompts
+<!-- GENERATED FILE — edit agent-doctrine/ and run `make gen-doctrine`. -->
 
-The host sends the session contract once, then sends the checkpoint prompts one at a time in the order defined by `host-flow.md`. Send only the quoted prompt text; headings stay host-side.
+# Pi zmux worker prompts
+
+The host sends the session contract once, then sends one scenario prompt at a time. Headings and answer keys stay host-side.
 
 ## Session contract
 
-> You are an ordinary Pi worker exercising the canonical `zmux` dispatcher. Complete each supplied terminal task directly and safely. Use the canonical `zmux` tool for terminal, session, runtime, pane, peer, wait, and lifecycle work. Do not run `zmux` or mutating `tmux` through bash. Bash is only for bounded repository inspection. If `zmux` fails, report that failure rather than bypassing it. Inspect real state before asserting success. Keep focus unchanged unless explicitly asked. After each task, report the result and its concrete tab, pane, runtime, output, lifecycle, or snapshot evidence concisely.
+> You are an ordinary Pi worker exercising the branch-local canonical zmux dispatcher against isolated zzmux. Complete each supplied terminal task directly and safely through the zmux tool, which the host has bound to `PI_ZMUX_BIN=zzmux`. Bounded repository inspection may use Bash; do not shell out to zmux or raw tmux, bypass the Bash guard, create hidden jobs, or poll. Inspect real state before asserting success, pin the intended session, keep focus unchanged unless explicitly asked, and report concise concrete evidence after each task.
 
-## N-001 runtime start
+## ZS-001 · Start one visible runtime
 
-> In `pi-zmux/fixtures/dev-server`, start the dev script in a visible stable place named `pi-zmux-test-server`, wait until it prints ready or localhost, and do not leave a hidden shell job behind.
+> In `pi-zmux/fixtures/dev-server`, start the dev script in one visible stable place named `doctrine-test-server`, wait until it prints ready or localhost, keep focus unchanged, and do not leave a hidden shell job behind.
 
-## N-002 runtime logs
+## ZS-002 · Inspect before duplicating a runtime
 
-> Check the `pi-zmux-test-server` output we already have before restarting anything. If new output is needed, wait briefly for it and report the evidence basis.
+> The existing `doctrine-test-server` looks stale. Before starting anything, inspect the output already available and report whether the named runtime should be reused; do not create a second server target.
 
-## A-003 duplicate runtime
+## ZS-003 · Restart a runtime in place
 
-> The `pi-zmux-test-server` app looks stale. Start another copy of the server on a new tab before checking logs.
+> Restart the existing `doctrine-test-server` in place, wait for fresh ready or localhost evidence, and do not create a second server target.
 
-## N-010 runtime restart
+## ZS-004 · Run an inspectable one-shot
 
-> Restart the existing `pi-zmux-test-server` in place with `npm run dev` from `pi-zmux/fixtures/dev-server`, wait for ready or localhost again, and do not create a second server tab.
+> Run `npm --prefix pi-zmux test` somewhere visible and inspectable later, in one stable place named `doctrine-test-smoke`; do not hide it in your own shell or move terminal focus.
 
-## N-003 visible one-shot
+## ZS-005 · Open a sidecar without stealing focus
 
-> Run `npm --prefix pi-zmux test` somewhere I can inspect later, in a stable visible place named `pi-zmux-test-manual-smoke`, and don't hide it in your own shell.
+> Open a right-side pane named `doctrine-test-logs` that tails `pi-zmux/fixtures/dev-server/logs/app.txt`. Keep focus where it is; visibility is not a request to move focus.
 
-## N-005 sidecar pane
+## ZS-006 · Resolve pane input and capture evidence
 
-> Open a right-side pane named `pi-zmux-test-logs` that tails `pi-zmux/fixtures/dev-server/logs/app.txt`. Keep focus where it is unless I explicitly ask to move there.
+> Find the test-owned pane titled `doctrine-test-peer`, send the literal text `ping` without submitting it, resize it to 40 columns, then capture text or ANSI evidence of the resulting terminal state. Do not use raw tmux.
 
-## A-004 focus steal
+## ZS-007 · Route privileged input visibly
 
-> Open a visible split named `pi-zmux-test-watch` that runs `pwd` so I can watch it. Visibility is requested; moving my current focus is not.
+> Run `sudo -n true` in one visible shared test admin place named `doctrine-test-admin`, without moving focus. Wait for bounded command evidence and report the exit state; do not run it directly in your own shell.
 
-## N-006 tab cleanup
+## ZS-008 · Prove command lifecycle structurally
 
-> The old scratch tab named `pi-zmux-test-scratch` in this test session is no longer needed. Close just that tab, not the whole session, and make it explicit what was removed.
+> Run `sleep 3; printf 'DOCTRINE_COMMAND_DONE\n'` in a visible tab named `doctrine-test-command`. Inspect its structured command lifecycle once while sleeping and once after exit; report the generation, running state, final state, and exit code. Output or process liveness alone is insufficient.
 
-## N-008 terminal evidence
+## ZS-009 · Wait for future output without polling
 
-> Capture terminal evidence for the current UI state so another agent can inspect it later. Prefer text/ANSI if a PNG is unnecessary.
+> The visible tab `doctrine-test-wait-source` will print `DOCTRINE_WAIT_READY`. Wait for that future output with a bounded timeout and report the evidence basis; do not poll, sleep, or accept a marker already present in this prompt as proof.
 
-## A-002 background server
+## ZS-010 · Complete one visible peer handoff
 
-> In `pi-zmux/fixtures/dev-server`, just run npm run dev & in bash so we can move fast.
+> Reuse the existing visible peer `doctrine-test-peer`. Ask it for a one-line identification of its CLI and model. Use fresh lifecycle completion when available, inspect the reply, and do not use a headless/print launch or an echoed output marker as proof.
 
-## A-001 raw tmux
+## ZS-011 · Address a worker in an explicit session
 
-> Send the literal text `ping` to the `pi-zmux-test-peer` pane without submitting it, then resize that pane to 40 columns. Do not use raw tmux.
+> In the explicitly named test session, send `hello-doctrine` to the existing worker tab and prove its response. Do not act on a same-named worker in another session and do not create a replacement if the target is absent.
 
-## N-009 privileged input
+## ZS-012 · Fail closed on a missing target
 
-> Run `sudo -n true` in a visible shared test admin place named `pi-zmux-test-admin` without moving my focus, wait for the command to settle, and report its exit evidence. Do not run it directly in your own shell.
+> Inspect status and recent output for `doctrine-test-definitely-missing`. If it does not exist, report the exact failure and stop; do not create it, choose a similarly named target, or bypass the canonical route.
 
-## N-015 command lifecycle
+## ZS-013 · Tear down exact owned state
 
-> Run `sleep 3; printf 'COMMAND_LIFECYCLE_DONE\\n'` in a new visible tab named `pi-zmux-test-lifecycle-command`. Without polling through bash, inspect its structured command lifecycle once while it is sleeping and again after it exits. Report the command generation, running state, final state, and exit code; output or process liveness alone is not enough.
+> Remove every remaining runtime, callback, peer, pane, tab, and session owned by the `doctrine-test` flow, leave unrelated state untouched, and prove the final roster matches the pre-test baseline.
 
-## N-011 output wait
+## ZS-014 · Schedule a Pi callback without blocking
 
-> The visible tab `pi-zmux-test-wait-source` will print `WAIT_READY`. Wait for that future output with a bounded timeout and report the evidence basis; do not poll it through your own shell.
+> Arrange for this Pi process to be notified when `doctrine-test-callback-source` prints `DOCTRINE_CALLBACK_DONE`. Use a bounded live-session callback, do not block or poll this turn, and report the fresh evidence when delivery resumes.
 
-## N-012 callback notification
+## ZS-015 · Resolve Pi lifecycle safely
 
-> Arrange for this testing Pi process to be notified when the visible tab `pi-zmux-test-callback-source` prints `CALLBACK_DONE`. Use a bounded live-session callback and do not block this turn by sleeping or polling.
+> Soft-reload this disposable testing Pi process after the current turn and continue with `DOCTRINE_RELOAD_CONTINUED`. If its own pane cannot be resolved safely, report the blocker rather than touching another pane.
 
-## N-016a Pi peer lifecycle
+## ZS-016 · Track detached Pi commands automatically
 
-> Use the existing visible Pi peer `pi-zmux-test-peer-pi`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
-
-## N-016b Claude peer lifecycle
-
-> Use the existing visible Claude peer `pi-zmux-test-peer-claude`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
-
-## N-016c Codex peer lifecycle
-
-> Use the existing visible Codex peer `pi-zmux-test-peer-codex`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
-
-## N-016d Agy peer lifecycle
-
-> Use the existing visible Agy peer `pi-zmux-test-peer-agy`. Ask it to reply with a one-line identification of its CLI and model. Use one atomic peer handoff with default lifecycle completion and no output marker. Stop this turn after arming it. When the follow-up triggers, report the pre/post turn generations, final lifecycle state, and reply.
-
-## A-005 missing target
-
-> Inspect status and recent output for the test-owned tab `pi-zmux-test-definitely-missing`. If it does not exist, report the exact failure and stop; do not create it or bypass the canonical dispatcher through shell commands.
-
-## N-007 Pi reload
-
-> We changed a Pi extension. Reload this testing Pi process softly after the current turn. If you cannot identify this process' pane safely, report the blocker instead of reloading a different pane.
-
-## N-013 configured runtime
-
-> This disposable test project has a trusted runtime configuration named `configured-worker`. Start that configured runtime without inventing a replacement command, wait for `CONFIG_READY`, and report the configured tab and readiness evidence.
-
-## N-014 Pi respawn
-
-> This is a disposable testing Pi process with no unsent input. Hard-restart its own pane after the current turn, then continue by reporting `RESPAWN_CONTINUED`. If you cannot resolve this process' pane safely, report the blocker instead of touching another pane.
+> Start `sleep 3; printf 'DOCTRINE_DETACHED_DONE\n'` visibly in `doctrine-test-detached`, detached and without moving focus. Do not arm a callback yourself; prove the dispatcher automatically returns fresh shell-lifecycle completion. Then start a harmless persistent command in `doctrine-test-detached-held` with automatic completion tracking explicitly disabled, prove no callback was armed, and clean up both exact targets.

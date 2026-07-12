@@ -1,0 +1,13 @@
+{
+  "id": "ZD-009",
+  "title": "Keep peers interactive and clean their lifecycle",
+  "invariant": "Peers never use headless print mode and are consumed, parked with a reason, or killed when no concrete next checkpoint exists.",
+  "sharedInstruction": "Launch peers as visible interactive CLIs, never print/headless one-shots; after consuming the answer, retain only for a concrete next checkpoint and otherwise clean up the tab and lifecycle state.",
+  "appliesTo": ["claude", "pi"],
+  "projection": {
+    "claude": { "mechanism": "Launch profiles plus tab peer state/kill", "enforcement": "guard", "promptGuideline": null },
+    "pi": { "mechanism": "Headless launch rejection plus tab_peer/tab_kill", "enforcement": "guard", "promptGuideline": null }
+  },
+  "caveats": { "claude": ["Prompt scope, not OS sandboxing, defines a read-only review."], "pi": ["Immediate teardown may omit an intermediate consumed state."] },
+  "verifyRefs": ["skills/zmux/references/agent-peer.md", "skills/zmux/test/doctor.mjs"]
+}

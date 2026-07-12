@@ -1,0 +1,13 @@
+{
+  "id": "ZD-003",
+  "title": "Do not move focus implicitly",
+  "invariant": "Terminal focus moves only after an explicit user request.",
+  "sharedInstruction": "Keep terminal focus unchanged unless the user explicitly asks to move it; visibility alone is not a focus request.",
+  "appliesTo": ["claude", "pi"],
+  "projection": {
+    "claude": { "mechanism": "Detached/default CLI flags", "enforcement": "instruction", "promptGuideline": null },
+    "pi": { "mechanism": "focus options default false", "enforcement": "typed-operation", "promptGuideline": "Never set focus:true unless the user explicitly wants terminal focus moved; if visibility is requested without focus, keep focus false." }
+  },
+  "caveats": { "claude": [], "pi": ["Explicit tab_focus and pane_focus remain available for direct user requests."] },
+  "verifyRefs": ["skills/zmux/references/run-observe.md", "pi-zmux/test/dispatcher.mjs"]
+}

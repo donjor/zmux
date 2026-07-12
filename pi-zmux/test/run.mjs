@@ -12,6 +12,8 @@ try {
     'references/testing/host-prompt.md',
     'references/testing/host-flow.md',
     'references/testing/prompts.md',
+    'references/testing/answer-key.generated.md',
+    'doctrine-manifest.generated.json',
     'fixtures/config-project/.pi/zmux.json',
     'fixtures/config-project/README.md',
     'fixtures/dev-server/package.json',
@@ -21,8 +23,12 @@ try {
   for (const path of harnessFiles) {
     assert.ok(existsSync(join(root, path)), `canonical testing harness file missing: ${path}`);
   }
-  const checkpoints = readFileSync(join(root, 'references/testing/prompts.md'), 'utf8').match(/^## [NA]-\d{3} /gm) ?? [];
-  assert.equal(checkpoints.length, 19, 'canonical testing flow must retain all 19 accepted checkpoints');
+  const prompts = readFileSync(join(root, 'references/testing/prompts.md'), 'utf8');
+  const checkpoints = prompts.match(/^## ZS-\d{3} ·/gm) ?? [];
+  assert.equal(checkpoints.length, 16, 'canonical Pi testing flow must project all 16 applicable registry scenarios');
+  const manifest = JSON.parse(readFileSync(join(root, 'doctrine-manifest.generated.json'), 'utf8'));
+  assert.deepEqual(checkpoints.map((heading) => heading.slice(3, 9)), manifest.piScenarioIds, 'Pi prompt inventory must match doctrine manifest');
+  assert.ok(!prompts.includes('**Pi mechanics:**'), 'worker prompts must not leak host answer-key operations');
 
   const tsc = join(root, 'node_modules/.bin/tsc');
   const compile = spawnSync(tsc, ['-p', join(root, 'tsconfig.json'), '--outDir', outDir, '--noEmit', 'false'], { stdio: 'inherit' });

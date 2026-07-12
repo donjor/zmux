@@ -12,7 +12,8 @@ zmux is a Go CLI around tmux. The command tree lives under `internal/cli`, core
 tmux interaction is isolated behind `internal/tmux`, and the user-facing
 surfaces are split across focused packages for workspaces, recipes, themes, the
 status bar, logical tabs, terminal evidence, and Bubble Tea TUIs. Optional agent
-integrations live at the repository edge in `skills/zmux/` and `pi-zmux/`.
+integrations live at the repository edge: `agent-doctrine/` owns shared behavioral
+truth, while `skills/zmux/` and `pi-zmux/` consume generated harness projections.
 
 ## Key components
 
@@ -29,8 +30,9 @@ zmux/
 ├── docs/                 # this directory (architecture, setup, dev, reference, domains, and planning docs.)
 ├── themes/iterm2/        # downloaded theme cache (gitignored; not an embed source)
 ├── tests/                # integration tests (build tag: `integration`)
-├── skills/zmux/          # Agent skill, Claude hooks, and peer/worker doctrine
-├── pi-zmux/         # Pi agent TypeScript extension (separate build)
+├── agent-doctrine/       # neutral rules/scenarios + deterministic projection generator
+├── skills/zmux/          # Claude skill/hooks plus generated doctrine/testing projection
+├── pi-zmux/              # Pi extension plus generated guidance/testing projection
 ├── legacy/v0/            # archived bash+gum prototype — see legacy/v0/README.md
 ├── .github/workflows/ci.yml # CI: lint, build, race tests, integration, vuln scan
 ├── .config/wt.toml       # Worktrunk pre-merge gate
@@ -46,8 +48,8 @@ zmux/
 
 ### Source area summary
 
-The active source roots are `cmd/`, `internal/`, `checklists/`, `skills/zmux/`,
-`pi-zmux/`, and `tests/`. Generated or local-only state stays out of the
+The active source roots are `cmd/`, `internal/`, `checklists/`, `agent-doctrine/`,
+`skills/zmux/`, `pi-zmux/`, and `tests/`. Generated or local-only state stays out of the
 tracked source map (`themes/iterm2/`, `.qa/`, profile state). The archived bash
 prototype is under `legacy/v0/`; do not extend it.
 
@@ -142,7 +144,8 @@ The flat `tui` root package was dissolved into focused leaf/surface packages; th
   placements.
 - **Generated user surfaces derive from registries** - keybindings and tmux
   config should read from canonical registries instead of hardcoded duplicate
-  strings.
+  strings. Shared agent outcomes and live scenarios similarly originate in
+  `agent-doctrine/`; generated Claude/Pi copies are committed and freshness-gated.
 
 Durable decision records live in [decisions/](decisions/).
 

@@ -122,15 +122,13 @@ For broad changes to the shipped zmux skill, Pi extension tools, guardrails, or
 peer/worker flows, deterministic checks should be paired with a fresh-session
 prompt run:
 
-- `test-prompts/zmux-agent-skill-testing-prompt.md` — shared skill/CLI doctrine
-  and `zzmux` smoke coverage.
-- `test-prompts/zmux-agent-pi-zmux-testing-prompt.md` — active Pi tool
-  inventory, bash guardrails, typed tools, and peer composite behavior.
+- `test-prompts/zmux-agent-skill-testing-prompt.md` activates the durable Claude/CLI framework under `skills/zmux/references/testing/`.
+- `test-prompts/zmux-agent-pi-zmux-testing-prompt.md` activates the durable Pi framework under `pi-zmux/references/testing/`.
 
-These prompts are exploratory QA wrappers, not a new behavior source of truth.
-Expected behavior still lives in `skills/zmux/SKILL.md`, its references, and
-`docs/domains/pi-zmux-extension.md`; `make test-agent-surfaces` remains the
-repeatable gate.
+These files are thin launch wrappers, not behavior sources. Shared outcomes and prompts
+come from `agent-doctrine/`; generated answer keys remain host-only, and each framework
+owns harness-specific launch/inspection/teardown. `make test-agent-surfaces` remains the
+repeatable deterministic gate.
 
 ## What stays on the human's plate
 

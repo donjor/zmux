@@ -100,7 +100,9 @@ its own config/state and tmux socket, so QA can run without corrupting active
 `zmux` sessions.
 
 Use `./dev.sh zmux` only when you intentionally want to refresh the live binary
-and shared agent integration links.
+and shared agent integration links. It runs `agent-doctrine` freshness validation
+before build/link/sync mutation and refuses stale generated projections; regenerate
+explicitly with `make gen-doctrine` first.
 
 ## Output and failure behavior
 

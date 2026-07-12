@@ -1,5 +1,7 @@
 # Agent Peer Doctrine
 
+Shared outcomes live in `shared-doctrine.generated.md`; this reference owns visible-peer mechanics for Claude and CLI consumers.
+
 Drive an official agent CLI (`codex`, `claude`, `pi`, `agy`, etc.) in a zmux tab as a
 visible peer. Type prompts, read lifecycle state from zmux when the peer is
 instrumented, then read the answer from the terminal. The whole exchange stays

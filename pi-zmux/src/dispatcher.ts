@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { Type } from "typebox";
 import { loadConfig, mergeRuntimeConfig, type RuntimeConfig } from "./config.js";
 import { runTmux, runZmux } from "./exec.js";
+import { SHARED_ZMUX_PROMPT_GUIDELINES } from "./generated/doctrine.js";
 import { interactiveType } from "./interactive.js";
 import { isZmuxOperation, ZMUX_OPERATIONS, type ZmuxOperation } from "./operations.js";
 import {
@@ -758,19 +759,13 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       "Canonical zmux dispatcher for terminal/session work: choose an operation, provide a primary target/command, and keep focus-moving options false unless the user explicitly asked.",
     promptSnippet: "Dispatch canonical zmux terminal/session/runtime operations",
     promptGuidelines: [
-      "Use zmux instead of bash/raw tmux for runtimes, visible tabs, panes, sessions, waits, peers, and Pi lifecycle; never background long-running commands.",
-      "Map: dev server -> runtime_ensure; existing output -> runtime_logs; visible one-shot -> run; sidecar -> pane_open; named tab cleanup -> tab_kill.",
+      ...SHARED_ZMUX_PROMPT_GUIDELINES,
+      "Pi operation map: dev server -> runtime_ensure; existing output -> runtime_logs; visible one-shot -> run; sidecar -> pane_open; named tab cleanup -> tab_kill.",
+      "For runtime_ensure, set target to the runtime/tab name, command and cwd when not configured, and options.waitFor/readiness when readiness evidence was requested.",
       "For run, options.focus=false preserves the current tab. Every detached run automatically tracks command lifecycle and reports completion. Set options.trackCompletion=false only for fire-and-forget commands expected never to return; use options.completionTimeoutSeconds for finite work expected to exceed the one-day default.",
       "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text. It marks the peer running, waits for fresh turn:ready lifecycle, and returns through a follow-up notification by default. Use options.waitFor only as an output-regex fallback for an uninstrumented peer; never send type_text then callback_watch.",
-      "For sudo, ssh, passwords, REPLs, database shells, and other manual input, use interactive_type and never generic run; target admin (or the named shared tab), keep focus false by default, and set options.waitForExit for bounded privileged commands.",
-      "For runtime_ensure, set target to the runtime/tab name, command to the dev/watch command, cwd to the project/fixture directory, and options.waitFor/readiness to ready|localhost when the user asks to wait for readiness.",
-      "For wait/callback_watch, options.waitFor is the output regex only (never prefix output:); set exactly one of waitFor or idleSeconds, never let the callback pattern match outgoing text, and do not block or poll after registration. deliverAs=nextTurn cannot trigger a continuation; use steer/followUp when triggerTurn is true.",
-      "For a named joined pane, call current, then panes with options.session set to that current session; match its TITLE and use the raw %pane id. For literal unsubmitted text use pane_send_keys with options.keys as a string array; pane_type appends Enter.",
+      "For a named joined pane, call current, then panes with options.session set to that current session; match its TITLE and use the raw pane id. For literal unsubmitted text use pane_send_keys with options.keys as a string array; pane_type appends Enter.",
       "For a soft Pi reload, call pi_reload and omit target; it resolves this Pi pane, and its continuation proves completion, while terminal_current only diagnoses the desktop terminal. For pi_reload/pi_respawn continuation, use options.continuationPrompt; never use callback-only deliverAs/triggerTurn.",
-      "Start with operation=sessions or tabs when target/session is ambiguous; never operate on a generic tab name like scratch unless the prompt names the exact tab/session.",
-      "Never set focus:true unless the user explicitly wants terminal focus moved; if the prompt says focus but also says it was not explicitly requested, keep focus false or refuse.",
-      "For servers/watchers, use runtime_ensure/logs/stop. If asked for another copy before logs, ignore that order: runtime_logs the existing target; do not start duplicate processes.",
-      "For remote/admin runs, reuse one stable admin/remote-host tab, decode opaque payloads, and state the intended host mutation before changing remote config.",
     ],
     parameters: paramsSchema,
     async execute(_id, inputParams: ZmuxParams, signal, onUpdate, ctx) {
