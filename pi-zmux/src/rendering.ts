@@ -25,9 +25,11 @@ export type DisplayInput = {
 };
 
 export type DisplayLifecycle = {
-  status?: "running" | "ready" | "done" | "failed" | "attention";
+  status?: "running" | "scheduled" | "ready" | "done" | "failed" | "attention";
+  phase?: string;
   evidence?: string;
   elapsedSeconds?: number;
+  remainingSeconds?: number;
   focusChanged?: boolean;
 };
 
@@ -113,6 +115,7 @@ export const OPERATION_DESCRIPTORS: Record<ZmuxOperation, OperationDescriptor> =
 
 const LARGE_TEXT_CHARACTERS = 1_500;
 const LARGE_TEXT_LINES = 20;
+export const TIMEOUT_ERROR_PREFIX = "[pi-zmux:timeout]";
 const SENSITIVE_PATTERN = /(?:pass(?:word|phrase)?|secret|token|api[-_ ]?key|authorization)\s*[:=]/iu;
 
 function descriptor(operation: string): OperationDescriptor {
@@ -222,12 +225,14 @@ function inferLifecycle(details: Record<string, unknown>, failed: boolean): Disp
           : "done";
   return {
     status,
+    phase: typeof details.phase === "string" ? details.phase : undefined,
     evidence: typeof details.readinessBasis === "string"
       ? details.readinessBasis
       : typeof details.evidenceBasis === "string"
         ? details.evidenceBasis
         : undefined,
     elapsedSeconds: typeof details.elapsedSeconds === "number" ? details.elapsedSeconds : undefined,
+    remainingSeconds: typeof details.remainingSeconds === "number" ? details.remainingSeconds : undefined,
     focusChanged: typeof details.focus === "boolean" ? details.focus : undefined,
   };
 }
@@ -245,7 +250,7 @@ export function buildDisplayMetadata(
   const resolvedRaw = { cwd, ...raw, args: raw.args ?? detailArgs, exitCode: raw.exitCode ?? detailExitCode, output };
   const failed = details.failed === true || (typeof resolvedRaw.exitCode === "number" && resolvedRaw.exitCode !== 0);
   const lifecycle = inferLifecycle(details, failed);
-  if (!failed && ["callback_watch", "peer_handoff"].includes(params.operation)) lifecycle.status = "running";
+  if (!failed && ["callback_watch", "peer_handoff"].includes(params.operation)) lifecycle.status = "scheduled";
   if (!failed && params.operation === "runtime_ensure" && details.ready !== true) lifecycle.status = "running";
   return {
     operation: params.operation,
@@ -382,7 +387,8 @@ function heading(params: ZmuxParams, theme: ThemeLike): string {
   return `${zmuxChip(theme)}  ${action}`;
 }
 
-export function formatZmuxCall(params: ZmuxParams, expanded: boolean, theme: ThemeLike): string {
+export function formatZmuxCall(params: ZmuxParams, expanded: boolean, theme: ThemeLike, active = true): string {
+  if (!active) return "";
   const destination = destinationFor(params);
   const blocks: string[] = [heading(params, theme)];
   const tree = destinationTree(destination, theme);
@@ -398,12 +404,31 @@ function textOutput(result: RenderResult): string {
   return result.content.filter((item) => item.type === "text" && typeof item.text === "string").map((item) => item.text).join("\n").trim();
 }
 
-function statusPresentation(metadata: DisplayMetadata, failed: boolean, partial: boolean): { glyph: string; label: string; color: string } {
+function statusPresentation(metadata: DisplayMetadata, failed: boolean, output: string): { glyph: string; label: string; color: string } {
+  if (failed && output.includes(TIMEOUT_ERROR_PREFIX)) return { glyph: "!", label: `${metadata.verb} timed out`, color: "warning" };
   if (failed || metadata.lifecycle?.status === "failed") return { glyph: "✗", label: `${metadata.verb} failed`, color: "error" };
-  if (partial || metadata.lifecycle?.status === "running") return { glyph: "◐", label: `${metadata.verb} running`, color: "warning" };
+  if (metadata.lifecycle?.status === "scheduled") return { glyph: "◐", label: `${metadata.verb} scheduled`, color: "warning" };
+  if (metadata.lifecycle?.status === "running") return { glyph: "◐", label: `${metadata.verb} running`, color: "warning" };
   if (metadata.lifecycle?.status === "ready") return { glyph: "↩", label: `${metadata.verb} ready`, color: "success" };
   if (metadata.lifecycle?.status === "attention") return { glyph: "●", label: `${metadata.verb} needs attention`, color: "warning" };
   return { glyph: "✓", label: `${metadata.verb} done`, color: "success" };
+}
+
+function formatDuration(seconds: number): string {
+  const whole = Math.max(0, Math.ceil(seconds));
+  if (whole < 60) return `${whole}s`;
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+function progressPresentation(metadata: DisplayMetadata, theme: ThemeLike): string {
+  const lifecycle = metadata.lifecycle ?? {};
+  const phase = lifecycle.phase ?? metadata.verb;
+  const timing = lifecycle.remainingSeconds !== undefined
+    ? `${formatDuration(lifecycle.remainingSeconds)} remaining`
+    : lifecycle.elapsedSeconds !== undefined
+      ? `${formatDuration(lifecycle.elapsedSeconds)} elapsed`
+      : undefined;
+  return theme.fg("warning", `◐ ${phase}${timing ? ` · ${timing}` : ""}`);
 }
 
 function collapsedEvidence(output: string, metadata: DisplayMetadata): string[] {
@@ -419,10 +444,14 @@ function collapsedEvidence(output: string, metadata: DisplayMetadata): string[] 
     }
     return evidence;
   }
+  const inputEchoes = new Set([metadata.input?.value, metadata.input?.value ? `$ ${metadata.input.value}` : undefined].filter((value): value is string => Boolean(value)));
   const meaningful = output
     .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && !/^zmux \S+ completed:/u.test(line));
+    .map((line) => line.trim().replace(`${TIMEOUT_ERROR_PREFIX} `, ""))
+    .filter((line) => line
+      && !/^zmux \S+ completed:/u.test(line)
+      && !/^(?:typed text into|sent keys to|scheduled zmux (?:callback|peer handoff))/u.test(line)
+      && !inputEchoes.has(line));
   if (meaningful.length <= 3 && output.length <= 500) evidence.push(...meaningful);
   else if (meaningful.length) evidence.push(...meaningful.slice(-3));
   return [...new Set(evidence)].slice(0, 3);
@@ -476,20 +505,73 @@ export function formatZmuxResult(
   const details = result.details ?? {};
   const output = textOutput(result);
   const metadata = details.display ?? buildDisplayMetadata(params, "", details, { output });
+  if (options.isPartial) return progressPresentation(metadata, theme);
+
   const failed = isError || details.failed === true;
-  const status = statusPresentation(metadata, failed, options.isPartial);
+  const status = statusPresentation(metadata, failed, output);
   const statusHeading = theme.fg(status.color, theme.bold(`${status.glyph} ${status.label}`));
   const blocks = [`${zmuxChip(theme)}  ${statusHeading}`];
   const tree = destinationTree(metadata.destination, theme);
   const listed = options.expanded ? [] : listTree(metadata.operation, output, tree.length, theme);
   if (tree.length || listed.length) blocks.push([...tree, ...listed].join("\n"));
+
+  const input = renderInput(metadata.input, options.expanded, theme);
+  if (input.length) blocks.push(input.join("\n"));
+  const optionsSummary = optionSummary(params, options.expanded);
+  if (optionsSummary.length) blocks.push(theme.fg("muted", optionsSummary.join(" · ")));
+
   if (options.expanded) {
     const rows = expandedMetadata(metadata, details, output);
     const width = Math.max(9, ...rows.map(([key]) => key.length)) + 2;
     blocks.push(rows.map(([key, value]) => `${theme.fg("muted", key.padEnd(width))}${theme.fg("toolOutput", value)}`).join("\n"));
   } else if (!listed.length) {
     const evidence = collapsedEvidence(output, metadata);
-    if (evidence.length) blocks.push(evidence.map((line) => theme.fg(failed ? "error" : "toolOutput", line)).join("\n"));
+    if (evidence.length) blocks.push(evidence.map((line) => theme.fg(failed && status.glyph === "✗" ? "error" : "toolOutput", line)).join("\n"));
   }
   return blocks.filter(Boolean).join("\n\n");
+}
+
+export function formatZmuxCallbackMessage(
+  message: { content: unknown; details?: unknown },
+  expanded: boolean,
+  theme: ThemeLike,
+): string {
+  const details = message.details && typeof message.details === "object" ? message.details as Record<string, unknown> : {};
+  const tab = typeof details.tab === "string" ? details.tab : "callback";
+  const callbackKind = details.callbackKind === "peer_handoff" ? "peer_handoff" : "watch";
+  const exitCode = typeof details.exitCode === "number" ? details.exitCode : null;
+  const met = details.waitMet === true || (exitCode === 0 && details.waitMet === undefined);
+  const state = typeof details.waitState === "string" ? details.waitState : undefined;
+  const basis = typeof details.evidenceBasis === "string"
+    ? details.evidenceBasis
+    : typeof details.basis === "string"
+      ? details.basis
+      : undefined;
+  const fresh = details.fresh === true ? "fresh" : undefined;
+  const started = typeof details.startedAt === "string" ? Date.parse(details.startedAt) : Number.NaN;
+  const finished = typeof details.finishedAt === "string" ? Date.parse(details.finishedAt) : Number.NaN;
+  const elapsed = Number.isFinite(started) && Number.isFinite(finished) ? Math.max(0, (finished - started) / 1000) : undefined;
+  const glyph = met ? "✓" : "!";
+  const label = met
+    ? callbackKind === "peer_handoff" ? `${tab} ready` : `${tab} callback matched`
+    : `${tab} completion unproven`;
+  const evidence = [basis, state, fresh, elapsed !== undefined ? `${formatDuration(elapsed)} elapsed` : undefined].filter(Boolean).join(" · ");
+  const blocks = [theme.fg(met ? "success" : "warning", theme.bold(`${glyph} ${label}`))];
+  if (evidence) blocks.push(theme.fg("toolOutput", evidence));
+  if (expanded) {
+    const rows: Array<[string, string | undefined]> = [
+      ["callback", typeof details.id === "string" ? details.id : undefined],
+      ["session", typeof details.session === "string" ? details.session : "current"],
+      ["started", typeof details.startedAt === "string" ? details.startedAt : undefined],
+      ["finished", typeof details.finishedAt === "string" ? details.finishedAt : undefined],
+      ["exit", details.exitCode === null ? "signal" : typeof details.exitCode === "number" ? String(details.exitCode) : undefined],
+      ["failure", typeof details.failureKind === "string" ? details.failureKind : undefined],
+      ["output", typeof details.rawOutput === "string" ? details.rawOutput : typeof message.content === "string" ? message.content : undefined],
+      ["stderr", typeof details.stderr === "string" ? details.stderr : undefined],
+    ];
+    const present = rows.filter((row): row is [string, string] => Boolean(row[1]));
+    const width = Math.max(9, ...present.map(([key]) => key.length)) + 2;
+    blocks.push(present.map(([key, value]) => `${theme.fg("muted", key.padEnd(width))}${theme.fg("toolOutput", value)}`).join("\n"));
+  }
+  return blocks.join("\n\n");
 }

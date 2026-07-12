@@ -38,14 +38,17 @@ function fakePi() {
   const registeredTools = [];
   const registeredCommands = [];
   const registeredHandlers = [];
+  const registeredMessageRenderers = [];
   const sentMessages = [];
   return {
     registeredTools,
     registeredCommands,
     registeredHandlers,
+    registeredMessageRenderers,
     sentMessages,
     api: {
       registerTool(tool) { registeredTools.push(tool); },
+      registerMessageRenderer(customType, renderer) { registeredMessageRenderers.push({ customType, renderer }); },
       registerCommand(name, options) { registeredCommands.push({ name, options }); },
       on(event, handler) { registeredHandlers.push({ event, handler }); },
       sendMessage(message, options) { sentMessages.push({ message, options }); },
@@ -115,8 +118,14 @@ function readCommandLog(path) {
   return readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
 }
 
-async function executeDispatcher(tool, params, cwd = '/repo', projectTrusted = true) {
-  return tool.execute('dispatcher-contract', params, undefined, undefined, { cwd, isProjectTrusted: () => projectTrusted });
+async function executeDispatcher(tool, params, cwd = '/repo', projectTrusted = true, execution = {}) {
+  const ui = execution.ui ?? { setStatus() {}, notify() {} };
+  return tool.execute('dispatcher-contract', params, execution.signal, execution.onUpdate, {
+    cwd,
+    mode: execution.mode ?? 'tui',
+    ui,
+    isProjectTrusted: () => projectTrusted,
+  });
 }
 
 async function validateDispatcherContract(extension, dispatcherTool, testDirectory, dispatcherOperations, lifecycle) {
@@ -434,7 +443,23 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     assert.deepEqual(callbackMessage.options, { deliverAs: 'followUp', triggerTurn: false });
     assert.equal(callbackMessage.message.content, 'wait matched work\noutputRegex · DONE · fresh');
     assert.doesNotMatch(callbackMessage.message.content, /TAIL_199/);
+    await executeDispatcher(dispatcherTool, { operation: 'callback_watch', target: 'work', options: { id: 'callback-stale-ui', waitFor: 'DONE' } }, contextCwd, true, {
+      mode: 'tui',
+      ui: { setStatus() { throw new Error('stale UI'); }, notify() {} },
+    });
+    await waitFor(() => extension.sentMessages.some(({ message }) => message.details?.id === 'callback-stale-ui'), 'stale callback UI sink must not block completion delivery');
     delete process.env.PI_ZMUX_TEST_WAIT_OUTPUT;
+
+    const spawnErrorStatuses = [];
+    process.env.PI_ZMUX_BIN = join(testDirectory, 'missing-zmux-binary');
+    await executeDispatcher(dispatcherTool, { operation: 'callback_watch', target: 'work', options: { id: 'callback-spawn-error', waitFor: 'DONE' } }, contextCwd, true, {
+      mode: 'tui',
+      ui: { setStatus(key, text) { spawnErrorStatuses.push({ key, text }); }, notify() {} },
+    });
+    await waitFor(() => extension.sentMessages.some(({ message }) => message.details?.id === 'callback-spawn-error'), 'callback child error message was not delivered');
+    assert.equal(spawnErrorStatuses.at(-1).text, undefined, 'callback child error must clear its footer status');
+    assert.match(extension.sentMessages.find(({ message }) => message.details?.id === 'callback-spawn-error').message.details.stderr, /ENOENT|no such file/i);
+    process.env.PI_ZMUX_BIN = recorder.path;
 
     process.env.PI_ZMUX_TEST_HOLD = '1';
     const cancellable = await execute({ operation: 'callback_watch', target: 'work', options: { id: 'callback-cancel', idleSeconds: 1 } });
@@ -457,12 +482,73 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
       /nextTurn.*never triggers a turn/,
     );
 
-    const shutdownCallback = await execute({ operation: 'callback_watch', target: 'work', options: { id: 'callback-shutdown', idleSeconds: 1 } });
+    const shutdownStatuses = [];
+    const shutdownCallback = await executeDispatcher(dispatcherTool, { operation: 'callback_watch', target: 'work', options: { id: 'callback-shutdown', idleSeconds: 1 } }, contextCwd, true, {
+      mode: 'tui',
+      ui: { setStatus(key, text) { shutdownStatuses.push({ key, text }); }, notify() {} },
+    });
     assert.equal(shutdownCallback.details.id, 'callback-shutdown');
     const shutdown = extension.registeredHandlers.find((handler) => handler.event === 'session_shutdown');
     shutdown.handler();
+    assert.equal(shutdownStatuses.at(-1).text, undefined, 'session shutdown must clear background wait status');
     const afterShutdown = await execute({ operation: 'callback_list' });
     assert.equal(toolText(afterShutdown), 'no active zmux callbacks');
+
+    const sessionStartStatuses = [];
+    await executeDispatcher(dispatcherTool, { operation: 'callback_watch', target: 'work', options: { id: 'callback-session-start', idleSeconds: 1 } }, contextCwd, true, {
+      mode: 'tui',
+      ui: { setStatus(key, text) { sessionStartStatuses.push({ key, text }); }, notify() {} },
+    });
+    const sessionReplacement = extension.registeredHandlers.find((handler) => handler.event === 'session_start');
+    await sessionReplacement.handler({}, { cwd: contextCwd, ui: { notify() {} } });
+    assert.equal(sessionStartStatuses.at(-1).text, undefined, 'session replacement must clear callback footer state and its UI sink');
+    const afterSessionStart = await execute({ operation: 'callback_list' });
+    assert.equal(toolText(afterSessionStart), 'no active zmux callbacks');
+    delete process.env.PI_ZMUX_TEST_HOLD;
+
+    const progressUpdates = [];
+    const progressAbort = new AbortController();
+    process.env.PI_ZMUX_TEST_HOLD = '1';
+    const heldWait = executeDispatcher(dispatcherTool, { operation: 'wait', target: 'work', options: { waitFor: 'NEVER', timeoutSeconds: 5 } }, contextCwd, true, {
+      signal: progressAbort.signal,
+      onUpdate(update) { progressUpdates.push(update); },
+      mode: 'tui',
+    });
+    await waitFor(() => progressUpdates.length > 0, 'foreground wait did not publish delayed progress');
+    assert.equal(progressUpdates[0].details.display.lifecycle.phase, 'waiting for output');
+    assert.ok(progressUpdates[0].details.display.lifecycle.remainingSeconds <= 5);
+    progressAbort.abort();
+    await assert.rejects(() => heldWait, /abort/i);
+    const progressCountAfterAbort = progressUpdates.length;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_100));
+    assert.equal(progressUpdates.length, progressCountAfterAbort, 'foreground ticker must stop after abort');
+    await assert.rejects(
+      () => execute({ operation: 'wait', target: 'work', options: { waitFor: 'NEVER', timeoutSeconds: 0.01 } }),
+      /timed out after 0\.01s; completion unproven/,
+    );
+    delete process.env.PI_ZMUX_TEST_HOLD;
+
+    const rpcUpdates = [];
+    await executeDispatcher(dispatcherTool, { operation: 'tabs' }, contextCwd, true, { mode: 'rpc', onUpdate(update) { rpcUpdates.push(update); } });
+    assert.equal(rpcUpdates.length, 0, 'non-TUI modes must not emit cosmetic progress updates');
+
+    process.env.PI_ZMUX_TEST_HOLD = '1';
+    const statusEvents = [];
+    const visibleUi = { setStatus(key, text) { statusEvents.push({ key, text }); }, notify() {} };
+    const visibleExecute = (params) => executeDispatcher(dispatcherTool, params, contextCwd, true, { mode: 'tui', ui: visibleUi });
+    await visibleExecute({ operation: 'callback_watch', target: 'work', options: { id: 'footer-a', waitFor: 'ONE', timeoutSeconds: 5 } });
+    await visibleExecute({ operation: 'callback_watch', target: 'other', options: { id: 'footer-b', idleSeconds: 1, timeoutSeconds: 8 } });
+    assert.match(statusEvents.at(-1).text, /2 waits · nearest/);
+    const footerTickCount = statusEvents.length;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_100));
+    assert.ok(statusEvents.length > footerTickCount, 'background footer must update on its one-second cadence');
+    await visibleExecute({ operation: 'callback_cancel', target: 'footer-a' });
+    assert.match(statusEvents.at(-1).text, /other · waiting for 1s idle/);
+    await visibleExecute({ operation: 'callback_cancel', target: 'footer-b' });
+    assert.equal(statusEvents.at(-1).text, undefined, 'last callback removal must clear the footer');
+    const footerCountAfterClear = statusEvents.length;
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_100));
+    assert.equal(statusEvents.length, footerCountAfterClear, 'background footer interval must stop when no waits remain');
     delete process.env.PI_ZMUX_TEST_HOLD;
 
     const noFocus = await execute({ operation: 'tab_place', target: 'child', options: { action: 'pane', into: 'host', focus: false } });
@@ -523,12 +609,13 @@ try {
   symlinkSync(nodeModules, join(compiledOut, 'node_modules'), 'dir');
 
   const { default: registerExtension } = await import(join(compiledOut, 'index.js'));
-  const { ZMUX_OPERATIONS } = await import(join(compiledOut, 'src/dispatcher.js'));
+  const { ZMUX_OPERATIONS, executionTimeoutSeconds } = await import(join(compiledOut, 'src/dispatcher.js'));
   const piLifecycle = await import(join(compiledOut, 'src/zmux/pi-lifecycle.js'));
   const {
     OPERATION_DESCRIPTORS,
     buildDisplayMetadata,
     formatZmuxCall,
+    formatZmuxCallbackMessage,
     formatZmuxResult,
   } = await import(join(compiledOut, 'src/rendering.js'));
   const { visibleWidth } = await import('@earendil-works/pi-tui');
@@ -555,8 +642,13 @@ try {
   assert.match(guidelines, /named joined pane.*current.*options\.session.*TITLE.*pane_send_keys.*string array.*pane_type.*Enter/is);
   assert.ok(dispatcher.parameters.properties.operation.description.includes('runtime_ensure'));
   assert.match(dispatcher.parameters.properties.options.description, /waitForExit/);
+  assert.equal(executionTimeoutSeconds({ operation: 'wait', target: 'work', options: { waitFor: 'DONE' } }), 300, 'default wait UI/process deadline must match zmux wait -T');
+  assert.equal(executionTimeoutSeconds({ operation: 'runtime_logs', target: 'work', options: { waitFor: 'DONE' } }), 10, 'runtime log wait deadline must match buildWatchArgs default');
+  assert.equal(executionTimeoutSeconds({ operation: 'run', command: 'true' }), 130);
+  assert.equal(executionTimeoutSeconds({ operation: 'pane_type', target: '%1', options: { text: 'x' } }), 5);
   assert.equal(typeof dispatcher.renderCall, 'function', 'dispatcher must provide a native call renderer');
   assert.equal(typeof dispatcher.renderResult, 'function', 'dispatcher must provide a native result renderer');
+  assert.deepEqual(extension.registeredMessageRenderers.map((entry) => entry.customType), ['pi-zmux-callback'], 'callback delivery must use a native compact renderer');
 
   const plainTheme = {
     fg(_color, text) { return text; },
@@ -577,6 +669,19 @@ try {
   assert.ok(typeCall.includes(`_${typedText}_`), 'typed text must render in italics and in full');
   assert.doesNotMatch(typeCall, new RegExp(`"${typedText}"`), 'typed text must not be quoted');
   assert.match(typeCall, /wait for ready · focus unchanged/);
+  assert.equal(formatZmuxCall(typeRenderArgs, false, plainTheme, false), '', 'final call slot must become empty so the result owns the completed card');
+
+  const partialDisplay = buildDisplayMetadata(typeRenderArgs, '/repo', { status: 'running', phase: 'waiting for peer readiness', elapsedSeconds: 2, remainingSeconds: 58 });
+  const partialRendered = formatZmuxResult({ content: [{ type: 'text', text: '' }], details: { display: partialDisplay } }, typeRenderArgs, { expanded: false, isPartial: true }, false, plainTheme);
+  assert.equal(partialRendered, '◐ waiting for peer readiness · 58s remaining', 'partial result must append only live phase/time feedback');
+  assert.doesNotMatch(partialRendered, /zmux|pi-peer|Review the current/, 'partial result must not repeat the call card');
+
+  const typeFinalDisplay = buildDisplayMetadata(typeRenderArgs, '/repo', {}, { output: 'typed text into pi-peer' });
+  const typeFinal = formatZmuxResult({ content: [{ type: 'text', text: 'typed text into pi-peer' }], details: { display: typeFinalDisplay } }, typeRenderArgs, { expanded: false, isPartial: false }, false, plainTheme);
+  assert.equal((`${formatZmuxCall(typeRenderArgs, false, plainTheme, false)}\n${typeFinal}`.match(/┫ 󱂬 zmux ┣/g) ?? []).length, 1, 'completed tool box must contain one zmux identity chip');
+  assert.equal((typeFinal.match(/pi-peer/g) ?? []).length, 1, 'completed tool box must render its destination once');
+  assert.ok(typeFinal.includes(`_${typedText}_`), 'completed card must retain the original input after the call slot disappears');
+  assert.doesNotMatch(typeFinal, /typed text into pi-peer/, 'collapsed evidence must suppress dispatcher echoes already represented by the card');
 
   const hugeText = Array.from({ length: 22 }, (_, index) => `line ${index} ${'x'.repeat(70)}`).join('\n');
   const hugeArgs = { operation: 'peer_handoff', target: 'pi-peer', options: { session: 'main', text: hugeText } };
@@ -605,6 +710,47 @@ try {
   assert.match(paneExpanded, /pane\s+%272/);
   assert.match(paneExpanded, /argv\s+pane resize %272 --height 40%/);
 
+  const timedOut = formatZmuxResult(
+    { content: [{ type: 'text', text: '[pi-zmux:timeout] zmux wait timed out after 2s' }] },
+    { operation: 'wait', target: 'work', options: { waitFor: 'DONE', timeoutSeconds: 2 } },
+    { expanded: false, isPartial: false },
+    true,
+    plainTheme,
+  );
+  assert.match(timedOut, /^┫ 󱂬 zmux ┣  ! wait timed out/);
+  assert.doesNotMatch(timedOut, /✗/, 'timeout without concrete failure evidence must use warning presentation');
+  assert.doesNotMatch(timedOut, /\[pi-zmux:timeout\]/, 'structured timeout marker must not leak into collapsed evidence');
+  const realFailureMentioningTimeout = formatZmuxResult(
+    { content: [{ type: 'text', text: 'connection timeout refused' }] },
+    { operation: 'run', command: 'connect service' },
+    { expanded: false, isPartial: false },
+    true,
+    plainTheme,
+  );
+  assert.match(realFailureMentioningTimeout, /^┫ 󱂬 zmux ┣  ✗ run command failed/, 'ordinary failure text mentioning timeout must remain a failure');
+
+  const callbackRendered = formatZmuxCallbackMessage({
+    content: 'wait matched pi-peer\nturnState · ready · fresh',
+    details: {
+      id: 'peer-handoff-1',
+      callbackKind: 'peer_handoff',
+      tab: 'pi-peer',
+      session: 'main',
+      startedAt: '2026-07-12T00:00:00.000Z',
+      finishedAt: '2026-07-12T00:00:03.000Z',
+      exitCode: 0,
+      waitMet: true,
+      evidenceBasis: 'turnState',
+      waitState: 'ready',
+      fresh: true,
+      rawOutput: '{"outcome":{"met":true}}',
+    },
+  }, false, plainTheme);
+  assert.equal(callbackRendered, '✓ pi-peer ready\n\nturnState · ready · fresh · 3s elapsed');
+  const callbackExpanded = formatZmuxCallbackMessage({ content: '', details: { id: 'callback-1', tab: 'work', exitCode: 1, failureKind: 'timeout', rawOutput: 'raw wait evidence' } }, true, plainTheme);
+  assert.match(callbackExpanded, /^! work completion unproven/);
+  assert.match(callbackExpanded, /callback\s+callback-1[\s\S]*failure\s+timeout[\s\S]*output\s+raw wait evidence/);
+
   const tabsParams = { operation: 'tabs', options: { session: 'main' } };
   const tabsResult = { content: [{ type: 'text', text: '1: pi ready\n2: api running' }], details: { display: buildDisplayMetadata(tabsParams, '/repo', {}, { output: '1: pi ready\n2: api running' }) } };
   const tabsRendered = formatZmuxResult(tabsResult, tabsParams, { expanded: false, isPartial: false }, false, plainTheme);
@@ -620,7 +766,7 @@ try {
     cwd: '/repo',
     executionStarted: false,
     argsComplete: true,
-    isPartial: false,
+    isPartial: true,
     showImages: false,
     isError: false,
   };
@@ -628,6 +774,8 @@ try {
   for (const line of narrowCall.render(24)) {
     assert.ok(visibleWidth(line) <= 24, `narrow renderer overflowed: ${JSON.stringify(line)}`);
   }
+  const finalCallComponent = dispatcher.renderCall(typeRenderArgs, plainTheme, { ...renderContext, isPartial: false, lastComponent: undefined });
+  assert.deepEqual(finalCallComponent.render(80), [], 'native final call slot must render no rows');
 
   assert.equal(
     extension.registeredHandlers.filter((handler) => handler.event === 'before_agent_start').length,

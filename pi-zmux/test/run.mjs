@@ -71,8 +71,10 @@ try {
   const registeredTools = [];
   const registeredCommands = [];
   const registeredHandlers = [];
+  const registeredMessageRenderers = [];
   const fakePi = {
     registerTool(tool) { registeredTools.push(tool); },
+    registerMessageRenderer(customType, renderer) { registeredMessageRenderers.push({ customType, renderer }); },
     registerCommand(name, options) { registeredCommands.push({ name, options }); },
     on(event, handler) { registeredHandlers.push({ event, handler }); },
     sendMessage() {},
@@ -83,6 +85,7 @@ try {
   assert.deepEqual(toolNames, ['zmux'], 'production Pi tool surface must expose only the canonical dispatcher');
   assert.equal(new Set(toolNames).size, toolNames.length, 'tool names must be unique');
   assert.deepEqual(registeredCommands.map((cmd) => cmd.name), ['zmux']);
+  assert.deepEqual(registeredMessageRenderers.map((entry) => entry.customType), ['pi-zmux-callback']);
   for (const eventName of ['agent_start', 'agent_end', 'session_shutdown', 'session_start', 'tool_call']) {
     assert.ok(registeredHandlers.some((handler) => handler.event === eventName), `expected handler for ${eventName}`);
   }

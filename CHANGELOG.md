@@ -9,6 +9,7 @@ versioning is semver-ish until the first public release.
 
 ### Fixed
 
+- **Pi-zmux waits stay visible without duplicating completed cards** `agents` `pi` — foreground dispatcher work now updates one pending card with phase/countdown feedback before settling into one consolidated result, scheduled callbacks keep one aggregate footer indicator alive until completion/cancellation/session replacement/shutdown, and callback delivery uses a compact native renderer with expanded diagnostics. Timeout remains warning/unproven unless concrete failure evidence exists.
 - **Instrumented peer handoffs resume Pi from lifecycle completion** `agents` `pi` — atomic `peer_handoff` now arms a fresh `turn:ready` wait, marks the peer running, and only then submits before delivering completion as a triggering follow-up by default. Output/idle are explicit fallbacks, `nextTurn` plus `triggerTurn` is rejected, the dispatcher now uses the canonical callback registry instead of a promoted duplicate, and the live matrix covers low-tier Pi, Claude, Codex, and Agy plus shell-command lifecycle.
 
 ## [0.14.0] - 2026-07-11

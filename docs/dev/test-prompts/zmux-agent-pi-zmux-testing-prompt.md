@@ -72,7 +72,11 @@ Required results:
 - dispatcher contracts pass 40/40;
 - schema estimate stays at or below 1,200 tokens;
 - automatic injected runtime context is zero tokens;
-- `/zmux status` still returns the full human diagnostic snapshot.
+- `/zmux status` still returns the full human diagnostic snapshot;
+- completed tool boxes show one consolidated zmux card, while a deliberately
+  delayed foreground wait updates in place with phase and remaining time;
+- scheduled callbacks show one aggregate footer status that clears on
+  completion, cancellation, session replacement, and shutdown.
 
 ## Source and guard checks
 
@@ -123,10 +127,15 @@ Set a unique `$RUN_ID`. Record every tool call and result.
   Output or process liveness alone is not lifecycle evidence.
 - Use `type_text` to send `hello-$RUN_ID` to `worker`; prove `worker-saw:hello-$RUN_ID`.
 - Apply `tab_state` and `tab_peer`, then read both with `tab_status`/`tab_inspect`.
-- Start `callback_watch` for a future `worker-saw:callback-$RUN_ID` marker, then
-  send the input. Confirm a top-level custom message with `customType:
-  "pi-zmux-callback"`, fresh evidence basis, and no leaked callback handle.
-- Use `callback_list`; cancel any remaining handle with `callback_cancel`.
+- Start `callback_watch` for a future `worker-saw:callback-$RUN_ID` marker.
+  Before sending the input, confirm the scheduled tool card settles while an
+  aggregate Pi-zmux footer remains visible and counts down. Then send the input
+  and confirm the footer clears and a compact top-level message with
+  `customType: "pi-zmux-callback"` reports fresh evidence without leaking a
+  callback handle.
+- Start and cancel one additional held callback; prove cancellation clears the
+  footer without delivering a completion message. Use `callback_list` and
+  `callback_cancel` for cleanup.
 
 ### 5. Real peer lifecycle matrix
 

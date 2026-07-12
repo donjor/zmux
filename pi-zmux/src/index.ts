@@ -1,10 +1,12 @@
 import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Box, Text } from "@earendil-works/pi-tui";
 import { classifyBash, hasExplicitBypass, shouldBlock } from "./classify.js";
 import { loadConfig } from "./config.js";
 import { shouldTriggerContinuation, takeReloadContinuation, type ReloadContinuation } from "./reload-continuation.js";
 import { takeRespawnContinuation, type RespawnContinuation } from "./respawn-continuation.js";
-import { registerZmuxDispatcher } from "./dispatcher.js";
+import { clearZmuxDispatcherActivity, registerZmuxDispatcher } from "./dispatcher.js";
 import { registerGlyphLifecycle } from "./lifecycle.js";
+import { formatZmuxCallbackMessage } from "./rendering.js";
 import { clearCallbacks } from "./zmux/callbacks.js";
 import { currentPane, listTabs, reloadZmux } from "./zmux/context.js";
 import { zmux } from "./zmux/shared.js";
@@ -70,14 +72,22 @@ function sendContinuation(
 
 export default function (pi: ExtensionAPI): void {
 	registerZmuxDispatcher(pi);
+	pi.registerMessageRenderer("pi-zmux-callback", (message, { expanded }, theme) => {
+		const box = new Box(1, 1, (text) => theme.bg("customMessageBg", text));
+		box.addChild(new Text(formatZmuxCallbackMessage(message, expanded, theme), 0, 0));
+		return box;
+	});
 
 	pi.on("session_shutdown", async () => {
 		clearCallbacks();
+		clearZmuxDispatcherActivity();
 	});
 
 	registerGlyphLifecycle(pi);
 
 	pi.on("session_start", async (_event, ctx) => {
+		clearCallbacks();
+		clearZmuxDispatcherActivity();
 		const reloadContinuation = takeReloadContinuation(ctx.cwd);
 		if (reloadContinuation) {
 			const sent = sendContinuation(pi, "reload", reloadContinuation);

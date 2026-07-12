@@ -384,7 +384,7 @@ zmux type codex-peer '/new'
 
 Pause briefly before the next prompt; session reset can race input.
 
-Quit only when the peer session is genuinely done. After the answer is consumed, prefer `zmux tab peer park <peer> --ttl 30m`; use `keep --ttl` only for a named next checkpoint. The shell and tab may survive a CLI exit, so a future peer can be spawned in the same named tab until the parked tab expires and reaps.
+Quit only when the peer session is genuinely done. After the answer is consumed, prefer `zmux tab peer park <peer> --ttl 30m`; use `keep --ttl` only for a named next checkpoint. If the tab is being killed immediately, `tab kill` is sufficient cleanup—do not add a redundant `tab peer consumed` write first. The shell and tab may survive a CLI exit, so a future peer can be spawned in the same named tab until the parked tab expires and reaps.
 
 ## Clean Quotes
 

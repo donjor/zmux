@@ -27,7 +27,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 ## Reusable primitives
 
 - `src/dispatcher.ts` owns the one-tool schema and its 40 operation mappings.
-- `src/rendering.ts` owns compact/expanded native tool-call and result presentation, including destination trees, lifecycle evidence, narrow-width wrapping, and sensitive-input redaction.
+- `src/rendering.ts` owns the pending/partial/final native tool-card lifecycle, compact/expanded presentation, callback-message rendering, destination trees, lifecycle evidence, narrow-width wrapping, and sensitive-input redaction.
 - `src/exec.ts` and `src/interactive.ts` are focused dispatcher adapters over the `zmux` CLI and tmux socket.
 - `src/classify.ts` shares the guard vocabulary with the zmux skill and Claude hook tests.
 - `src/zmux/**` retains context, lifecycle, and continuation primitives used outside the model-visible schema.
@@ -83,9 +83,9 @@ package names. Runtime Pi core packages are peer dependencies; local development
 uses dev dependencies from `pi-zmux/package.json`.
 
 ```bash
-bun --cwd pi-zmux install
-bun --cwd pi-zmux run typecheck
-bun --cwd pi-zmux test
+npm --prefix pi-zmux install
+npm --prefix pi-zmux run typecheck
+npm --prefix pi-zmux test
 make test-agent-surfaces
 ```
 
@@ -111,15 +111,18 @@ remains in this domain doc plus `skills/zmux/SKILL.md` and its references, while
 
 The accepted one-tool candidate's behavioral checkpoints are preserved and
 extended as a lightweight package regression flow under
-`pi-zmux/references/testing/`. A host drives one visible Terra/medium Pi worker
-through the main chain and judges real terminal state after each prompt; one
-disposable worker covers the trusted-project and hard-respawn checks. Dedicated
-lifecycle probes cover a three-second shell command plus low-tier Pi, Claude,
-Codex, and Agy peers without spending judgment-tier models. The flow distinguishes
-clean passes from safe recovered friction, uses exact test-owned teardown, and
-requires no custom agent/profile,
-run IDs, JSONL, or transcript schema. Historical promotion artifacts remain in
-the skills repo.
+`pi-zmux/references/testing/`.
+
+- A host drives one visible Terra/medium Pi worker through the main chain and
+  judges real terminal state after each prompt.
+- One disposable worker covers trusted-project and hard-respawn checks.
+- Dedicated lifecycle probes cover a three-second shell command plus low-tier
+  Pi, Claude, Codex, and Agy peers without spending judgment-tier models.
+- The flow distinguishes clean passes from safe recovered friction, uses exact
+  test-owned teardown, and requires no custom profile, run IDs, JSONL, or
+  transcript schema.
+
+Historical promotion artifacts remain in the skills repo.
 
 ## Dispatcher
 
@@ -140,27 +143,36 @@ Operation groups:
   `callback_list`, `callback_cancel`, `terminal_current`, `pi_reload`,
   `pi_respawn`.
 
-The schema estimate is gated at no more than 1,200 tokens; the accepted
-production surface is approximately 995. The extension does not inject runtime
+The schema estimate is gated at no more than 1,200 tokens; the current
+production surface is approximately 1,088. The extension does not inject runtime
 state into the model system prompt. State is read only when the agent calls a
 context operation or another operation resolves the live target it needs.
 `/zmux status` retains the full human diagnostic snapshot without adding it to
 model context. Bash hooks, lifecycle glyphs, callbacks, and continuation
 handlers add no prompt tokens by themselves.
 
-The dispatcher preserves operation-specific safety: persistent processes use
-`runtime_ensure`; sudo/manual input uses `interactive_type`; atomic
-`peer_handoff` arms a fresh `turn:ready` lifecycle callback, marks the peer
-running, and only then submits before the default follow-up continuation;
-output-regex and idle callbacks are explicit fallbacks; literal pane keys remain
-separate from
-submit-with-Enter pane typing; and focus-moving options stay false unless the
-user explicitly requests focus. Native call/result rendering keeps
-collapsed output readable while expanded views retain structured operation,
-argv, cwd, lifecycle, and evidence details. Successful wait and callback
-completions summarize their match basis and freshness instead of returning the
-captured output tail to the model; expanded wait views retain the raw JSON for
-human diagnosis.
+The dispatcher preserves operation-specific safety:
+
+- persistent processes use `runtime_ensure`;
+- sudo/manual input uses `interactive_type`;
+- atomic `peer_handoff` arms a fresh `turn:ready` callback, marks the peer
+  running, and only then submits before the default follow-up continuation;
+- output-regex and idle callbacks are explicit fallbacks;
+- literal pane keys remain separate from submit-with-Enter pane typing;
+- focus-moving options stay false unless the user explicitly requests focus.
+
+Native rendering updates one tool card through pending, partial, and final
+states. Foreground operations longer than the anti-flicker delay show TUI-only
+phase/countdown feedback; the completed card presents its operation,
+destination, input, options, and evidence once. Expanded views retain structured
+operation, argv, cwd, lifecycle, and raw evidence details.
+
+Scheduled background callbacks publish one aggregate footer status until
+completion, cancellation, session replacement, or shutdown, then deliver through a compact native
+`pi-zmux-callback` renderer. Successful wait and callback completions summarize
+their match basis and freshness instead of returning captured output tails to
+the model; expanded wait/callback views retain raw diagnostics for human
+inspection.
 
 ## Bash guardrails
 
@@ -212,8 +224,9 @@ name without rediscovering commands or starting duplicate processes.
 
 - `operation=type_text` delegates to first-class `zmux type --json` with peer-running and turn-wait options.
 - `operation=peer_handoff` arms `zmux wait --for turn:ready`, sets `running`,
-  then submits. Completion uses `deliverAs: "followUp"` with `triggerTurn: true`
-  unless explicitly changed.
+  then submits. The aggregate Pi footer keeps the scheduled wait visible after
+  the tool returns. Completion clears it and uses `deliverAs: "followUp"` with
+  `triggerTurn: true` unless explicitly changed.
 - Pi and Claude currently publish native turn-end lifecycle. Codex and Agy
   complete visible answers without advancing `turnState`; callers use explicit
   `idleSeconds` fallback for those CLIs, while the regression matrix keeps their

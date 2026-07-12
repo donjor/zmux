@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { AgentToolUpdateCallback, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { resolve } from "node:path";
 import { Type } from "typebox";
@@ -9,6 +9,7 @@ import { isZmuxOperation, ZMUX_OPERATIONS, type ZmuxOperation } from "./operatio
 import {
   formatZmuxCall,
   formatZmuxResult,
+  TIMEOUT_ERROR_PREFIX,
   withDisplayMetadata,
   type RenderResult as ZmuxRenderResult,
   type ZmuxParams,
@@ -21,6 +22,7 @@ import {
   listRecentCallbackCompletions,
   startPeerHandoff,
   startWatchCallback,
+  type CallbackActivitySink,
 } from "./zmux/callbacks.js";
 import { resizePane } from "./zmux/panes.js";
 import { zmuxRunSafetyWarnings } from "./zmux/sessions.js";
@@ -476,7 +478,93 @@ function content(text: string, details: Record<string, unknown> = {}) {
   };
 }
 
-async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: string, signal?: AbortSignal) {
+type ForegroundProgress = {
+  setPhase(phase: string): void;
+  stop(): void;
+};
+
+let callbackStatusSetter: ((text: string | undefined) => void) | undefined;
+const sharedCallbackActivitySink: CallbackActivitySink = {
+  set(text) {
+    callbackStatusSetter?.(text);
+  },
+};
+
+function callbackActivitySinkFor(mode: "tui" | "rpc" | "json" | "print", setStatus: (text: string | undefined) => void): CallbackActivitySink | undefined {
+  if (mode !== "tui") return undefined;
+  callbackStatusSetter = setStatus;
+  return sharedCallbackActivitySink;
+}
+
+export function clearZmuxDispatcherActivity(): void {
+  callbackStatusSetter?.(undefined);
+  callbackStatusSetter = undefined;
+}
+
+function initialProgressPhase(params: ZmuxParams): string {
+  const options = params.options ?? {};
+  if (params.operation === "peer_ensure") return "waiting for peer readiness";
+  if (params.operation === "runtime_ensure") return "starting runtime";
+  if (params.operation === "runtime_logs" || params.operation === "wait") {
+    if (optString(options, "waitFor")) return "waiting for output";
+    if (optNumber(options, "idleSeconds") !== undefined) return "waiting for idle condition";
+  }
+  if (params.operation === "interactive_type") return "waiting for command completion";
+  return `${params.operation.replaceAll("_", " ")} running`;
+}
+
+export function executionTimeoutSeconds(params: ZmuxParams): number {
+  const explicit = optNumber(params.options ?? {}, "timeoutSeconds");
+  if (explicit !== undefined) return explicit;
+  if (params.operation === "wait" || params.operation === "callback_watch" || params.operation === "peer_handoff") return 300;
+  if (params.operation === "runtime_logs" && (optString(params.options ?? {}, "waitFor") || optNumber(params.options ?? {}, "idleSeconds") !== undefined)) return 10;
+  if (["pane_resize", "pane_send_keys", "pane_type"].includes(params.operation)) return 5;
+  if (params.operation === "interactive_type" || params.operation === "runtime_ensure") return 90;
+  if (params.operation === "run") return 130;
+  return 30;
+}
+
+function createForegroundProgress(
+  params: ZmuxParams,
+  cwd: string,
+  mode: "tui" | "rpc" | "json" | "print",
+  onUpdate: AgentToolUpdateCallback<Record<string, unknown>> | undefined,
+): ForegroundProgress {
+  if (mode !== "tui" || !onUpdate) return { setPhase() {}, stop() {} };
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + executionTimeoutSeconds(params) * 1000;
+  let phase = initialProgressPhase(params);
+  let interval: ReturnType<typeof setInterval> | undefined;
+  let stopped = false;
+  const emit = () => {
+    if (stopped) return;
+    const now = Date.now();
+    onUpdate(withDisplayMetadata(content("", {
+      status: "running",
+      phase,
+      elapsedSeconds: Math.max(0, Math.floor((now - startedAt) / 1000)),
+      remainingSeconds: Math.max(0, Math.ceil((deadlineAt - now) / 1000)),
+    }), params, cwd));
+  };
+  const delay = setTimeout(() => {
+    if (stopped) return;
+    emit();
+    interval = setInterval(emit, 1_000);
+  }, 400);
+  return {
+    setPhase(nextPhase) {
+      phase = nextPhase;
+      if (interval) emit();
+    },
+    stop() {
+      stopped = true;
+      clearTimeout(delay);
+      if (interval) clearInterval(interval);
+    },
+  };
+}
+
+async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: string, signal?: AbortSignal, activitySink?: CallbackActivitySink) {
   const options = params.options ?? {};
   const cwd = cwdFor(defaultCwd, params);
   if (params.operation === "callback_list") {
@@ -509,6 +597,7 @@ async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: 
       message: optString(options, "message"),
       deliverAs: optDeliverAs(options),
       triggerTurn: optBool(options, "triggerTurn"),
+      activitySink,
     });
     return content(callback.text, callback.details);
   }
@@ -537,6 +626,7 @@ async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: 
       message: optString(options, "message"),
       deliverAs: optDeliverAs(options),
       triggerTurn: optBool(options, "triggerTurn"),
+      activitySink,
     });
     return content(handoff.text, handoff.details);
   }
@@ -584,6 +674,7 @@ async function executeSpecial(pi: ExtensionAPI, params: ZmuxParams, defaultCwd: 
 }
 
 export function registerZmuxDispatcher(pi: ExtensionAPI): void {
+  clearZmuxDispatcherActivity();
   pi.registerTool({
     name: "zmux",
     label: "zmux",
@@ -609,6 +700,10 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       const runtime = resolveRuntimeParams(inputParams, ctx.cwd, ctx.isProjectTrusted());
       const params = runtime?.params ?? inputParams;
       const options = params.options ?? {};
+      const cwd = cwdFor(ctx.cwd, params);
+      const progress = createForegroundProgress(params, cwd, ctx.mode, onUpdate);
+      const activitySink = callbackActivitySinkFor(ctx.mode, (text) => ctx.ui.setStatus("pi-zmux-waits", text));
+      try {
       if (params.operation === "runtime_ensure" && !params.command) {
         return withDisplayMetadata(
           content(`ERROR: runtime ${runtime?.details.runtimeName ?? params.target ?? "unknown"} has no command. Pass command or add it to trusted .pi/zmux.json / .config/pi-zmux.json.`, { ...runtime?.details, failed: true }),
@@ -631,12 +726,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
         const command = requireCommand(params);
         const waitFor = optString(options, "waitFor");
         const waitForExit = optBool(options, "waitForExit") ?? shouldWaitForExit(command);
-        if (waitForExit || waitFor) {
-          onUpdate?.({
-            content: [{ type: "text", text: `Typed command into ${tab}. Waiting up to ${optNumber(options, "timeoutSeconds") ?? 90}s for user input and command completion...` }],
-            details: { tab, waiting: true, session: optString(options, "session") },
-          });
-        }
+        progress.setPhase(waitFor ? "waiting for output" : waitForExit ? "waiting for command completion" : "typing interactive command");
         const result = await interactiveType(tab, command, cwdFor(ctx.cwd, params), {
           waitFor,
           waitForExit,
@@ -647,9 +737,8 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
         });
         return withDisplayMetadata(content(result.text, result.details), params, cwdFor(ctx.cwd, params), { output: result.text });
       }
-      const special = await executeSpecial(pi, params, ctx.cwd, signal);
-      if (special) return withDisplayMetadata(special, params, cwdFor(ctx.cwd, params), { output: special.content.map((item) => item.text).join("\n") });
-      const cwd = cwdFor(ctx.cwd, params);
+      const special = await executeSpecial(pi, params, ctx.cwd, signal, activitySink);
+      if (special) return withDisplayMetadata(special, params, cwd, { output: special.content.map((item) => item.text).join("\n") });
       const args = buildArgs(params);
       const runSafety = params.operation === "run"
         ? zmuxRunSafetyWarnings({ command: requireCommand(params), cwd, tab: params.target, session: optString(options, "session") })
@@ -657,19 +746,24 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       let restartText = "";
       let restartStopped: boolean | undefined;
       if (params.operation === "runtime_ensure" && optBool(options, "restart")) {
+        progress.setPhase("stopping runtime before restart");
         const stopArgs = ["send", requireTarget(params, "runtime tab"), "C-c"];
         pushSession(stopArgs, optString(options, "session"));
         const stopped = await runZmux(stopArgs, { cwd, signal, timeoutMs: 5_000 });
         restartStopped = !(stopped.timedOut || stopped.code !== 0);
         restartText = restartStopped ? `sent C-c to ${params.target}` : `restart stop skipped: ${formatResult("runtime_stop", stopArgs, stopped.stdout, stopped.stderr)}`;
       }
-      const result = await runZmux(args, { cwd, signal, timeoutMs: timeoutMs(options, params.operation === "run" ? 130 : 30) });
+      if (params.operation === "runtime_ensure") progress.setPhase("starting runtime");
+      const result = await runZmux(args, { cwd, signal, timeoutMs: executionTimeoutSeconds(params) * 1000 });
       const failed = result.timedOut || result.code !== 0;
       const rawResultText = formatResult(params.operation, args, result.stdout, result.stderr);
       const waitSummary = params.operation === "wait" ? summarizeWaitOutput(rawResultText) : undefined;
       let text = [runSafety?.text, restartText, waitSummary?.text ?? rawResultText].filter(Boolean).join("\n");
       if (failed) {
         const processOutput = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n");
+        if (result.timedOut) {
+          throw new Error(`${TIMEOUT_ERROR_PREFIX} zmux ${params.operation} timed out after ${executionTimeoutSeconds(params)}s; completion unproven${processOutput ? `\n${processOutput}` : ""}`);
+        }
         throw new Error(processOutput || `zmux ${params.operation} failed: ${args.join(" ")}`);
       }
       const details: Record<string, unknown> = { operation: params.operation, args, cwd, exitCode: result.code, ...runtime?.details, ...runSafety?.details, ...waitSummary?.details };
@@ -683,6 +777,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
           const tab = optString(options, "tab") ?? params.target;
           const watchOptions = { ...options, waitFor: readiness, timeoutSeconds: optNumber(options, "timeoutSeconds") ?? 90 };
           const watchArgs = buildWatchArgs(tab ?? "", watchOptions);
+          progress.setPhase("waiting for runtime readiness");
           const watch = await runZmux(watchArgs, { cwd, signal, timeoutMs: timeoutMs(watchOptions, 90) });
           text = [text, formatResult("runtime_logs", watchArgs, watch.stdout, watch.stderr)].filter(Boolean).join("\n");
           details.ready = !(watch.timedOut || watch.code !== 0);
@@ -690,10 +785,13 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
         }
       }
       return withDisplayMetadata(content(text, details), params, cwd, { args, exitCode: result.code, output: params.operation === "wait" ? rawResultText : text });
+      } finally {
+        progress.stop();
+      }
     },
     renderCall(args, theme, context) {
       const text = (context.lastComponent as Text | undefined) ?? new Text("", 0, 0);
-      text.setText(formatZmuxCall(args as ZmuxParams, context.expanded, theme));
+      text.setText(formatZmuxCall(args as ZmuxParams, context.expanded, theme, context.isPartial));
       return text;
     },
     renderResult(result, options, theme, context) {
