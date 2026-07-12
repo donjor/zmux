@@ -75,7 +75,7 @@ const skillFiles = [
   'skills/zmux/references/agent-worker.md',
   'skills/zmux/references/cli-catalog.md',
   'skills/zmux/references/shared-doctrine.generated.md',
-  'docs/domains/agent-doctrine-matrix.generated.md',
+  'docs/reference/agent-doctrine-matrix.generated.md',
   'docs/domains/pi-zmux-extension.md',
   'docs/dev/agent-grounding.md',
   'docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md',

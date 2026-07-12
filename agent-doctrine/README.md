@@ -23,7 +23,7 @@ Generated outputs currently include:
 - `skills/zmux/references/shared-doctrine.generated.md`
 - `pi-zmux/src/generated/doctrine.ts`
 - `pi-zmux/doctrine-manifest.generated.json`
-- `docs/domains/agent-doctrine-matrix.generated.md`
+- `docs/reference/agent-doctrine-matrix.generated.md`
 - `skills/zmux/references/testing/{prompts.md,answer-key.generated.md}`
 - `pi-zmux/references/testing/{prompts.md,answer-key.generated.md}`
 

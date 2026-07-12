@@ -8,7 +8,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 ## Owned paths
 
 - `agent-doctrine/**` — neutral shared rules/scenarios and deterministic generator.
-- `docs/domains/agent-doctrine-matrix.generated.md` — generated capability/caveat review matrix.
+- `docs/reference/agent-doctrine-matrix.generated.md` — generated capability/caveat review matrix.
 - `pi-zmux/index.ts` — package entry for Pi extension loading.
 - `pi-zmux/src/**` — dispatcher registration, on-demand diagnostics, bash classification, and zmux adapters.
 - `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
@@ -177,15 +177,21 @@ destination, input, options, and evidence once. Expanded views retain structured
 operation, argv, cwd, lifecycle, and raw evidence details.
 
 Scheduled background callbacks—including core-owned detached-run completion
-tracking—publish one aggregate above-editor widget line immediately above tasks
-without using footer status or periodic model messages. The component occupies
-no rows while inactive and remains visible across running-state wait renewals,
-then clears on completion, cancellation, session replacement, or shutdown.
-Terminal outcomes deliver through a compact native `pi-zmux-callback` renderer. Models do not need to issue a second `callback_watch`
-for ordinary detached runs. New tabs tolerate completion before callback spawn;
-reused tabs capture the pre-run `cmdSeq` and require a newer lifecycle generation,
-so an old `done` state cannot satisfy the new run. Successful wait and callback completions summarize
-their match basis and freshness instead of returning captured output tails to
+tracking—publish one aggregate above-editor widget line immediately above tasks.
+They do not use footer status or periodic model messages. The component occupies
+no rows while inactive, remains visible across running-state wait renewals, and
+clears on completion, cancellation, session replacement, or shutdown.
+
+Terminal outcomes use the compact native `pi-zmux-callback` renderer. Models do
+not need a second `callback_watch` for ordinary detached runs.
+
+Lifecycle freshness is explicit:
+
+- New tabs tolerate completion before callback spawn.
+- Reused tabs capture the pre-run `cmdSeq` and require a newer lifecycle
+  generation, so an old `done` state cannot satisfy the new run.
+- Successful wait and callback completions summarize their match basis and
+  freshness instead of returning captured output tails to
 the model; expanded wait/callback views retain raw diagnostics for human
 inspection.
 

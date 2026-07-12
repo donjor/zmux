@@ -24,7 +24,7 @@ Writes (--write only):
   skills/zmux/references/shared-doctrine.generated.md
   pi-zmux/src/generated/doctrine.ts
   pi-zmux/doctrine-manifest.generated.json
-  docs/domains/agent-doctrine-matrix.generated.md
+  docs/reference/agent-doctrine-matrix.generated.md
   skills/zmux/references/testing/prompts.md
   skills/zmux/references/testing/answer-key.generated.md
   pi-zmux/references/testing/prompts.md
@@ -277,7 +277,7 @@ function outputs(rules, scenarios, operations) {
     ["skills/zmux/references/shared-doctrine.generated.md", renderClaudeReference(rules)],
     ["pi-zmux/src/generated/doctrine.ts", renderPiModule(rules)],
     ["pi-zmux/doctrine-manifest.generated.json", renderManifest(rules, scenarios, operations)],
-    ["docs/domains/agent-doctrine-matrix.generated.md", renderMatrix(rules)],
+    ["docs/reference/agent-doctrine-matrix.generated.md", renderMatrix(rules)],
     ["skills/zmux/references/testing/prompts.md", renderPrompts(scenarios, "claude")],
     ["skills/zmux/references/testing/answer-key.generated.md", renderAnswerKey(scenarios, "claude")],
     ["pi-zmux/references/testing/prompts.md", renderPrompts(scenarios, "pi")],
