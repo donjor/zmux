@@ -159,6 +159,11 @@ Agy     Gemini 3.5 Flash (Low)
 
 ### 6. Panes and evidence
 
+- Create a throwaway command tab with `run`, `options.focus:false`, and
+  `options.waitForExit:false`; register `callback_watch` for a future output
+  marker. Confirm `run` returns immediately, the current tab does not change,
+  the card reports both guarantees, and the callback later delivers fresh
+  completion evidence. Do not set `options.state`; shell hooks own lifecycle.
 - Create a throwaway `side` tab with `run`, then use `tab_place` to join and
   restore/clean it without focus.
 - Exercise `pane_open`, `panes`, `pane_resize` with `options.axis: "auto"`, and

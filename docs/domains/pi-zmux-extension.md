@@ -144,7 +144,7 @@ Operation groups:
   `pi_respawn`.
 
 The schema estimate is gated at no more than 1,200 tokens; the current
-production surface is approximately 1,088. The extension does not inject runtime
+production surface is approximately 1,148. The extension does not inject runtime
 state into the model system prompt. State is read only when the agent calls a
 context operation or another operation resolves the live target it needs.
 `/zmux status` retains the full human diagnostic snapshot without adding it to
@@ -154,6 +154,9 @@ handlers add no prompt tokens by themselves.
 The dispatcher preserves operation-specific safety:
 
 - persistent processes use `runtime_ensure`;
+- `run` maps `focus:false` to focus-preserving creation and `waitForExit:false`
+  to detached execution, rejects contradictory combinations, and leaves lifecycle
+  state to the shell hooks;
 - sudo/manual input uses `interactive_type`;
 - atomic `peer_handoff` arms a fresh `turn:ready` callback, marks the peer
   running, and only then submits before the default follow-up continuation;

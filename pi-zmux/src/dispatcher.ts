@@ -146,12 +146,22 @@ function buildArgs(params: ZmuxParams): string[] {
       return args;
     }
     case "run": {
+      const detach = optBool(options, "detach");
+      const waitForExit = optBool(options, "waitForExit");
+      const focus = optBool(options, "focus");
+      const state = optString(options, "state") ?? optString(options, "action");
+      if (state !== undefined) throw new Error("run lifecycle is automatic; use tab_state for explicit lifecycle mutation");
+      if (focus === true) throw new Error("run does not accept options.focus=true; omit it for normal creation or call tab_focus explicitly");
+      if (detach === true && waitForExit === true) throw new Error("options.detach=true and options.waitForExit=true are contradictory for run");
+      if (detach === false && waitForExit === false) throw new Error("options.detach=false and options.waitForExit=false are contradictory for run");
+
       const args = ["run", "--command", requireCommand(params)];
       pushOpt(args, "-n", optString(options, "tab") ?? target);
       pushSession(args, session);
       pushOpt(args, "-T", optNumber(options, "timeoutSeconds"));
       pushOpt(args, "--lines", lines);
-      if (optBool(options, "detach")) args.push("-d");
+      if (focus === false) args.push("--no-focus");
+      if (detach === true || waitForExit === false) args.push("-d");
       if (optBool(options, "keep")) args.push("--keep");
       pushOpt(args, "--scope", optString(options, "scope"));
       return args;
@@ -684,6 +694,7 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
     promptGuidelines: [
       "Use zmux instead of bash/raw tmux for runtimes, visible tabs, panes, sessions, waits, peers, and Pi lifecycle; never background long-running commands.",
       "Map: dev server -> runtime_ensure; existing output -> runtime_logs; visible one-shot -> run; sidecar -> pane_open; named tab cleanup -> tab_kill.",
+      "For run, options.focus=false preserves the current tab and options.waitForExit=false detaches and returns immediately. For later notification, register callback_watch after the detached run; shell hooks own lifecycle state automatically.",
       "For a peer prompt plus response notification, use peer_ensure then atomic peer_handoff with options.text. It marks the peer running, waits for fresh turn:ready lifecycle, and returns through a follow-up notification by default. Use options.waitFor only as an output-regex fallback for an uninstrumented peer; never send type_text then callback_watch.",
       "For sudo, ssh, passwords, REPLs, database shells, and other manual input, use interactive_type and never generic run; target admin (or the named shared tab), keep focus false by default, and set options.waitForExit for bounded privileged commands.",
       "For runtime_ensure, set target to the runtime/tab name, command to the dev/watch command, cwd to the project/fixture directory, and options.waitFor/readiness to ready|localhost when the user asks to wait for readiness.",

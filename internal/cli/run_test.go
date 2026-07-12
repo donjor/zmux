@@ -197,6 +197,38 @@ func TestRunLabelsAndDetachesNewNamedWindow(t *testing.T) {
 	}
 }
 
+func TestRunNoFocusCanStillWaitForCompletion(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%8"
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 0)
+
+	rootCmd.SetArgs([]string{"run", "make build", "-n", "build", "-s", "test-session", "--no-focus", "-T", "5"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run --no-focus should still wait for completion: %v", err)
+	}
+
+	var detached, stagedRun bool
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" {
+			for _, arg := range c.Args {
+				if arg == "detached=true" {
+					detached = true
+				}
+			}
+		}
+		if c.Method == "SetPaneOption" && len(c.Args) >= 3 && c.Args[1] == tabs.OptNextRunID {
+			stagedRun = true
+		}
+	}
+	if !detached {
+		t.Error("expected --no-focus to create the new window detached")
+	}
+	if !stagedRun {
+		t.Error("expected --no-focus without -d to retain blocking lifecycle wait")
+	}
+}
+
 func TestRunDerivesNameFromCommand(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}

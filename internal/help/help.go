@@ -144,6 +144,7 @@ func commandSections() []Section {
 		{Title: "Terminal Commands", Entries: []Entry{
 			{"zmux run '<cmd>' -n <tab>", "Run + wait for completion"},
 			{"zmux run '<cmd>' -n <tab> -d", "Run detached (servers)"},
+			{"zmux run '<cmd>' -n <tab> --no-focus", "Wait without selecting a new tab"},
 			{"zmux run '<cmd>' -n <tab> -f", "Run + follow output"},
 			{"zmux run '<cmd>' -n <tab> --keep", "Exempt the tab from auto-reaping"},
 			{"zmux run '<cmd>' -n <tab> --scope daemon", "Long-lived tab — never auto-reaped"},

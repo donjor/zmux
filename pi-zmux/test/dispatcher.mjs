@@ -155,7 +155,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     ['tabs', { operation: 'tabs', options: { session: 's1' } }, ['tabs', '-s', 's1']],
     ['sessions', { operation: 'sessions', target: 'workspace', options: { flat: true } }, ['ls', '-s', 'workspace']],
     ['panes', { operation: 'panes', options: { session: 's1' } }, ['pane', 'list', '--session', '--target', 's1']],
-    ['run', { operation: 'run', target: 'job', command: 'echo hi', options: { session: 's1', timeoutSeconds: 5, lines: 20, detach: true, keep: true, scope: 'task' } }, ['run', '--command', 'echo hi', '-n', 'job', '-s', 's1', '-T', '5', '--lines', '20', '-d', '--keep', '--scope', 'task']],
+    ['run', { operation: 'run', target: 'job', command: 'echo hi', options: { session: 's1', timeoutSeconds: 5, lines: 20, focus: false, waitForExit: false, keep: true, scope: 'task' } }, ['run', '--command', 'echo hi', '-n', 'job', '-s', 's1', '-T', '5', '--lines', '20', '--no-focus', '-d', '--keep', '--scope', 'task']],
     ['session_run', { operation: 'session_run', target: 'session-a', command: 'worker', cwd: commandCwd, options: { tab: 'main', workspace: 'ws' } }, ['session', 'run', 'session-a', '-n', 'main', '--workspace', 'ws', '--cwd', commandCwd, '--', 'bash', '-lc', 'worker']],
     ['session_kill', { operation: 'session_kill', target: 'session-a' }, ['session', 'kill', 'session-a']],
     ['runtime_ensure', { operation: 'runtime_ensure', target: 'server', command: 'npm run dev', options: { kind: 'server', session: 's1' } }, ['run', '--command', 'npm run dev', '-n', 'server', '-d', '--keep', '--scope', 'server', '-s', 's1']],
@@ -196,6 +196,12 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
       const commands = readCommandLog(recorder.logPath);
       assert.deepEqual(commands, [{ args: expectedArgs, cwd: params.cwd ?? contextCwd }], `${name} process contract drifted`);
     }
+
+    writeFileSync(recorder.logPath, '');
+    const blockingNoFocus = await execute({ operation: 'run', target: 'job', command: 'echo hi', options: { focus: false, waitForExit: true } });
+    assert.deepEqual(blockingNoFocus.details.args, ['run', '--command', 'echo hi', '-n', 'job', '--no-focus']);
+    const legacyDetach = await execute({ operation: 'run', target: 'job', command: 'echo hi', options: { detach: true } });
+    assert.deepEqual(legacyDetach.details.args, ['run', '--command', 'echo hi', '-n', 'job', '-d'], 'legacy detach:true mapping must remain covered');
 
     writeFileSync(recorder.logPath, '');
     process.env.PI_ZMUX_TEST_RUN_OUTPUT = 'ready localhost:43123';
@@ -558,6 +564,10 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
 
     await assert.rejects(() => execute({ operation: 'unknown' }), /unknown zmux operation/);
     await assert.rejects(() => execute({ operation: 'run' }), /command is required/);
+    await assert.rejects(() => execute({ operation: 'run', command: 'true', options: { state: 'running' } }), /run lifecycle is automatic.*tab_state/);
+    await assert.rejects(() => execute({ operation: 'run', command: 'true', options: { focus: true } }), /run does not accept options.focus=true/);
+    await assert.rejects(() => execute({ operation: 'run', command: 'true', options: { detach: true, waitForExit: true } }), /contradictory/);
+    await assert.rejects(() => execute({ operation: 'run', command: 'true', options: { detach: false, waitForExit: false } }), /contradictory/);
     await assert.rejects(() => execute({ operation: 'tab_kill' }), /tab is required/);
     await assert.rejects(() => execute({ operation: 'send_keys', target: 'work', options: { keys: 'C-c' } }), /must be an array of strings/);
     await assert.rejects(() => execute({ operation: 'tabs', options: { session: 42 } }), /must be a string/);
@@ -670,6 +680,11 @@ try {
   assert.doesNotMatch(typeCall, new RegExp(`"${typedText}"`), 'typed text must not be quoted');
   assert.match(typeCall, /wait for ready · focus unchanged/);
   assert.equal(formatZmuxCall(typeRenderArgs, false, plainTheme, false), '', 'final call slot must become empty so the result owns the completed card');
+
+  const noFocusRunArgs = { operation: 'run', target: 'job', command: 'echo hi', options: { focus: false, waitForExit: false } };
+  const noFocusRunDisplay = buildDisplayMetadata(noFocusRunArgs, '/repo', {}, { args: ['run', '--command', 'echo hi', '-n', 'job', '--no-focus', '-d'], exitCode: 0 });
+  const noFocusRunFinal = formatZmuxResult({ content: [{ type: 'text', text: 'running in main:job' }], details: { display: noFocusRunDisplay } }, noFocusRunArgs, { expanded: false, isPartial: false }, false, plainTheme);
+  assert.match(noFocusRunFinal, /focus unchanged · do not wait for exit/, 'run card must describe the normalized no-focus detached behavior');
 
   const partialDisplay = buildDisplayMetadata(typeRenderArgs, '/repo', { status: 'running', phase: 'waiting for peer readiness', elapsedSeconds: 2, remainingSeconds: 58 });
   const partialRendered = formatZmuxResult({ content: [{ type: 'text', text: '' }], details: { display: partialDisplay } }, typeRenderArgs, { expanded: false, isPartial: true }, false, plainTheme);

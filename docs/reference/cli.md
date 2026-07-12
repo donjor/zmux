@@ -74,7 +74,7 @@ their own session, window, cwd, and process metadata.
 ### Reviewable commands and output
 
 ```bash
-zmux run '<cmd>' -n <tab> [-T seconds] [-d] [-f] [--keep] [--scope daemon]
+zmux run '<cmd>' -n <tab> [-T seconds] [-d] [--no-focus] [-f] [--keep] [--scope daemon]
 zmux wait <tab> --for turn:ready|cmd:done|output:<regex>|idle:<duration> [--json]
 zmux watch <tab> [-l lines] [--until pattern] [--idle seconds] [-f]
 zmux log start <tab> [--ansi] [--max-bytes n]
@@ -86,7 +86,9 @@ zmux type <tab> '<text>' [--wait-turn state|--wait-cmd state] [--mark-peer-runni
 ```
 
 Purpose: run commands in named tmux tabs, wait/follow/tail output, record a
-bounded log, or send input. `run` writes command lifecycle metadata; `wait` is
+bounded log, or send input. `run` writes command lifecycle metadata; `-d` returns
+without waiting, while `--no-focus` independently prevents a newly created tab
+from being selected and may be combined with either blocking or detached execution. `wait` is
 the structured condition primitive for fresh command state, fresh turn state,
 future output regex, and idle/quiet evidence; `watch` and `log tail` remain
 human-friendly output readers. `send` and `type` mutate the target pane, and

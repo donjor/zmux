@@ -112,6 +112,7 @@ Pi exposes one canonical `zmux` tool. Select its `operation` instead of
 shelling out:
 
 - inspect/control: `current`, `tabs`, `sessions`, `panes`, `run`, `session_run`, `session_kill`;
+- `run` focus/wait: `options.focus=false` preserves the current tab; `options.waitForExit=false` detaches and returns immediately;
 - persistent work: `runtime_ensure`, `runtime_logs`, `runtime_stop`;
 - peers/tabs: `peer_ensure`, `peer_handoff`, `type_text`, `tab_inspect`, `tab_status`, `tab_state`, `tab_peer`, `tab_place`, `tab_kill`;
 - panes/input: `pane_open`, `pane_resize`, `pane_close`, `interactive_type`;

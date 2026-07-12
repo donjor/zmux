@@ -49,6 +49,7 @@ func newRunCmd(app *apppkg.App) *cobra.Command {
 	var runWindowName string
 	var runSessionFlag string
 	var runDetach bool
+	var runNoFocus bool
 	var runFollow bool
 	var runTimeout int
 	var runFollowLines int
@@ -81,8 +82,9 @@ By default, zmux run:
   3. Waits for it to finish (prints output live)
   4. Returns the command's exit code
 
-For long-running processes (servers), use --detach or --follow:
+Execution controls:
   --detach/-d  Fire and forget. Don't wait for completion.
+  --no-focus   Keep blocking completion behavior without selecting a new tab.
   --follow/-f  Tail output live. Ctrl+C stops following (process keeps running).
 
 Examples:
@@ -94,6 +96,7 @@ Examples:
   zmux run 'make build' -n build -T 60        # wait with 60s timeout
   zmux run 'npm run dev' -n server -d         # detach (server, don't wait)
   zmux run 'npm run dev' -n server -f         # follow output live
+  zmux run 'npm test' -n tests --no-focus     # wait without selecting a new tab
   zmux run 'npm test' -n tests -s myproject   # target specific session`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -180,6 +183,7 @@ Examples:
 			opts := runTabOpts{
 				windowName:  runWindowName,
 				detach:      runDetach,
+				noFocus:     runNoFocus,
 				follow:      runFollow,
 				timeout:     runTimeout,
 				followLines: runFollowLines,
@@ -198,6 +202,7 @@ Examples:
 	cmd.Flags().StringVarP(&runWindowName, "name", "n", "", "tab name (default: derived from command)")
 	cmd.Flags().StringVarP(&runSessionFlag, "session", "s", "", "target session (default: current session)")
 	cmd.Flags().BoolVarP(&runDetach, "detach", "d", false, "fire and forget (don't wait for completion)")
+	cmd.Flags().BoolVar(&runNoFocus, "no-focus", false, "create a new tab without selecting it (still wait unless detached)")
 	cmd.Flags().BoolVarP(&runFollow, "follow", "f", false, "tail output live (Ctrl+C to stop)")
 	cmd.Flags().IntVarP(&runTimeout, "timeout", "T", 120, "timeout in seconds (default 120)")
 	cmd.Flags().IntVar(&runFollowLines, "lines", 50, "lines to capture when tailing")
@@ -221,6 +226,7 @@ Examples:
 type runTabOpts struct {
 	windowName  string
 	detach      bool
+	noFocus     bool
 	follow      bool
 	timeout     int
 	followLines int
@@ -277,8 +283,9 @@ func runInNewTab(app *apppkg.App, sessionName, name, sendCmd, nonce string, shou
 
 	dir, _ := os.Getwd()
 	var newOpts []tmux.WindowOpt
-	if opts.detach {
-		// Don't yank the user's focus to a fire-and-forget tab.
+	if opts.detach || opts.noFocus {
+		// Creation focus is independent from lifecycle waiting. --detach also
+		// makes the run asynchronous; --no-focus alone preserves blocking.
 		newOpts = append(newOpts, tmux.Detached())
 	}
 	paneID, err := app.Runner.NewWindow(sessionName, name, dir, newOpts...)
@@ -358,7 +365,7 @@ func shouldDispatchRecipeRun(cmd *cobra.Command, app *apppkg.App, args []string,
 	if detach && !yes && !dryRun {
 		return false
 	}
-	if cmd.Flags().Changed("timeout") || cmd.Flags().Changed("lines") {
+	if cmd.Flags().Changed("timeout") || cmd.Flags().Changed("lines") || cmd.Flags().Changed("no-focus") {
 		return false
 	}
 	defs, err := loadRecipeDefinitions(app)
