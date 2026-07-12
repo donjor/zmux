@@ -82,7 +82,7 @@ These are harness-neutral outcomes projected for the Claude skill. Claude-specif
 - **Instruction:** When a target is missing or ambiguous, report the exact failure and stop rather than creating a substitute; clean only exact state owned by the task and prove the final roster.
 - **Claude mechanism:** Resolver failures plus explicit kill/session cleanup (instruction)
   - Caveat: none.
-- **Verify:** `skills/zmux/references/run-observe.md`, `pi-zmux/references/testing/host-flow.md`
+- **Verify:** `skills/zmux/references/run-observe.md`, `agent-doctrine/testing/pi/host-flow.md`
 
 ### ZD-011 · Make remote mutation legible
 

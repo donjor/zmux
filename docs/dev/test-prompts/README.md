@@ -42,11 +42,12 @@ for isolated QA.
 These files are thin activation wrappers only:
 
 - `zmux-agent-skill-testing-prompt.md` → durable Claude/CLI framework at
-  [`../../../skills/zmux/references/testing/`](../../../skills/zmux/references/testing/).
+  [`../../../agent-doctrine/testing/claude/`](../../../agent-doctrine/testing/claude/).
 - `zmux-agent-pi-zmux-testing-prompt.md` → durable Pi framework at
-  [`../../../pi-zmux/references/testing/`](../../../pi-zmux/references/testing/).
+  [`../../../agent-doctrine/testing/pi/`](../../../agent-doctrine/testing/pi/).
 
-Shared scenario prompts and harness answer keys are generated from
-`agent-doctrine/scenarios/*.json`; exploratory wrappers must not duplicate the chain.
+Shared scenario prompts and harness answer keys are authored in
+`agent-doctrine/scenarios/*.md` and rendered to stdout with
+`agent-doctrine/generate.mjs --render`; exploratory wrappers must not duplicate the chain.
 Both frameworks use one ordinary visible worker, host-inspected evidence, explicit
 `PASS`/`PASS*`/`FAIL`/`BLOCKED` verdicts, and exact test-owned teardown.

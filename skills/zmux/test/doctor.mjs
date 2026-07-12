@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadDoctrine } from '../../../agent-doctrine/generate.mjs';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const root = join(here, '..', '..', '..');
+
+for (const retired of ['skills/zmux/references/testing', 'pi-zmux/references/testing']) {
+  assert.equal(existsSync(join(root, retired)), false, `retired package-local testing tree must stay removed: ${retired}`);
+}
 
 const doctrineCheck = spawnSync(process.execPath, [join(root, 'agent-doctrine/generate.mjs'), '--check'], {
   cwd: root,
@@ -35,26 +40,15 @@ assert.equal(doctrineManifest.schema, 'zmux.doctrine-manifest.v1');
 assert.deepEqual(doctrineManifest.dispatcherOperations, [...operations].sort(), 'doctrine manifest operation inventory drifted');
 assert.equal(new Set(doctrineManifest.piRuleIds).size, doctrineManifest.piRuleIds.length, 'Pi doctrine manifest contains duplicate rule ids');
 
-const scenarioRecords = readdirSync(join(root, 'agent-doctrine/scenarios'))
-  .filter((name) => name.endsWith('.json'))
-  .sort()
-  .map((name) => JSON.parse(read(`agent-doctrine/scenarios/${name}`)));
-const claudePrompts = read('skills/zmux/references/testing/prompts.md');
-const piPrompts = read('pi-zmux/references/testing/prompts.md');
-const claudeAnswerKey = read('skills/zmux/references/testing/answer-key.generated.md');
-const piAnswerKey = read('pi-zmux/references/testing/answer-key.generated.md');
-const claudeHostFlow = read('skills/zmux/references/testing/host-flow.md');
-const piHostFlow = read('pi-zmux/references/testing/host-flow.md');
+const { scenarios: scenarioRecords } = loadDoctrine();
+const claudeHostFlow = read('agent-doctrine/testing/claude/host-flow.md');
+const piHostFlow = read('agent-doctrine/testing/pi/host-flow.md');
 for (const scenario of scenarioRecords) {
-  const workerPrompt = `> ${scenario.prompt}`;
-  for (const [harness, prompts, answerKey, hostFlow] of [
-    ['claude', claudePrompts, claudeAnswerKey, claudeHostFlow],
-    ['pi', piPrompts, piAnswerKey, piHostFlow],
+  for (const [harness, hostFlow] of [
+    ['claude', claudeHostFlow],
+    ['pi', piHostFlow],
   ]) {
-    const applicable = scenario.applicability.includes(harness);
-    assert.equal(prompts.includes(workerPrompt), applicable, `${scenario.id} ${harness} prompt projection drifted`);
-    assert.equal(answerKey.includes(`### ${scenario.id} ·`), applicable, `${scenario.id} ${harness} answer key drifted`);
-    assert.equal(hostFlow.includes(scenario.id), applicable, `${scenario.id} ${harness} host flow inventory drifted`);
+    assert.equal(hostFlow.includes(scenario.id), scenario.applicability.includes(harness), `${scenario.id} ${harness} host flow inventory drifted`);
   }
 }
 assert.deepEqual(
@@ -62,8 +56,6 @@ assert.deepEqual(
   scenarioRecords.filter((scenario) => scenario.applicability.includes('pi')).map((scenario) => scenario.id),
   'Pi scenario manifest drifted',
 );
-assert.ok(!claudePrompts.includes('**Claude mechanics:**'), 'Claude worker prompts must not leak the host answer key');
-assert.ok(!piPrompts.includes('**Pi mechanics:**'), 'Pi worker prompts must not leak the host answer key');
 assert.match(dispatcherSource, /import \{ SHARED_ZMUX_PROMPT_GUIDELINES \} from "\.\/generated\/doctrine\.js";/);
 assert.match(dispatcherSource, /promptGuidelines:\s*\[\s*\.\.\.SHARED_ZMUX_PROMPT_GUIDELINES,/);
 
@@ -80,6 +72,12 @@ const skillFiles = [
   'docs/dev/agent-grounding.md',
   'docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md',
   'docs/dev/test-prompts/zmux-agent-skill-testing-prompt.md',
+  'agent-doctrine/testing/claude/README.md',
+  'agent-doctrine/testing/claude/host-prompt.md',
+  'agent-doctrine/testing/claude/host-flow.md',
+  'agent-doctrine/testing/pi/README.md',
+  'agent-doctrine/testing/pi/host-prompt.md',
+  'agent-doctrine/testing/pi/host-flow.md',
 ];
 const docs = Object.fromEntries(skillFiles.map((file) => [file, read(file)]));
 const combined = Object.values(docs).join('\n');

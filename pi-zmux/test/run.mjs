@@ -7,12 +7,7 @@ import assert from 'node:assert/strict';
 const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 const outDir = mkdtempSync(join(tmpdir(), 'pi-zmux-test-'));
 try {
-  const harnessFiles = [
-    'references/testing/README.md',
-    'references/testing/host-prompt.md',
-    'references/testing/host-flow.md',
-    'references/testing/prompts.md',
-    'references/testing/answer-key.generated.md',
+  const packageFiles = [
     'doctrine-manifest.generated.json',
     'fixtures/config-project/.pi/zmux.json',
     'fixtures/config-project/README.md',
@@ -20,15 +15,9 @@ try {
     'fixtures/dev-server/server.mjs',
     'fixtures/dev-server/logs/app.txt',
   ];
-  for (const path of harnessFiles) {
-    assert.ok(existsSync(join(root, path)), `canonical testing harness file missing: ${path}`);
+  for (const path of packageFiles) {
+    assert.ok(existsSync(join(root, path)), `canonical package fixture missing: ${path}`);
   }
-  const prompts = readFileSync(join(root, 'references/testing/prompts.md'), 'utf8');
-  const checkpoints = prompts.match(/^## ZS-\d{3} ·/gm) ?? [];
-  assert.equal(checkpoints.length, 16, 'canonical Pi testing flow must project all 16 applicable registry scenarios');
-  const manifest = JSON.parse(readFileSync(join(root, 'doctrine-manifest.generated.json'), 'utf8'));
-  assert.deepEqual(checkpoints.map((heading) => heading.slice(3, 9)), manifest.piScenarioIds, 'Pi prompt inventory must match doctrine manifest');
-  assert.ok(!prompts.includes('**Pi mechanics:**'), 'worker prompts must not leak host answer-key operations');
 
   const tsc = join(root, 'node_modules/.bin/tsc');
   const compile = spawnSync(tsc, ['-p', join(root, 'tsconfig.json'), '--outDir', outDir, '--noEmit', 'false'], { stdio: 'inherit' });

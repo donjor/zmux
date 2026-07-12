@@ -43,6 +43,14 @@ jobs:
           go-version: '1.24'
           cache: true
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: agent doctrine
+        run: make check-doctrine
+
       # Kept explicit (golangci also runs govet) as a guard against linter
       # config drift accidentally disabling vet.
       - name: go vet

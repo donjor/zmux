@@ -30,7 +30,7 @@ make hooks   # one-time: install the pre-push quality gate (see below)
 `make build` invokes `go build` with version-info `ldflags` and drops a `zmux` binary at the repo root.
 
 `make hooks` points `core.hooksPath` at the versioned `scripts/hooks/`; the
-`pre-push` hook runs `make lint` + `make test-race` — but **only on pushes that
+`pre-push` hook runs `make check-doctrine` + `make lint` + `make test-race` — but **only on pushes that
 update `master`**. Feature/wip branch pushes stay cheap (wip commits may be
 unverified — iterate freely). This is the repo's primary gate; GitHub Actions is
 secondary. Force the gate on any push with `GATE_ALL=1 git push`; bypass it once

@@ -9,8 +9,8 @@ versioning is semver-ish until the first public release.
 
 ### Added
 
-- **Shared agent doctrine registry and projections** `agents` `skills` `pi` — `agent-doctrine/` now owns neutral terminal rules and live scenarios, deterministically generating the Claude reference, compact Pi guidance, capability matrix, package coverage manifest, and both harnesses’ worker prompts/host answer keys. `make check-doctrine`, the single doctrine doctor, and live `./dev.sh zmux` reject stale or incomplete projections without regenerating them.
-- **Symmetric visible host/peer regression frameworks** `agents` `qa` — durable Claude and Pi flows drive ordinary visible workers against isolated `zzmux`, share 13 scenario prompts, keep harness mechanics/answer keys host-only, preserve Pi-only callback/lifecycle cases, and require real state evidence plus exact cleanup.
+- **Shared agent doctrine registry and projections** `agents` `skills` `pi` — `agent-doctrine/` now owns neutral terminal rules and human-authored Markdown live scenarios, deterministically generating the Claude runtime reference, compact Pi guidance, capability matrix, package coverage manifest, and local harness worker prompts/host answer keys. `make check-doctrine`, CI, Worktrunk/pre-push gates, the single doctrine doctor, and live `./dev.sh zmux` reject stale or incomplete committed runtime projections without regenerating them.
+- **Central visible host/peer regression frameworks** `agents` `qa` — durable handwritten Claude and Pi flows now live together under `agent-doctrine/testing/`, drive ordinary visible workers against isolated `zzmux`, share 13 scenario prompts, preserve Pi-only callback/lifecycle cases, and require real state evidence plus exact cleanup. Maintainer-only prompt and answer-key projections render to stdout on demand instead of shipping tracked copies inside the skill and extension.
 
 ### Changed
 
@@ -65,7 +65,7 @@ versioning is semver-ish until the first public release.
 
 - **Pi peer lifecycle readiness is restored** `agents` `pi` -- the extension now publishes and waits on peer lifecycle state through dedicated lifecycle helpers, so fresh peer turns can be detected reliably.
 - **Remote tab sprawl is detected earlier** `agents` `pi` -- Pi zmux tools now warn on likely remote-tab/session sprawl and the guard fixtures cover the generalized remote-command shape.
-- **Developer skill sync uses the canonical reconciler** `dev` `skills` -- `./dev.sh` routes skill mirrors through the shared sync path instead of carrying a parallel mirror implementation.
+- **Developer agent sync is scoped and self-verifying** `dev` `skills` `pi` -- `./dev.sh zmux` routes through the canonical sibling reconciler, installs and checks only the `zmux` skill for Claude, Codex, and Antigravity, and stages and checks only the `pi-zmux` package for Pi.
 
 ## [0.11.2] - 2026-07-05
 > Release tag: `v0.11.2` | Topics: `shell`, `agents`, `pi`, `tabs`, `panes`, `qa` | Compare: `v0.11.1...v0.11.2`

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -8,16 +8,13 @@ import { fileURLToPath } from "node:url";
 
 const sourceDoctrine = dirname(fileURLToPath(import.meta.url));
 const sourceRoot = join(sourceDoctrine, "..");
-const generatedPaths = [
+const committedPaths = [
   "skills/zmux/references/shared-doctrine.generated.md",
   "pi-zmux/src/generated/doctrine.ts",
   "pi-zmux/doctrine-manifest.generated.json",
   "docs/reference/agent-doctrine-matrix.generated.md",
-  "skills/zmux/references/testing/prompts.md",
-  "skills/zmux/references/testing/answer-key.generated.md",
-  "pi-zmux/references/testing/prompts.md",
-  "pi-zmux/references/testing/answer-key.generated.md",
 ];
+const generatedPaths = [...committedPaths];
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "zmux-doctrine-"));
@@ -30,16 +27,14 @@ function fixture() {
   return root;
 }
 
-function run(root, mode) {
-  return spawnSync(process.execPath, [join(root, "agent-doctrine/generate.mjs"), mode], { cwd: root, encoding: "utf8" });
+function run(root, ...args) {
+  return spawnSync(process.execPath, [join(root, "agent-doctrine/generate.mjs"), ...args], { cwd: root, encoding: "utf8" });
 }
 
-function json(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
-}
-
-function writeJson(path, value) {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
+function replaceFile(path, oldText, newText) {
+  const source = readFileSync(path, "utf8");
+  assert.ok(source.includes(oldText), `${path} must contain replacement target`);
+  writeFileSync(path, source.replace(oldText, newText));
 }
 
 function withFixture(fn) {
@@ -61,22 +56,34 @@ test("write and check are byte-deterministic", () => withFixture((root) => {
 
 test("shared scenario prompts are identical and harness-only prompts stay local", () => withFixture((root) => {
   assert.equal(run(root, "--write").status, 0);
-  const claude = readFileSync(join(root, "skills/zmux/references/testing/prompts.md"), "utf8");
-  const pi = readFileSync(join(root, "pi-zmux/references/testing/prompts.md"), "utf8");
+  const claudeResult = run(root, "--render", "claude-prompts");
+  const piResult = run(root, "--render", "pi-prompts");
+  assert.equal(claudeResult.status, 0, claudeResult.stderr);
+  assert.equal(piResult.status, 0, piResult.stderr);
+  const claude = claudeResult.stdout;
+  const pi = piResult.stdout;
+  for (const [harness, prompts] of [["Claude", claude], ["Pi", pi]]) {
+    assert.ok(!prompts.includes(`**${harness} mechanics:**`), `${harness} worker prompts must not leak host answer-key mechanics`);
+    assert.ok(!prompts.includes("# Claude host answer key") && !prompts.includes("# Pi host answer key"), `${harness} worker prompts must not leak a host answer key`);
+  }
   const scenarioDir = join(root, "agent-doctrine/scenarios");
-  for (const name of readdirSync(scenarioDir).filter((entry) => entry.endsWith(".json"))) {
-    const scenario = json(join(scenarioDir, name));
-    const renderedPrompt = `> ${scenario.prompt}`;
-    if (scenario.applicability.includes("claude")) assert.ok(claude.includes(renderedPrompt), `${scenario.id} missing from Claude prompts`);
-    else assert.ok(!claude.includes(renderedPrompt), `${scenario.id} leaked into Claude prompts`);
-    if (scenario.applicability.includes("pi")) assert.ok(pi.includes(renderedPrompt), `${scenario.id} missing from Pi prompts`);
-    else assert.ok(!pi.includes(renderedPrompt), `${scenario.id} leaked into Pi prompts`);
+  for (const name of readdirSync(scenarioDir).filter((entry) => entry.endsWith(".md"))) {
+    const source = readFileSync(join(scenarioDir, name), "utf8");
+    const id = /^id: "([^"]+)"$/mu.exec(source)?.[1];
+    const applicability = JSON.parse(/^applicability: (.+)$/mu.exec(source)?.[1] ?? "[]");
+    const prompt = /^## Prompt\n\n([\s\S]*?)\n\n## Setup$/mu.exec(source)?.[1];
+    assert.ok(id && prompt, `${name} must expose readable Markdown id and prompt sections`);
+    const renderedPrompt = `> ${prompt}`;
+    if (applicability.includes("claude")) assert.ok(claude.includes(renderedPrompt), `${id} missing from Claude prompts`);
+    else assert.ok(!claude.includes(renderedPrompt), `${id} leaked into Claude prompts`);
+    if (applicability.includes("pi")) assert.ok(pi.includes(renderedPrompt), `${id} missing from Pi prompts`);
+    else assert.ok(!pi.includes(renderedPrompt), `${id} leaked into Pi prompts`);
   }
 }));
 
-test("check names stale generated output and never rewrites it", () => withFixture((root) => {
+test("check names stale committed output and never rewrites it", () => withFixture((root) => {
   assert.equal(run(root, "--write").status, 0);
-  const path = join(root, generatedPaths[0]);
+  const path = join(root, committedPaths[0]);
   writeFileSync(path, "stale\n");
   const result = run(root, "--check");
   assert.equal(result.status, 1);
@@ -84,49 +91,68 @@ test("check names stale generated output and never rewrites it", () => withFixtu
   assert.equal(readFileSync(path, "utf8"), "stale\n");
 }));
 
-test("invalid JSON reports its source record", () => withFixture((root) => {
+test("live-test rendering is stdout-only", () => withFixture((root) => {
+  const result = run(root, "--render", "pi-answer-key");
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /# Pi host answer key/);
+  assert.equal(existsSync(join(root, ".dump")), false);
+}));
+
+test("invalid rule Markdown reports its source record", () => withFixture((root) => {
   const name = readdirSync(join(root, "agent-doctrine/rules"))[0];
-  writeFileSync(join(root, "agent-doctrine/rules", name), "{ nope");
+  writeFileSync(join(root, "agent-doctrine/rules", name), "# not a rule record\n");
   const result = run(root, "--check");
   assert.equal(result.status, 1);
   assert.match(result.stderr, new RegExp(name.replaceAll(".", "\\.")));
-  assert.match(result.stderr, /invalid JSON/);
+  assert.match(result.stderr, /frontmatter/);
+}));
+
+test("invalid scenario Markdown reports its source record", () => withFixture((root) => {
+  const path = join(root, "agent-doctrine/scenarios/ZS-001-runtime-start.md");
+  writeFileSync(path, "# not a scenario record\n");
+  const result = run(root, "--check");
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ZS-001-runtime-start\.md/);
+  assert.match(result.stderr, /frontmatter/);
+}));
+
+test("legacy scenario JSON is rejected", () => withFixture((root) => {
+  const path = join(root, "agent-doctrine/scenarios/ZS-999-legacy.json");
+  writeFileSync(path, '{"id":"ZS-999"}\n');
+  const result = run(root, "--check");
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /legacy JSON records/);
 }));
 
 test("duplicate rule ids fail before generation", () => withFixture((root) => {
   const dir = join(root, "agent-doctrine/rules");
-  const original = join(dir, "ZD-001-routing.json");
-  cpSync(original, join(dir, "ZD-001-routing-copy.json"));
+  const original = join(dir, "ZD-001-routing.md");
+  cpSync(original, join(dir, "ZD-001-routing-copy.md"));
   const result = run(root, "--check");
   assert.equal(result.status, 1);
   assert.match(result.stderr, /duplicate rule id ZD-001/);
 }));
 
 test("missing applicable projection fails", () => withFixture((root) => {
-  const path = join(root, "agent-doctrine/rules/ZD-001-routing.json");
-  const rule = json(path);
-  delete rule.projection.pi;
-  writeJson(path, rule);
+  const path = join(root, "agent-doctrine/rules/ZD-001-routing.md");
+  const source = readFileSync(path, "utf8");
+  writeFileSync(path, source.replace(/\n## Pi mechanism[\s\S]*?(?=\n## Verify)/u, ""));
   const result = run(root, "--check");
   assert.equal(result.status, 1);
   assert.match(result.stderr, /projection\.pi is required/);
 }));
 
 test("undeclared Pi operation mention fails", () => withFixture((root) => {
-  const path = join(root, "agent-doctrine/rules/ZD-001-routing.json");
-  const rule = json(path);
-  rule.projection.pi.promptGuideline += " Use invented_operation.";
-  writeJson(path, rule);
+  const path = join(root, "agent-doctrine/rules/ZD-001-routing.md");
+  replaceFile(path, "and Pi lifecycle; never background long-running commands.", "and Pi lifecycle; never background long-running commands. Use invented_operation.");
   const result = run(root, "--check");
   assert.equal(result.status, 1);
   assert.match(result.stderr, /undeclared Pi operation invented_operation/);
 }));
 
 test("one-harness records require a divergence reason", () => withFixture((root) => {
-  const path = join(root, "agent-doctrine/rules/ZD-012-pi-lifecycle.json");
-  const rule = json(path);
-  delete rule.divergenceReason;
-  writeJson(path, rule);
+  const path = join(root, "agent-doctrine/rules/ZD-012-pi-lifecycle.md");
+  replaceFile(path, 'divergenceReason: "Claude does not expose Pi extension reload/respawn lifecycle operations."\n', "");
   const result = run(root, "--check");
   assert.equal(result.status, 1);
   assert.match(result.stderr, /divergenceReason must be a non-empty string/);
@@ -134,7 +160,7 @@ test("one-harness records require a divergence reason", () => withFixture((root)
 
 test("symlinked registry records are rejected", { skip: process.platform === "win32" }, () => withFixture((root) => {
   const dir = join(root, "agent-doctrine/rules");
-  symlinkSync(join(dir, "ZD-001-routing.json"), join(dir, "ZD-099-linked.json"));
+  symlinkSync(join(dir, "ZD-001-routing.md"), join(dir, "ZD-099-linked.md"));
   const result = run(root, "--check");
   assert.equal(result.status, 1);
   assert.match(result.stderr, /must be a committed file, not a symlink/);
@@ -143,6 +169,13 @@ test("symlinked registry records are rejected", { skip: process.platform === "wi
 test("unknown arguments return usage exit 2", () => withFixture((root) => {
   const result = run(root, "--unknown");
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /choose exactly one mode/);
+  assert.match(result.stderr, /choose --write, --check, or --render/);
   assert.match(result.stderr, /Usage:/);
+}));
+
+test("unknown render artifacts fail without output", () => withFixture((root) => {
+  const result = run(root, "--render", "unknown");
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "");
+  assert.match(result.stderr, /unknown render artifact unknown/);
 }));

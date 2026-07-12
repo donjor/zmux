@@ -12,8 +12,10 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 - `pi-zmux/index.ts` — package entry for Pi extension loading.
 - `pi-zmux/src/**` — dispatcher registration, on-demand diagnostics, bash classification, and zmux adapters.
 - `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
-- `pi-zmux/references/testing/**`, `pi-zmux/fixtures/**` — generated prompts/answer keys, Pi host mechanics, and deterministic live fixtures.
-- `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — Claude mechanics/hooks, generated shared projection/framework, and the single doctrine doctor.
+- `agent-doctrine/testing/{claude,pi}/**` — handwritten harness launch, inspection, judgment, and teardown mechanics.
+- `agent-doctrine/generate.mjs --render <artifact>` — stdout-only generated prompts and host answer keys for live maintainer runs.
+- `pi-zmux/fixtures/**` — deterministic live fixtures.
+- `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — Claude mechanics/hooks, the committed runtime doctrine projection, and the single doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
 - `docs/dev/test-prompts/zmux-agent-*-testing-prompt.md` — prompt-driven exploratory QA for fresh isolated sessions testing the whole agent-facing skill/Pi surface.
 
@@ -41,7 +43,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 
 - Do not duplicate shell lifecycle waiting with temp sentinels or wrapper scripts; read `zmux tab status --json` or use first-class `zmux wait` / `zmux type --wait-*` condition results.
 - Do not let the Pi dispatcher silently normalize opaque remote-admin behavior: numbered `remote-<host>N` tab sprawl and encoded/obfuscated remote payloads need deterministic warnings/tests, not just prose doctrine.
-- Do not hand-edit generated doctrine, prompt, answer-key, manifest, or matrix files; edit `agent-doctrine/`, run `make gen-doctrine`, and commit every changed projection.
+- Do not hand-edit committed runtime projections. Edit `agent-doctrine/`, run `make gen-doctrine`, commit changed runtime projections, and render maintainer test artifacts on demand.
 - Do not add a dispatcher operation without updating its contract test, neutral mechanism records, and the guard redirect map when the workflow should be tool-preferred.
 - Keep package loading settings-managed. A retired global `~/.pi/agent/extensions/pi-zmux` symlink can mask the local package.
 - Keep `zzmux` grounding isolated from live `zmux`; edge profile QA must not mutate live shell startup or agent integration links.
@@ -96,8 +98,7 @@ npm --prefix pi-zmux test
 make test-agent-surfaces
 ```
 
-`make test-agent-surfaces` first runs generator tests and byte-freshness checks,
-then extension typecheck/tests, QA lint, and the shipped zmux skill doctrine doctor.
+`make test-agent-surfaces` first validates Markdown doctrine records, runs generator tests and checks committed projection freshness, then extension typecheck/tests, QA lint, and the shipped zmux skill doctrine doctor. Live-test prompts and answer keys are stdout-only `--render` outputs; they are not package files.
 
 ## Agent-surface test prompts
 
@@ -113,12 +114,11 @@ failure. Thin activation wrappers live under `docs/dev/test-prompts/`:
 Use these prompts after material agent-facing changes, especially new dispatcher
 operations, guard classifications, peer/worker flow changes, or edits to shipped
 skill doctrine. The wrappers route to durable Claude and Pi frameworks. Shared prompt/outcome bodies
-come from `agent-doctrine/scenarios/*.json`; generated host answer keys stay hidden
+come from `agent-doctrine/scenarios/*.md`; generated host answer keys stay hidden
 from workers, while harness-specific launch, inspection, and teardown stay handwritten.
 `make test-agent-surfaces` remains the deterministic gate.
 
-The Claude framework lives at `skills/zmux/references/testing/`; the Pi framework
-lives at `pi-zmux/references/testing/`.
+The handwritten Claude framework lives at `agent-doctrine/testing/claude/`; the Pi framework lives at `agent-doctrine/testing/pi/`. Their worker prompts and host-only answer keys are rendered to stdout by `agent-doctrine/generate.mjs --render`.
 
 - The Claude framework drives one visible Sonnet worker; the Pi framework drives one visible Terra/medium worker.
 - Both consume the same 13 shared scenario prompts; Pi adds callback and soft-lifecycle scenarios, while package tests retain trusted-config, guard, renderer, and hard-respawn coverage.

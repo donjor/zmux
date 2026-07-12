@@ -24,7 +24,7 @@ make build                 # compile ./cmd/zmux
 make test                  # unit tests
 make test-race             # race detector suite; mirrors Worktrunk merge gate
 make test-integration      # integration tests; builds first
-make gen-doctrine          # explicitly rewrite committed Claude/Pi projections
+make gen-doctrine          # explicitly rewrite committed runtime projections
 make check-doctrine        # generator tests + non-mutating byte freshness
 make test-agent-surfaces   # doctrine gate + Pi extension + QA lint + single doctor
 make lint                  # go vet + golangci-lint + gofumpt check
@@ -41,7 +41,8 @@ agent-surface changes, also hand a fresh session the relevant prompt under
 [test-prompts/](test-prompts/).
 
 The Worktrunk pre-merge gate in [../../.config/wt.toml](../../.config/wt.toml)
-runs `make lint` and `make test-race`; GitHub CI adds build, race tests,
+runs `make check-doctrine`, `make lint`, and `make test-race`; the pre-push hook
+matches it, and GitHub CI also checks doctrine freshness before build, race tests,
 integration tests, and govulncheck.
 
 ## Guides

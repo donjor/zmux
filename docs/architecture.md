@@ -12,8 +12,7 @@ zmux is a Go CLI around tmux. The command tree lives under `internal/cli`, core
 tmux interaction is isolated behind `internal/tmux`, and the user-facing
 surfaces are split across focused packages for workspaces, recipes, themes, the
 status bar, logical tabs, terminal evidence, and Bubble Tea TUIs. Optional agent
-integrations live at the repository edge: `agent-doctrine/` owns shared behavioral
-truth, while `skills/zmux/` and `pi-zmux/` consume generated harness projections.
+integrations live at the repository edge: `agent-doctrine/` owns authored shared behavior, Markdown scenarios, and handwritten live-test harnesses; `skills/zmux/` and `pi-zmux/` consume only the committed runtime projections they need.
 
 ## Key components
 
@@ -30,11 +29,11 @@ zmux/
 ├── docs/                 # this directory (architecture, setup, dev, reference, domains, and planning docs.)
 ├── themes/iterm2/        # downloaded theme cache (gitignored; not an embed source)
 ├── tests/                # integration tests (build tag: `integration`)
-├── agent-doctrine/       # neutral rules/scenarios + deterministic projection generator
-├── skills/zmux/          # Claude skill/hooks plus generated doctrine/testing projection
-├── pi-zmux/              # Pi extension plus generated guidance/testing projection
+├── agent-doctrine/       # neutral rules, Markdown scenarios, harnesses + projection generator
+├── skills/zmux/          # Claude skill/hooks plus committed runtime doctrine projection
+├── pi-zmux/              # Pi extension plus committed runtime guidance/manifest
 ├── legacy/v0/            # archived bash+gum prototype — see legacy/v0/README.md
-├── .github/workflows/ci.yml # CI: lint, build, race tests, integration, vuln scan
+├── .github/workflows/ci.yml # CI: doctrine, lint, build, race, integration, vuln
 ├── .config/wt.toml       # Worktrunk pre-merge gate
 ├── .golangci.yml         # golangci-lint/gofumpt config used by make lint + CI
 ├── cliff.toml            # git-cliff draft config for curated CHANGELOG updates
@@ -49,8 +48,9 @@ zmux/
 ### Source area summary
 
 The active source roots are `cmd/`, `internal/`, `checklists/`, `agent-doctrine/`,
-`skills/zmux/`, `pi-zmux/`, and `tests/`. Generated or local-only state stays out of the
-tracked source map (`themes/iterm2/`, `.qa/`, profile state). The archived bash
+`skills/zmux/`, `pi-zmux/`, and `tests/`. Local generated state stays out of the
+tracked source map (`themes/iterm2/`, `.qa/`, profile state); package-required
+runtime projections are the explicit exception. The archived bash
 prototype is under `legacy/v0/`; do not extend it.
 
 ---
@@ -145,7 +145,8 @@ The flat `tui` root package was dissolved into focused leaf/surface packages; th
 - **Generated user surfaces derive from registries** - keybindings and tmux
   config should read from canonical registries instead of hardcoded duplicate
   strings. Shared agent outcomes and live scenarios similarly originate in
-  `agent-doctrine/`; generated Claude/Pi copies are committed and freshness-gated.
+  `agent-doctrine/`; runtime projections are committed and freshness-gated,
+  while maintainer-only live-test prompts and answer keys render to stdout.
 
 Durable decision records live in [decisions/](decisions/).
 
@@ -389,7 +390,7 @@ A few rules worth re-stating here because they're easy to miss:
 - **Don't run `zmux init` inside tmux.** It refuses; this is intentional, not a bug.
 - **Explicit DI, no package-global `app`** — `app.App` (in `internal/app`) is built once in `main` (`app.New()`) and threaded through `NewRootCmd(app)`. Each command is a `newXCmd(app)` constructor capturing it; flag state is constructor-local.
 - **Session-group clones** collapse to root in `ListSessions()` and `WorkspaceFor()`. Managed sessions use `__clone_b`-style raw clone names so local labels ending in `-b` are not misread as clones.
-- **Merge and CI gates are explicit files.** `.config/wt.toml` mirrors the local merge gate (`make lint` + `make test-race`); `.github/workflows/ci.yml` adds build, race tests, integration tests, and govulncheck; `.golangci.yml` owns formatter/linter policy.
+- **Merge and CI gates are explicit files.** `.config/wt.toml` mirrors the local merge gate (`make check-doctrine` + `make lint` + `make test-race`); `.github/workflows/ci.yml` checks doctrine freshness and adds build, race tests, integration tests, and govulncheck; `.golangci.yml` owns formatter/linter policy.
 
 ---
 

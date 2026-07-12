@@ -18,14 +18,14 @@ Work from the accepted zmux checkout in an attached test terminal:
 ```text
 You are the supervising host for the branch-local Claude/CLI zmux regression.
 
-Read and execute `skills/zmux/references/testing/host-prompt.md` exactly. It routes to the durable host flow, generated worker prompts, and generated host-only answer key.
+Read and execute `agent-doctrine/testing/claude/host-prompt.md` exactly. It routes to the durable host flow and stdout-only worker prompts/host answer key rendered from the Markdown registry.
 
 Use only isolated `zzmux`; never mutate live `zmux`, refresh global mirrors, install hooks, commit, or push. Keep focus unchanged. Judge real terminal/lifecycle state rather than worker self-report, and perform exact test-owned cleanup.
 ```
 
 The durable framework owns worker launch, scenario order, evidence, verdicts, and teardown:
 
-- `skills/zmux/references/testing/README.md`
-- `skills/zmux/references/testing/host-flow.md`
-- generated `skills/zmux/references/testing/prompts.md`
-- generated host-only `skills/zmux/references/testing/answer-key.generated.md`
+- `agent-doctrine/testing/claude/README.md`
+- `agent-doctrine/testing/claude/host-flow.md`
+- `node agent-doctrine/generate.mjs --render claude-prompts`
+- host-only `node agent-doctrine/generate.mjs --render claude-answer-key`

@@ -10,25 +10,26 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const USAGE = `Usage: node agent-doctrine/generate.mjs <--write|--check>
+const USAGE = `Usage: node agent-doctrine/generate.mjs <--write|--check|--render <artifact>>
 
-Generate committed Claude/Pi doctrine projections from agent-doctrine/rules/*.json
-and validate agent-doctrine/scenarios/*.json.
+Generate committed Claude/Pi doctrine projections from authored Markdown records
+in agent-doctrine/rules/*.md and agent-doctrine/scenarios/*.md.
 
 Modes:
-  --write  validate sources and rewrite changed generated outputs
-  --check  validate sources and fail when a generated output is stale
+  --write  validate sources and rewrite committed runtime projections
+  --check  validate sources and fail when a committed projection is stale; never writes
+  --render <artifact>
+           validate sources and print one maintainer live-test artifact to stdout
   -h, --help
 
-Writes (--write only):
+Committed projections (--write only):
   skills/zmux/references/shared-doctrine.generated.md
   pi-zmux/src/generated/doctrine.ts
   pi-zmux/doctrine-manifest.generated.json
   docs/reference/agent-doctrine-matrix.generated.md
-  skills/zmux/references/testing/prompts.md
-  skills/zmux/references/testing/answer-key.generated.md
-  pi-zmux/references/testing/prompts.md
-  pi-zmux/references/testing/answer-key.generated.md
+
+Render artifacts:
+  claude-prompts | claude-answer-key | pi-prompts | pi-answer-key
 
 Exit codes: 0 success; 1 invalid/stale doctrine; 2 usage error.`;
 
@@ -37,6 +38,7 @@ const root = resolve(here, "..");
 const HARNESSES = ["claude", "pi"];
 const ENFORCEMENT = new Set(["instruction", "typed-operation", "composite", "guard", "unsupported"]);
 const GENERATED_BANNER = "GENERATED FILE — edit agent-doctrine/ and run `make gen-doctrine`.";
+const RENDERED_BANNER = "RENDERED ARTIFACT — edit agent-doctrine/ and rerun this --render command; do not save or commit this output.";
 
 function fail(message, code = 1) {
   console.error(`agent-doctrine: ${message}`);
@@ -53,23 +55,165 @@ function withinRoot(path) {
   return rel !== "" && !rel.startsWith(`..${sep}`) && rel !== ".." && !resolve(path).startsWith(`${root}${sep}..${sep}`);
 }
 
-function readJsonRecords(kind) {
-  const dir = join(here, kind);
-  const names = readdirSync(dir).filter((name) => name.endsWith(".json")).sort();
-  if (names.length === 0) throw new Error(`${kind}/ contains no JSON records`);
-  return names.map((name) => {
-    const path = join(dir, name);
-    if (!withinRoot(path)) throw new Error(`${kind}/${name} escapes repository root`);
-    if (lstatSync(path).isSymbolicLink()) throw new Error(`${kind}/${name} must be a committed file, not a symlink`);
-    const real = realpathSync(path);
-    if (!withinRoot(real)) throw new Error(`${kind}/${name} resolves outside repository root`);
-    let value;
+function checkedRecordPath(kind, name) {
+  const path = join(here, kind, name);
+  if (!withinRoot(path)) throw new Error(`${kind}/${name} escapes repository root`);
+  if (lstatSync(path).isSymbolicLink()) throw new Error(`${kind}/${name} must be a committed file, not a symlink`);
+  const real = realpathSync(path);
+  if (!withinRoot(real)) throw new Error(`${kind}/${name} resolves outside repository root`);
+  return path;
+}
+
+const RULE_FRONTMATTER = new Set(["id", "title", "applicability", "divergenceReason"]);
+const RULE_SECTIONS = new Set([
+  "Invariant", "Shared instruction", "Claude mechanism", "Claude enforcement", "Claude prompt guideline", "Claude caveats",
+  "Pi mechanism", "Pi enforcement", "Pi prompt guideline", "Pi caveats", "Verify",
+]);
+const SCENARIO_FRONTMATTER = new Set(["id", "title", "doctrineRefs", "applicability", "divergenceReason"]);
+const SCENARIO_SECTIONS = new Set(["Prompt", "Setup", "Expected outcome", "Evidence", "Safety", "Cleanup", "Claude answer key", "Pi answer key"]);
+
+function parseJsonFrontmatter(source, at, allowedFields) {
+  const fields = {};
+  for (const [index, line] of source.split("\n").entries()) {
+    if (!line.trim()) continue;
+    const match = /^([A-Za-z][A-Za-z0-9]*):\s+(.+)$/u.exec(line);
+    expect(match, `${at} frontmatter line ${index + 1} must be key: JSON-value`);
+    const [, key, encoded] = match;
+    expect(allowedFields.has(key), `${at} frontmatter contains unknown field ${key}`);
+    expect(fields[key] === undefined, `${at} frontmatter contains duplicate field ${key}`);
     try {
-      value = JSON.parse(readFileSync(path, "utf8"));
+      fields[key] = JSON.parse(encoded);
     } catch (error) {
-      throw new Error(`${kind}/${name}: invalid JSON: ${error.message}`);
+      throw new Error(`${at} frontmatter field ${key} is not valid inline JSON: ${error.message}`);
     }
-    return { name, path, value };
+  }
+  return fields;
+}
+
+function parseSections(source, at, allowedSections) {
+  const sections = {};
+  const heading = /^## (.+)$/gmu;
+  const matches = [...source.matchAll(heading)];
+  expect(matches.length > 0, `${at} must contain Markdown sections`);
+  expect(source.slice(0, matches[0].index).trim() === "", `${at} must not contain content before its first section`);
+  for (const [index, match] of matches.entries()) {
+    const name = match[1].trim();
+    expect(allowedSections.has(name), `${at} contains unknown section ${name}`);
+    expect(sections[name] === undefined, `${at} contains duplicate section ${name}`);
+    const start = match.index + match[0].length;
+    const end = matches[index + 1]?.index ?? source.length;
+    sections[name] = source.slice(start, end).trim();
+  }
+  return sections;
+}
+
+function paragraphSection(sections, name, at) {
+  const value = sections[name];
+  string(value, `${at} section ${name}`);
+  expect(!value.includes("\n- "), `${at} section ${name} must be prose, not a list`);
+  return value.replace(/\s*\n\s*/gu, " ");
+}
+
+function listSection(sections, name, at, { allowEmpty = false, required = true } = {}) {
+  const source = sections[name];
+  if (source === undefined) {
+    expect(!required, `${at} section ${name} is required`);
+    return undefined;
+  }
+  if (source === "_None._") {
+    expect(allowEmpty, `${at} section ${name} must not be empty`);
+    return [];
+  }
+  const lines = source.split("\n");
+  const values = lines.map((line, index) => {
+    const match = /^- (.+)$/u.exec(line);
+    expect(match, `${at} section ${name} line ${index + 1} must be a Markdown bullet`);
+    return match[1];
+  });
+  stringArray(values, `${at} section ${name}`, { allowEmpty });
+  return values;
+}
+
+function nullableParagraphSection(sections, name, at) {
+  const value = sections[name];
+  string(value, `${at} section ${name}`);
+  if (value === "_None._") return null;
+  return value.replace(/\s*\n\s*/gu, " ");
+}
+
+function readMarkdownRecords(kind, frontmatterFields, sectionNames, buildValue) {
+  const dir = join(here, kind);
+  const entries = readdirSync(dir).sort();
+  const legacy = entries.filter((name) => name.endsWith(".json"));
+  expect(legacy.length === 0, `${kind}/ contains legacy JSON records: ${legacy.join(", ")}; convert them to Markdown`);
+  const names = entries.filter((name) => name.endsWith(".md"));
+  if (names.length === 0) throw new Error(`${kind}/ contains no Markdown records`);
+  return names.map((name) => {
+    const path = checkedRecordPath(kind, name);
+    const source = readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+    const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/u.exec(source);
+    expect(match, `${kind}/${name} must contain JSON-valued YAML frontmatter followed by Markdown sections`);
+    const at = `${kind}/${name}`;
+    const fields = parseJsonFrontmatter(match[1], at, frontmatterFields);
+    const sections = parseSections(match[2], at, sectionNames);
+    return { name, path, value: buildValue(fields, sections, at) };
+  });
+}
+
+function readRuleRecords() {
+  return readMarkdownRecords("rules", RULE_FRONTMATTER, RULE_SECTIONS, (fields, sections, at) => {
+    const projection = {};
+    const caveats = {};
+    for (const [harness, label] of [["claude", "Claude"], ["pi", "Pi"]]) {
+      const mechanism = sections[`${label} mechanism`];
+      const enforcement = sections[`${label} enforcement`];
+      const promptGuideline = sections[`${label} prompt guideline`];
+      const harnessCaveats = sections[`${label} caveats`];
+      const present = [mechanism, enforcement, promptGuideline, harnessCaveats].filter((value) => value !== undefined).length;
+      expect(present === 0 || present === 4, `${at} must include all or none of the ${label} projection sections`);
+      if (present === 0) continue;
+      projection[harness] = {
+        mechanism: paragraphSection(sections, `${label} mechanism`, at),
+        enforcement: paragraphSection(sections, `${label} enforcement`, at),
+        promptGuideline: nullableParagraphSection(sections, `${label} prompt guideline`, at),
+      };
+      caveats[harness] = listSection(sections, `${label} caveats`, at, { allowEmpty: true });
+    }
+    return {
+      id: fields.id,
+      title: fields.title,
+      appliesTo: fields.applicability,
+      ...(fields.divergenceReason ? { divergenceReason: fields.divergenceReason } : {}),
+      invariant: paragraphSection(sections, "Invariant", at),
+      sharedInstruction: paragraphSection(sections, "Shared instruction", at),
+      projection,
+      caveats,
+      verifyRefs: listSection(sections, "Verify", at),
+    };
+  });
+}
+
+function readScenarioRecords() {
+  return readMarkdownRecords("scenarios", SCENARIO_FRONTMATTER, SCENARIO_SECTIONS, (fields, sections, at) => {
+    const answerKey = {};
+    const claude = listSection(sections, "Claude answer key", at, { required: false });
+    const pi = listSection(sections, "Pi answer key", at, { required: false });
+    if (claude) answerKey.claude = claude;
+    if (pi) answerKey.pi = pi;
+    return {
+      id: fields.id,
+      title: fields.title,
+      doctrineRefs: fields.doctrineRefs,
+      applicability: fields.applicability,
+      ...(fields.divergenceReason ? { divergenceReason: fields.divergenceReason } : {}),
+      prompt: paragraphSection(sections, "Prompt", at),
+      setup: listSection(sections, "Setup", at),
+      expectedOutcome: paragraphSection(sections, "Expected outcome", at),
+      evidence: listSection(sections, "Evidence", at),
+      safety: listSection(sections, "Safety", at),
+      cleanup: listSection(sections, "Cleanup", at, { allowEmpty: true }),
+      answerKey,
+    };
   });
 }
 
@@ -261,7 +405,7 @@ function renderPrompts(scenarios, harness) {
     .map((scenario) => `## ${scenario.id} · ${scenario.title}\n\n> ${scenario.prompt}`)
     .join("\n\n");
   const title = harness === "claude" ? "Claude zmux worker prompts" : "Pi zmux worker prompts";
-  return `<!-- ${GENERATED_BANNER} -->\n\n# ${title}\n\nThe host sends the session contract once, then sends one scenario prompt at a time. Headings and answer keys stay host-side.\n\n## Session contract\n\n> ${contract}\n\n${body}\n`;
+  return `<!-- ${RENDERED_BANNER} -->\n\n# ${title}\n\nThe host sends the session contract once, then sends one scenario prompt at a time. Headings and answer keys stay host-side.\n\n## Session contract\n\n> ${contract}\n\n${body}\n`;
 }
 
 function renderAnswerKey(scenarios, harness) {
@@ -269,7 +413,7 @@ function renderAnswerKey(scenarios, harness) {
     .filter((scenario) => scenario.applicability.includes(harness))
     .map((scenario) => `### ${scenario.id} · ${scenario.title}\n\n- **Expected outcome:** ${scenario.expectedOutcome}\n- **${harness === "claude" ? "Claude" : "Pi"} mechanics:** ${scenario.answerKey[harness].join("; ")}\n- **Evidence:** ${scenario.evidence.join("; ")}\n- **Safety:** ${scenario.safety.join("; ")}\n- **Cleanup:** ${scenario.cleanup.length > 0 ? scenario.cleanup.join("; ") : "none"}${scenario.divergenceReason ? `\n- **Divergence:** ${scenario.divergenceReason}` : ""}`)
     .join("\n\n");
-  return `<!-- ${GENERATED_BANNER} -->\n\n# ${harness === "claude" ? "Claude" : "Pi"} host answer key\n\nHost-only expected mechanics and evidence. Never send this file or its operation/verb hints to the worker.\n\n${rows}\n`;
+  return `<!-- ${RENDERED_BANNER} -->\n\n# ${harness === "claude" ? "Claude" : "Pi"} host answer key\n\nHost-only expected mechanics and evidence. Never send this file or its operation/verb hints to the worker.\n\n${rows}\n`;
 }
 
 function outputs(rules, scenarios, operations) {
@@ -278,11 +422,18 @@ function outputs(rules, scenarios, operations) {
     ["pi-zmux/src/generated/doctrine.ts", renderPiModule(rules)],
     ["pi-zmux/doctrine-manifest.generated.json", renderManifest(rules, scenarios, operations)],
     ["docs/reference/agent-doctrine-matrix.generated.md", renderMatrix(rules)],
-    ["skills/zmux/references/testing/prompts.md", renderPrompts(scenarios, "claude")],
-    ["skills/zmux/references/testing/answer-key.generated.md", renderAnswerKey(scenarios, "claude")],
-    ["pi-zmux/references/testing/prompts.md", renderPrompts(scenarios, "pi")],
-    ["pi-zmux/references/testing/answer-key.generated.md", renderAnswerKey(scenarios, "pi")],
   ]);
+}
+
+function renderTestingArtifact(name, scenarios) {
+  const artifacts = {
+    "claude-prompts": renderPrompts(scenarios, "claude"),
+    "claude-answer-key": renderAnswerKey(scenarios, "claude"),
+    "pi-prompts": renderPrompts(scenarios, "pi"),
+    "pi-answer-key": renderAnswerKey(scenarios, "pi"),
+  };
+  expect(Object.hasOwn(artifacts, name), `unknown render artifact ${name}; choose one of: ${Object.keys(artifacts).join(", ")}`);
+  return artifacts[name];
 }
 
 function writeOutputs(rendered) {
@@ -308,8 +459,16 @@ function checkOutputs(rendered) {
     try { current = readFileSync(join(root, rel), "utf8"); } catch { current = undefined; }
     if (current !== content) stale.push(rel);
   }
-  if (stale.length > 0) throw new Error(`stale generated output(s): ${stale.join(", ")}; run make gen-doctrine`);
-  console.log(`agent-doctrine: ${rendered.size} generated outputs current`);
+  if (stale.length > 0) throw new Error(`stale committed projection(s): ${stale.join(", ")}; run make gen-doctrine`);
+  console.log(`agent-doctrine: ${rendered.size} committed projections current; Markdown records valid`);
+}
+
+export function loadDoctrine() {
+  const rules = uniqueById(readRuleRecords().map(validateRule), "rule");
+  const ruleIds = new Set(rules.map((rule) => rule.id));
+  const scenarios = uniqueById(readScenarioRecords().map((record) => validateScenario(record, ruleIds)), "scenario");
+  const operations = validatePiOperationMentions(rules, scenarios);
+  return { rules, scenarios, operations };
 }
 
 function main() {
@@ -318,15 +477,18 @@ function main() {
     console.log(USAGE);
     return;
   }
-  if (args.length !== 1 || !["--write", "--check"].includes(args[0])) {
-    usageError("choose exactly one mode: --write or --check");
+  const renderMode = args[0] === "--render" && args.length === 2;
+  const projectionMode = args.length === 1 && ["--write", "--check"].includes(args[0]);
+  if (!renderMode && !projectionMode) {
+    usageError("choose --write, --check, or --render <artifact>");
     return;
   }
   try {
-    const rules = uniqueById(readJsonRecords("rules").map(validateRule), "rule");
-    const ruleIds = new Set(rules.map((rule) => rule.id));
-    const scenarios = uniqueById(readJsonRecords("scenarios").map((record) => validateScenario(record, ruleIds)), "scenario");
-    const operations = validatePiOperationMentions(rules, scenarios);
+    const { rules, scenarios, operations } = loadDoctrine();
+    if (renderMode) {
+      process.stdout.write(renderTestingArtifact(args[1], scenarios));
+      return;
+    }
     const rendered = outputs(rules, scenarios, operations);
     if (args[0] === "--write") writeOutputs(rendered);
     else checkOutputs(rendered);
@@ -335,4 +497,4 @@ function main() {
   }
 }
 
-main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) main();

@@ -19,14 +19,14 @@ PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
 ```text
 You are the supervising host for the branch-local canonical pi-zmux regression.
 
-Read and execute `pi-zmux/references/testing/host-prompt.md` exactly. It routes to the durable host flow, generated worker prompts, generated host-only answer key, adapter-local deterministic gates, and exact teardown.
+Read and execute `agent-doctrine/testing/pi/host-prompt.md` exactly. It routes to the durable host flow, stdout-only worker prompts/host answer key rendered from the Markdown registry, adapter-local deterministic gates, and exact teardown.
 
 Use only isolated `zzmux`; never mutate live `zmux`, refresh global integrations, bypass the Bash guard, commit, or push. Keep focus unchanged. Judge real dispatcher/terminal/lifecycle state rather than worker self-report.
 ```
 
 The durable framework owns worker launch, shared and Pi-only scenario order, evidence, verdicts, and cleanup:
 
-- `pi-zmux/references/testing/README.md`
-- `pi-zmux/references/testing/host-flow.md`
-- generated `pi-zmux/references/testing/prompts.md`
-- generated host-only `pi-zmux/references/testing/answer-key.generated.md`
+- `agent-doctrine/testing/pi/README.md`
+- `agent-doctrine/testing/pi/host-flow.md`
+- `node agent-doctrine/generate.mjs --render pi-prompts`
+- host-only `node agent-doctrine/generate.mjs --render pi-answer-key`

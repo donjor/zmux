@@ -305,15 +305,21 @@ if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_AGENT_INTEGRATIONS:-0}" != "1" ]; th
 	fi
 
 	if [ -n "$SKILLS_ROOT" ] && [ -x "$SKILLS_ROOT/sync" ] && command -v bun >/dev/null 2>&1; then
-		for harness in codex pi gemini; do
-			printf "${dim}refreshing %s skill mirror...${reset} " "$harness"
-			"$SKILLS_ROOT/sync" skills apply --harness "$harness" >/dev/null
-			printf "${green}ok${reset}\n"
+		for harness in claude codex antigravity; do
+			printf "${dim}installing zmux skill for %s...${reset} " "$harness"
+			"$SKILLS_ROOT/sync" skills apply --harness "$harness" --unit skill:zmux >/dev/null
+			"$SKILLS_ROOT/sync" skills check --harness "$harness" --unit skill:zmux >/dev/null
+			printf "${green}ok${reset}  ${dim}installed and verified${reset}\n"
 		done
+
+		printf "${dim}installing pi-zmux package for Pi...${reset} "
+		"$SKILLS_ROOT/sync" apply --harness pi --unit package:pi-zmux >/dev/null
+		"$SKILLS_ROOT/sync" check --harness pi --unit package:pi-zmux >/dev/null
+		printf "${green}ok${reset}  ${dim}installed and verified${reset}\n"
 	elif [ -z "$SKILLS_ROOT" ]; then
 		:
 	else
-		printf "${dim}skipping skill mirrors; missing bun or %s/sync${reset}\n" "$SKILLS_ROOT"
+		printf "${dim}skipping agent surface sync; missing bun or %s/sync${reset}\n" "$SKILLS_ROOT"
 	fi
 
 	printf "${dim}checking pi extension package...${reset} "

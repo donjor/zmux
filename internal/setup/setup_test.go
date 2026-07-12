@@ -252,6 +252,33 @@ func TestDevShZzmuxSkipsShellSetupByDefault(t *testing.T) {
 	}
 }
 
+func TestDevShLiveInstallScopesAndVerifiesAgentSync(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "dev.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := string(data)
+	for _, want := range []string{
+		"for harness in claude codex antigravity; do",
+		`skills apply --harness "$harness" --unit skill:zmux`,
+		`skills check --harness "$harness" --unit skill:zmux`,
+		"apply --harness pi --unit package:pi-zmux",
+		"check --harness pi --unit package:pi-zmux",
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("dev.sh live install must scope and verify agent sync; missing %q", want)
+		}
+	}
+	for _, stale := range []string{
+		"for harness in codex pi gemini; do",
+		`skills apply --harness "$harness" >/dev/null`,
+	} {
+		if strings.Contains(script, stale) {
+			t.Fatalf("dev.sh still carries broad or stale agent sync %q", stale)
+		}
+	}
+}
+
 func TestPlanShellIntegration_IncludesLifecycleHooks(t *testing.T) {
 	cases := []struct {
 		shell Shell

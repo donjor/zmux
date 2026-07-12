@@ -180,7 +180,7 @@ zmux exposes an agent-safe terminal control surface:
   terminal work;
 - use the canonical Pi `zmux` dispatcher from `pi-zmux/`; Pi replaces the full skill with compact generated guidance while the shared `peer` skill still owns selection policy;
 - use the full `skills/zmux/SKILL.md` in Claude and other skill-capable harnesses;
-- edit shared outcomes and live scenarios only under `agent-doctrine/`, then commit every generated projection;
+- author shared outcomes and live scenarios as Markdown records under `agent-doctrine/`; commit only runtime projections and render maintainer test material on demand;
 - never hide long-running work behind `&`, `nohup`, `disown`, or raw tmux.
 
 Detailed agent and Pi integration docs:
@@ -207,7 +207,8 @@ make vuln
 Start with the narrow test, then run `make test`. For command, tmux, keybinding,
 TUI, or agent-facing behavior, also run the relevant QA checklist. Maintainers
 should use `./dev.sh zzmux` for edge-profile proof before touching live shell or
-agent integration.
+agent integration. The live `./dev.sh zmux` path also installs and verifies the
+`zmux` skill for Claude, Codex, and Antigravity plus the `pi-zmux` package for Pi.
 
 ## Docs
 

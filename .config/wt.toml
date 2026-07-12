@@ -1,9 +1,10 @@
 # worktrunk project config — pre-merge verification gate.
-# Mirrors the pre-push hook (scripts/hooks/pre-push): lint + race tests gate
-# anything integrating into master. Local-first repo — this is the real gate.
+# Mirrors the pre-push hook (scripts/hooks/pre-push): doctrine freshness,
+# lint, and race tests gate anything integrating into master. Local-first repo —
+# this is the real gate.
 
 [pre-merge]
-check = "make lint"
+check = "make check-doctrine && make lint"
 test = "make test-race"
 
 [post-create]

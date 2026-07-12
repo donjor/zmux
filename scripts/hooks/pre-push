@@ -7,8 +7,9 @@
 # (master = high bar; other branches = easy reverting/referencing).
 #
 # When gated, runs the fast, offline, deterministic checks:
-#   - make lint       (go vet + golangci-lint, incl. gofumpt format check)
-#   - make test-race   (full unit suite with the race detector)
+#   - make check-doctrine (Markdown registry validation + projection freshness)
+#   - make lint           (go vet + golangci-lint, incl. gofumpt format check)
+#   - make test-race      (full unit suite with the race detector)
 # (Not run, to keep the gate fast + offline: `make vuln` — needs network + a
 #  Go >=1.25 toolchain fetch; and `make test-integration` — execs the built CLI.
 #  Run both periodically by hand; CI also covers them.)
@@ -35,6 +36,9 @@ if ! should_gate; then
 	echo "▶ pre-push: not updating master — skipping gate (GATE_ALL=1 to force)"
 	exit 0
 fi
+
+echo "▶ pre-push (master): make check-doctrine"
+make check-doctrine
 
 echo "▶ pre-push (master): make lint"
 make lint

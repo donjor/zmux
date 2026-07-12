@@ -100,9 +100,12 @@ its own config/state and tmux socket, so QA can run without corrupting active
 `zmux` sessions.
 
 Use `./dev.sh zmux` only when you intentionally want to refresh the live binary
-and shared agent integration links. It runs `agent-doctrine` freshness validation
-before build/link/sync mutation and refuses stale generated projections; regenerate
-explicitly with `make gen-doctrine` first.
+and shared agent integrations. It links the owned sources into the configured
+`ZMUX_SKILLS_ROOT`, installs and verifies only the `zmux` skill for Claude, Codex,
+and Antigravity, then stages and verifies only the `pi-zmux` package for Pi. It
+runs `agent-doctrine` freshness validation before build/link/sync mutation and
+refuses stale generated projections; regenerate explicitly with
+`make gen-doctrine` first.
 
 ## Output and failure behavior
 
