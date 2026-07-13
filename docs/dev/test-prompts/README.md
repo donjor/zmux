@@ -1,6 +1,6 @@
 # Agent-surface test prompts
 
-These prompts are for fresh-session exploratory QA of zmux's agent-facing surfaces. The Claude/CLI flow uses branch-local docs with isolated `zzmux`; the canonical Pi flow uses the already-synced installed package on native `zmux`.
+These prompts are for fresh-session exploratory QA of zmux's agent-facing surfaces. The Claude/CLI host confirms a native-or-edge lane with the user; the canonical Pi flow uses the already-synced installed package on native `zmux`.
 
 ## Activation model
 
@@ -11,12 +11,11 @@ extension package links.
 Use this split when testing:
 
 - **Skill/CLI prompt:** paste `zmux-agent-skill-testing-prompt.md` into a fresh
-  agent session started from this repo. The prompt tells the agent to read the
-  branch-local `skills/zmux/**` docs, so no global skill mirror refresh is
-  required. If you specifically want to test auto-discovery of the shipped skill
-  in the live agent installation, run `./dev.sh zmux` separately and reload or
-  restart that agent; that mutates live integrations and is not part of `zzmux`
-  isolation.
+  host session started from this repo. The host confirms whether to use native
+  `zmux` or isolated `zzmux`, which checkout/install is under test, and whether
+  any skill sync is allowed before setup. Branch-local docs can be read without
+  refreshing a global mirror; installed-skill coverage requires an explicitly
+  approved and verified sync.
 - **Pi extension prompt:** after the native binary and installed Pi package have been synced, launch a fresh `pi` process in an attached native `zmux` session and paste `zmux-agent-pi-zmux-testing-prompt.md`. The flow does not install, sync, switch profiles, or ask the user to choose a lane; missing required surfaces are reported as `BLOCKED`.
 
 ## Prompts

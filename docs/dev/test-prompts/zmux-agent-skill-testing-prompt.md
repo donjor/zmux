@@ -1,22 +1,16 @@
 # zmux agent skill testing prompt
 
-Thin activation wrapper for the durable Claude/CLI skill regression framework.
+Thin activation wrapper for the canonical Claude/CLI test framework for agent-driven `zmux` usage through the skill.
 Shared scenarios and expected outcomes do not live here.
 
-## Isolated launch
+## Launch
 
-Work from the accepted zmux checkout in an attached test terminal:
-
-```sh
-./dev.sh zzmux
-```
-
-`./dev.sh zzmux` is binary/profile-only. It does not refresh live skill mirrors, shell integration, or Pi packages.
+Start the supervising host from the accepted zmux checkout in an attached test terminal. Do not install or sync first: the durable host flow inspects the checkout, recommends a native-or-edge lane, and asks the user to confirm the profile, code under test, skill source, and allowed mutations.
 
 ## Copy-paste prompt
 
 ```text
-You are the supervising host for the branch-local Claude/CLI zmux regression.
+You are the supervising host for the canonical branch-local test flow for agent-driven `zmux` usage through the Claude/CLI skill.
 
 Read and execute `agent-doctrine/testing/claude/host-prompt.md` exactly. It routes to the durable host flow and stdout-only worker prompts/host answer key rendered from the Markdown registry.
 

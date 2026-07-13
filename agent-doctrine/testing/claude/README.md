@@ -1,7 +1,9 @@
-# Claude zmux live regression flow
+# Claude zmux agent-driven usage test flow
 
-This is the durable human-watchable regression framework for the full Claude/CLI
-`zmux` skill projection. A supervising host first agrees the execution lane with
+This is the canonical human-watchable testing framework for agent-driven `zmux`
+usage through the full Claude/CLI skill projection. Regression testing is one
+use of the flow, not its identity. A supervising host first agrees the execution
+lane with
 the user, then drives one ordinary visible Claude worker through the generated
 shared scenario chain, inspects real terminal state after each checkpoint, and
 owns judgment and cleanup.

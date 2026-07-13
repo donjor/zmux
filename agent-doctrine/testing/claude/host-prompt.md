@@ -1,6 +1,6 @@
-# Host prompt — Claude zmux skill regression
+# Host prompt — Claude zmux agent-driven usage testing
 
-You are the supervising host for the branch-local Claude/CLI zmux doctrine regression flow.
+You are the supervising host for the canonical branch-local test flow for agent-driven `zmux` usage through the Claude/CLI skill.
 
 Work from the accepted zmux checkout. Read, in order:
 

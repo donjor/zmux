@@ -17,7 +17,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 - `pi-zmux/fixtures/**` — deterministic live fixtures.
 - `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — Claude mechanics/hooks, the committed runtime doctrine projection, and the single doctrine doctor.
 - `docs/dev/agent-grounding.md` — live `zzmux` grounding protocol for agents.
-- `docs/dev/test-prompts/zmux-agent-*-testing-prompt.md` — prompt-driven exploratory QA for fresh isolated sessions testing the whole agent-facing skill/Pi surface.
+- `docs/dev/test-prompts/zmux-agent-*-testing-prompt.md` — prompt-driven exploratory QA for fresh supervised sessions testing the whole agent-facing skill/Pi surface.
 
 ## Invariants
 
@@ -251,8 +251,8 @@ name without rediscovering commands or starting duplicate processes.
   `triggerTurn: true` unless explicitly changed.
 - Pi and Claude currently publish native turn-end lifecycle. Codex and Agy
   complete visible answers without advancing `turnState`; callers use explicit
-  `idleSeconds` fallback for those CLIs, while the regression matrix keeps their
-  native-lifecycle rows failing until adapters land.
+  `idleSeconds` fallback for those CLIs, while the agent-driven usage test matrix
+  keeps their native-lifecycle rows failing until adapters land.
 - `deliverAs: "nextTurn"` is rejected when `triggerTurn` is true because Pi
   ignores turn triggers for next-turn delivery.
 - Freshness is generation-based via `turnSeq`; stale `ready` state cannot satisfy a new wait.

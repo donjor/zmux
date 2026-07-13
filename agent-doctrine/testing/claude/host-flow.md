@@ -1,4 +1,4 @@
-# Host flow — Claude zmux skill regression
+# Host flow — Claude zmux agent-driven usage testing
 
 The host owns setup, timing, inspection, judgment, and cleanup. The Claude worker receives outcomes only from the validated stdout of `node agent-doctrine/generate.mjs --render claude-prompts`.
 
