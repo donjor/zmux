@@ -155,7 +155,7 @@ handlers add no prompt tokens by themselves.
 
 The dispatcher preserves operation-specific safety:
 
-- persistent processes use `runtime_ensure`;
+- persistent processes use `runtime_ensure`, which passes readiness into the same detached `zmux run` operation so the output baseline is captured before command delivery and immediate startup output cannot race a later watch;
 - `run` maps `focus:false` to focus-preserving creation; every detached run
   automatically arms a shell-lifecycle completion callback and later reports its
   evidence, while `trackCompletion:false` is reserved for work expected never to
@@ -187,6 +187,7 @@ not need a second `callback_watch` for ordinary detached runs.
 
 Lifecycle freshness is explicit:
 
+- Runtime readiness is an atomic detached launch wait: `zmux run --detach --until <regex>` snapshots pre-launch output, submits the command, and accepts only matching output beyond that baseline.
 - New tabs tolerate completion before callback spawn.
 - Reused tabs capture the pre-run `cmdSeq` and require a newer lifecycle
   generation, so an old `done` state cannot satisfy the new run.

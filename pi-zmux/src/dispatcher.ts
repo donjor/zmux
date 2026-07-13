@@ -217,6 +217,11 @@ function buildArgs(params: ZmuxParams): string[] {
       const tab = optString(options, "tab") ?? target;
       if (!tab) throw new Error("target or options.tab is required for runtime_ensure");
       const args = ["run", "--command", requireCommand(params), "-n", tab, "-d", "--keep", "--scope", optString(options, "kind") ?? "daemon"];
+      const readiness = optString(options, "readiness") ?? optString(options, "waitFor");
+      if (readiness) {
+        args.push("--until", readiness);
+        pushOpt(args, "-T", optNumber(options, "timeoutSeconds") ?? 90);
+      }
       pushSession(args, session);
       return args;
     }
@@ -590,7 +595,7 @@ function initialProgressPhase(params: ZmuxParams): string {
 
 export function executionTimeoutSeconds(params: ZmuxParams): number {
   const explicit = optNumber(params.options ?? {}, "timeoutSeconds");
-  if (explicit !== undefined) return explicit;
+  if (explicit !== undefined) return params.operation === "runtime_ensure" ? explicit + 5 : explicit;
   if (params.operation === "wait" || params.operation === "callback_watch" || params.operation === "peer_handoff") return 300;
   if (params.operation === "runtime_logs" && (optString(params.options ?? {}, "waitFor") || optNumber(params.options ?? {}, "idleSeconds") !== undefined)) return 10;
   if (["pane_resize", "pane_send_keys", "pane_type"].includes(params.operation)) return 5;
@@ -878,18 +883,9 @@ export function registerZmuxDispatcher(pi: ExtensionAPI): void {
       }
       if (params.operation === "runtime_ensure") {
         const readiness = optString(options, "readiness") ?? optString(options, "waitFor");
-        if (readiness && outputMatches(readiness, result.stdout, result.stderr)) {
+        if (readiness) {
           details.ready = true;
-          details.readinessBasis = "initial-output";
-        } else if (readiness) {
-          const tab = optString(options, "tab") ?? params.target;
-          const watchOptions = { ...options, waitFor: readiness, timeoutSeconds: optNumber(options, "timeoutSeconds") ?? 90 };
-          const watchArgs = buildWatchArgs(tab ?? "", watchOptions);
-          progress.setPhase("waiting for runtime readiness");
-          const watch = await runZmux(watchArgs, { cwd, signal, timeoutMs: timeoutMs(watchOptions, 90) });
-          text = [text, formatResult("runtime_logs", watchArgs, watch.stdout, watch.stderr)].filter(Boolean).join("\n");
-          details.ready = !(watch.timedOut || watch.code !== 0);
-          details.readinessBasis = "fresh-watch";
+          details.readinessBasis = "atomic-launch-watch";
         }
       }
       return withDisplayMetadata(content(text, details), params, cwd, { args, exitCode: result.code, output: params.operation === "wait" ? rawResultText : text });

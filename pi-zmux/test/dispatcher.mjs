@@ -326,9 +326,9 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     process.env.PI_ZMUX_TEST_RUN_OUTPUT = 'ready localhost:43123';
     const immediateReadiness = await execute({ operation: 'runtime_ensure', target: 'server', command: 'npm run dev', options: { readiness: 'ready|localhost', timeoutSeconds: 4 } });
     assert.equal(immediateReadiness.details.ready, true);
-    assert.equal(immediateReadiness.details.readinessBasis, 'initial-output');
+    assert.equal(immediateReadiness.details.readinessBasis, 'atomic-launch-watch');
     assert.deepEqual(readCommandLog(recorder.logPath).map((entry) => entry.args), [
-      ['run', '--command', 'npm run dev', '-n', 'server', '-d', '--keep', '--scope', 'daemon'],
+      ['run', '--command', 'npm run dev', '-n', 'server', '-d', '--keep', '--scope', 'daemon', '--until', 'ready|localhost', '-T', '4'],
     ]);
     delete process.env.PI_ZMUX_TEST_RUN_OUTPUT;
 
@@ -336,10 +336,9 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     process.env.PI_ZMUX_TEST_WATCH_OUTPUT = 'ready localhost:43124';
     const delayedReadiness = await execute({ operation: 'runtime_ensure', target: 'server', command: 'npm run dev', options: { readiness: 'ready|localhost', timeoutSeconds: 4 } });
     assert.equal(delayedReadiness.details.ready, true);
-    assert.equal(delayedReadiness.details.readinessBasis, 'fresh-watch');
+    assert.equal(delayedReadiness.details.readinessBasis, 'atomic-launch-watch');
     assert.deepEqual(readCommandLog(recorder.logPath).map((entry) => entry.args), [
-      ['run', '--command', 'npm run dev', '-n', 'server', '-d', '--keep', '--scope', 'daemon'],
-      ['watch', 'server', '-l', '120', '--until', 'ready|localhost', '-T', '4'],
+      ['run', '--command', 'npm run dev', '-n', 'server', '-d', '--keep', '--scope', 'daemon', '--until', 'ready|localhost', '-T', '4'],
     ]);
     delete process.env.PI_ZMUX_TEST_WATCH_OUTPUT;
 
@@ -356,8 +355,7 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     assert.equal(configured.details.ready, true);
     assert.deepEqual(readCommandLog(recorder.logPath), [
       { args: ['send', 'configured-tab', 'C-c', '-s', 's2'], cwd: commandCwd },
-      { args: ['run', '--command', 'npm run configured', '-n', 'configured-tab', '-d', '--keep', '--scope', 'worker', '-s', 's2'], cwd: commandCwd },
-      { args: ['watch', 'configured-tab', '-l', '120', '--until', 'READY', '-T', '12', '-s', 's2'], cwd: commandCwd },
+      { args: ['run', '--command', 'npm run configured', '-n', 'configured-tab', '-d', '--keep', '--scope', 'worker', '--until', 'READY', '-T', '12', '-s', 's2'], cwd: commandCwd },
     ]);
 
     const untrusted = await executeDispatcher(dispatcherTool, { operation: 'runtime_ensure', target: 'configured' }, contextCwd, false);

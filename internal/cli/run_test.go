@@ -46,6 +46,48 @@ func TestRunCreatesNewWindow(t *testing.T) {
 	}
 }
 
+func TestDetachedRunUntilAcceptsReadinessAlreadyPrintedAfterLaunch(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%7"
+	mock.CapturedPaneContent = "ready localhost:43123\n"
+
+	rootCmd.SetArgs([]string{"run", "npm run dev", "-n", "server", "-s", "test-session", "-d", "--until", "ready|localhost", "-T", "2"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("fast readiness emitted before wait registration must still pass: %v", err)
+	}
+}
+
+func TestDetachedRunUntilAcceptsByteIdenticalReadinessAfterRestart(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.Windows["test-session"] = []tmux.Window{{Index: 1, Name: "server", Label: "server", Active: true}}
+	captures := []string{"READY\n", "READY\nREADY\n"}
+	mock.CapturePaneFunc = func(_ string, _ int) (string, error) {
+		if len(captures) == 1 {
+			return captures[0], nil
+		}
+		output := captures[0]
+		captures = captures[1:]
+		return output, nil
+	}
+
+	rootCmd.SetArgs([]string{"run", "npm run dev", "-n", "server", "-s", "test-session", "-d", "--until", "READY", "-T", "2"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("byte-identical readiness beyond the pre-launch count must pass: %v", err)
+	}
+}
+
+func TestRunUntilRequiresDetachedRuntime(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+
+	rootCmd.SetArgs([]string{"run", "npm run dev", "-n", "server", "-s", "test-session", "--until", "ready"})
+	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "--until requires --detach") {
+		t.Fatalf("expected detached-runtime validation, got %v", err)
+	}
+}
+
 func TestRunReusesExistingWindow(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}

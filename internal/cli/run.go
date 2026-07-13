@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/recipeup"
+	"github.com/donjor/zmux/internal/waitfor"
 	"github.com/spf13/cobra"
 )
 
@@ -64,6 +66,7 @@ func newRunCmd(app *apppkg.App) *cobra.Command {
 	var runKeep bool
 	var runScope string
 	var runOrigin string
+	var runUntil string
 
 	cmd := &cobra.Command{
 		Use:   "run <recipe|command>",
@@ -117,6 +120,14 @@ Examples:
 			command := strings.Join(args, " ")
 			if !tabs.ValidScope(runScope) {
 				return fmt.Errorf("unknown lifecycle scope %q (want task|daemon|shell|peer|worker|agent-shell)", runScope)
+			}
+			if runUntil != "" && !runDetach {
+				return fmt.Errorf("--until requires --detach; it proves startup readiness while the command keeps running")
+			}
+			if runUntil != "" {
+				if _, err := waitfor.ParseCondition("output:" + runUntil); err != nil {
+					return err
+				}
 			}
 
 			// Determine target session.
@@ -191,6 +202,7 @@ Examples:
 				keep:        runKeep,
 				scope:       runScope,
 				origin:      runOrigin,
+				until:       runUntil,
 			}
 			if rt.found() {
 				return runInResolvedTab(app, rt, sessionName, name, sendCmd, nonce, shouldWait, opts)
@@ -216,6 +228,7 @@ Examples:
 	cmd.Flags().DurationVar(&runTTL, "ttl", 0, "auto-reap this tab after it's idle this long (e.g. 30m, 2h)")
 	cmd.Flags().BoolVar(&runKeep, "keep", false, "never auto-reap this tab")
 	cmd.Flags().StringVar(&runScope, "scope", "", "lifecycle scope: task (default), daemon, shell, peer, worker, agent-shell")
+	cmd.Flags().StringVar(&runUntil, "until", "", "with --detach, wait for fresh startup output matching this regex")
 	cmd.Flags().StringVar(&runOrigin, "origin", "", "lifecycle origin override: agent|human (default inferred)")
 	_ = cmd.Flags().MarkHidden("origin")
 	return cmd
@@ -234,11 +247,20 @@ type runTabOpts struct {
 	keep        bool
 	scope       string
 	origin      string
+	until       string
 }
 
 // runInResolvedTab delivers the command to an already-existing tab, clearing
 // stale glyph state first and optionally staging a lifecycle wait.
 func runInResolvedTab(app *apppkg.App, rt resolvedTab, sessionName, name, sendCmd, nonce string, shouldWait bool, opts runTabOpts) error {
+	var outputBaseline map[string]int
+	if opts.until != "" {
+		output, err := app.Runner.CapturePane(rt.Target, opts.followLines)
+		if err != nil {
+			return fmt.Errorf("capture pre-launch readiness baseline for %s: %w", name, err)
+		}
+		outputBaseline = waitfor.OutputBaseline(output)
+	}
 	// Delivering input clears stale done|failed first (ratified
 	// clear table: typing-by-proxy = user input) — same as send/type.
 	rt.clearStale(app)
@@ -258,6 +280,9 @@ func runInResolvedTab(app *apppkg.App, rt resolvedTab, sessionName, name, sendCm
 	fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
 	if shouldWait {
 		return waitForRunResult(app, rt.Target, waitPane, nonce, opts.timeout, opts.followLines)
+	}
+	if opts.until != "" {
+		return waitForRunReadiness(app, rt.Target, waitPane, opts, outputBaseline)
 	}
 	if opts.follow {
 		return followOutput(app, rt.Target, opts.followLines)
@@ -352,8 +377,37 @@ func runInNewTab(app *apppkg.App, sessionName, name, sendCmd, nonce string, shou
 	if shouldWait {
 		return waitForRunResult(app, target, waitPane, nonce, opts.timeout, opts.followLines)
 	}
+	if opts.until != "" {
+		return waitForRunReadiness(app, target, waitPane, opts, map[string]int{})
+	}
 	if opts.follow {
 		return followOutput(app, target, opts.followLines)
+	}
+	return nil
+}
+
+func waitForRunReadiness(app *apppkg.App, target, paneID string, opts runTabOpts, outputBaseline map[string]int) error {
+	condition, err := waitfor.ParseCondition("output:" + opts.until)
+	if err != nil {
+		return err
+	}
+	outcome, err := waitfor.Wait(context.Background(), waitfor.Request{
+		Runner:         app.Runner,
+		Target:         target,
+		PaneID:         paneID,
+		Lines:          opts.followLines,
+		Timeout:        time.Duration(opts.timeout) * time.Second,
+		Condition:      condition,
+		OutputBaseline: outputBaseline,
+	})
+	if err != nil {
+		return err
+	}
+	if outcome.OutputTail != "" {
+		fmt.Print(outcome.OutputTail)
+	}
+	if !outcome.Met {
+		return fmt.Errorf("runtime readiness not met: %s", outcome.FailureKind)
 	}
 	return nil
 }

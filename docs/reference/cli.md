@@ -88,7 +88,10 @@ zmux type <tab> '<text>' [--wait-turn state|--wait-cmd state] [--mark-peer-runni
 Purpose: run commands in named tmux tabs, wait/follow/tail output, record a
 bounded log, or send input. `run` writes command lifecycle metadata; `-d` returns
 without waiting, while `--no-focus` independently prevents a newly created tab
-from being selected and may be combined with either blocking or detached execution. `wait` is
+from being selected and may be combined with either blocking or detached execution. Detached
+long-running commands can add `--until <regex>` to prove fresh startup output against a baseline
+captured before command delivery; this avoids missing readiness printed immediately after launch.
+`wait` is
 the structured condition primitive for fresh command state, fresh turn state,
 future output regex, and idle/quiet evidence; `watch` and `log tail` remain
 human-friendly output readers. `send` and `type` mutate the target pane, and

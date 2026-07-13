@@ -72,15 +72,16 @@ type Baseline struct {
 }
 
 type Request struct {
-	Runner       tmux.Runner
-	Target       string
-	PaneID       string
-	Lines        int
-	Timeout      time.Duration
-	PollInterval time.Duration
-	Condition    Condition
-	AllowStale   bool
-	Baseline     *Baseline
+	Runner         tmux.Runner
+	Target         string
+	PaneID         string
+	Lines          int
+	Timeout        time.Duration
+	PollInterval   time.Duration
+	Condition      Condition
+	AllowStale     bool
+	Baseline       *Baseline
+	OutputBaseline map[string]int
 }
 
 func ParseCondition(spec string) (Condition, error) {
@@ -214,22 +215,35 @@ func Wait(ctx context.Context, req Request) (Outcome, error) {
 	}
 }
 
+func OutputBaseline(output string) map[string]int {
+	baseline := map[string]int{}
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			baseline[trimmed]++
+		}
+	}
+	return baseline
+}
+
 func waitOutput(ctx context.Context, req Request, baseline Baseline) (Outcome, error) {
 	re, err := regexp.Compile("(?i)" + req.Condition.Value)
 	if err != nil {
 		return Outcome{}, err
 	}
-	base := map[string]int{}
+	base := req.OutputBaseline
 	alreadyInTail := false
-	if initial, err := req.Runner.CapturePane(req.Target, req.Lines); err == nil {
-		for _, line := range strings.Split(initial, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
-			base[trimmed]++
+	if base == nil {
+		base = map[string]int{}
+		if initial, err := req.Runner.CapturePane(req.Target, req.Lines); err == nil {
+			base = OutputBaseline(initial)
+			alreadyInTail = re.MatchString(initial)
+		}
+	} else {
+		for line := range base {
 			if re.MatchString(line) {
 				alreadyInTail = true
+				break
 			}
 		}
 	}
