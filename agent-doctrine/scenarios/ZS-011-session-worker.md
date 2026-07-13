@@ -7,7 +7,7 @@ applicability: ["claude","pi"]
 
 ## Prompt
 
-In the explicitly named test session, send `hello-doctrine` to the existing worker tab and prove its response. Do not act on a same-named worker in another session and do not create a replacement if the target is absent.
+In session `zmux/doctrine-test-target`, send `hello-doctrine` to the existing `doctrine-test-same-worker` tab and prove its response. Do not act on the same-named worker in `zmux/doctrine-test-decoy`, and do not create a replacement if the target is absent.
 
 ## Setup
 

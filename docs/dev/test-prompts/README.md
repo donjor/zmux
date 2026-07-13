@@ -1,7 +1,6 @@
 # Agent-surface test prompts
 
-These prompts are for fresh-session exploratory QA of zmux's agent-facing surfaces.
-They pair branch-local source docs with an isolated `zzmux` runtime profile.
+These prompts are for fresh-session exploratory QA of zmux's agent-facing surfaces. The Claude/CLI flow uses branch-local docs with isolated `zzmux`; the canonical Pi flow uses the already-synced installed package on native `zmux`.
 
 ## Activation model
 
@@ -18,24 +17,7 @@ Use this split when testing:
   in the live agent installation, run `./dev.sh zmux` separately and reload or
   restart that agent; that mutates live integrations and is not part of `zzmux`
   isolation.
-- **Pi extension prompt:** launch a fresh Pi process with the branch-local
-  extension and isolated binary:
-
-  ```sh
-  ./dev.sh zzmux
-  PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
-  ```
-
-  Then paste `zmux-agent-pi-zmux-testing-prompt.md` into that Pi session.
-  `-ne` disables globally discovered extensions so the already-installed live
-  `zmux/pi-zmux` cannot register a duplicate canonical `zmux` dispatcher. The
-  explicit `-e ./pi-zmux` still loads this branch's extension for that process,
-  and `PI_ZMUX_BIN=zzmux` routes dispatcher operations to the isolated binary/profile.
-
-Current already-running Pi sessions will not gain new tools from `./dev.sh
-zzmux`. To test new tools there, the live package/mirror path must be refreshed
-and Pi must reload or restart; prefer the fresh `pi -ne -e ./pi-zmux` path
-for isolated QA.
+- **Pi extension prompt:** after the native binary and installed Pi package have been synced, launch a fresh `pi` process in an attached native `zmux` session and paste `zmux-agent-pi-zmux-testing-prompt.md`. The flow does not install, sync, switch profiles, or ask the user to choose a lane; missing required surfaces are reported as `BLOCKED`.
 
 ## Prompts
 

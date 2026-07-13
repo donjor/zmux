@@ -1,27 +1,23 @@
 # zmux agent Pi extension testing prompt
 
-Thin activation wrapper for the durable branch-local Pi dispatcher regression framework.
-Shared scenarios and expected outcomes do not live here.
+Thin activation wrapper for the canonical installed-package test framework for agent-driven `zmux` usage through the `pi-zmux` extension. Shared scenarios and expected outcomes do not live here.
 
-## Isolated launch
+## Launch
 
-Work from the accepted zmux checkout in an attached test terminal:
+Start Pi from the accepted zmux checkout in an attached native `zmux` session. The installed package and native binary must already be synced; this flow does not install or switch anything.
 
 ```sh
-./dev.sh zzmux
-PI_ZMUX_BIN=zzmux pi -ne -e ./pi-zmux
+pi
 ```
-
-`-ne` suppresses globally discovered extensions so the live installed package cannot register a duplicate tool. The explicit branch package remains loaded, and `PI_ZMUX_BIN=zzmux` isolates dispatcher operations.
 
 ## Copy-paste prompt
 
 ```text
-You are the supervising host for the branch-local canonical pi-zmux regression.
+You are the supervising host for the canonical test of the installed `pi-zmux` integration on native `zmux`.
 
 Read and execute `agent-doctrine/testing/pi/host-prompt.md` exactly. It routes to the durable host flow, stdout-only worker prompts/host answer key rendered from the Markdown registry, adapter-local deterministic gates, and exact teardown.
 
-Use only isolated `zzmux`; never mutate live `zmux`, refresh global integrations, bypass the Bash guard, commit, or push. Keep focus unchanged. Judge real dispatcher/terminal/lifecycle state rather than worker self-report.
+Use native `zmux` and the already-synced installed package. Do not install, sync, switch profiles, bypass the Bash guard, commit, or push. Keep focus unchanged. Judge real dispatcher/terminal/lifecycle state rather than worker self-report.
 ```
 
 The durable framework owns worker launch, shared and Pi-only scenario order, evidence, verdicts, and cleanup:

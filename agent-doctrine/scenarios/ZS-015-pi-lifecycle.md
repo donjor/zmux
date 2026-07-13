@@ -12,7 +12,7 @@ Soft-reload this disposable testing Pi process after the current turn and contin
 
 ## Setup
 
-- Use a disposable branch-local Pi with no unsent composer input.
+- Use a disposable test Pi with no unsent composer input.
 
 ## Expected outcome
 

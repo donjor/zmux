@@ -1,33 +1,21 @@
-# Host flow — Pi zmux regression
+# Host flow — Pi zmux agent-driven usage testing
 
 The host owns setup, timing, inspection, judgment, and cleanup. The Pi worker receives outcomes only from the validated stdout of `node agent-doctrine/generate.mjs --render pi-prompts`.
 
-Use the fixed prefix `doctrine-test`. Record the approved profile's roster and focus before setup. Remove only stale objects with that exact prefix.
+Use native `zmux`, the installed Pi package, and the fixed prefix `doctrine-test`. Record the native roster and focus before setup. Remove only stale objects with that exact prefix. Do not install, sync, or switch profiles.
 
-## 1. Confirm and prepare the execution lane
+## 1. Prepare the canonical environment
 
-Before running commands, ask the user what work is in flight and how they want it exercised. Inspect the host location and checkout only to form a recommendation; do not choose on the user's behalf. Propose one concrete lane and confirm:
-
-- native `zmux` or isolated `zzmux`;
-- installed/merged behavior or checkout-local changes;
-- installed Pi package or branch-local `pi-zmux` loaded with `pi -e <path>`;
-- any allowed installation or live-profile mutation.
-
-Record the agreed lane in the final report. Pi can normally test checkout package changes without syncing global state by launching with `-e <checkout>/pi-zmux` and setting `PI_ZMUX_BIN` to the approved binary. If no safe agreed route can load the intended code, mark the affected coverage `BLOCKED`.
-
-Run the checks that apply to the agreed lane from the accepted checkout:
+Run the deterministic checks from the accepted checkout:
 
 ```sh
-# Edge profile only, when approved:
-./dev.sh zzmux
-
 node agent-doctrine/generate.mjs --check
 npm --prefix pi-zmux run typecheck
 npm --prefix pi-zmux test
 node skills/zmux/test/doctor.mjs
 ```
 
-Require an attached session in the selected profile. Never fall back from the selected profile without asking the user again. Confirm fixtures:
+Require an attached native `zmux` session. If the installed package, model/auth, attached session, or another required surface is unavailable, mark affected coverage `BLOCKED`; do not substitute another profile or package. Confirm fixtures:
 
 - `pi-zmux/fixtures/dev-server`
 - `pi-zmux/fixtures/dev-server/logs/app.txt`
@@ -35,13 +23,13 @@ Require an attached session in the selected profile. Never fall back from the se
 
 ## 2. Launch the ordinary Pi worker
 
-Launch visible `doctrine-test-worker` in the approved session and repository root. For a user-approved branch-local package lane:
+Launch visible `doctrine-test-worker` in the current native session and repository root:
 
 ```sh
-env PI_ZMUX_BIN=<zmux-or-zzmux> pi --model openai-codex/gpt-5.6-terra --thinking medium -ne -e ./pi-zmux
+pi --model openai-codex/gpt-5.6-terra --thinking medium
 ```
 
-For an installed-package lane, use the installed Pi package instead of `-e ./pi-zmux`. Use detached/no-focus launch mechanics and pin the approved session. Confirm one `zmux` tool, Terra/medium, the approved package source, binary, and cwd. Render `pi-prompts`, send its session contract once, then send one rendered scenario prompt per checkpoint. Render `pi-answer-key` separately and keep that output host-side; never quote its operation hints.
+Use detached/no-focus launch mechanics and pin the current session. Confirm Terra/medium, one installed `zmux` tool, native `zmux`, and the repository cwd. Render `pi-prompts`, send its session contract once, then send one rendered scenario prompt per checkpoint. Render `pi-answer-key` separately and keep that output host-side; never quote its operation hints.
 
 ## 3. Shared sequential chain
 
@@ -57,7 +45,7 @@ Send one scenario prompt at a time. Wait for fresh worker lifecycle and inspect 
 8. `ZS-008` — one fresh command generation transitions running → done/0 around the three-second sleep.
 9. `ZS-009` — persistent source producer starts only after wait registration; echoed prompt marker is not evidence.
 10. `ZS-010` — host creates visible low-tier Pi/Luna peer with only `pi-zmux/src/peer-lifecycle.ts`. Require `peer_ensure`/atomic handoff semantics, running before submit, newer ready generation, automatic follow-up, visible reply, and cleanup.
-11. `ZS-011` — host creates target and decoy same-named workers in two sessions within the approved profile; require explicit session targeting and unchanged decoy.
+11. `ZS-011` — host creates `zmux/doctrine-test-target` and `zmux/doctrine-test-decoy`, each with a `doctrine-test-same-worker` tab; require explicit target-session addressing and an unchanged decoy.
 12. `ZS-012` — exact target absent; require structured failure and unchanged roster.
 13. `ZS-013` — worker removes remaining exact test-owned state and proves baseline roster.
 
@@ -67,8 +55,8 @@ Do not leave unresolved callbacks or peer lifecycle state between rows.
 
 Run these in controlled state after shared cleanup setup is re-established as needed.
 
-14. `ZS-014` — create persistent callback source, register callback before producer output, confirm scheduled card settles, aggregate footer remains active, then compact fresh completion arrives and footer/list clear. Cancel on timeout.
-15. `ZS-015` — in the disposable branch-local Pi with no unsent input, require soft reload of its own pane and continuation proof; a safe resolution blocker passes, touching another pane fails.
+14. `ZS-014` — create the persistent callback source, send the prompt, wait only until the worker's scheduled card and active footer are visible, then produce the output immediately. Confirm compact fresh completion and a cleared footer/list; cancel on timeout.
+15. `ZS-015` — in the disposable test Pi with no unsent input, require soft reload of its own pane and continuation proof; a safe resolution blocker passes, touching another pane fails.
 16. `ZS-016` — run one finite detached command with focus unchanged and no manual callback; prove automatic fresh completion and activity cleanup. Then run one harmless no-return command with `trackCompletion:false`, prove no callback was armed, and stop/kill both exact targets.
 
 Adapter-local checks not duplicated in live prompts remain mandatory through package tests: trusted config, Bash guard, schema/rendering, non-TUI ticker suppression, session replacement cleanup, and hard respawn continuation.

@@ -25,7 +25,7 @@ Exactly one visible named runtime exists and fresh output proves readiness witho
 
 ## Safety
 
-- isolated zzmux profile
+- test-owned doctrine-test state only
 - no hidden process
 
 ## Cleanup
