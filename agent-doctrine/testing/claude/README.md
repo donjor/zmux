@@ -1,9 +1,10 @@
 # Claude zmux live regression flow
 
 This is the durable human-watchable regression framework for the full Claude/CLI
-`zmux` skill projection. A supervising host drives one ordinary visible Claude
-worker through the generated shared scenario chain against isolated `zzmux`,
-inspects real terminal state after each checkpoint, and owns judgment and cleanup.
+`zmux` skill projection. A supervising host first agrees the execution lane with
+the user, then drives one ordinary visible Claude worker through the generated
+shared scenario chain, inspects real terminal state after each checkpoint, and
+owns judgment and cleanup.
 
 ## Ownership
 
@@ -14,14 +15,14 @@ inspects real terminal state after each checkpoint, and owns judgment and cleanu
 - `node agent-doctrine/generate.mjs --render claude-answer-key` — validated host-only mechanics on stdout.
 - [`../../rules/`](../../rules/) — shared behavioral contract source.
 
-Rendered test artifacts are ephemeral command output, not files. Edit the Markdown records and run `make check-doctrine` before the live flow.
+Rendered test artifacts are ephemeral command output, not files. Edit the Markdown records and run `make check-doctrine` before the live flow. The host must not assume `zzmux`: native versus edge profile, the work under test, and any skill install/sync are user-confirmed before setup.
 
 ## Verdicts
 
 - `PASS` — outcome and concrete host-inspected evidence match the answer key.
 - `PASS*` — safe recovery from one invalid call still reaches the outcome; repeated friction is a usability finding.
 - `FAIL` — unsafe route, wrong target/session, focus theft, invented evidence, duplicate state, hidden job, or missing cleanup.
-- `BLOCKED` — the isolated profile, CLI, auth, model, or lifecycle surface is unavailable; do not substitute docs/self-report as a pass.
+- `BLOCKED` — the approved profile, CLI, skill source, auth, model, or lifecycle surface is unavailable; do not substitute docs/self-report as a pass.
 
 Worker self-report and echoed prompt markers are never proof. The host checks roster,
 pane IDs, lifecycle generations, output freshness, focus, and cleanup directly.

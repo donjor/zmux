@@ -2,20 +2,31 @@
 
 The host owns setup, timing, inspection, judgment, and cleanup. The Claude worker receives outcomes only from the validated stdout of `node agent-doctrine/generate.mjs --render claude-prompts`.
 
-Use the fixed prefix `doctrine-test`. Record the isolated roster and focus before setup. Remove only stale objects with that exact prefix.
+Use the fixed prefix `doctrine-test`. Record the approved profile's roster and focus before setup. Remove only stale objects with that exact prefix.
 
-## 1. Prepare isolated zmux
+## 1. Confirm and prepare the execution lane
 
-From the accepted zmux checkout:
+Before running commands, ask the user what work is in flight and how they want it exercised. Inspect the host location and checkout only to form a recommendation; do not choose on the user's behalf. Propose one concrete lane and confirm:
+
+- native `zmux` or isolated `zzmux`;
+- installed/merged behavior or checkout-local changes;
+- installed Claude skill or an explicitly approved temporary install/sync;
+- any allowed mutation of the live profile or global skill mirrors.
+
+Record the agreed lane in the final report. Claude cannot load a checkout skill with a direct extension flag, so never claim branch-local skill coverage unless the user approved and the host proved the required install/sync. If no safe agreed route can load the intended code, mark the affected coverage `BLOCKED`.
+
+Run the checks that apply to the agreed lane from the accepted checkout:
 
 ```sh
+# Edge profile only, when approved:
 ./dev.sh zzmux
+
 make build
 node agent-doctrine/generate.mjs --check
 node skills/zmux/test/doctor.mjs
 ```
 
-Require an attached isolated `zzmux` session. Resolve its raw/current session once, then pass that session on every subsequent CLI read/write. If the host is not attached to `zzmux`, mark live scenarios `BLOCKED`; do not improvise against live `zmux`.
+Require an attached session in the selected profile. Resolve its raw/current session once, then pass that session on every subsequent CLI read/write. Never fall back from the selected profile without asking the user again.
 
 Confirm the fixture paths:
 
@@ -24,7 +35,7 @@ Confirm the fixture paths:
 
 ## 2. Launch the ordinary Claude worker
 
-Create/reuse visible `doctrine-test-worker` in the isolated session with:
+Create/reuse visible `doctrine-test-worker` in the approved session with:
 
 ```sh
 claude --model sonnet --dangerously-skip-permissions
@@ -67,7 +78,7 @@ After each row, independently prove exactly one server target exists.
 
 ### Session addressing and failure closure
 
-11. `ZS-011` — create two isolated test sessions containing same-named worker tabs; name the intended session in the prompt delivery context. Prove only the target receives input and the decoy stays unchanged.
+11. `ZS-011` — create two test sessions in the approved profile containing same-named worker tabs; name the intended session in the prompt delivery context. Prove only the target receives input and the decoy stays unchanged.
 12. `ZS-012` — prove `doctrine-test-definitely-missing` is absent before delivery. Require exact failure and unchanged roster.
 13. `ZS-013` — supply no hidden inventory hints. Require the worker to remove all remaining exact test-owned state and prove the final roster.
 
@@ -79,7 +90,7 @@ Use the `claude-answer-key` render output host-side. A passing worker may use eq
 
 Automatic failures:
 
-- live `zmux` or raw tmux app mutation;
+- mutation outside the user-approved profile or raw tmux app mutation;
 - shell backgrounding, hidden/headless peers, focus movement, or unpinned ambiguous reads;
 - duplicate runtimes or invented substitute targets;
 - elapsed time, process liveness, self-report, or echoed prompts treated as completion evidence;

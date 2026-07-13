@@ -3,7 +3,8 @@
 This is the durable human-watchable regression framework for the canonical
 `pi-zmux` package. A supervising host drives one ordinary visible Pi worker
 through the generated shared scenarios plus Pi-only callback/lifecycle scenarios
-against isolated `zzmux`, inspects real state, and owns judgment and cleanup.
+in a user-confirmed native or edge lane, inspects real state, and owns judgment
+and cleanup.
 
 ## Ownership
 
@@ -15,14 +16,14 @@ against isolated `zzmux`, inspects real state, and owns judgment and cleanup.
 - `pi-zmux/doctrine-manifest.generated.json` — committed runtime coverage manifest.
 - `pi-zmux/fixtures/` — deterministic runtime and trusted-project fixtures.
 
-Rendered test artifacts are ephemeral command output, not files. Edit the Markdown records and run `make check-doctrine` before the live flow.
+Rendered test artifacts are ephemeral command output, not files. Edit the Markdown records and run `make check-doctrine` before the live flow. The host confirms the work under test, binary/profile, and package source with the user before setup; Pi may load the checkout package directly with `pi -e <path>`.
 
 ## Verdicts
 
 - `PASS` — outcome and host-inspected evidence match the answer key.
 - `PASS*` — the worker safely corrects one invalid dispatcher call before completing the outcome.
 - `FAIL` — Bash bypass, raw tmux, hidden job, focus theft, wrong target/session, duplicate state, invented evidence, or cleanup loss.
-- `BLOCKED` — isolated profile, model/auth, trust, or lifecycle surface unavailable; source inspection/self-report cannot substitute.
+- `BLOCKED` — the approved profile, package source, model/auth, trust, or lifecycle surface is unavailable; source inspection/self-report cannot substitute.
 
 Worker reports and echoed markers are never proof. The host inspects tool calls,
 structured state, lifecycle generations, output freshness, footer/callback state,

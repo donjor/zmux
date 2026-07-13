@@ -2,21 +2,32 @@
 
 The host owns setup, timing, inspection, judgment, and cleanup. The Pi worker receives outcomes only from the validated stdout of `node agent-doctrine/generate.mjs --render pi-prompts`.
 
-Use the fixed prefix `doctrine-test`. Record the isolated roster and focus before setup. Remove only stale objects with that exact prefix.
+Use the fixed prefix `doctrine-test`. Record the approved profile's roster and focus before setup. Remove only stale objects with that exact prefix.
 
-## 1. Prepare isolated package and profile
+## 1. Confirm and prepare the execution lane
 
-From the accepted zmux checkout:
+Before running commands, ask the user what work is in flight and how they want it exercised. Inspect the host location and checkout only to form a recommendation; do not choose on the user's behalf. Propose one concrete lane and confirm:
+
+- native `zmux` or isolated `zzmux`;
+- installed/merged behavior or checkout-local changes;
+- installed Pi package or branch-local `pi-zmux` loaded with `pi -e <path>`;
+- any allowed installation or live-profile mutation.
+
+Record the agreed lane in the final report. Pi can normally test checkout package changes without syncing global state by launching with `-e <checkout>/pi-zmux` and setting `PI_ZMUX_BIN` to the approved binary. If no safe agreed route can load the intended code, mark the affected coverage `BLOCKED`.
+
+Run the checks that apply to the agreed lane from the accepted checkout:
 
 ```sh
+# Edge profile only, when approved:
 ./dev.sh zzmux
+
 node agent-doctrine/generate.mjs --check
 npm --prefix pi-zmux run typecheck
 npm --prefix pi-zmux test
 node skills/zmux/test/doctor.mjs
 ```
 
-Require an attached isolated `zzmux` session. Confirm fixtures:
+Require an attached session in the selected profile. Never fall back from the selected profile without asking the user again. Confirm fixtures:
 
 - `pi-zmux/fixtures/dev-server`
 - `pi-zmux/fixtures/dev-server/logs/app.txt`
@@ -24,13 +35,13 @@ Require an attached isolated `zzmux` session. Confirm fixtures:
 
 ## 2. Launch the ordinary Pi worker
 
-Launch visible `doctrine-test-worker` in the isolated session and repository root with:
+Launch visible `doctrine-test-worker` in the approved session and repository root. For a user-approved branch-local package lane:
 
 ```sh
-env PI_ZMUX_BIN=zzmux pi --model openai-codex/gpt-5.6-terra --thinking medium -ne -e ./pi-zmux
+env PI_ZMUX_BIN=<zmux-or-zzmux> pi --model openai-codex/gpt-5.6-terra --thinking medium -ne -e ./pi-zmux
 ```
 
-Use detached/no-focus launch mechanics and pin the isolated session. Confirm one `zmux` tool, Terra/medium, branch-local package, and correct cwd. Render `pi-prompts`, send its session contract once, then send one rendered scenario prompt per checkpoint. Render `pi-answer-key` separately and keep that output host-side; never quote its operation hints.
+For an installed-package lane, use the installed Pi package instead of `-e ./pi-zmux`. Use detached/no-focus launch mechanics and pin the approved session. Confirm one `zmux` tool, Terra/medium, the approved package source, binary, and cwd. Render `pi-prompts`, send its session contract once, then send one rendered scenario prompt per checkpoint. Render `pi-answer-key` separately and keep that output host-side; never quote its operation hints.
 
 ## 3. Shared sequential chain
 
@@ -46,7 +57,7 @@ Send one scenario prompt at a time. Wait for fresh worker lifecycle and inspect 
 8. `ZS-008` — one fresh command generation transitions running → done/0 around the three-second sleep.
 9. `ZS-009` — persistent source producer starts only after wait registration; echoed prompt marker is not evidence.
 10. `ZS-010` — host creates visible low-tier Pi/Luna peer with only `pi-zmux/src/peer-lifecycle.ts`. Require `peer_ensure`/atomic handoff semantics, running before submit, newer ready generation, automatic follow-up, visible reply, and cleanup.
-11. `ZS-011` — host creates target and decoy same-named workers in two isolated sessions; require explicit session targeting and unchanged decoy.
+11. `ZS-011` — host creates target and decoy same-named workers in two sessions within the approved profile; require explicit session targeting and unchanged decoy.
 12. `ZS-012` — exact target absent; require structured failure and unchanged roster.
 13. `ZS-013` — worker removes remaining exact test-owned state and proves baseline roster.
 
