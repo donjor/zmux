@@ -15,7 +15,7 @@
 | ZD-005 | Route manual input through a visible shared terminal | claude | instruction | Visible tab plus type/watch/status CLI sequence | — |
 | ZD-005 | Route manual input through a visible shared terminal | pi | composite | interactive_type composite | A password prompt may return needsUserInput rather than moving focus automatically. |
 | ZD-006 | Use bounded first-class evidence | claude | instruction | zmux wait/status/watch with fresh baselines | Idle is a fallback for uninstrumented programs, not lifecycle truth. |
-| ZD-006 | Use bounded first-class evidence | pi | typed-operation | wait/callback_watch plus structured command and turn state | deliverAs=nextTurn cannot trigger a continuation; use steer or followUp when triggerTurn is true. |
+| ZD-006 | Use bounded first-class evidence | pi | typed-operation | wait/callback_watch plus structured command and turn state | deliverAs=nextTurn cannot trigger a continuation; use steer or followUp when triggerTurn is true. A timeout is diagnostic: before escalating, inspect current lifecycle and ask whether the event already happened, the evidence channel is stale, or the chosen mechanism is wrong. |
 | ZD-007 | Target panes structurally and capture minimal evidence | claude | instruction | pane list/open/send/resize/snapshot CLI verbs | — |
 | ZD-007 | Target panes structurally and capture minimal evidence | pi | typed-operation | panes and pane_* operations plus snapshot | terminal_current diagnoses desktop attachment and may be unsupported. |
 | ZD-008 | Drive visible peers through fresh lifecycle | claude | instruction | peer ensure/type/wait/status/inspect sequence | The peer skill owns when and which peer to select. |
@@ -26,5 +26,3 @@
 | ZD-010 | Fail closed and clean exact owned state | pi | typed-operation | Typed target resolution plus tab_kill/session_kill | — |
 | ZD-011 | Make remote mutation legible | claude | guard | Skill doctrine and guard warnings | — |
 | ZD-011 | Make remote mutation legible | pi | guard | Dispatcher safety warnings and interactive routing | Warnings do not infer whether a decoded mutation is authorized. |
-| ZD-012 | Reload or respawn only the resolved Pi process | claude | unsupported | — | Claude does not expose Pi extension reload/respawn lifecycle operations. |
-| ZD-012 | Reload or respawn only the resolved Pi process | pi | composite | pi_reload and pi_respawn composites | terminal_current diagnoses desktop terminal attachment; it does not identify the Pi pane. |

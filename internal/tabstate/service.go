@@ -2,6 +2,7 @@ package tabstate
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/donjor/zmux/internal/tmux"
@@ -35,9 +36,9 @@ func (s *Service) Set(t Target, st State, source, msg string) error {
 	at := strconv.FormatInt(s.now().Unix(), 10)
 	values := map[string]string{
 		OptState:  string(st),
-		OptSource: source,
+		OptSource: sanitizeMirrorValue(source),
 		OptAt:     at,
-		OptMsg:    msg,
+		OptMsg:    sanitizeMirrorValue(msg),
 	}
 	writes := make([]tmux.OptionWrite, 0, len(MirrorKeys)*2)
 	for _, key := range MirrorKeys {
@@ -49,6 +50,14 @@ func (s *Service) Set(t Target, st State, source, msg string) error {
 	s.syncStatusInterval(st == StateRunning)
 	_ = s.runner.RefreshStatus() // best-effort: "no current client" when detached
 	return nil
+}
+
+// sanitizeMirrorValue collapses every run of whitespace — including TAB and
+// newline — to a single space so mirrored option values stay single-line and
+// never carry the TAB field separator that ShowPaneOptions splits on. Empty
+// stays empty so callers can still unset an option.
+func sanitizeMirrorValue(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // Clear removes all state options from the pane and its window mirror in one

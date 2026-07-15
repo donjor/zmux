@@ -122,11 +122,11 @@ For broad changes to the shipped zmux skill, Pi extension tools, guardrails, or
 peer/worker flows, deterministic checks should be paired with a fresh-session
 prompt run:
 
-- `test-prompts/zmux-agent-skill-testing-prompt.md` activates the durable Claude/CLI framework under `agent-doctrine/testing/claude/`.
-- `test-prompts/zmux-agent-pi-zmux-testing-prompt.md` activates the durable Pi framework under `agent-doctrine/testing/pi/`.
+- `test-prompts/zmux-agent-skill-testing-prompt.md` activates the durable Claude/CLI framework under `agent-doctrine/harnesses/claude/`.
+- `test-prompts/zmux-agent-pi-zmux-testing-prompt.md` targets the durable Pi framework under `agent-doctrine/harnesses/pi/` — deferred with the Pi extension reintegration and not present on this shared branch.
 
 These files are thin launch wrappers, not behavior sources. Shared outcomes and prompts
-come from authored Markdown under `agent-doctrine/scenarios/`; generated worker prompts
+come from authored Markdown under `agent-doctrine/scenarios/shared/`; generated worker prompts
 and host-only answer keys render to stdout through `agent-doctrine/generate.mjs --render`.
 Each framework owns harness-specific launch/inspection/teardown.
 `make test-agent-surfaces` remains the repeatable deterministic gate.

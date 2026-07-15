@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import {
   lstatSync,
   mkdirSync,
@@ -13,19 +12,18 @@ import { fileURLToPath } from "node:url";
 const USAGE = `Usage: node agent-doctrine/generate.mjs <--write|--check|--render <artifact>>
 
 Generate committed Claude/Pi doctrine projections from authored Markdown records
-in agent-doctrine/rules/*.md and agent-doctrine/scenarios/*.md.
+and render shared plus Pi-only natural-prompt scenarios from agent-doctrine/scenarios/**/*.md.
 
 Modes:
   --write  validate sources and rewrite committed runtime projections
   --check  validate sources and fail when a committed projection is stale; never writes
-  --render <artifact>
-           validate sources and print one maintainer live-test artifact to stdout
+  --render <artifact> [--tier atomic|workflow|resilience] [--ids ZS-001,ZS-013]
+           validate sources and print one maintainer live-test artifact to stdout;
+           --ids stays caller-ordered and composes with an optional tier filter
   -h, --help
 
 Committed projections (--write only):
   skills/zmux/references/shared-doctrine.generated.md
-  pi-zmux/src/generated/doctrine.ts
-  pi-zmux/doctrine-manifest.generated.json
   docs/reference/agent-doctrine-matrix.generated.md
 
 Render artifacts:
@@ -69,8 +67,11 @@ const RULE_SECTIONS = new Set([
   "Invariant", "Shared instruction", "Claude mechanism", "Claude enforcement", "Claude prompt guideline", "Claude caveats",
   "Pi mechanism", "Pi enforcement", "Pi prompt guideline", "Pi caveats", "Verify",
 ]);
-const SCENARIO_FRONTMATTER = new Set(["id", "title", "doctrineRefs", "applicability", "divergenceReason"]);
-const SCENARIO_SECTIONS = new Set(["Prompt", "Setup", "Expected outcome", "Evidence", "Safety", "Cleanup", "Claude answer key", "Pi answer key"]);
+const SCENARIO_FRONTMATTER = new Set(["id", "title", "tier", "doctrineRefs", "sharedRefs", "applicability", "uatEligible", "legacyRefs", "knownFailureRefs", "divergenceReason"]);
+const SCENARIO_SECTIONS = new Set(["Host setup", "Host perturbations", "Verdict", "Evidence", "Cleanup", "Claude answer key", "Pi answer key"]);
+const TIERS = ["atomic", "workflow", "resilience"];
+const VERDICT_LENSES = ["outcome", "orchestration", "responsiveness", "presentation", "cleanup"];
+const INTERNAL_PROMPT_VOCABULARY = new Set(["callback", "observer", "lease", "inbox", "queue", "epoch", "tombstone", "generation", "receipt", "dispatcher"]);
 
 function parseJsonFrontmatter(source, at, allowedFields) {
   const fields = {};
@@ -156,12 +157,12 @@ function readMarkdownRecords(kind, frontmatterFields, sectionNames, buildValue) 
     const at = `${kind}/${name}`;
     const fields = parseJsonFrontmatter(match[1], at, frontmatterFields);
     const sections = parseSections(match[2], at, sectionNames);
-    return { name, path, value: buildValue(fields, sections, at) };
+    return { kind, name, path, value: buildValue(fields, sections, at) };
   });
 }
 
-function readRuleRecords() {
-  return readMarkdownRecords("rules", RULE_FRONTMATTER, RULE_SECTIONS, (fields, sections, at) => {
+function readRuleRecords(kind) {
+  return readMarkdownRecords(kind, RULE_FRONTMATTER, RULE_SECTIONS, (fields, sections, at) => {
     const projection = {};
     const caveats = {};
     for (const [harness, label] of [["claude", "Claude"], ["pi", "Pi"]]) {
@@ -193,27 +194,88 @@ function readRuleRecords() {
   });
 }
 
-function readScenarioRecords() {
-  return readMarkdownRecords("scenarios", SCENARIO_FRONTMATTER, SCENARIO_SECTIONS, (fields, sections, at) => {
+function parseScenarioSections(source, at) {
+  const sections = {};
+  const prompts = [];
+  const heading = /^## (.+)$/gmu;
+  // A fenced command payload can itself contain a Markdown-looking h2.
+  const matches = [...source.matchAll(heading)].filter((match) => (source.slice(0, match.index).match(/^```/gmu) ?? []).length % 2 === 0);
+  expect(matches.length > 0, `${at} must contain Markdown sections`);
+  expect(source.slice(0, matches[0].index).trim() === "", `${at} must not contain content before its first section`);
+  for (const [index, match] of matches.entries()) {
+    const name = match[1].trim();
+    const prompt = /^Prompt (\d+)$/u.exec(name);
+    const start = match.index + match[0].length;
+    const end = matches[index + 1]?.index ?? source.length;
+    if (prompt) {
+      const number = Number(prompt[1]);
+      expect(number === prompts.length + 1, `${at} prompt headings must be sequential Prompt 1, Prompt 2, …`);
+      let body = source.slice(start, end);
+      expect(body.startsWith("\n\n"), `${at} ${name} must contain a blank line before its body`);
+      body = body.slice(2);
+      if (index + 1 < matches.length) {
+        expect(body.endsWith("\n\n"), `${at} ${name} must be separated from the next section by a blank line`);
+        body = body.slice(0, -2);
+      } else if (body.endsWith("\n")) body = body.slice(0, -1);
+      string(body, `${at} ${name}`);
+      prompts.push(body);
+      continue;
+    }
+    expect(SCENARIO_SECTIONS.has(name), `${at} contains unknown section ${name}`);
+    expect(sections[name] === undefined, `${at} contains duplicate section ${name}`);
+    sections[name] = source.slice(start, end).trim();
+  }
+  expect(prompts.length > 0, `${at} requires at least one numbered Prompt section`);
+  return { sections, prompts };
+}
+
+function parseVerdict(sections, at) {
+  const source = sections.Verdict;
+  string(source, `${at} section Verdict`);
+  const verdict = {};
+  for (const [index, line] of source.split("\n").entries()) {
+    const match = /^- ([a-z]+): (.+)$/u.exec(line);
+    expect(match, `${at} section Verdict line ${index + 1} must be a named Markdown bullet`);
+    const [, lens, value] = match;
+    expect(VERDICT_LENSES.includes(lens), `${at} section Verdict contains invalid lens ${lens}`);
+    expect(verdict[lens] === undefined, `${at} section Verdict contains duplicate lens ${lens}`);
+    string(value, `${at} section Verdict.${lens}`);
+    verdict[lens] = value;
+  }
+  expect(Object.keys(verdict).length === VERDICT_LENSES.length, `${at} section Verdict requires exactly ${VERDICT_LENSES.join(", ")}`);
+  return verdict;
+}
+
+function readScenarioRecords(kind) {
+  const dir = join(here, kind);
+  const entries = readdirSync(dir).sort();
+  const legacy = entries.filter((name) => name.endsWith(".json"));
+  expect(legacy.length === 0, `${kind}/ contains legacy JSON records: ${legacy.join(", ")}; convert them to Markdown`);
+  const names = entries.filter((name) => name.endsWith(".md"));
+  if (names.length === 0) throw new Error(`${kind}/ contains no Markdown records`);
+  return names.map((name) => {
+    const path = checkedRecordPath(kind, name);
+    const source = readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+    const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/u.exec(source);
+    expect(match, `${kind}/${name} must contain JSON-valued YAML frontmatter followed by Markdown sections`);
+    const at = `${kind}/${name}`;
+    const fields = parseJsonFrontmatter(match[1], at, SCENARIO_FRONTMATTER);
+    const { sections, prompts } = parseScenarioSections(match[2], at);
     const answerKey = {};
     const claude = listSection(sections, "Claude answer key", at, { required: false });
     const pi = listSection(sections, "Pi answer key", at, { required: false });
     if (claude) answerKey.claude = claude;
     if (pi) answerKey.pi = pi;
-    return {
-      id: fields.id,
-      title: fields.title,
-      doctrineRefs: fields.doctrineRefs,
-      applicability: fields.applicability,
+    return { kind, name, path, value: {
+      id: fields.id, title: fields.title, tier: fields.tier, doctrineRefs: fields.doctrineRefs,
+      ...(fields.sharedRefs ? { sharedRefs: fields.sharedRefs } : {}), applicability: fields.applicability,
+      uatEligible: fields.uatEligible, legacyRefs: fields.legacyRefs ?? [], knownFailureRefs: fields.knownFailureRefs ?? [],
       ...(fields.divergenceReason ? { divergenceReason: fields.divergenceReason } : {}),
-      prompt: paragraphSection(sections, "Prompt", at),
-      setup: listSection(sections, "Setup", at),
-      expectedOutcome: paragraphSection(sections, "Expected outcome", at),
-      evidence: listSection(sections, "Evidence", at),
-      safety: listSection(sections, "Safety", at),
-      cleanup: listSection(sections, "Cleanup", at, { allowEmpty: true }),
-      answerKey,
-    };
+      prompts, hostSetup: listSection(sections, "Host setup", at),
+      hostPerturbations: listSection(sections, "Host perturbations", at, { allowEmpty: true }),
+      verdict: parseVerdict(sections, at), evidence: listSection(sections, "Evidence", at),
+      cleanup: listSection(sections, "Cleanup", at, { allowEmpty: true }), answerKey,
+    }};
   });
 }
 
@@ -240,14 +302,16 @@ function exactHarnesses(value, field) {
   return unique;
 }
 
-function validateRule(record) {
+function validateRule(record, { sharedOnly = false, piOnly = false } = {}) {
   const rule = record.value;
-  const at = `rules/${record.name}`;
+  const at = `${record.kind}/${record.name}`;
   expect(rule && typeof rule === "object" && !Array.isArray(rule), `${at} must contain an object`);
   expect(/^ZD-\d{3}$/.test(rule.id), `${at}.id must match ZD-###`);
   expect(record.name.startsWith(`${rule.id}-`), `${at} filename must start with ${rule.id}-`);
   for (const field of ["title", "invariant", "sharedInstruction"]) string(rule[field], `${at}.${field}`);
   const appliesTo = exactHarnesses(rule.appliesTo, `${at}.appliesTo`);
+  if (sharedOnly) expect(appliesTo.length === HARNESSES.length, `${at}.applicability must be ["claude","pi"]`);
+  if (piOnly) expect(appliesTo.length === 1 && appliesTo[0] === "pi", `${at}.applicability must be ["pi"]`);
   if (appliesTo.length !== HARNESSES.length) string(rule.divergenceReason, `${at}.divergenceReason`);
   expect(rule.projection && typeof rule.projection === "object", `${at}.projection must be an object`);
   expect(rule.caveats && typeof rule.caveats === "object", `${at}.caveats must be an object`);
@@ -272,20 +336,41 @@ function validateRule(record) {
   return rule;
 }
 
-function validateScenario(record, ruleIds) {
+function validateScenario(record, ruleIds, { idPattern = /^ZS-\d{3}$/, idShape = "ZS-###", sharedOnly = false, piOnly = false, sharedScenarioIds } = {}) {
   const scenario = record.value;
-  const at = `scenarios/${record.name}`;
+  const at = `${record.kind}/${record.name}`;
   expect(scenario && typeof scenario === "object" && !Array.isArray(scenario), `${at} must contain an object`);
-  expect(/^ZS-\d{3}$/.test(scenario.id), `${at}.id must match ZS-###`);
-  expect(record.name.startsWith(`${scenario.id}-`), `${at} filename must start with ${scenario.id}-`);
-  for (const field of ["title", "prompt", "expectedOutcome"]) string(scenario[field], `${at}.${field}`);
+  expect(idPattern.test(scenario.id), `${at}.id must match ${idShape}`);
+  expect(record.name === `${scenario.id}.md` || record.name.startsWith(`${scenario.id}-`), `${at} filename must be ${scenario.id}.md or start with ${scenario.id}-`);
+  for (const field of ["title"]) string(scenario[field], `${at}.${field}`);
+  expect(TIERS.includes(scenario.tier), `${at}.tier must be one of: ${TIERS.join(", ")}`);
+  expect(typeof scenario.uatEligible === "boolean", `${at}.uatEligible must be a boolean`);
+  if (scenario.tier === "resilience") expect(!scenario.uatEligible, `${at}.uatEligible must be false for resilience scenarios`);
+  stringArray(scenario.prompts, `${at}.prompts`);
+  if (scenario.tier === "atomic") expect(scenario.prompts.length === 1, `${at} atomic scenarios require exactly one prompt`);
+  if (scenario.tier === "workflow") expect(scenario.prompts.length >= 2, `${at} workflow scenarios require at least two prompts`);
+  if (scenario.tier === "atomic") expect(scenario.hostPerturbations.length === 0, `${at} atomic scenarios require _None._ Host perturbations`);
+  if (scenario.tier === "resilience") expect(scenario.hostPerturbations.length > 0, `${at} resilience scenarios require Host perturbations`);
+  stringArray(scenario.legacyRefs, `${at}.legacyRefs`, { allowEmpty: true });
+  stringArray(scenario.knownFailureRefs, `${at}.knownFailureRefs`, { allowEmpty: true });
   stringArray(scenario.doctrineRefs, `${at}.doctrineRefs`);
   for (const ref of scenario.doctrineRefs) expect(ruleIds.has(ref), `${at}.doctrineRefs references missing ${ref}`);
-  const applicability = exactHarnesses(scenario.applicability, `${at}.applicability`);
-  if (applicability.length !== HARNESSES.length) string(scenario.divergenceReason, `${at}.divergenceReason`);
-  for (const field of ["setup", "evidence", "safety", "cleanup"]) {
-    stringArray(scenario[field], `${at}.${field}`, { allowEmpty: field === "cleanup" });
+  if (sharedOnly) expect(scenario.sharedRefs === undefined, `${at}.sharedRefs belongs only on Pi-specific scenarios`);
+  if (scenario.sharedRefs !== undefined) {
+    stringArray(scenario.sharedRefs, `${at}.sharedRefs`);
+    expect(sharedScenarioIds instanceof Set, `${at}.sharedRefs cannot be validated without shared scenarios`);
+    for (const ref of scenario.sharedRefs) expect(sharedScenarioIds.has(ref), `${at}.sharedRefs references missing ${ref}`);
   }
+  const applicability = exactHarnesses(scenario.applicability, `${at}.applicability`);
+  if (sharedOnly) expect(applicability.length === HARNESSES.length, `${at}.applicability must be ["claude","pi"]`);
+  if (piOnly) expect(applicability.length === 1 && applicability[0] === "pi", `${at}.applicability must be ["pi"]`);
+  if (applicability.length !== HARNESSES.length) string(scenario.divergenceReason, `${at}.divergenceReason`);
+  for (const field of ["hostSetup", "hostPerturbations", "evidence", "cleanup"]) {
+    stringArray(scenario[field], `${at}.${field}`, { allowEmpty: field === "hostPerturbations" || field === "cleanup" });
+  }
+  expect(scenario.verdict && typeof scenario.verdict === "object", `${at}.verdict must be an object`);
+  expect(Object.keys(scenario.verdict).length === VERDICT_LENSES.length, `${at}.verdict must contain five lenses`);
+  for (const lens of VERDICT_LENSES) string(scenario.verdict[lens], `${at}.verdict.${lens}`);
   expect(scenario.answerKey && typeof scenario.answerKey === "object", `${at}.answerKey must be an object`);
   for (const harness of HARNESSES) {
     if (applicability.includes(harness)) stringArray(scenario.answerKey[harness], `${at}.answerKey.${harness}`);
@@ -330,6 +415,29 @@ function validatePiOperationMentions(rules, scenarios) {
   return [...operations].sort();
 }
 
+function unfencedMarkdown(value) {
+  let fenced = false;
+  const outside = [];
+  for (const line of value.split("\n")) {
+    if (/^```/u.test(line)) { fenced = !fenced; continue; }
+    if (!fenced) outside.push(line);
+  }
+  return outside.join("\n");
+}
+
+function validatePromptLeakage(scenarios) {
+  for (const scenario of scenarios) for (const [index, prompt] of scenario.prompts.entries()) {
+    const text = unfencedMarkdown(prompt);
+    const snake = /\b[a-z]+_[a-z0-9_]+\b/gu.exec(text);
+    expect(!snake, `${scenario.id} Prompt ${index + 1} leaks snake_case operation ${snake?.[0]}`);
+    for (const word of INTERNAL_PROMPT_VOCABULARY) {
+      expect(!new RegExp(`\\b${word}\\b`, "iu").test(text), `${scenario.id} Prompt ${index + 1} leaks internal vocabulary ${word}`);
+    }
+    // Snake-case operation identifiers are internal. Single-word operation names such
+    // as run, wait, log, current, or snapshot remain valid ordinary user language.
+  }
+}
+
 function markdownText(value) {
   return value.replaceAll("|", "\\|").replaceAll("\n", " ");
 }
@@ -343,41 +451,6 @@ function renderClaudeReference(rules) {
     })
     .join("\n\n");
   return `<!-- ${GENERATED_BANNER} -->\n\n# Shared zmux doctrine\n\nThese are harness-neutral outcomes projected for the Claude skill. Claude-specific command sequences and hooks remain in the handwritten references.\n\n${body}\n`;
-}
-
-function renderPiModule(rules) {
-  const piRules = rules.filter((rule) => rule.appliesTo.includes("pi"));
-  const guidelines = piRules.flatMap((rule) => rule.projection.pi.promptGuideline ? [rule.projection.pi.promptGuideline] : []);
-  const ids = piRules.map((rule) => rule.id);
-  return `// ${GENERATED_BANNER}\n\nexport const SHARED_ZMUX_PROMPT_GUIDELINES = ${JSON.stringify(guidelines, null, 2)} as const;\n\nexport const PI_DOCTRINE_RULE_IDS = ${JSON.stringify(ids, null, 2)} as const;\n`;
-}
-
-function manifestPayload(rules) {
-  return rules
-    .filter((rule) => rule.appliesTo.includes("pi"))
-    .map((rule) => ({
-      id: rule.id,
-      enforcement: rule.projection.pi.enforcement,
-      mechanism: rule.projection.pi.mechanism,
-      promptProjected: Boolean(rule.projection.pi.promptGuideline),
-    }));
-}
-
-function renderManifest(rules, scenarios, operations) {
-  const piRules = manifestPayload(rules);
-  const digestInput = JSON.stringify({ piRules, piScenarioIds: scenarios.filter((item) => item.applicability.includes("pi")).map((item) => item.id) });
-  const manifest = {
-    schema: "zmux.doctrine-manifest.v1",
-    generated: true,
-    coverageComplete: true,
-    digest: `sha256:${createHash("sha256").update(digestInput).digest("hex")}`,
-    piRuleIds: piRules.map((rule) => rule.id),
-    promptRuleIds: piRules.filter((rule) => rule.promptProjected).map((rule) => rule.id),
-    piRules,
-    piScenarioIds: scenarios.filter((item) => item.applicability.includes("pi")).map((item) => item.id),
-    dispatcherOperations: operations,
-  };
-  return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
 function renderMatrix(rules) {
@@ -397,43 +470,62 @@ function renderMatrix(rules) {
 }
 
 function renderPrompts(scenarios, harness) {
-  const contract = harness === "claude"
-    ? "You are an ordinary Claude worker exercising branch-local zmux doctrine against isolated zzmux. Complete each supplied terminal task directly and safely through documented zmux CLI verbs, invoking the isolated binary as `zzmux` rather than live `zmux`. Bounded repository inspection may use your shell; do not use raw tmux, hidden jobs, or ad-hoc polling. Inspect real state before asserting success, pin the intended session, keep focus unchanged unless explicitly asked, and report concise concrete evidence after each task."
-    : "You are an ordinary Pi worker exercising the installed canonical zmux dispatcher on native zmux. Complete each supplied terminal task directly and safely through the zmux tool. Bounded repository inspection may use Bash; do not shell out to zmux or raw tmux, bypass the Bash guard, create hidden jobs, or poll. Touch only doctrine-test state, inspect real state before asserting success, pin the intended session, keep focus unchanged unless explicitly asked, and report concise concrete evidence after each task.";
-  const body = scenarios
+  const turns = scenarios
     .filter((scenario) => scenario.applicability.includes(harness))
-    .map((scenario) => `## ${scenario.id} · ${scenario.title}\n\n> ${scenario.prompt}`)
-    .join("\n\n");
-  const title = harness === "claude" ? "Claude zmux worker prompts" : "Pi zmux worker prompts";
-  return `<!-- ${RENDERED_BANNER} -->\n\n# ${title}\n\nThe host sends the session contract once, then sends one scenario prompt at a time. Headings and answer keys stay host-side.\n\n## Session contract\n\n> ${contract}\n\n${body}\n`;
+    .flatMap((scenario) => scenario.prompts.map((prompt, index) => ({ id: scenario.id, number: index + 1, prompt })));
+  // A single selected turn is exact copy/paste worker input. Multi-turn/tier bundles
+  // carry host-only HTML boundaries so the conductor can send each body separately.
+  if (turns.length === 1) return turns[0].prompt;
+  return turns.map(({ id, number, prompt }) => `<!-- BEGIN HOST TURN ${id} Prompt ${number} -->\n${prompt}\n<!-- END HOST TURN ${id} Prompt ${number} -->`).join("\n\n");
 }
 
 function renderAnswerKey(scenarios, harness) {
   const rows = scenarios
     .filter((scenario) => scenario.applicability.includes(harness))
-    .map((scenario) => `### ${scenario.id} · ${scenario.title}\n\n- **Expected outcome:** ${scenario.expectedOutcome}\n- **${harness === "claude" ? "Claude" : "Pi"} mechanics:** ${scenario.answerKey[harness].join("; ")}\n- **Evidence:** ${scenario.evidence.join("; ")}\n- **Safety:** ${scenario.safety.join("; ")}\n- **Cleanup:** ${scenario.cleanup.length > 0 ? scenario.cleanup.join("; ") : "none"}${scenario.divergenceReason ? `\n- **Divergence:** ${scenario.divergenceReason}` : ""}`)
+    .map((scenario) => `### ${scenario.id} · ${scenario.title}\n\n- **Host setup:** ${scenario.hostSetup.join("; ")}\n- **Host perturbations:** ${scenario.hostPerturbations.length ? scenario.hostPerturbations.join("; ") : "none"}\n${VERDICT_LENSES.map((lens) => `- **${lens}:** ${scenario.verdict[lens]}`).join("\n")}\n- **Evidence:** ${scenario.evidence.join("; ")}\n- **Cleanup:** ${scenario.cleanup.length ? scenario.cleanup.join("; ") : "none"}\n- **${harness === "claude" ? "Claude" : "Pi"} mechanics:** ${scenario.answerKey[harness].join("; ")}${scenario.divergenceReason ? `\n- **Divergence:** ${scenario.divergenceReason}` : ""}`)
     .join("\n\n");
   return `<!-- ${RENDERED_BANNER} -->\n\n# ${harness === "claude" ? "Claude" : "Pi"} host answer key\n\nHost-only expected mechanics and evidence. Never send this file or its operation/verb hints to the worker.\n\n${rows}\n`;
 }
 
-function outputs(rules, scenarios, operations) {
+function outputs(rules) {
   return new Map([
     ["skills/zmux/references/shared-doctrine.generated.md", renderClaudeReference(rules)],
-    ["pi-zmux/src/generated/doctrine.ts", renderPiModule(rules)],
-    ["pi-zmux/doctrine-manifest.generated.json", renderManifest(rules, scenarios, operations)],
     ["docs/reference/agent-doctrine-matrix.generated.md", renderMatrix(rules)],
   ]);
 }
 
-function renderTestingArtifact(name, scenarios) {
-  const artifacts = {
-    "claude-prompts": renderPrompts(scenarios, "claude"),
-    "claude-answer-key": renderAnswerKey(scenarios, "claude"),
-    "pi-prompts": renderPrompts(scenarios, "pi"),
-    "pi-answer-key": renderAnswerKey(scenarios, "pi"),
+function scenarioOrder(left, right) {
+  const tier = TIERS.indexOf(left.tier) - TIERS.indexOf(right.tier);
+  if (tier) return tier;
+  const shared = (left.id.startsWith("PZ-") ? 1 : 0) - (right.id.startsWith("PZ-") ? 1 : 0);
+  if (shared) return shared;
+  return Number(left.id.slice(3)) - Number(right.id.slice(3));
+}
+
+function selectScenarios(records, ids, tier, harness) {
+  const applicable = records.filter((scenario) => scenario.applicability.includes(harness));
+  if (ids.length === 0) return applicable.filter((scenario) => !tier || scenario.tier === tier).sort(scenarioOrder);
+  const byId = new Map(applicable.map((scenario) => [scenario.id, scenario]));
+  const unique = [...new Set(ids)];
+  expect(unique.length === ids.length, "--ids contains duplicates");
+  return ids.map((id) => {
+    const scenario = byId.get(id);
+    expect(scenario, `scenario ${id} is unknown or not applicable to ${harness}`);
+    expect(!tier || scenario.tier === tier, `scenario ${id} is not in tier ${tier}`);
+    return scenario;
+  });
+}
+
+function renderTestingArtifact(name, scenarios, ids = [], tier) {
+  const specs = {
+    "claude-prompts": ["claude", renderPrompts],
+    "claude-answer-key": ["claude", renderAnswerKey],
+    "pi-prompts": ["pi", renderPrompts],
+    "pi-answer-key": ["pi", renderAnswerKey],
   };
-  expect(Object.hasOwn(artifacts, name), `unknown render artifact ${name}; choose one of: ${Object.keys(artifacts).join(", ")}`);
-  return artifacts[name];
+  expect(Object.hasOwn(specs, name), `unknown render artifact ${name}; choose one of: ${Object.keys(specs).join(", ")}`);
+  const [harness, renderer] = specs[name];
+  return renderer(selectScenarios(scenarios, ids, tier, harness), harness);
 }
 
 function writeOutputs(rendered) {
@@ -464,37 +556,48 @@ function checkOutputs(rendered) {
 }
 
 export function loadDoctrine() {
-  const rules = uniqueById(readRuleRecords().map(validateRule), "rule");
+  const rules = uniqueById(
+    readRuleRecords("rules/shared").map((record) => validateRule(record, { sharedOnly: true })),
+    "rule",
+  );
   const ruleIds = new Set(rules.map((rule) => rule.id));
-  const scenarios = uniqueById(readScenarioRecords().map((record) => validateScenario(record, ruleIds)), "scenario");
-  const operations = validatePiOperationMentions(rules, scenarios);
-  return { rules, scenarios, operations };
+  const scenarios = uniqueById(
+    readScenarioRecords("scenarios/shared").map((record) => validateScenario(record, ruleIds, { sharedOnly: true })),
+    "shared scenario",
+  );
+  // Shared rules/scenarios keep both harness projections; this still validates their Pi answer keys.
+  validatePiOperationMentions(rules, scenarios);
+  validatePromptLeakage(scenarios);
+  return { rules, scenarios };
 }
 
 function main() {
   const args = process.argv.slice(2);
-  if (args.length === 1 && ["-h", "--help"].includes(args[0])) {
-    console.log(USAGE);
-    return;
-  }
-  const renderMode = args[0] === "--render" && args.length === 2;
+  if (args.length === 1 && ["-h", "--help"].includes(args[0])) { console.log(USAGE); return; }
   const projectionMode = args.length === 1 && ["--write", "--check"].includes(args[0]);
-  if (!renderMode && !projectionMode) {
-    usageError("choose --write, --check, or --render <artifact>");
-    return;
+  const renderMode = args[0] === "--render" && typeof args[1] === "string";
+  if (!renderMode && !projectionMode) { usageError("choose --write, --check, or --render <artifact>"); return; }
+  let ids = [];
+  let tier;
+  if (renderMode) {
+    for (let index = 2; index < args.length; index += 2) {
+      const option = args[index]; const value = args[index + 1];
+      if (!value || !["--ids", "--tier"].includes(option)) { usageError("--render accepts only --ids and --tier values"); return; }
+      if (option === "--ids") { if (ids.length) { usageError("--ids may be supplied once"); return; } ids = value.split(",").map((id) => id.trim()).filter(Boolean); }
+      else { if (tier !== undefined || !TIERS.includes(value)) { usageError(`--tier must be one of: ${TIERS.join(", ")}`); return; } tier = value; }
+    }
+    if (args.length % 2 !== 0) { usageError("--render options require values"); return; }
   }
   try {
-    const { rules, scenarios, operations } = loadDoctrine();
+    const { rules, scenarios } = loadDoctrine();
     if (renderMode) {
-      process.stdout.write(renderTestingArtifact(args[1], scenarios));
+      expect(!args.includes("--ids") || ids.length > 0, "--ids requires at least one scenario id");
+      process.stdout.write(renderTestingArtifact(args[1], scenarios, ids, tier));
       return;
     }
-    const rendered = outputs(rules, scenarios, operations);
-    if (args[0] === "--write") writeOutputs(rendered);
-    else checkOutputs(rendered);
-  } catch (error) {
-    fail(error instanceof Error ? error.message : String(error));
-  }
+    const rendered = outputs(rules);
+    if (args[0] === "--write") writeOutputs(rendered); else checkOutputs(rendered);
+  } catch (error) { fail(error instanceof Error ? error.message : String(error)); }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) main();

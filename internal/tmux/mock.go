@@ -49,6 +49,10 @@ type MockRunner struct {
 	// best-effort "no current client" failure without poisoning other calls.
 	RefreshStatusErr error
 
+	// SendKeysErr is returned by SendKeys only — models a send failure without
+	// breaking pane creation or option writes.
+	SendKeysErr error
+
 	// PaneOptionValues backs ListPaneOptionValues, keyed by option name —
 	// one entry per pane, as list-panes -a would report.
 	PaneOptionValues map[string][]string
@@ -400,6 +404,9 @@ func (m *MockRunner) ReorderWindow(delta int) error {
 // SendKeys records the call.
 func (m *MockRunner) SendKeys(target string, keys ...string) error {
 	m.record("SendKeys", append([]string{target}, keys...)...)
+	if m.SendKeysErr != nil {
+		return m.SendKeysErr
+	}
 	return m.Err
 }
 

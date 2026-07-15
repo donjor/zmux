@@ -2,6 +2,8 @@
 
 Thin activation wrapper for the canonical installed-package test framework for agent-driven `zmux` usage through the `pi-zmux` extension. Shared scenarios and expected outcomes do not live here.
 
+> **Deferred:** the Pi doctrine harness mechanics (`agent-doctrine/harnesses/pi/**`) ship with the Pi extension reintegration and are not present on this shared branch. The shared worker prompts and answer keys still render (`--render pi-prompts` / `pi-answer-key`), but the launch/inspection/teardown flow below cannot be executed until the harness lands.
+
 ## Launch
 
 Start Pi from the accepted zmux checkout in an attached native `zmux` session. The installed package and native binary must already be synced; this flow does not install or switch anything.
@@ -15,14 +17,14 @@ pi
 ```text
 You are the supervising host for the canonical test of the installed `pi-zmux` integration on native `zmux`.
 
-Read and execute `agent-doctrine/testing/pi/host-prompt.md` exactly. It routes to the durable host flow, stdout-only worker prompts/host answer key rendered from the Markdown registry, adapter-local deterministic gates, and exact teardown.
+Read and execute `agent-doctrine/harnesses/pi/host-prompt.md` exactly. It routes to the durable host flow, stdout-only worker prompts/host answer key rendered from the Markdown registry, adapter-local deterministic gates, and exact teardown.
 
 Use native `zmux` and the already-synced installed package. Do not install, sync, switch profiles, bypass the Bash guard, commit, or push. Keep focus unchanged. Judge real dispatcher/terminal/lifecycle state rather than worker self-report.
 ```
 
 The durable framework owns worker launch, shared and Pi-only scenario order, evidence, verdicts, and cleanup:
 
-- `agent-doctrine/testing/pi/README.md`
-- `agent-doctrine/testing/pi/host-flow.md`
+- `agent-doctrine/harnesses/pi/README.md`
+- `agent-doctrine/harnesses/pi/host-flow.md`
 - `node agent-doctrine/generate.mjs --render pi-prompts`
 - host-only `node agent-doctrine/generate.mjs --render pi-answer-key`

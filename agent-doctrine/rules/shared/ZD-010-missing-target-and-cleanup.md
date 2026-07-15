@@ -47,5 +47,5 @@ _None._
 ## Verify
 
 - skills/zmux/references/run-observe.md
-- agent-doctrine/testing/pi/host-flow.md
+- agent-doctrine/harnesses/claude/host-flow.md
 

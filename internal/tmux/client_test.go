@@ -151,6 +151,31 @@ func TestClientPipePaneOpensAndClosesPipe(t *testing.T) {
 	}
 }
 
+func TestClientShowPaneOptionsSplitsOnTab(t *testing.T) {
+	t.Setenv("TMUX", "")
+	logPath := filepath.Join(t.TempDir(), "tmux-args.log")
+	// Real tmux passes TAB through display-message verbatim (unlike 0x1f, which
+	// it octal-escapes), so TAB is the field separator. The fake echoes a row
+	// with a spaced value ("exit 2") and an empty middle field.
+	client := &Client{bin: fakeTmux(t, logPath, `printf 'running\texit 2\t\tclaude\n'`)}
+
+	got, err := client.ShowPaneOptions("%3", []string{"@a", "@b", "@c", "@d"})
+	if err != nil {
+		t.Fatalf("ShowPaneOptions failed: %v", err)
+	}
+	want := map[string]string{"@a": "running", "@b": "exit 2", "@c": "", "@d": "claude"}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("key %s = %q, want %q (full: %v)", k, got[k], v, got)
+		}
+	}
+
+	calls := readFakeTmuxCalls(t, logPath)
+	if len(calls) != 1 || !strings.Contains(calls[0], "#{@a}\t#{@b}\t#{@c}\t#{@d}") {
+		t.Fatalf("display-message format should TAB-join keys: %v", calls)
+	}
+}
+
 func TestTailLines(t *testing.T) {
 	tests := []struct {
 		name string

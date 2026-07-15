@@ -23,12 +23,13 @@ Use this split when testing:
 These files are thin activation wrappers only:
 
 - `zmux-agent-skill-testing-prompt.md` → durable Claude/CLI framework at
-  [`../../../agent-doctrine/testing/claude/`](../../../agent-doctrine/testing/claude/).
+  [`../../../agent-doctrine/harnesses/claude/`](../../../agent-doctrine/harnesses/claude/).
 - `zmux-agent-pi-zmux-testing-prompt.md` → durable Pi framework at
-  [`../../../agent-doctrine/testing/pi/`](../../../agent-doctrine/testing/pi/).
+  `agent-doctrine/harnesses/pi/` — deferred with the Pi extension reintegration and
+  not present on this shared branch.
 
 Shared scenario prompts and harness answer keys are authored in
-`agent-doctrine/scenarios/*.md` and rendered to stdout with
+`agent-doctrine/scenarios/shared/*.md` and rendered to stdout with
 `agent-doctrine/generate.mjs --render`; exploratory wrappers must not duplicate the chain.
 Both frameworks use one ordinary visible worker, host-inspected evidence, explicit
 `PASS`/`PASS*`/`FAIL`/`BLOCKED` verdicts, and exact test-owned teardown.

@@ -12,7 +12,7 @@ zmux-managed tabs instead of hidden shell jobs or raw tmux.
 - `pi-zmux/index.ts` — package entry for Pi extension loading.
 - `pi-zmux/src/**` — dispatcher registration, on-demand diagnostics, bash classification, and zmux adapters.
 - `pi-zmux/test/**`, `pi-zmux/package.json`, `pi-zmux/tsconfig.json` — TypeScript validation surface.
-- `agent-doctrine/testing/{claude,pi}/**` — handwritten harness launch, inspection, judgment, and teardown mechanics.
+- `agent-doctrine/harnesses/claude/**` — handwritten harness launch, inspection, judgment, and teardown mechanics. The parallel `agent-doctrine/harnesses/pi/**` is deferred with the Pi extension reintegration and not present on this shared branch.
 - `agent-doctrine/generate.mjs --render <artifact>` — stdout-only generated prompts and host answer keys for live maintainer runs.
 - `pi-zmux/fixtures/**` — deterministic live fixtures.
 - `skills/zmux/SKILL.md`, `skills/zmux/references/**`, `skills/zmux/hooks/**`, `skills/zmux/test/**` — Claude mechanics/hooks, the committed runtime doctrine projection, and the single doctrine doctor.
@@ -114,14 +114,14 @@ failure. Thin activation wrappers live under `docs/dev/test-prompts/`:
 Use these prompts after material agent-facing changes, especially new dispatcher
 operations, guard classifications, peer/worker flow changes, or edits to shipped
 skill doctrine. The wrappers route to durable Claude and Pi frameworks. Shared prompt/outcome bodies
-come from `agent-doctrine/scenarios/*.md`; generated host answer keys stay hidden
+come from `agent-doctrine/scenarios/shared/*.md`; generated host answer keys stay hidden
 from workers, while harness-specific launch, inspection, and teardown stay handwritten.
 `make test-agent-surfaces` remains the deterministic gate.
 
-The handwritten Claude framework lives at `agent-doctrine/testing/claude/`; the Pi framework lives at `agent-doctrine/testing/pi/`. Their worker prompts and host-only answer keys are rendered to stdout by `agent-doctrine/generate.mjs --render`.
+The handwritten Claude framework lives at `agent-doctrine/harnesses/claude/`; the parallel Pi framework at `agent-doctrine/harnesses/pi/` is deferred with the Pi extension reintegration and not present on this shared branch. Their worker prompts and host-only answer keys are rendered to stdout by `agent-doctrine/generate.mjs --render`.
 
 - The Claude framework drives one visible Sonnet worker; the Pi framework drives one visible Terra/medium worker.
-- Both consume the same 13 shared scenario prompts; Pi adds callback and soft-lifecycle scenarios, while package tests retain trusted-config, guard, renderer, and hard-respawn coverage.
+- Both consume the same 20 shared scenario prompts; package tests retain trusted-config, guard, renderer, and hard-respawn coverage. Pi-only callback and soft-lifecycle scenarios return with the deferred Pi harness.
 - Hosts inspect real state, use low-tier lifecycle peers, distinguish clean passes from safe recovered friction, and own exact teardown.
 
 Historical promotion artifacts remain in the skills repo.

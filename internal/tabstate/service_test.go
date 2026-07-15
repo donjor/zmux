@@ -2,6 +2,7 @@ package tabstate
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,6 +65,38 @@ func TestSetWritesPaneCanonicalAndWindowMirror(t *testing.T) {
 	}
 	if got := callsOf(mock, "RefreshStatus"); len(got) != 1 {
 		t.Fatalf("Set must refresh status once, got %d", len(got))
+	}
+}
+
+// TestSetSanitizesTabsFromMirrorValues is the invariant guard for the
+// ShowPaneOptions TAB field separator: no free-text mirror value (source, msg)
+// may reach a pane option carrying a TAB, or a later ShowPaneOptions batch read
+// would split one value into two and misalign every field after it.
+func TestSetSanitizesTabsFromMirrorValues(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	s := newTestService(mock, nil)
+	tgt := Target{PaneID: "%3", Window: "dev:2"}
+
+	if err := s.Set(tgt, StateFailed, "run\tinjected", "exit 2\tsmuggled\ttail"); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	for _, c := range callsOf(mock, "ApplyOptions") {
+		if strings.Contains(c.Args[3], "\t") {
+			t.Fatalf("mirror write for %s must not contain a TAB, got %q", c.Args[2], c.Args[3])
+		}
+	}
+
+	pane := batchWrites(mock, tmux.ScopePane, false)
+	got := map[string]string{}
+	for _, c := range pane {
+		got[c.Args[2]] = c.Args[3]
+	}
+	if got[OptSource] != "run injected" {
+		t.Fatalf("source not collapsed: %q", got[OptSource])
+	}
+	if got[OptMsg] != "exit 2 smuggled tail" {
+		t.Fatalf("msg not collapsed: %q", got[OptMsg])
 	}
 }
 

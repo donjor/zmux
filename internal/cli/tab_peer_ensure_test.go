@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -41,6 +42,49 @@ func TestTabPeerEnsureCreatesMissingPeerAndSendsCommand(t *testing.T) {
 	}
 	if !newWindow || !sendCommand || !turnRunning {
 		t.Fatalf("missing expected create/send/running calls: new=%v send=%v running=%v calls=%+v", newWindow, sendCommand, turnRunning, mock.Calls)
+	}
+}
+
+func TestTabPeerEnsureRejectsReadinessMatchingCommand(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	// The readiness regex matches the launch command, so the command's own echo
+	// could falsely satisfy it. Ensure must refuse before doing any work.
+	root.SetArgs([]string{"tab", "peer", "ensure", "claude-peer", "-s", "test-session", "--command", "claude serve", "--readiness", "claude"})
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "must not match the launch command") {
+		t.Fatalf("expected readiness-echo rejection, got %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" {
+			t.Fatalf("guard must fire before any pane is created: %+v", mock.Calls)
+		}
+	}
+}
+
+func TestTabPeerEnsureKillsFreshPaneWhenSendFails(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%9"
+	mock.SendKeysErr = errors.New("boom")
+	mock.DisplayMessageFunc = func(target, format string) (string, error) {
+		if target == "%9" {
+			return "%9\ttest-session:2", nil
+		}
+		return "test-session", nil
+	}
+	root.SetArgs([]string{"tab", "peer", "ensure", "claude-peer", "-s", "test-session", "--command", "claude"})
+	if err := root.Execute(); err == nil {
+		t.Fatalf("expected send failure to surface")
+	}
+	var killed bool
+	for _, c := range mock.Calls {
+		if c.Method == "KillPane" && c.Args[0] == "%9" {
+			killed = true
+		}
+	}
+	if !killed {
+		t.Fatalf("a fresh peer pane must be torn down when birth fails, calls=%+v", mock.Calls)
 	}
 }
 

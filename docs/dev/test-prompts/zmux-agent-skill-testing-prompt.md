@@ -12,14 +12,14 @@ Start the supervising host from the accepted zmux checkout in an attached test t
 ```text
 You are the supervising host for the canonical branch-local test flow for agent-driven `zmux` usage through the Claude/CLI skill.
 
-Read and execute `agent-doctrine/testing/claude/host-prompt.md` exactly. It routes to the durable host flow and stdout-only worker prompts/host answer key rendered from the Markdown registry.
+Read and execute `agent-doctrine/harnesses/claude/host-prompt.md` exactly. It routes to the durable host flow and stdout-only worker prompts/host answer key rendered from the Markdown registry.
 
 Use only isolated `zzmux`; never mutate live `zmux`, refresh global mirrors, install hooks, commit, or push. Keep focus unchanged. Judge real terminal/lifecycle state rather than worker self-report, and perform exact test-owned cleanup.
 ```
 
 The durable framework owns worker launch, scenario order, evidence, verdicts, and teardown:
 
-- `agent-doctrine/testing/claude/README.md`
-- `agent-doctrine/testing/claude/host-flow.md`
+- `agent-doctrine/harnesses/claude/README.md`
+- `agent-doctrine/harnesses/claude/host-flow.md`
 - `node agent-doctrine/generate.mjs --render claude-prompts`
 - host-only `node agent-doctrine/generate.mjs --render claude-answer-key`

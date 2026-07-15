@@ -690,9 +690,9 @@ func (c *Client) ShowPaneOption(target, key string) (string, error) {
 	return c.run(args...)
 }
 
-// ShowPaneOptions expands all keys in one display-message call. Fields are
-// unit-separator (0x1f) delimited: option values can contain tabs (command
-// text), but never a control separator.
+// ShowPaneOptions expands sanitized pane lifecycle options in one display-
+// message call. Tmux passes TAB through format output verbatim; other control
+// separators are octal-escaped (unit separator becomes literal `\037`).
 func (c *Client) ShowPaneOptions(target string, keys []string) (map[string]string, error) {
 	if len(keys) == 0 {
 		return map[string]string{}, nil
@@ -701,11 +701,11 @@ func (c *Client) ShowPaneOptions(target string, keys []string) (map[string]strin
 	for i, key := range keys {
 		parts[i] = "#{" + key + "}"
 	}
-	out, err := c.DisplayMessage(target, strings.Join(parts, "\x1f"))
+	out, err := c.DisplayMessage(target, strings.Join(parts, "\t"))
 	if err != nil {
 		return nil, err
 	}
-	values := strings.Split(strings.TrimSuffix(out, "\n"), "\x1f")
+	values := strings.Split(strings.TrimSuffix(out, "\n"), "\t")
 	got := make(map[string]string, len(keys))
 	for i, key := range keys {
 		if i < len(values) {

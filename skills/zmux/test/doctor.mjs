@@ -41,21 +41,13 @@ assert.deepEqual(doctrineManifest.dispatcherOperations, [...operations].sort(), 
 assert.equal(new Set(doctrineManifest.piRuleIds).size, doctrineManifest.piRuleIds.length, 'Pi doctrine manifest contains duplicate rule ids');
 
 const { scenarios: scenarioRecords } = loadDoctrine();
-const claudeHostFlow = read('agent-doctrine/testing/claude/host-flow.md');
-const piHostFlow = read('agent-doctrine/testing/pi/host-flow.md');
+// The Pi doctrine harness (agent-doctrine/harnesses/pi) and its scenario
+// projection are deferred with the Pi extension; only the Claude harness ships
+// on this branch, so cross-check the shared scenario inventory against it alone.
+const claudeHostFlow = read('agent-doctrine/harnesses/claude/host-flow.md');
 for (const scenario of scenarioRecords) {
-  for (const [harness, hostFlow] of [
-    ['claude', claudeHostFlow],
-    ['pi', piHostFlow],
-  ]) {
-    assert.equal(hostFlow.includes(scenario.id), scenario.applicability.includes(harness), `${scenario.id} ${harness} host flow inventory drifted`);
-  }
+  assert.equal(claudeHostFlow.includes(scenario.id), scenario.applicability.includes('claude'), `${scenario.id} claude host flow inventory drifted`);
 }
-assert.deepEqual(
-  doctrineManifest.piScenarioIds,
-  scenarioRecords.filter((scenario) => scenario.applicability.includes('pi')).map((scenario) => scenario.id),
-  'Pi scenario manifest drifted',
-);
 assert.match(dispatcherSource, /import \{ SHARED_ZMUX_PROMPT_GUIDELINES \} from "\.\/generated\/doctrine\.js";/);
 assert.match(dispatcherSource, /promptGuidelines:\s*\[\s*\.\.\.SHARED_ZMUX_PROMPT_GUIDELINES,/);
 
@@ -72,12 +64,9 @@ const skillFiles = [
   'docs/dev/agent-grounding.md',
   'docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md',
   'docs/dev/test-prompts/zmux-agent-skill-testing-prompt.md',
-  'agent-doctrine/testing/claude/README.md',
-  'agent-doctrine/testing/claude/host-prompt.md',
-  'agent-doctrine/testing/claude/host-flow.md',
-  'agent-doctrine/testing/pi/README.md',
-  'agent-doctrine/testing/pi/host-prompt.md',
-  'agent-doctrine/testing/pi/host-flow.md',
+  'agent-doctrine/harnesses/claude/README.md',
+  'agent-doctrine/harnesses/claude/host-prompt.md',
+  'agent-doctrine/harnesses/claude/host-flow.md',
 ];
 const docs = Object.fromEntries(skillFiles.map((file) => [file, read(file)]));
 const combined = Object.values(docs).join('\n');

@@ -47,7 +47,7 @@ These are harness-neutral outcomes projected for the Claude skill. Claude-specif
 ### ZD-006 · Use bounded first-class evidence
 
 - **Invariant:** Completion and readiness are proven by fresh lifecycle or output evidence, never polling, elapsed time, process existence, or echoed prompt text.
-- **Instruction:** Use bounded first-class lifecycle or future-output waits; do not poll, sleep as proof, treat process liveness as completion, or accept a marker already present in the prompt tail.
+- **Instruction:** Use bounded first-class lifecycle or future-output evidence; register callbacks before expected events and never add a post-hoc blind wait when lifecycle or callback evidence exists. Blind waiting is the last resort: try 10 seconds, inspect and reassess whether the expectation or mechanism is wrong, then escalate only to 30 and 60 seconds with the same reassessment. Do not poll, sleep as proof, treat process liveness as completion, or accept a marker already present in the prompt tail.
 - **Claude mechanism:** zmux wait/status/watch with fresh baselines (instruction)
   - Caveat: Idle is a fallback for uninstrumented programs, not lifecycle truth.
 - **Verify:** `skills/zmux/references/run-observe.md`, `pi-zmux/test/dispatcher.mjs`
@@ -82,7 +82,7 @@ These are harness-neutral outcomes projected for the Claude skill. Claude-specif
 - **Instruction:** When a target is missing or ambiguous, report the exact failure and stop rather than creating a substitute; clean only exact state owned by the task and prove the final roster.
 - **Claude mechanism:** Resolver failures plus explicit kill/session cleanup (instruction)
   - Caveat: none.
-- **Verify:** `skills/zmux/references/run-observe.md`, `agent-doctrine/testing/pi/host-flow.md`
+- **Verify:** `skills/zmux/references/run-observe.md`, `agent-doctrine/harnesses/claude/host-flow.md`
 
 ### ZD-011 · Make remote mutation legible
 

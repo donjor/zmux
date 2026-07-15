@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -117,6 +118,22 @@ type peerEnsureOptions struct {
 }
 
 func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, error) {
+	// A readiness regex that also matches the launch command would be satisfied
+	// by the command's own echo, not real startup output. Reject that up front
+	// so peers prove readiness on evidence outgoing text cannot fake.
+	if strings.TrimSpace(o.readiness) != "" && strings.TrimSpace(o.command) != "" {
+		condition, err := waitfor.ParseCondition("output:" + o.readiness)
+		if err != nil {
+			return peerEnsureOutput{}, err
+		}
+		matches, err := regexp.MatchString("(?i)"+condition.Value, o.command)
+		if err != nil {
+			return peerEnsureOutput{}, err
+		}
+		if matches {
+			return peerEnsureOutput{}, fmt.Errorf("peer readiness pattern must not match the launch command; use startup evidence that outgoing text cannot satisfy")
+		}
+	}
 	if o.lines <= 0 {
 		o.lines = 120
 	}
@@ -224,6 +241,15 @@ func createPeerCommandTab(app *apppkg.App, sessionName, name, command string, o 
 	if paneID != "" {
 		target = paneID
 	}
+	// Tear the fresh pane down if any birth step below fails, so a half-stamped
+	// or never-launched peer never leaks as an orphan tab.
+	created := true
+	cleanupTarget := target
+	defer func() {
+		if created {
+			_ = app.Runner.KillPane(cleanupTarget)
+		}
+	}()
 	if paneID != "" {
 		if _, err := tabs.Stamp(app.Runner, paneID, paneID, name, tablabel.SourcePane); err != nil {
 			return "", "", fmt.Errorf("stamp peer tab: %w", err)
@@ -236,6 +262,7 @@ func createPeerCommandTab(app *apppkg.App, sessionName, name, command string, o 
 	if err := sendPreparedCommand(app, target, command, o.timeoutSec); err != nil {
 		return "", "", err
 	}
+	created = false
 	return paneID, target, nil
 }
 
