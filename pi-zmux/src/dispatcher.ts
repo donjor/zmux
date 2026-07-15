@@ -25,6 +25,7 @@ import {
   startWatchCallback,
   type CallbackActivitySink,
 } from "./zmux/callbacks.js";
+import { buildWaitArgs as buildWaitArgsFromParams } from "./zmux/agent.js";
 import { resizePane } from "./zmux/panes.js";
 import { zmuxRunSafetyWarnings } from "./zmux/sessions.js";
 import { schedulePiReload, schedulePiRespawn } from "./zmux/pi-lifecycle.js";
@@ -446,19 +447,24 @@ function buildWatchArgs(target: string, options: Record<string, unknown>): strin
   return args;
 }
 
+// The public wait/callback_watch ops share the same builder as the internal
+// callback path (zmux/agent.ts) so every wait condition — output, idle,
+// turn:, cmd: — plus --allow-stale and --fresh-after is reachable from the
+// operation surface, not just from callbacks. Public ops keep their wider
+// defaults (160 lines, 300s) vs the callback builder's terse ones.
 function buildWaitArgs(target: string, options: Record<string, unknown>): string[] {
-  const args = ["wait", target];
-  const waitFor = optString(options, "waitFor");
-  const idleSeconds = optNumber(options, "idleSeconds");
-  if (waitFor && idleSeconds !== undefined) throw new Error("waitFor and idleSeconds cannot be combined");
-  if (!waitFor && idleSeconds === undefined) throw new Error("wait requires waitFor or idleSeconds");
-  if (waitFor?.startsWith("output:")) throw new Error('options.waitFor is the output regex only; omit the "output:" prefix');
-  args.push("--for", waitFor ? `output:${waitFor}` : `idle:${idleSeconds}`);
-  pushOpt(args, "-l", optNumber(options, "lines") ?? 160);
-  pushOpt(args, "-T", optNumber(options, "timeoutSeconds") ?? 300);
-  args.push("--json");
-  pushSession(args, optString(options, "session"));
-  return args;
+  return buildWaitArgsFromParams({
+    tab: target,
+    session: optString(options, "session"),
+    lines: optNumber(options, "lines") ?? 160,
+    waitFor: optString(options, "waitFor"),
+    idleSeconds: optNumber(options, "idleSeconds"),
+    turnState: optString(options, "turnState"),
+    commandState: optString(options, "commandState"),
+    timeoutSeconds: optNumber(options, "timeoutSeconds") ?? 300,
+    allowStale: optBool(options, "allowStale"),
+    freshAfter: optNumber(options, "freshAfter"),
+  });
 }
 
 function formatResult(operation: string, args: string[], stdout: string, stderr: string): string {

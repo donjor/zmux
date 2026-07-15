@@ -735,10 +735,17 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     await assert.rejects(() => execute({ operation: 'run', command: 'true', options: { timeoutSeconds: Number.NaN } }), /must be a finite number/);
     await assert.rejects(() => execute({ operation: 'tab_place', target: 'child', options: { action: 'pane', focus: 'yes' } }), /must be a boolean/);
     await assert.rejects(() => execute({ operation: 'runtime_logs', target: 'server', options: { waitFor: 'READY', idleSeconds: 1 } }), /cannot be combined/);
-    await assert.rejects(() => execute({ operation: 'wait', target: 'server' }), /requires waitFor or idleSeconds/);
-    await assert.rejects(() => execute({ operation: 'wait', target: 'server', options: { waitFor: 'READY', idleSeconds: 1 } }), /cannot be combined/);
+    await assert.rejects(() => execute({ operation: 'wait', target: 'server' }), /exactly one of waitFor, idleSeconds, turnState, or commandState/);
+    await assert.rejects(() => execute({ operation: 'wait', target: 'server', options: { waitFor: 'READY', idleSeconds: 1 } }), /exactly one of waitFor, idleSeconds, turnState, or commandState/);
     await assert.rejects(() => execute({ operation: 'wait', target: 'server', options: { waitFor: 'output:READY' } }), /output regex only.*omit.*output:/);
     await assert.rejects(() => execute({ operation: 'callback_watch', target: 'server', options: { waitFor: 'output:READY' } }), /output regex only.*omit.*output:/);
+    // The public wait op shares the callback builder, so turn:/cmd: conditions
+    // plus --allow-stale/--fresh-after must be reachable from the operation
+    // surface, not only from the internal callback path.
+    const turnWait = await execute({ operation: 'wait', target: 'work', options: { turnState: 'ready', lines: 50, timeoutSeconds: 11 } });
+    assert.deepEqual(turnWait.details.args, ['wait', 'work', '--for', 'turn:ready', '-l', '50', '-T', '11', '--json']);
+    const anchoredWait = await execute({ operation: 'wait', target: 'work', options: { waitFor: 'DONE', freshAfter: 7, allowStale: true } });
+    assert.deepEqual(anchoredWait.details.args, ['wait', 'work', '--for', 'output:DONE', '-l', '160', '-T', '300', '--json', '--allow-stale', '--fresh-after', '7']);
     await assert.rejects(() => execute({ operation: 'tab_state', target: 'work', options: { state: 'mystery' } }), /state must be one of/);
     await assert.rejects(() => execute({ operation: 'tab_peer', target: 'work', options: { action: 'mystery' } }), /action must be one of/);
     await assert.rejects(() => execute({ operation: 'tab_place', target: 'work', options: { action: 'sideways' } }), /action must be one of/);
