@@ -120,7 +120,7 @@ func GenerateConf(cfg *config.Config, palette *theme.Palette, zmuxBin string) st
 	}
 	fmt.Fprintf(&b, "bind %s next-window\n", keys.TabNext.Key)
 	fmt.Fprintf(&b, "bind %s previous-window\n", keys.TabPrev.Key)
-	fmt.Fprintf(&b, "bind %s command-prompt -p \"label tab (blank clears):\" \"set-option -w -t #{window_id} @zmux_label '%%%%' \\; set-option -w -t #{window_id} @zmux_label_source manual\"\n", keys.LabelTab.Key)
+	fmt.Fprintf(&b, "bind %s command-prompt -p \"label tab (blank clears):\" \"set-option -w @zmux_label '%%%%' \\; set-option -w @zmux_label_source manual\"\n", keys.LabelTab.Key)
 	fmt.Fprintf(&b, "bind %s swap-window -t -1 \\; select-window -t -1\n", keys.TabReorderLeft.Key)
 	fmt.Fprintf(&b, "bind %s swap-window -t +1 \\; select-window -t +1\n", keys.TabReorderRight.Key)
 	fmt.Fprintf(&b, "bind %s confirm-before -p \"close tab %s? (y/n)\" kill-window\n", keys.TabKill.Key, tablabel.PlainFormat())
