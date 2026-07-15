@@ -510,17 +510,26 @@ async function validateDispatcherContract(extension, dispatcherTool, testDirecto
     await execute({ operation: 'callback_cancel', target: 'peer-handoff-test' });
 
     writeFileSync(recorder.logPath, '');
+    // A lifecycle handoff must anchor its turn:ready wait to the peer's current
+    // turn generation, read synchronously before marking it running. Otherwise
+    // a pre-existing ready state satisfies the wait before the brief lands.
+    process.env.PI_ZMUX_TEST_STATUS_BEFORE = JSON.stringify({ turnSeq: '12', turnState: 'ready' });
+    process.env.PI_ZMUX_TEST_STATUS_AFTER = process.env.PI_ZMUX_TEST_STATUS_BEFORE;
     const lifecycleHandoff = await execute({ operation: 'peer_handoff', target: 'peer', options: { id: 'peer-lifecycle-test', text: 'review branch', timeoutSeconds: 9 } });
     assert.equal(lifecycleHandoff.details.turnState, 'ready');
+    assert.equal(lifecycleHandoff.details.freshAfter, 12);
     assert.equal(lifecycleHandoff.details.callback.continueOnRunningTimeout, true);
-    assert.deepEqual(lifecycleHandoff.details.args, ['wait', 'peer', '--for', 'turn:ready', '-l', '200', '-T', '9', '--json']);
+    assert.deepEqual(lifecycleHandoff.details.args, ['wait', 'peer', '--for', 'turn:ready', '-l', '200', '-T', '9', '--json', '--fresh-after', '12']);
     peerHandoffCommands = readCommandLog(recorder.logPath).map((entry) => entry.args);
-    assert.equal(peerHandoffCommands.length, 3);
+    assert.equal(peerHandoffCommands.length, 4);
+    assert.deepEqual(peerHandoffCommands[0], ['tab', 'status', 'peer', '--json'], 'turn-seq read must precede arming the wait');
     assert.deepEqual(peerHandoffCommands.at(-1), ['type', 'peer', 'review branch']);
-    assert.ok(peerHandoffCommands.slice(0, -1).some((args) => JSON.stringify(args) === JSON.stringify(lifecycleHandoff.details.args)));
-    assert.ok(peerHandoffCommands.slice(0, -1).some((args) => JSON.stringify(args) === JSON.stringify(['tab', 'peer', 'running', 'peer', '--source', 'pi-zmux-handoff'])));
+    assert.ok(peerHandoffCommands.some((args) => JSON.stringify(args) === JSON.stringify(lifecycleHandoff.details.args)));
+    assert.ok(peerHandoffCommands.some((args) => JSON.stringify(args) === JSON.stringify(['tab', 'peer', 'running', 'peer', '--source', 'pi-zmux-handoff'])));
     await execute({ operation: 'callback_cancel', target: 'peer-lifecycle-test' });
     delete process.env.PI_ZMUX_TEST_HOLD;
+    delete process.env.PI_ZMUX_TEST_STATUS_BEFORE;
+    delete process.env.PI_ZMUX_TEST_STATUS_AFTER;
 
     writeFileSync(recorder.logPath, '');
     rmSync(`${recorder.logPath}.wait-count`, { force: true });

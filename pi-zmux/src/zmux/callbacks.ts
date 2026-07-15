@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { spawn, type ChildProcess } from "node:child_process";
 import { trimOutput } from "../shell.js";
 import { summarizeWaitOutput } from "../wait-summary.js";
-import { buildWaitArgs } from "./agent.js";
+import { buildWaitArgs, readTurnSeq } from "./agent.js";
 import { setTabPeer, typeText } from "./tabs.js";
 import { zmuxBin } from "./shared.js";
 
@@ -306,6 +306,19 @@ export function clearCallbacks(): void {
 	refreshCallbackActivity();
 }
 
+// resolveDelivery applies the kind's deliverAs default and rejects the
+// contradictory nextTurn+triggerTurn pairing. Shared so a peer handoff can
+// validate delivery semantics before any side effect, not only once the
+// callback is being armed.
+function resolveDelivery(deliverAs: CallbackDeliverAs | undefined, triggerTurn: boolean | undefined, kind: "watch" | "peer_handoff"): { deliverAs: CallbackDeliverAs; triggerTurn: boolean } {
+	const resolvedDeliverAs = deliverAs ?? (kind === "peer_handoff" ? "followUp" : "steer");
+	const resolvedTriggerTurn = triggerTurn ?? true;
+	if (resolvedDeliverAs === "nextTurn" && resolvedTriggerTurn) {
+		throw new Error('deliverAs "nextTurn" never triggers a turn; use "steer" or "followUp", or set triggerTurn false');
+	}
+	return { deliverAs: resolvedDeliverAs, triggerTurn: resolvedTriggerTurn };
+}
+
 export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams, kind: "watch" | "peer_handoff" = "watch"): { text: string; details: Record<string, unknown> } {
 	const conditions = [params.waitFor !== undefined, params.idleSeconds !== undefined, params.turnState !== undefined, params.commandState !== undefined].filter(Boolean).length;
 	if (conditions !== 1) {
@@ -314,11 +327,7 @@ export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams
 	const id = callbackId(kind === "peer_handoff" ? "peer-handoff" : "callback", params.id);
 	if (callbacks.has(id)) throw new Error(`callback id already exists: ${id}`);
 	const args = buildCallbackWatchArgs(params);
-	const deliverAs = params.deliverAs ?? (kind === "peer_handoff" ? "followUp" : "steer");
-	const triggerTurn = params.triggerTurn ?? true;
-	if (deliverAs === "nextTurn" && triggerTurn) {
-		throw new Error('deliverAs "nextTurn" never triggers a turn; use "steer" or "followUp", or set triggerTurn false');
-	}
+	const { deliverAs, triggerTurn } = resolveDelivery(params.deliverAs, params.triggerTurn, kind);
 	const startedAt = new Date().toISOString();
 	const timeoutSeconds = params.timeoutSeconds ?? 300;
 	const condition = callbackCondition(params);
@@ -420,7 +429,21 @@ export function startWatchCallback(pi: ExtensionAPI, params: WatchCallbackParams
 }
 
 export async function startPeerHandoff(pi: ExtensionAPI, params: PeerHandoffParams): Promise<{ text: string; details: Record<string, unknown> }> {
+	// Reject contradictory delivery semantics before issuing the turn-seq read
+	// or arming the wait, so an invalid handoff has no observable side effect.
+	resolveDelivery(params.deliverAs, params.triggerTurn, "peer_handoff");
 	const useLifecycle = params.waitFor === undefined && params.idleSeconds === undefined;
+	// Anchor the readiness wait to the peer's turn generation *before* we mark it
+	// running and type the brief. The wait is spawned as a child process below,
+	// and without a floor it can observe a pre-existing `ready` state and fire
+	// the handoff before the brief is even delivered. Capturing the seq
+	// synchronously here makes freshness independent of when that child
+	// snapshots its own baseline. Only meaningful for the turn-lifecycle path.
+	let freshAfter: number | undefined;
+	if (useLifecycle) {
+		const seq = await readTurnSeq({ tab: params.tab, cwd: params.cwd, session: params.session });
+		if (seq !== undefined && seq > 0) freshAfter = seq;
+	}
 	const callbackParams: WatchCallbackParams = {
 		id: params.id,
 		tab: params.tab,
@@ -430,6 +453,7 @@ export async function startPeerHandoff(pi: ExtensionAPI, params: PeerHandoffPara
 		waitFor: params.waitFor,
 		idleSeconds: params.idleSeconds,
 		turnState: useLifecycle ? "ready" : undefined,
+		freshAfter,
 		timeoutSeconds: params.timeoutSeconds ?? 300,
 		message: params.message ?? "peer handoff ready",
 		deliverAs: params.deliverAs,
@@ -454,6 +478,7 @@ export async function startPeerHandoff(pi: ExtensionAPI, params: PeerHandoffPara
 				waitFor: params.waitFor,
 				idleSeconds: params.idleSeconds,
 				turnState: useLifecycle ? "ready" : undefined,
+				freshAfter,
 			},
 		};
 	} catch (error) {

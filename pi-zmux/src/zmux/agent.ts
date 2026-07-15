@@ -192,6 +192,14 @@ async function readStatusRecord(params: { tab: string; cwd: string; session?: st
 	}
 }
 
+// readTurnSeq returns a tab's current turn generation, used to anchor a
+// lifecycle wait's freshness floor synchronously before the wait is armed.
+// Returns undefined when status is unavailable or the tab has no turn seq yet.
+export async function readTurnSeq(params: { tab: string; cwd: string; session?: string }): Promise<number | undefined> {
+	const { status } = await readStatusRecord(params);
+	return turnSeq(status);
+}
+
 function outcomeFromInspect(parsed: Record<string, unknown>): { status?: Record<string, unknown>; warnings: string[]; logTail: string } {
 	const status = recordFrom(parsed.status);
 	const warnings = Array.isArray(parsed.warnings) ? parsed.warnings.filter((w): w is string => typeof w === "string") : [];
