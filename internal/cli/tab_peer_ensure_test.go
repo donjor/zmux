@@ -62,6 +62,31 @@ func TestTabPeerEnsureRejectsReadinessMatchingCommand(t *testing.T) {
 	}
 }
 
+// A freshly created peer must be able to prove readiness from its own startup
+// output. The prior code captured the readiness baseline *after* launch, so
+// early startup output already on screen was misclassified as pre-existing and
+// the wait falsely timed out. An empty pre-launch baseline fixes the race.
+func TestTabPeerEnsureProvesReadinessFromFreshStartupOutput(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%9"
+	mock.DisplayMessageFunc = func(target, format string) (string, error) {
+		if target == "%9" {
+			return "%9\ttest-session:2", nil
+		}
+		return "test-session", nil
+	}
+	// Startup output is already on screen by the time the wait polls. The
+	// readiness pattern is disjoint from the launch command, so it can only be
+	// proven by real output, not echo.
+	mock.CapturedPaneContent = "SERVER READY on :4321\n"
+
+	root.SetArgs([]string{"tab", "peer", "ensure", "server-peer", "-s", "test-session", "--command", "serve-app", "--readiness", "SERVER READY", "-T", "2"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("fresh startup output must prove readiness, got %v", err)
+	}
+}
+
 func TestTabPeerEnsureKillsFreshPaneWhenSendFails(t *testing.T) {
 	root, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}

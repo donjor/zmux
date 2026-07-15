@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -121,18 +120,10 @@ func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, e
 	// A readiness regex that also matches the launch command would be satisfied
 	// by the command's own echo, not real startup output. Reject that up front
 	// so peers prove readiness on evidence outgoing text cannot fake.
-	if strings.TrimSpace(o.readiness) != "" && strings.TrimSpace(o.command) != "" {
-		condition, err := waitfor.ParseCondition("output:" + o.readiness)
-		if err != nil {
-			return peerEnsureOutput{}, err
-		}
-		matches, err := regexp.MatchString("(?i)"+condition.Value, o.command)
-		if err != nil {
-			return peerEnsureOutput{}, err
-		}
-		if matches {
-			return peerEnsureOutput{}, fmt.Errorf("peer readiness pattern must not match the launch command; use startup evidence that outgoing text cannot satisfy")
-		}
+	if echoes, err := readinessEchoesCommand(o.readiness, o.command); err != nil {
+		return peerEnsureOutput{}, err
+	} else if echoes {
+		return peerEnsureOutput{}, fmt.Errorf("peer readiness pattern must not match the launch command; use startup evidence that outgoing text cannot satisfy")
 	}
 	if o.lines <= 0 {
 		o.lines = 120
@@ -150,9 +141,17 @@ func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, e
 	}
 	exists := rt.found()
 	baseline := waitfor.Baseline{}
+	// Snapshot the readiness output multiset before any restart or command
+	// redelivery so genuine early startup output is proven fresh rather than
+	// misclassified as pre-existing. A tab we are about to create fresh has no
+	// prior output, so an empty baseline is correct there.
+	readinessBaseline := map[string]int{}
 	if exists {
-		paneID, _ := paneTargetForResolvedTab(app, rt)
+		paneID, target := paneTargetForResolvedTab(app, rt)
 		baseline = waitfor.SnapshotBaseline(app.Runner, paneID)
+		if output, err := app.Runner.CapturePane(target, o.lines); err == nil {
+			readinessBaseline = waitfor.OutputBaseline(output)
+		}
 	}
 	out := peerEnsureOutput{Tab: o.tab, Session: sessionName, Reused: exists && !o.restart}
 	var warnings []string
@@ -201,7 +200,7 @@ func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, e
 		if err != nil {
 			return out, err
 		}
-		readiness, _ := waitfor.Wait(context.Background(), waitfor.Request{Runner: app.Runner, Target: out.Target, PaneID: out.PaneID, Lines: o.lines, Timeout: time.Duration(o.timeoutSec) * time.Second, Condition: cond})
+		readiness, _ := waitfor.Wait(context.Background(), waitfor.Request{Runner: app.Runner, Target: out.Target, PaneID: out.PaneID, Lines: o.lines, Timeout: time.Duration(o.timeoutSec) * time.Second, Condition: cond, OutputBaseline: readinessBaseline})
 		out.Readiness = &readiness
 		if !readiness.Met {
 			warnings = append(warnings, "readiness pattern not proven")

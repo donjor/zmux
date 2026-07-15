@@ -125,8 +125,12 @@ Examples:
 				return fmt.Errorf("--until requires --detach; it proves startup readiness while the command keeps running")
 			}
 			if runUntil != "" {
-				if _, err := waitfor.ParseCondition("output:" + runUntil); err != nil {
+				echoes, err := readinessEchoesCommand(runUntil, command)
+				if err != nil {
 					return err
+				}
+				if echoes {
+					return fmt.Errorf("--until pattern must not match the command itself; the command's echo would satisfy it before any real startup output")
 				}
 			}
 

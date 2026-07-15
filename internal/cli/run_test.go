@@ -88,6 +88,24 @@ func TestRunUntilRequiresDetachedRuntime(t *testing.T) {
 	}
 }
 
+func TestRunUntilRejectsPatternMatchingCommand(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+
+	// The readiness regex matches the launch command, so its own shell echo
+	// would satisfy the wait before the process emits real startup output.
+	rootCmd.SetArgs([]string{"run", "python -m http.server 8000", "-n", "server", "-s", "test-session", "-d", "--until", "8000"})
+	err := rootCmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "must not match the command") {
+		t.Fatalf("expected command-echo rejection, got %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" {
+			t.Fatalf("guard must fire before any tab is created: %+v", mock.Calls)
+		}
+	}
+}
+
 func TestRunReusesExistingWindow(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
