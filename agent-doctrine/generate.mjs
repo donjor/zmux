@@ -415,6 +415,16 @@ function validatePiOperationMentions(rules, scenarios) {
   return [...operations].sort();
 }
 
+function validateFrozenPiManifestOperations(operations) {
+  const path = join(root, "pi-zmux/doctrine-manifest.generated.json");
+  let manifest;
+  try { manifest = JSON.parse(readFileSync(path, "utf8")); }
+  catch (error) { throw new Error(`invalid frozen Pi doctrine manifest: ${error instanceof Error ? error.message : String(error)}`); }
+  const projected = manifest?.dispatcherOperations;
+  expect(Array.isArray(projected) && projected.every((operation) => typeof operation === "string"), "frozen Pi doctrine manifest dispatcherOperations must be a string array");
+  expect(JSON.stringify([...projected].sort()) === JSON.stringify(operations), "frozen Pi doctrine manifest dispatcherOperations drift from pi-zmux/src/operations.ts");
+}
+
 function unfencedMarkdown(value) {
   let fenced = false;
   const outside = [];
@@ -566,7 +576,8 @@ export function loadDoctrine() {
     "shared scenario",
   );
   // Shared rules/scenarios keep both harness projections; this still validates their Pi answer keys.
-  validatePiOperationMentions(rules, scenarios);
+  const operations = validatePiOperationMentions(rules, scenarios);
+  validateFrozenPiManifestOperations(operations);
   validatePromptLeakage(scenarios);
   return { rules, scenarios };
 }

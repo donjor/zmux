@@ -18,6 +18,7 @@ versioning is semver-ish until the first public release.
 
 ### Fixed
 
+- **Pi package contract stays owned by zmux** `agents` `pi` `sync` — `make check-doctrine` now compares the frozen manifest operation inventory with `pi-zmux/src/operations.ts`, while the shared skills registry validates only generic manifest shape and generated-rule consistency. Parked feature branches can no longer advance an external hardcoded operation count and break stable `./dev.sh` sync.
 - **Pane lifecycle option mirror survives free-text values** `agents` `tmux` — `ShowPaneOptions` now splits mirrored pane options on TAB (which tmux passes through `display-message` verbatim, unlike the octal-escaped `0x1f`), and `tabstate.Service.Set` collapses whitespace in the free-text `--source`/`--msg` mirror values so they can never smuggle the field separator and misalign the option-to-key demux.
 - **Peer ensure fails closed on echo-satisfiable readiness and cleans up partial launches** `agents` `peer` — `tab peer ensure` refuses a `--readiness` pattern that matches its own launch command, so the command's echo cannot falsely satisfy startup evidence, and tears down a freshly created peer pane when the command send fails instead of leaving an orphaned tab.
 - **Runtime readiness is atomic with command launch** `agents` `pi` `wait` — detached `zmux run --until <regex>` now snapshots output before command delivery and waits for only fresh matching output, so immediate startup messages cannot race a later watch; Pi `runtime_ensure` delegates readiness to that same launch operation.

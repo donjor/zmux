@@ -63,7 +63,7 @@ The active shared-skill source is `~/donjor/skills`. In the maintainer setup:
 - Pi consumes the generated mirror at `~/.pi/agent/skills/donjor/zmux`.
 - `./dev.sh zmux` symlinks this repo's `pi-zmux/` package into `~/donjor/skills/pi/extensions/pi-zmux`.
 - Pi sync loads that settings-managed package through the skills repo registry, not directly from this repo.
-- That registry classifies `pi-zmux` as the Pi-only replacement for `zmux`, keeps `peer` backed, and validates `doctrine-manifest.generated.json` before suppressing the full skill. Claude still installs the full skill.
+- That registry classifies `pi-zmux` as the Pi-only replacement for `zmux`, keeps `peer` backed, and validates the shape and generated-rule consistency of `doctrine-manifest.generated.json` before suppressing the full skill. The operation inventory remains owned here: `make check-doctrine` compares the frozen manifest with `pi-zmux/src/operations.ts` without imposing a zmux-specific count in the skills repo. Claude still installs the full skill.
 
 Refresh generated outputs explicitly, then mirrors and package diagnostics:
 

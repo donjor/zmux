@@ -121,7 +121,9 @@ function fixture() {
   mkdirSync(join(ad, "scenarios/shared"), { recursive: true });
   mkdirSync(join(root, "pi-zmux/src"), { recursive: true });
   cpSync(join(doctrine, "generate.mjs"), join(ad, "generate.mjs"));
-  writeFileSync(join(root, "pi-zmux/src/operations.ts"), 'export const ZMUX_OPERATIONS = ["run", "wait", "log", "runtime_ensure", "peer_ensure"] as const;\n');
+  const operations = ["run", "wait", "log", "runtime_ensure", "peer_ensure"];
+  writeFileSync(join(root, "pi-zmux/src/operations.ts"), `export const ZMUX_OPERATIONS = ${JSON.stringify(operations)} as const;\n`);
+  writeFileSync(join(root, "pi-zmux/doctrine-manifest.generated.json"), `${JSON.stringify({ dispatcherOperations: operations }, null, 2)}\n`);
   writeFileSync(join(ad, "rules/shared/ZD-001-rule.md"), RULE);
   const records = [
     ["ZS-001", { prompts: ["Run this exactly:\n\n```sh\necho hello\n\n# still fenced\n```\n\nThen tell me what it printed."] }],
@@ -141,6 +143,7 @@ function productionFixture() {
   for (const name of ["rules", "scenarios"]) cpSync(join(doctrine, name), join(ad, name), { recursive: true });
   mkdirSync(join(root, "pi-zmux/src"), { recursive: true });
   cpSync(join(doctrine, "../pi-zmux/src/operations.ts"), join(root, "pi-zmux/src/operations.ts"));
+  cpSync(join(doctrine, "../pi-zmux/doctrine-manifest.generated.json"), join(root, "pi-zmux/doctrine-manifest.generated.json"));
   return root;
 }
 
@@ -209,6 +212,16 @@ test("applicability and declared-operation guarantees remain enforced", () => wi
     replace(root2, "agent-doctrine/scenarios/shared/ZS-001.md", "Host performs Pi setup.", "Host performs invented_operation.");
     result = run(root2, "--check"); assert.equal(result.status, 1); assert.match(result.stderr, /undeclared Pi operation invented_operation/);
   } finally { rmSync(root2, { recursive: true, force: true }); }
+}));
+
+test("frozen Pi manifest inventory stays aligned with the package-owned operation source", () => withFixture((root) => {
+  const path = join(root, "pi-zmux/doctrine-manifest.generated.json");
+  const manifest = JSON.parse(readFileSync(path, "utf8"));
+  manifest.dispatcherOperations.pop();
+  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+  const result = run(root, "--check");
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /frozen Pi doctrine manifest dispatcherOperations drift from pi-zmux\/src\/operations\.ts/);
 }));
 
 test("write/check remain deterministic and render remains stdout-only", () => withFixture((root) => {
