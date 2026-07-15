@@ -5,7 +5,22 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.15.0...HEAD`
+> Release tag: pending | Compare: `v0.15.1...HEAD`
+
+## [0.15.1] - 2026-07-15
+> Release tag: `v0.15.1` | Topics: `agents`, `pi`, `wait` | Compare: `v0.15.0...v0.15.1`
+
+### Changed
+
+- **Public Pi wait op shares the callback wait-arg builder** `agents` `pi` `wait` — the public `wait` and `callback_watch` ops now delegate to the shared builder in `zmux/agent.ts` instead of a dispatcher-local copy, so `turn:`/`cmd:` conditions plus `--allow-stale`/`--fresh-after` are no longer silently dropped; public ops keep their wider 160-line/300-second defaults.
+
+### Fixed
+
+- **Runtime readiness is atomic with command launch** `agents` `pi` `wait` — detached `zmux run --until <regex>` now snapshots output before command delivery and waits for only fresh matching output, so immediate startup messages cannot race a later watch; a recipe-named arg combined with `--until` forces command mode so readiness is never silently dropped into a recipe run; Pi `runtime_ensure` delegates readiness to that same launch operation.
+- **Peer ensure fails closed on echo-satisfiable readiness and cleans up partial launches** `agents` `peer` — `tab peer ensure` refuses a `--readiness` pattern that matches its own launch command, so the command's echo cannot falsely satisfy startup evidence, and tears down a freshly created peer pane when the command send fails instead of leaving an orphaned tab.
+- **Peer handoff readiness anchors to a pre-arm turn floor** `agents` `pi` — `peer_handoff` now reads the peer's turn generation synchronously before arming the `turn:ready` wait and passes it as `--fresh-after`, so a pre-existing ready state can no longer satisfy the wait before the brief is delivered; `deliverAs` validation is hoisted ahead of the seq read so an invalid handoff has no side effect.
+- **Pane lifecycle option mirror survives free-text values** `agents` `tmux` — `ShowPaneOptions` now splits mirrored pane options on TAB (which tmux passes through `display-message` verbatim, unlike the octal-escaped `0x1f`), and `tabstate.Service.Set` collapses whitespace in the free-text `--source`/`--msg` mirror values so they can never smuggle the field separator and misalign the option-to-key demux.
+- **Doctrine records reject trailing blank lines** `agents` — the shared rules `ZD-001`..`ZD-011` are stripped of trailing blank lines and the generator now rejects any record ending in more than one newline, keeping committed runtime projections byte-stable.
 
 ## [0.15.0] - 2026-07-15
 > Release tag: `v0.15.0` | Topics: `agents`, `pi`, `skills`, `qa`, `sync` | Compare: `v0.14.0...v0.15.0`
@@ -22,9 +37,6 @@ versioning is semver-ish until the first public release.
 ### Fixed
 
 - **Pi package contract stays owned by zmux** `agents` `pi` `sync` — `make check-doctrine` now compares the frozen manifest operation inventory with `pi-zmux/src/operations.ts`, while the shared skills registry validates only generic manifest shape and generated-rule consistency. Parked feature branches can no longer advance an external hardcoded operation count and break stable `./dev.sh` sync.
-- **Pane lifecycle option mirror survives free-text values** `agents` `tmux` — `ShowPaneOptions` now splits mirrored pane options on TAB (which tmux passes through `display-message` verbatim, unlike the octal-escaped `0x1f`), and `tabstate.Service.Set` collapses whitespace in the free-text `--source`/`--msg` mirror values so they can never smuggle the field separator and misalign the option-to-key demux.
-- **Peer ensure fails closed on echo-satisfiable readiness and cleans up partial launches** `agents` `peer` — `tab peer ensure` refuses a `--readiness` pattern that matches its own launch command, so the command's echo cannot falsely satisfy startup evidence, and tears down a freshly created peer pane when the command send fails instead of leaving an orphaned tab.
-- **Runtime readiness is atomic with command launch** `agents` `pi` `wait` — detached `zmux run --until <regex>` now snapshots output before command delivery and waits for only fresh matching output, so immediate startup messages cannot race a later watch; Pi `runtime_ensure` delegates readiness to that same launch operation.
 - **Detached Pi runs own their completion reporting** `agents` `pi` — every detached `run` now automatically arms a shell-lifecycle callback, keeps aggregate activity visible above the task list, and triggers a compact evidence-backed follow-up without relying on a second model tool call; reused tabs require a newer pre-run command generation, concrete command failures render as failures, `completionTimeoutSeconds` controls an independent one-day wait window that renews silently while the command remains running, and `trackCompletion:false` is the explicit opt-out for commands expected never to return.
 - **Pi `run` focus and wait claims now match execution** `agents` `pi` — `focus:false` maps to independent focus-preserving tab creation, `waitForExit:false` maps to detached execution, contradictory or explicit lifecycle-state options fail with guidance, and `zmux run --no-focus` can still block for command completion without selecting a new tab.
 - **Pi-zmux waits stay visible without duplicating completed cards** `agents` `pi` — foreground dispatcher work now updates one pending card with phase/countdown feedback before settling into one consolidated result, scheduled callbacks keep one aggregate above-tasks widget line alive until completion/cancellation/session replacement/shutdown, and callback delivery uses a compact native renderer with expanded diagnostics. Timeout remains warning/unproven unless concrete failure evidence exists.
