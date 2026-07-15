@@ -48,4 +48,3 @@ Never set focus:true unless the user explicitly wants terminal focus moved; if v
 
 - skills/zmux/references/run-observe.md
 - pi-zmux/test/dispatcher.mjs
-

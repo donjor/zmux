@@ -152,6 +152,7 @@ function readMarkdownRecords(kind, frontmatterFields, sectionNames, buildValue) 
   return names.map((name) => {
     const path = checkedRecordPath(kind, name);
     const source = readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+    expect(/[^\n]\n$/u.test(source), `${kind}/${name} must end with exactly one trailing newline, no blank lines`);
     const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/u.exec(source);
     expect(match, `${kind}/${name} must contain JSON-valued YAML frontmatter followed by Markdown sections`);
     const at = `${kind}/${name}`;
@@ -256,6 +257,7 @@ function readScenarioRecords(kind) {
   return names.map((name) => {
     const path = checkedRecordPath(kind, name);
     const source = readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+    expect(/[^\n]\n$/u.test(source), `${kind}/${name} must end with exactly one trailing newline, no blank lines`);
     const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/u.exec(source);
     expect(match, `${kind}/${name} must contain JSON-valued YAML frontmatter followed by Markdown sections`);
     const at = `${kind}/${name}`;

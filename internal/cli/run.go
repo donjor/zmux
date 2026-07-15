@@ -423,7 +423,7 @@ func shouldDispatchRecipeRun(cmd *cobra.Command, app *apppkg.App, args []string,
 	if detach && !yes && !dryRun {
 		return false
 	}
-	if cmd.Flags().Changed("timeout") || cmd.Flags().Changed("lines") || cmd.Flags().Changed("no-focus") {
+	if cmd.Flags().Changed("timeout") || cmd.Flags().Changed("lines") || cmd.Flags().Changed("no-focus") || cmd.Flags().Changed("until") {
 		return false
 	}
 	defs, err := loadRecipeDefinitions(app)

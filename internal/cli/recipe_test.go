@@ -94,6 +94,19 @@ func TestRunDetachAloneDoesNotOpenRecipeForm(t *testing.T) {
 	}
 }
 
+func TestRunUntilForcesCommandModeOnRecipeName(t *testing.T) {
+	app, _, _ := newRecipeTestApp()
+	root := NewRootCmd(app, testVersion)
+	// --until is a command-mode readiness control. A recipe-named arg must not
+	// swallow it into a recipe run; command mode then enforces the detach
+	// requirement instead of silently dropping readiness.
+	root.SetArgs([]string{"run", "dev", "--until", "ready"})
+	err := root.Execute()
+	if err == nil || !strings.Contains(err.Error(), "--until requires --detach") {
+		t.Fatalf("expected --until to force command-mode validation, got %v", err)
+	}
+}
+
 func TestRecipeListIncludesBundledRecipes(t *testing.T) {
 	app, _, _ := newRecipeTestApp()
 	root := NewRootCmd(app, testVersion)

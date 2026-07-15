@@ -49,4 +49,3 @@ Before expected events, register callback_watch; never post-hoc blind wait when 
 
 - skills/zmux/references/run-observe.md
 - pi-zmux/test/dispatcher.mjs
-
