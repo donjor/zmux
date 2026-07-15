@@ -1,6 +1,7 @@
 package tabs
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -181,6 +182,36 @@ func TestStampPeerWritesMetadataWithoutBooleanKeep(t *testing.T) {
 	for _, key := range []string{OptPeerTurns, OptPeerLastTurn} {
 		if _, unset, ok := writeFor(m, key); !ok || !unset {
 			t.Fatalf("%s should reset when a new peer topic is stamped; found=%v unset=%v", key, ok, unset)
+		}
+	}
+}
+
+func TestStampPeerStripsDelimitersFromMetadataFields(t *testing.T) {
+	m := tmux.NewMockRunner()
+	// TAB and newline are the logical-row field/record delimiters. If they
+	// survive into a peer metadata option, a later logical scan splits the row
+	// on them and every downstream field shifts. Sanitize on write.
+	if err := StampPeer(m, "%1", PeerMetadata{
+		Role:     "cla\tude\n",
+		HostTab:  "ztab\thost",
+		HostPane: "%9\n",
+	}, time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{
+		OptPeerRole:     "claude",
+		OptPeerHostTab:  "ztabhost",
+		OptPeerHostPane: "%9",
+	} {
+		v, _, ok := writeFor(m, key)
+		if !ok {
+			t.Fatalf("%s not written", key)
+		}
+		if v != want {
+			t.Fatalf("%s = %q, want %q (delimiters must be stripped)", key, v, want)
+		}
+		if strings.ContainsAny(v, "\t\n") {
+			t.Fatalf("%s = %q still contains a delimiter", key, v)
 		}
 	}
 }
