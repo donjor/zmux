@@ -175,7 +175,7 @@ func TestGenerateConfContainsWindowBindings(t *testing.T) {
 		`bind j run-shell "/usr/local/bin/zmux tab split --notify --focus"`,
 		"bind n next-window",
 		`bind . command-prompt -p "label tab (blank clears):"`,
-		`set-option -w -t #{window_id} @zmux_label`,
+		`set-option -w @zmux_label`,
 		`bind J command-prompt -p "join tab here:" "run-shell '/usr/local/bin/zmux tab pane --notify --focus \"%%\"'"`,
 		`bind F run-shell "/usr/local/bin/zmux tab full --after --notify"`,
 		`bind h run-shell "/usr/local/bin/zmux tab hide --notify"`,
