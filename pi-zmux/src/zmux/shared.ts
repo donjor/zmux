@@ -16,6 +16,9 @@ export function withSession(args: string[], session?: string): string[] {
 	return session ? [...args, "-s", session] : args;
 }
 
+// zmux/* deliberately runs through shell.ts `runFile` (execFile, no abort) rather
+// than src/exec.ts (spawn + AbortSignal): these lifecycle commands run to
+// completion regardless of tool abort. See detox 054 audit M5.
 export function zmux(args: string[], options: { cwd?: string; timeoutMs?: number } = {}) {
 	return runFile(zmuxBin(), args, options);
 }

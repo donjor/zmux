@@ -67,6 +67,8 @@ const RULE_SECTIONS = new Set([
   "Invariant", "Shared instruction", "Claude mechanism", "Claude enforcement", "Claude prompt guideline", "Claude caveats",
   "Pi mechanism", "Pi enforcement", "Pi prompt guideline", "Pi caveats", "Verify",
 ]);
+// `legacyRefs` and `knownFailureRefs` are dead until the Pi doctrine harness
+// returns: the shared Claude scenarios never populate them, so both stay empty.
 const SCENARIO_FRONTMATTER = new Set(["id", "title", "tier", "doctrineRefs", "sharedRefs", "applicability", "uatEligible", "legacyRefs", "knownFailureRefs", "divergenceReason"]);
 const SCENARIO_SECTIONS = new Set(["Host setup", "Host perturbations", "Verdict", "Evidence", "Cleanup", "Claude answer key", "Pi answer key"]);
 const TIERS = ["atomic", "workflow", "resilience"];
@@ -271,6 +273,7 @@ function readScenarioRecords(kind) {
     return { kind, name, path, value: {
       id: fields.id, title: fields.title, tier: fields.tier, doctrineRefs: fields.doctrineRefs,
       ...(fields.sharedRefs ? { sharedRefs: fields.sharedRefs } : {}), applicability: fields.applicability,
+      // legacyRefs/knownFailureRefs: dead until the Pi doctrine harness returns; default empty.
       uatEligible: fields.uatEligible, legacyRefs: fields.legacyRefs ?? [], knownFailureRefs: fields.knownFailureRefs ?? [],
       ...(fields.divergenceReason ? { divergenceReason: fields.divergenceReason } : {}),
       prompts, hostSetup: listSection(sections, "Host setup", at),
@@ -304,6 +307,7 @@ function exactHarnesses(value, field) {
   return unique;
 }
 
+// `piOnly` is dead until the Pi doctrine harness returns; only `sharedOnly` rules ship today.
 function validateRule(record, { sharedOnly = false, piOnly = false } = {}) {
   const rule = record.value;
   const at = `${record.kind}/${record.name}`;
@@ -338,6 +342,7 @@ function validateRule(record, { sharedOnly = false, piOnly = false } = {}) {
   return rule;
 }
 
+// `piOnly` is dead until the Pi doctrine harness returns; only shared/claude scenarios ship today.
 function validateScenario(record, ruleIds, { idPattern = /^ZS-\d{3}$/, idShape = "ZS-###", sharedOnly = false, piOnly = false, sharedScenarioIds } = {}) {
   const scenario = record.value;
   const at = `${record.kind}/${record.name}`;
@@ -353,6 +358,7 @@ function validateScenario(record, ruleIds, { idPattern = /^ZS-\d{3}$/, idShape =
   if (scenario.tier === "workflow") expect(scenario.prompts.length >= 2, `${at} workflow scenarios require at least two prompts`);
   if (scenario.tier === "atomic") expect(scenario.hostPerturbations.length === 0, `${at} atomic scenarios require _None._ Host perturbations`);
   if (scenario.tier === "resilience") expect(scenario.hostPerturbations.length > 0, `${at} resilience scenarios require Host perturbations`);
+  // legacyRefs/knownFailureRefs validation is dead until the Pi doctrine harness returns (both stay empty).
   stringArray(scenario.legacyRefs, `${at}.legacyRefs`, { allowEmpty: true });
   stringArray(scenario.knownFailureRefs, `${at}.knownFailureRefs`, { allowEmpty: true });
   stringArray(scenario.doctrineRefs, `${at}.doctrineRefs`);
@@ -509,6 +515,7 @@ function outputs(rules) {
 function scenarioOrder(left, right) {
   const tier = TIERS.indexOf(left.tier) - TIERS.indexOf(right.tier);
   if (tier) return tier;
+  // The PZ- ordering branch is dead until the Pi doctrine harness returns; no PZ- scenarios ship today.
   const shared = (left.id.startsWith("PZ-") ? 1 : 0) - (right.id.startsWith("PZ-") ? 1 : 0);
   if (shared) return shared;
   return Number(left.id.slice(3)) - Number(right.id.slice(3));

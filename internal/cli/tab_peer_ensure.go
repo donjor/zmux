@@ -149,8 +149,8 @@ func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, e
 	if exists {
 		paneID, target := paneTargetForResolvedTab(app, rt)
 		baseline = waitfor.SnapshotBaseline(app.Runner, paneID)
-		if output, err := app.Runner.CapturePane(target, o.lines); err == nil {
-			readinessBaseline = waitfor.OutputBaseline(output)
+		if b, err := waitfor.CaptureBaseline(app.Runner, target, o.lines); err == nil {
+			readinessBaseline = b
 		}
 	}
 	out := peerEnsureOutput{Tab: o.tab, Session: sessionName, Reused: exists && !o.restart}

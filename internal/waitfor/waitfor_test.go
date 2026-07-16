@@ -163,6 +163,41 @@ func TestOutputWaitAcceptsRepeatedMatchingLineAfterBaseline(t *testing.T) {
 	}
 }
 
+func TestOutputWaitTreatsScrolledBaselineOccurrenceConservatively(t *testing.T) {
+	// L3 (detox 054 audit): the pre-existing READY sits in the baseline window.
+	// It then scrolls out as a genuinely fresh READY arrives, but the bounded
+	// capture window still shows exactly one READY, so the fresh occurrence's
+	// count never exceeds the stale baseline count. Freshness is occurrence-count
+	// based within the window, so this indistinguishable case is classified
+	// conservatively as pre-existing (not met) — a false-negative timeout is
+	// acceptable; a false-positive readiness is not. This pins that boundary.
+	mock := tmux.NewMockRunner()
+	captures := []string{"READY\n", "READY\n", "READY\n"}
+	mock.CapturePaneFunc = func(_ string, _ int) (string, error) {
+		if len(captures) == 1 {
+			return captures[0], nil
+		}
+		out := captures[0]
+		captures = captures[1:]
+		return out, nil
+	}
+	cond, _ := ParseCondition("output:READY")
+	out, err := Wait(context.Background(), Request{
+		Runner:       mock,
+		Target:       "%1",
+		PaneID:       "%1",
+		Condition:    cond,
+		Timeout:      10 * time.Millisecond,
+		PollInterval: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if out.Met || out.Fresh {
+		t.Fatalf("scrolled-out baseline occurrence must not be classified fresh readiness: %+v", out)
+	}
+}
+
 func TestIdleWaitReturnsStableTail(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	mock.CapturedPaneContent = "quiet\n"

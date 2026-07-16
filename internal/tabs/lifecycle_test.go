@@ -199,8 +199,8 @@ func TestStampPeerStripsDelimitersFromMetadataFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	for key, want := range map[string]string{
-		OptPeerRole:     "claude",
-		OptPeerHostTab:  "ztabhost",
+		OptPeerRole:     "cla ude",
+		OptPeerHostTab:  "ztab host",
 		OptPeerHostPane: "%9",
 	} {
 		v, _, ok := writeFor(m, key)

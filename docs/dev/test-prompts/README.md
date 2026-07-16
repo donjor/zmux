@@ -32,4 +32,4 @@ Shared scenario prompts and harness answer keys are authored in
 `agent-doctrine/scenarios/shared/*.md` and rendered to stdout with
 `agent-doctrine/generate.mjs --render`; exploratory wrappers must not duplicate the chain.
 Both frameworks use one ordinary visible worker, host-inspected evidence, explicit
-`PASS`/`PASS*`/`FAIL`/`BLOCKED` verdicts, and exact test-owned teardown.
+`PASS`/`FAIL`/`BLOCKED` verdicts (there is no `PASS*`), and exact test-owned teardown.

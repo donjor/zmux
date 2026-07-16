@@ -36,9 +36,9 @@ func (s *Service) Set(t Target, st State, source, msg string) error {
 	at := strconv.FormatInt(s.now().Unix(), 10)
 	values := map[string]string{
 		OptState:  string(st),
-		OptSource: sanitizeMirrorValue(source),
+		OptSource: SanitizeField(source),
 		OptAt:     at,
-		OptMsg:    sanitizeMirrorValue(msg),
+		OptMsg:    SanitizeField(msg),
 	}
 	writes := make([]tmux.OptionWrite, 0, len(MirrorKeys)*2)
 	for _, key := range MirrorKeys {
@@ -52,12 +52,21 @@ func (s *Service) Set(t Target, st State, source, msg string) error {
 	return nil
 }
 
-// sanitizeMirrorValue collapses every run of whitespace — including TAB and
-// newline — to a single space so mirrored option values stay single-line and
-// never carry the TAB field separator that ShowPaneOptions splits on. Empty
-// stays empty so callers can still unset an option.
-func sanitizeMirrorValue(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+// SanitizeField collapses every run of whitespace or control character —
+// including TAB, newline, and DEL, the field/record delimiters of the
+// logical-pane row format — to a single space, then trims the ends. Mirrored
+// state values and peer metadata stay single-line, so an embedded separator can
+// never carry the TAB that ShowPaneOptions splits on or shift downstream fields
+// on a logical scan. Word boundaries survive; empty stays empty so callers can
+// still unset an option. Single shared sanitizer for tabstate + tabs.
+func SanitizeField(s string) string {
+	mapped := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(mapped), " ")
 }
 
 // Clear removes all state options from the pane and its window mirror in one

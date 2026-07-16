@@ -1,18 +1,13 @@
-import { trimOutput } from "../shell.js";
-import { safeJson, withSession, zmux } from "./shared.js";
+import { withSession, zmux } from "./shared.js";
+
+// This module is arg-builder-canonical: every `build*Args` is the single source
+// of truth for its CLI mapping, consumed by the dispatcher (src/dispatcher.ts)
+// and unit-pinned in test/run.mjs. Only the three lifecycle wrappers still run
+// commands directly (setTabState/setTabPeer/typeText, used by lifecycle.ts and
+// callbacks.ts); the rest of the tab surface routes through the dispatcher.
 
 export function buildTabKillArgs(params: { tab: string; session?: string }): string[] {
 	return withSession(["tab", "kill", params.tab], params.session);
-}
-
-export async function killTab(tab: string, cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	await zmux(buildTabKillArgs({ tab, session }), { cwd, timeoutMs: 10_000 });
-	return { text: `killed tab ${tab}`, details: { tab, session } };
-}
-
-export async function sendKeys(tab: string, keys: string[], cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	await zmux(withSession(["send", tab, ...keys], session), { cwd, timeoutMs: 5_000 });
-	return { text: `sent keys to ${tab}: ${keys.join(" ")}`, details: { tab, keys, session } };
 }
 
 export async function typeText(tab: string, text: string, cwd: string, session?: string): Promise<{ text: string; details: Record<string, unknown> }> {
@@ -65,18 +60,6 @@ export function buildTabStatusArgs(params: { tab: string; session?: string }): s
 	return withSession(["tab", "status", params.tab, "--json"], params.session);
 }
 
-export async function tabStatus(params: { cwd: string; tab: string; session?: string }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(buildTabStatusArgs(params), { cwd: params.cwd, timeoutMs: 5_000 });
-	const output = trimOutput(result.stdout || result.stderr);
-	let details: Record<string, unknown> = { ...params };
-	try {
-		details = { ...params, status: safeJson(output) };
-	} catch {
-		// Keep text output when an older binary lacks JSON or returns plain errors.
-	}
-	return { text: output || `tab status ${params.tab}`, details };
-}
-
 export function buildTabLabelArgs(params: { label?: string; target?: string; clear?: boolean }): string[] {
 	const args = ["tab", "label"];
 	if (params.target) args.push("--target", params.target);
@@ -85,22 +68,10 @@ export function buildTabLabelArgs(params: { label?: string; target?: string; cle
 	return args;
 }
 
-export async function labelTab(params: { cwd: string; label?: string; target?: string; clear?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(buildTabLabelArgs(params), { cwd: params.cwd, timeoutMs: 5_000 });
-	const output = trimOutput(result.stdout || result.stderr);
-	return { text: output || (params.clear ? "cleared tab label" : `set tab label ${params.label ?? ""}`), details: { ...params } };
-}
-
 export function buildTabMoveArgs(params: { tab: string; destination: string; force?: boolean; session?: string }): string[] {
 	const args = ["tab", "move", params.tab, params.destination];
 	if (params.force) args.push("--force");
 	return withSession(args, params.session);
-}
-
-export async function moveTab(params: { cwd: string; tab: string; destination: string; force?: boolean; session?: string }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(buildTabMoveArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
-	const output = trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n"));
-	return { text: output || `moved tab ${params.tab} to ${params.destination}`, details: { ...params } };
 }
 
 export function buildLogArgs(params: { action: LogAction; tab?: string; session?: string; ansi?: boolean; maxBytes?: number; lines?: number }): string[] {
@@ -116,11 +87,6 @@ export function buildLogArgs(params: { action: LogAction; tab?: string; session?
 	return args;
 }
 
-export async function logCommand(params: { action: LogAction; cwd: string; tab?: string; session?: string; ansi?: boolean; maxBytes?: number; lines?: number }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(buildLogArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
-	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || `zmux log ${params.action}`, details: { ...params } };
-}
-
 export function buildSnapshotArgs(params: { noPng?: boolean; panes?: string[]; lines?: number; out?: string; json?: boolean }): string[] {
 	const args = ["snapshot"];
 	if (params.noPng) args.push("--no-png");
@@ -129,11 +95,6 @@ export function buildSnapshotArgs(params: { noPng?: boolean; panes?: string[]; l
 	if (params.out) args.push("--out", params.out);
 	if (params.json) args.push("--json");
 	return args;
-}
-
-export async function snapshot(params: { cwd: string; noPng?: boolean; panes?: string[]; lines?: number; out?: string; json?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(buildSnapshotArgs(params), { cwd: params.cwd, timeoutMs: 30_000 });
-	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || "snapshot captured", details: { ...params } };
 }
 
 export function buildTabPlacementArgs(params: { action: TabPlacementAction; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean; focus?: boolean }): string[] {
@@ -151,14 +112,4 @@ export function buildTabPlacementArgs(params: { action: TabPlacementAction; tab?
 	if (params.action === "show" && params.focus) args.push("--focus");
 	if (params.action === "full" && params.after) args.push("--after");
 	return args;
-}
-
-export async function placeTab(params: { action: TabPlacementAction; cwd: string; tab?: string; session?: string; into?: string; direction?: TabPlacementDirection; size?: string; pane?: string; after?: boolean; focus?: boolean }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(buildTabPlacementArgs(params), { cwd: params.cwd, timeoutMs: 10_000 });
-	return { text: trimOutput([result.stdout, result.stderr].filter(Boolean).join("\n")) || `tab ${params.action}`, details: { ...params, focus: params.focus ?? false } };
-}
-
-export async function terminalCurrent(cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
-	const result = await zmux(["terminal", "current", "--json"], { cwd, timeoutMs: 5_000 });
-	return { text: trimOutput(result.stdout), details: { terminal: safeJson(result.stdout) } };
 }

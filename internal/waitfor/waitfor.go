@@ -226,6 +226,19 @@ func OutputBaseline(output string) map[string]int {
 	return baseline
 }
 
+// CaptureBaseline snapshots a pane's current output multiset so a later
+// occurrence of a readiness pattern is proven fresh rather than pre-existing.
+// It pairs CapturePane with OutputBaseline; callers that treat a capture failure
+// as non-fatal ignore the error and fall back to an empty baseline (a fresh tab
+// has no prior output), while pre-launch callers surface it.
+func CaptureBaseline(r tmux.Runner, target string, lines int) (map[string]int, error) {
+	output, err := r.CapturePane(target, lines)
+	if err != nil {
+		return nil, err
+	}
+	return OutputBaseline(output), nil
+}
+
 func waitOutput(ctx context.Context, req Request, baseline Baseline) (Outcome, error) {
 	re, err := regexp.Compile("(?i)" + req.Condition.Value)
 	if err != nil {
@@ -264,6 +277,16 @@ func waitOutput(ctx context.Context, req Request, baseline Baseline) (Outcome, e
 				}
 				continue
 			}
+			// Bounded-window freshness (see L3, detox 054 audit): freshness is
+			// occurrence-count based within the CapturePane window (req.Lines).
+			// A matching line is "new" only once its count in this capture
+			// exceeds the baseline count. If a pre-existing baseline line
+			// scrolls out of the window before a genuinely fresh occurrence
+			// arrives, the fresh line's count (1) no longer exceeds the stale
+			// baseline count (1), so it is conservatively treated as
+			// pre-existing — a false-negative (timeout), never a false-positive
+			// readiness. Widen req.Lines if a readiness pattern legitimately
+			// repeats faster than the window depth.
 			seen := map[string]int{}
 			for _, line := range strings.Split(out, "\n") {
 				trimmed := strings.TrimSpace(line)

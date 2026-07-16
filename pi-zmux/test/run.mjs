@@ -1,11 +1,11 @@
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
+import { compileProject } from './helpers/compile.mjs';
 
-const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
-const outDir = mkdtempSync(join(tmpdir(), 'pi-zmux-test-'));
+const { root, outDir } = compileProject();
 try {
   const packageFiles = [
     'doctrine-manifest.generated.json',
@@ -19,22 +19,20 @@ try {
     assert.ok(existsSync(join(root, path)), `canonical package fixture missing: ${path}`);
   }
 
-  const tsc = join(root, 'node_modules/.bin/tsc');
-  const compile = spawnSync(tsc, ['-p', join(root, 'tsconfig.json'), '--outDir', outDir, '--noEmit', 'false'], { stdio: 'inherit' });
-  assert.equal(compile.status, 0, 'TypeScript compile failed');
-  symlinkSync(join(root, 'node_modules'), join(outDir, 'node_modules'), 'dir');
-
   const { classifyBash, hasExplicitBypass, stripQuotedSegments } = await import(join(outDir, 'src/classify.js'));
   const { loadConfig } = await import(join(outDir, 'src/config.js'));
+  // Import from the concrete zmux/* modules directly; the old src/zmux.ts barrel
+  // was dead in production (only this test imported it) and was removed in detox 054.
+  const { autoPaneResizeAxis, buildPaneOpenArgs } = await import(join(outDir, 'src/zmux/panes.js'));
   const {
-    autoPaneResizeAxis,
     buildCallbackWatchArgs,
-    buildLogArgs,
     clearCallbacks,
-    buildPaneOpenArgs,
-    buildPiReloadScript,
-    buildSessionListArgs,
-    buildSessionRunArgs,
+    listCallbacks,
+    listRecentCallbackCompletions,
+    startWatchCallback,
+  } = await import(join(outDir, 'src/zmux/callbacks.js'));
+  const {
+    buildLogArgs,
     buildSnapshotArgs,
     buildTabKillArgs,
     buildTabLabelArgs,
@@ -43,18 +41,10 @@ try {
     buildTabPlacementArgs,
     buildTabStateArgs,
     buildTabStatusArgs,
-    buildTmuxRespawnScript,
-    buildWatchArgs,
-    buildWaitArgs,
-    buildZmuxRunArgs,
-    listCallbacks,
-    listRecentCallbackCompletions,
-    startWatchCallback,
-    statusWarnings,
-    watchPatternPresentInText,
-    zmuxRunResultDetails,
-    zmuxRunSafetyWarnings,
-  } = await import(join(outDir, 'src/zmux.js'));
+  } = await import(join(outDir, 'src/zmux/tabs.js'));
+  const { buildPiReloadScript, buildTmuxRespawnScript } = await import(join(outDir, 'src/zmux/pi-lifecycle.js'));
+  const { buildSessionListArgs, buildSessionRunArgs, buildZmuxRunArgs, zmuxRunResultDetails, zmuxRunSafetyWarnings } = await import(join(outDir, 'src/zmux/sessions.js'));
+  const { buildWatchArgs, buildWaitArgs, statusWarnings, watchPatternPresentInText } = await import(join(outDir, 'src/zmux/agent.js'));
   const { detectUserInputPrompt } = await import(join(outDir, 'src/interactive.js'));
   const { runFileStatus } = await import(join(outDir, 'src/shell.js'));
   const { reloadContinuationPath, shouldTriggerContinuation, takeReloadContinuation, writeReloadContinuation } = await import(join(outDir, 'src/reload-continuation.js'));

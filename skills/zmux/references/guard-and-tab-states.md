@@ -46,8 +46,8 @@ already exists, so addressing by a stable purpose-name keeps related work togeth
 | `dev` | the project runtime: app server, local service, main REPL, the process a human stops/restarts |
 | `scratch` | reviewable one-offs: mutations, manual takeover, things to inspect/re-run, no durable name |
 | `admin` / `remote-<host>` | SSH, sudo, remote shells, and remote-config retries — one stable tab per host |
-| `<agent>-peer` | a review peer — owned by the peer skill |
-| `worker-*` | orchestrate worker *sessions* (not conductor roster tabs) |
+| `<agent>-peer` | a review peer with a semantic `tab peer` lifecycle — owned by the peer skill |
+| `worker-*` | orchestrated worker *sessions* (not conductor roster tabs) |
 
 Do **not** mint `eval-2`, `test-run`, `build-x`, numbered remote/admin tabs,
 per-Playwright-lane, or feature-named tabs.

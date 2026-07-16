@@ -62,6 +62,7 @@ const skillFiles = [
   'docs/reference/agent-doctrine-matrix.generated.md',
   'docs/domains/pi-zmux-extension.md',
   'docs/dev/agent-grounding.md',
+  'docs/dev/test-prompts/README.md',
   'docs/dev/test-prompts/zmux-agent-pi-zmux-testing-prompt.md',
   'docs/dev/test-prompts/zmux-agent-skill-testing-prompt.md',
   'agent-doctrine/harnesses/claude/README.md',
@@ -70,6 +71,10 @@ const skillFiles = [
 ];
 const docs = Object.fromEntries(skillFiles.map((file) => [file, read(file)]));
 const combined = Object.values(docs).join('\n');
+// Whitespace-normalized view so doctrine assertions bind to wording, not to
+// where Markdown/prose happens to line-wrap. Use this for any multi-word phrase.
+const normalizeWs = (text) => text.replace(/\s+/g, ' ');
+const flatDocs = Object.fromEntries(Object.entries(docs).map(([file, text]) => [file, normalizeWs(text)]));
 
 const criticalOperations = [
   'run',
@@ -118,7 +123,10 @@ assert.match(docs['skills/zmux/references/agent-peer.md'], /-s <session>/);
 assert.match(docs['skills/zmux/references/agent-peer.md'], /`options\.session`/);
 assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /legacy `waiting` means `ready`|Legacy `waiting` means `ready`|waiting` aliases to `ready`/i);
 assert.match(docs['skills/zmux/SKILL.md'], /remote-<host>2/i);
-assert.match(docs['skills/zmux/references/guard-and-tab-states.md'], /opaque\nencoded or obfuscated payload/i);
+assert.ok(
+  flatDocs['skills/zmux/references/guard-and-tab-states.md'].includes('opaque encoded or obfuscated payload'),
+  'guard-and-tab-states.md must keep the opaque-payload audit rule',
+);
 assert.match(docs['docs/domains/pi-zmux-extension.md'], /numbered `remote-<host>N` tab sprawl/i);
 assert.match(docs['skills/zmux/references/shared-doctrine.generated.md'], /avoid numbered tab sprawl|stable admin or remote-host/i);
 
@@ -127,6 +135,9 @@ assert.ok(
   devSh.includes('if [ "$TARGET" = "zmux" ] && [ "${ZMUX_SKIP_SHELL_SETUP:-0}" != "1" ]; then'),
   'dev.sh must not update live shell integration for TARGET=zzmux by default',
 );
-assert.match(docs['docs/dev/agent-grounding.md'], /\.\/dev\.sh zzmux\s+# build \+ install the edge binary \(binary only/i);
+assert.ok(
+  flatDocs['docs/dev/agent-grounding.md'].includes('./dev.sh zzmux # build + install the edge binary (binary only'),
+  'agent-grounding.md must document zzmux as a binary-only edge install',
+);
 
 console.log(`zmux skill doctor passed (${toolNames.size} Pi tools, ${doctrineManifest.piRuleIds.length} Pi doctrine rules, ${scenarioRecords.length} scenarios, ${skillFiles.length} docs checked)`);

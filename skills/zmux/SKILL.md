@@ -70,20 +70,13 @@ not direct bash and not one tab per lane.
 
 ### Reuse a tiny roster
 
-Address tabs by purpose. `zmux run -n <name>` reuses an existing tab, so related
-work stays together:
-
-- `dev` — project runtime: server, service, main process, REPL.
-- `scratch` — reviewable one-offs, manual takeover, things to inspect/re-run.
-- `<agent>-peer` — a review peer with semantic `tab peer` lifecycle; `worker-*` — orchestrated worker sessions.
-- `claude` / `codex` / `pi` / `agy` — long-lived primary agent shells, not task tabs.
-
-Do **not** mint `eval-2`, `test-run`, `build-x`, per-Playwright-lane,
-numbered remote/admin tabs, or feature-named tabs. Bounded checks stay in your shell; odd
-reviewable commands and serial browser-proof batches go to `scratch`/`pw-scratch`;
-remote/manual admin goes to `admin` or one `remote-<host>` tab; the main runtime
-goes to `dev`. Re-running the same job means re-fire the same `run -n <name>`
-target, never suffix-bump `x` → `x2` → `x3`.
+Address tabs by purpose, never one tab per task — `zmux run -n <name>` reuses an
+existing tab so related work stays together, and re-running a job means re-firing
+the same `run -n <name>`, never suffix-bumping `x` → `x2` → `x3`. The full
+purpose-name roster (`dev`, `scratch`, `<agent>-peer`, `worker-*`,
+`admin`/`remote-<host>`, primary agent shells) and the "do not mint `eval-2`,
+`test-run`, per-Playwright-lane, or feature-named tabs" rule live in
+`references/guard-and-tab-states.md`.
 
 ### Joined panes are roster tabs too
 

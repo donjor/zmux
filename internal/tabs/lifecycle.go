@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/donjor/zmux/internal/tabstate"
 	"github.com/donjor/zmux/internal/tmux"
 )
 
@@ -98,9 +99,9 @@ func StampPeer(r tmux.Runner, paneID string, meta PeerMetadata, now time.Time) e
 		{Scope: tmux.ScopePane, Target: paneID, Key: OptParkUntil, Unset: true},
 		{Scope: tmux.ScopePane, Target: paneID, Key: OptStaleAt, Unset: true},
 	}
-	writes = appendPeerMetadataWrite(writes, paneID, OptPeerRole, sanitizePeerField(meta.Role))
-	writes = appendPeerMetadataWrite(writes, paneID, OptPeerHostTab, sanitizePeerField(meta.HostTab))
-	writes = appendPeerMetadataWrite(writes, paneID, OptPeerHostPane, sanitizePeerField(meta.HostPane))
+	writes = appendPeerMetadataWrite(writes, paneID, OptPeerRole, tabstate.SanitizeField(meta.Role))
+	writes = appendPeerMetadataWrite(writes, paneID, OptPeerHostTab, tabstate.SanitizeField(meta.HostTab))
+	writes = appendPeerMetadataWrite(writes, paneID, OptPeerHostPane, tabstate.SanitizeField(meta.HostPane))
 	if topic := sanitizePeerTopic(meta.Topic); topic != "" {
 		writes = appendPeerMetadataWrite(writes, paneID, OptPeerTopic, topic)
 		writes = append(writes,
@@ -118,21 +119,10 @@ func appendPeerMetadataWrite(writes []tmux.OptionWrite, paneID, key, value strin
 	return append(writes, tmux.OptionWrite{Scope: tmux.ScopePane, Target: paneID, Key: key, Value: value})
 }
 
-// sanitizePeerField strips control characters — notably TAB and newline, the
-// delimiters of the logical-pane row format — from single-token peer metadata
-// so an embedded separator can never shift downstream fields on read.
-func sanitizePeerField(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return -1
-		}
-		return r
-	}, s)
-	return strings.TrimSpace(s)
-}
-
+// sanitizePeerTopic collapses delimiters/control chars (shared tabstate rule)
+// then bounds the topic to 80 characters.
 func sanitizePeerTopic(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
+	s = tabstate.SanitizeField(s)
 	if len(s) > 80 {
 		s = strings.TrimSpace(s[:80])
 	}

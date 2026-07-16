@@ -25,10 +25,26 @@ import {
   startWatchCallback,
   type CallbackActivitySink,
 } from "./zmux/callbacks.js";
-import { buildWaitArgs as buildWaitArgsFromParams } from "./zmux/agent.js";
+import { buildWaitArgs } from "./zmux/agent.js";
 import { resizePane } from "./zmux/panes.js";
 import { zmuxRunSafetyWarnings } from "./zmux/sessions.js";
 import { schedulePiReload, schedulePiRespawn } from "./zmux/pi-lifecycle.js";
+import {
+  buildLogArgs,
+  buildSnapshotArgs,
+  buildTabKillArgs,
+  buildTabLabelArgs,
+  buildTabMoveArgs,
+  buildTabPeerArgs,
+  buildTabPlacementArgs,
+  buildTabStateArgs,
+  buildTabStatusArgs,
+  type LogAction,
+  type TabPeerAction,
+  type TabPlacementAction,
+  type TabPlacementDirection,
+  type TabStateAction,
+} from "./zmux/tabs.js";
 
 export { ZMUX_OPERATIONS } from "./operations.js";
 
@@ -234,52 +250,52 @@ function buildArgs(params: ZmuxParams): string[] {
       const state = optString(options, "state") ?? action;
       if (!state) throw new Error("options.state or options.action is required for tab_state");
       requireChoice(state, "tab_state state", ["attention", "failed", "running", "ready", "done", "clear"]);
-      const args = ["tab", "state", state];
-      if (target) args.push(target);
-      pushOpt(args, "--target", optString(options, "rawTarget"));
-      pushOpt(args, "--source", optString(options, "source"));
-      pushOpt(args, "--msg", optString(options, "message"));
-      pushOpt(args, "--if-state", optString(options, "ifState"));
-      if (optBool(options, "byVisibility")) args.push("--by-visibility");
-      pushSession(args, session);
-      return args;
+      return buildTabStateArgs({
+        action: state as TabStateAction,
+        tab: target,
+        target: optString(options, "rawTarget"),
+        source: optString(options, "source"),
+        msg: optString(options, "message"),
+        ifState: optString(options, "ifState"),
+        byVisibility: optBool(options, "byVisibility"),
+        session,
+      });
     }
     case "tab_peer": {
       if (!action) throw new Error("options.action is required for tab_peer");
       requireChoice(action, "tab_peer action", ["start", "running", "ready", "waiting", "attention", "failed", "consumed", "park", "keep", "clear-keep"]);
-      const args = ["tab", "peer", action];
-      if (target) args.push(target);
-      for (const [key, flag] of [["role", "--role"], ["hostTab", "--host-tab"], ["hostPane", "--host-pane"], ["topic", "--topic"], ["ttl", "--ttl"], ["source", "--source"], ["message", "--msg"]] as const) {
-        pushOpt(args, flag, optString(options, key));
-      }
-      pushSession(args, session);
-      return args;
+      return buildTabPeerArgs({
+        action: action as TabPeerAction,
+        tab: target,
+        target: optString(options, "rawTarget"),
+        role: optString(options, "role"),
+        hostTab: optString(options, "hostTab"),
+        hostPane: optString(options, "hostPane"),
+        topic: optString(options, "topic"),
+        ttl: optString(options, "ttl"),
+        source: optString(options, "source"),
+        msg: optString(options, "message"),
+        session,
+      });
     }
-    case "tab_status": {
-      const args = ["tab", "status", requireTarget(params, "tab"), "--json"];
-      pushSession(args, session);
-      return args;
-    }
+    case "tab_status":
+      return buildTabStatusArgs({ tab: requireTarget(params, "tab"), session });
     case "tab_inspect": {
       const args = ["tab", "inspect", requireTarget(params, "tab")];
       pushOpt(args, "--lines", lines);
       pushSession(args, session);
       return args;
     }
-    case "tab_label": {
-      const args = ["tab", "label"];
-      pushOpt(args, "--target", optString(options, "rawTarget"));
-      if (optBool(options, "clear")) args.push("--clear");
-      if (target) args.push(target);
-      return args;
-    }
+    case "tab_label":
+      return buildTabLabelArgs({
+        label: target,
+        target: optString(options, "rawTarget"),
+        clear: optBool(options, "clear"),
+      });
     case "tab_move": {
       const destination = optString(options, "destination");
       if (!destination) throw new Error("options.destination is required for tab_move");
-      const args = ["tab", "move", requireTarget(params, "tab"), destination];
-      if (optBool(options, "force")) args.push("--force");
-      pushSession(args, session);
-      return args;
+      return buildTabMoveArgs({ tab: requireTarget(params, "tab"), destination, force: optBool(options, "force"), session });
     }
     case "tab_place": {
       if (!action) throw new Error("options.action is required for tab_place (pane/full/hide/show)");
@@ -298,26 +314,21 @@ function buildArgs(params: ZmuxParams): string[] {
       if (action !== "pane" && size) throw new Error(`options.size is not valid for tab_place ${action}`);
       if (action !== "full" && after) throw new Error(`options.after is not valid for tab_place ${action}`);
       if (action !== "pane" && action !== "show" && focus) throw new Error(`options.focus is not valid for tab_place ${action}`);
-      const args = ["tab", action];
-      if (target) args.push(target);
-      pushOpt(args, "--session", session);
-      pushOpt(args, "--into", into);
-
-      if (direction) {
-        requireChoice(direction, "tab_place direction", ["right", "left", "up", "down"]);
-        args.push(`--${direction}`);
-      }
-      pushOpt(args, "--size", size);
-      pushOpt(args, "--pane", pane);
-      if (after) args.push("--after");
-      if (focus) args.push("--focus");
-      return args;
+      if (direction) requireChoice(direction, "tab_place direction", ["right", "left", "up", "down"]);
+      return buildTabPlacementArgs({
+        action: action as TabPlacementAction,
+        tab: target,
+        session,
+        into,
+        direction: direction as TabPlacementDirection | undefined,
+        size,
+        pane,
+        after,
+        focus,
+      });
     }
-    case "tab_kill": {
-      const args = ["tab", "kill", requireTarget(params, "tab")];
-      pushSession(args, session);
-      return args;
-    }
+    case "tab_kill":
+      return buildTabKillArgs({ tab: requireTarget(params, "tab"), session });
     case "tab_focus":
       return ["tab", "focus", requireTarget(params, "tab")];
     case "send_keys": {
@@ -395,27 +406,20 @@ function buildArgs(params: ZmuxParams): string[] {
       if (action !== "start" && ansi) throw new Error(`options.ansi is not valid for log ${action}`);
       if (action !== "start" && maxBytes !== undefined) throw new Error(`options.maxBytes is not valid for log ${action}`);
       if (action !== "tail" && lines !== undefined) throw new Error(`options.lines is not valid for log ${action}`);
-      const args = ["log", action];
-      if (target) args.push(target);
-      if (ansi) args.push("--ansi");
-      pushOpt(args, "--max-bytes", maxBytes);
-      pushOpt(args, "-n", lines);
-      pushSession(args, session);
-      return args;
+      return buildLogArgs({ action: action as LogAction, tab: target, session, ansi, maxBytes, lines });
     }
-    case "snapshot": {
-      const args = ["snapshot"];
-      if (optBool(options, "noPng")) args.push("--no-png");
-      for (const pane of optStringArray(options, "panes") ?? []) args.push("--pane", pane);
-      pushOpt(args, "--lines", lines);
-      pushOpt(args, "--out", optString(options, "out"));
-      if (optBool(options, "json")) args.push("--json");
-      return args;
-    }
+    case "snapshot":
+      return buildSnapshotArgs({
+        noPng: optBool(options, "noPng"),
+        panes: optStringArray(options, "panes"),
+        lines,
+        out: optString(options, "out"),
+        json: optBool(options, "json"),
+      });
     case "wait":
-      return buildWaitArgs(requireTarget(params, "tab"), options);
+      return buildWaitCliArgs(requireTarget(params, "tab"), options);
     case "callback_watch":
-      return buildWaitArgs(requireTarget(params, "tab"), options);
+      return buildWaitCliArgs(requireTarget(params, "tab"), options);
     case "callback_list":
     case "callback_cancel":
     case "peer_handoff":
@@ -452,8 +456,8 @@ function buildWatchArgs(target: string, options: Record<string, unknown>): strin
 // turn:, cmd: — plus --allow-stale and --fresh-after is reachable from the
 // operation surface, not just from callbacks. Public ops keep their wider
 // defaults (160 lines, 300s) vs the callback builder's terse ones.
-function buildWaitArgs(target: string, options: Record<string, unknown>): string[] {
-  return buildWaitArgsFromParams({
+function buildWaitCliArgs(target: string, options: Record<string, unknown>): string[] {
+  return buildWaitArgs({
     tab: target,
     session: optString(options, "session"),
     lines: optNumber(options, "lines") ?? 160,

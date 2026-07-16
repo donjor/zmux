@@ -9,7 +9,6 @@ This is the canonical human-watchable campaign for agent-driven `zmux` usage thr
 - `agent-doctrine/scenarios/shared/*.md` — portable natural jobs and harness-specific host answer keys.
 - `node agent-doctrine/generate.mjs --render claude-prompts --ids <id>` — exact worker turn(s) on stdout.
 - `node agent-doctrine/generate.mjs --render claude-answer-key --ids <id>` — host-only setup, verdict, evidence, cleanup, and mechanics.
-- `agent-doctrine/migrations/2026-natural-campaign.json` — machine-checked legacy coverage disposition.
 - [`../../rules/shared/`](../../rules/shared/) — portable behavioral doctrine.
 
 Rendered prompts and answer keys are ephemeral stdout. Edit scenario Markdown and run `make check-doctrine`; never commit a rendered campaign copy.

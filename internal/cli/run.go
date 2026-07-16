@@ -259,11 +259,11 @@ type runTabOpts struct {
 func runInResolvedTab(app *apppkg.App, rt resolvedTab, sessionName, name, sendCmd, nonce string, shouldWait bool, opts runTabOpts) error {
 	var outputBaseline map[string]int
 	if opts.until != "" {
-		output, err := app.Runner.CapturePane(rt.Target, opts.followLines)
+		var err error
+		outputBaseline, err = waitfor.CaptureBaseline(app.Runner, rt.Target, opts.followLines)
 		if err != nil {
 			return fmt.Errorf("capture pre-launch readiness baseline for %s: %w", name, err)
 		}
-		outputBaseline = waitfor.OutputBaseline(output)
 	}
 	// Delivering input clears stale done|failed first (ratified
 	// clear table: typing-by-proxy = user input) — same as send/type.
@@ -282,14 +282,22 @@ func runInResolvedTab(app *apppkg.App, rt resolvedTab, sessionName, name, sendCm
 		return fmt.Errorf("send to %s: %w", rt.Target, err)
 	}
 	fmt.Fprintf(os.Stderr, "sent to %s:%s\n", sessionName, name)
+	return dispatchRunTail(app, rt.Target, waitPane, nonce, shouldWait, opts, outputBaseline)
+}
+
+// dispatchRunTail runs the shared post-delivery tail for both new and reused
+// tabs: block on a lifecycle result, prove readiness against outputBaseline, or
+// follow output — exactly one, in that precedence. New tabs pass an empty
+// baseline (no prior output); reused tabs pass their pre-launch snapshot.
+func dispatchRunTail(app *apppkg.App, target, waitPane, nonce string, shouldWait bool, opts runTabOpts, outputBaseline map[string]int) error {
 	if shouldWait {
-		return waitForRunResult(app, rt.Target, waitPane, nonce, opts.timeout, opts.followLines)
+		return waitForRunResult(app, target, waitPane, nonce, opts.timeout, opts.followLines)
 	}
 	if opts.until != "" {
-		return waitForRunReadiness(app, rt.Target, waitPane, opts, outputBaseline)
+		return waitForRunReadiness(app, target, waitPane, opts, outputBaseline)
 	}
 	if opts.follow {
-		return followOutput(app, rt.Target, opts.followLines)
+		return followOutput(app, target, opts.followLines)
 	}
 	return nil
 }
@@ -378,16 +386,7 @@ func runInNewTab(app *apppkg.App, sessionName, name, sendCmd, nonce string, shou
 
 	fmt.Fprintf(os.Stderr, "running in %s:%s\n", sessionName, name)
 
-	if shouldWait {
-		return waitForRunResult(app, target, waitPane, nonce, opts.timeout, opts.followLines)
-	}
-	if opts.until != "" {
-		return waitForRunReadiness(app, target, waitPane, opts, map[string]int{})
-	}
-	if opts.follow {
-		return followOutput(app, target, opts.followLines)
-	}
-	return nil
+	return dispatchRunTail(app, target, waitPane, nonce, shouldWait, opts, map[string]int{})
 }
 
 func waitForRunReadiness(app *apppkg.App, target, paneID string, opts runTabOpts, outputBaseline map[string]int) error {
