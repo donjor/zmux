@@ -5,7 +5,31 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.15.1...HEAD`
+> Release tag: pending | Compare: `v0.16.0...HEAD`
+
+## [0.16.0] - 2026-07-16
+> Release tag: `v0.16.0` | Topics: `wait`, `cli`, `tui`, `themes`, `agents`, `pi`, `tests` | Compare: `v0.15.1...v0.16.0`
+
+### Added
+
+- **Multi-state turn wait conditions** `wait` `agents` — `zmux wait --for` accepts comma-set turn states (`turn:ready,failed,attention`), firing on whichever member state is reached first while preserving the failure kind of excluded terminal states; empty set members are rejected at parse time.
+- **Guard carve-out for backgrounded condition waits** `agents` `skills` — a single, unchained `zmux wait …` is now allowed to run in the harness background, giving Claude conductors the same wake-on-exit channel Pi gets from callbacks; any chaining, substitution, or expansion forfeits the carve-out and the normal block applies.
+- **Characterization and integration test hardening** `tests` — behavioral matrices now pin recipe inheritance (`Extends` merge/cycles/non-mutation), waitfor freshness/lifecycle classification and per-loop deadline ordering, run-launch mechanics, and both Themes surfaces; a non-tmux integration slice covers `recipe list/show` and dry-run against the real binary.
+
+### Changed
+
+- **BREAKING: public `--json` output normalized to lower-camelCase** `cli` — all commands emit `paneId`/`windowId`-style keys via explicit output DTOs instead of leaking exported Go field names or snake_case (`insideEnv` remains the sole sanctioned exception); command-level schemas are asserted end-to-end in tests. No compat aliases are emitted.
+- **Themes family converges on the app's TUI conventions** `tui` `themes` — the dashboard Themes tab and standalone theme picker now share the `outline.Tree` cursor engine, the `internal/keys` registry, and a single swatch resolver/renderer; a cross-surface keymap foundation in `internal/keys` replaces per-event key construction across all TUI surfaces.
+- **Run mechanics extracted to `internal/runexec`** `cli` — script writing, readiness polling, and output dedup moved out of the cobra layer behind a `Runner`+writers+ctx seam; `run.go` thins to command dispatch with behavior preserved.
+- **Pi extension delegates tab arg-building to zmux builders** `pi` `agents` — dispatcher-local argument assembly replaced by the shared `zmux/tabs` builders with a unified field sanitizer and hardened doctor checks.
+- **tmux option plumbing consolidated** `cli` — six scoped option methods now share one argv builder, proven identical by table tests.
+
+### Fixed
+
+- **Bar idle-shell detection matches reap semantics** `bar` — `sh`, `dash`, and `ksh` are now suppressed as idle shells in bar presets via the unified `tabs.IsIdleShell` predicate, ending the drift where only the reaper recognized them.
+- **Dormant Themes preview path removed** `tui` — the unreachable preview/revert mechanism in the dashboard Themes tab (never activatable through any public flow) is deleted rather than shipped dead.
+- **Pi doctrine names the real callback op** `pi` — salvaged conductor doctrine referenced a never-registered `zmux_callback` tool; it now points at the actual `callback_watch` operation.
+- **Reference-doc drift reconciled** `docs` — `cli.md` documents `tab full --after`; `architecture.md` corrects its clock-injection claim and stale package sizes; `install.sh` and `root.go` cross-reference the shared tmux 3.2 version floor.
 
 ## [0.15.1] - 2026-07-15
 > Release tag: `v0.15.1` | Topics: `agents`, `pi`, `wait` | Compare: `v0.15.0...v0.15.1`
