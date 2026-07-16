@@ -184,8 +184,30 @@ func TestRunPaneCurrentJSON(t *testing.T) {
 	if err := runPaneCurrent(a, cmd, &paneCurrentFlags{json: true}); err != nil {
 		t.Fatalf("runPaneCurrent failed: %v", err)
 	}
-	if !strings.Contains(out.String(), `"ID": "%12"`) || !strings.Contains(out.String(), `"Session": "zws_repo__main"`) || !strings.Contains(out.String(), `"WindowName": "agent"`) {
-		t.Fatalf("expected current pane JSON, got %s", out.String())
+	got := map[string]any{}
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("pane current --json is not valid JSON: %v\n%s", err, out.String())
+	}
+	// Canonical lower-camelCase schema (S-007): every tmux.Pane field via the DTO.
+	assertExactJSONKeys(t, got, map[string]any{
+		"paneId":      "%12",
+		"session":     "zws_repo__main",
+		"index":       float64(0),
+		"windowIndex": float64(4),
+		"windowName":  "agent",
+		"active":      false,
+		"command":     "pi",
+		"pid":         float64(0),
+		"dir":         "",
+		"width":       float64(0),
+		"height":      float64(0),
+		"title":       "main",
+	})
+	// Exported-Go-name leakage must be gone (explicit DTO, no untagged marshal).
+	for _, gone := range []string{"ID", "Session", "WindowName", "WindowIndex", "Dir"} {
+		if _, ok := got[gone]; ok {
+			t.Errorf("pane current --json leaks exported field %q:\n%s", gone, out.String())
+		}
 	}
 	if len(mock.Calls) != 2 || mock.Calls[1].Method != "ListWindowPanes" || mock.Calls[1].Args[0] != "%12" {
 		t.Fatalf("expected pane-scoped lookup for %%12, got %#v", mock.Calls)

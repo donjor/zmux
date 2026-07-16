@@ -2,9 +2,9 @@ import { trimOutput } from "../shell.js";
 import { tmux, zmux } from "./shared.js";
 
 type PaneRow = {
-	ID?: string;
-	Index?: number;
-	Title?: string;
+	paneId?: string;
+	index?: number;
+	title?: string;
 };
 
 type PaneResizeAxis = "width" | "height";
@@ -30,10 +30,10 @@ async function resolvePaneTarget(pane: string, cwd: string): Promise<string> {
 	} catch {
 		return pane;
 	}
-	const matches = rows.filter((row) => row.Title === pane || String(row.Index) === pane);
+	const matches = rows.filter((row) => row.title === pane || String(row.index) === pane);
 	if (matches.length === 0) return pane;
 	if (matches.length > 1) throw new Error(`pane ${pane} is ambiguous (${matches.length} matches); use a pane id`);
-	return matches[0]?.ID || pane;
+	return matches[0]?.paneId || pane;
 }
 
 export async function sendPaneKeys(pane: string, keys: string[], cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {

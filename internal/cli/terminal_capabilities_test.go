@@ -69,7 +69,7 @@ func TestRunTerminalCapabilitiesJSONOK(t *testing.T) {
 	var result struct {
 		OK         bool   `json:"ok"`
 		Status     string `json:"status"`
-		CurrentTTY string `json:"currentTTY"`
+		CurrentTTY string `json:"currentTty"`
 		Clients    []struct {
 			Current  bool   `json:"current"`
 			TermName string `json:"termName"`

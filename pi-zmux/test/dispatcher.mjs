@@ -469,7 +469,7 @@ describe('/zmux status command', () => {
     savedContextEnv = Object.fromEntries(['PI_ZMUX_BIN', 'PI_ZMUX_TEST_LOG', 'PI_ZMUX_TEST_CURRENT_PANE', 'PI_ZMUX_TEST_TABS_OUTPUT', 'PI_ZMUX_TEST_VERSION_OUTPUT'].map((name) => [name, process.env[name]]));
     process.env.PI_ZMUX_BIN = recorder.path;
     process.env.PI_ZMUX_TEST_LOG = recorder.logPath;
-    process.env.PI_ZMUX_TEST_CURRENT_PANE = JSON.stringify({ ID: '%1', Session: 'test', WindowIndex: 1, Dir: contextDirectory });
+    process.env.PI_ZMUX_TEST_CURRENT_PANE = JSON.stringify({ paneId: '%1', session: 'test', windowIndex: 1, dir: contextDirectory });
     process.env.PI_ZMUX_TEST_TABS_OUTPUT = '1: pi ready\n2: server running';
     process.env.PI_ZMUX_TEST_VERSION_OUTPUT = 'zmux test';
   });
@@ -903,7 +903,7 @@ describe('dispatcher contracts', () => {
     assert.ok(extension.sentMessages.some(({ message }) => message.customType === 'pi-zmux-respawn-continuation' && message.content === 'continue respawn smoke'));
     await assert.rejects(() => execute({ operation: 'pi_respawn', target: '%9', command: 'pi -c', options: { continuationPrompt: 'invalid combination' } }), /cannot be combined/);
 
-    process.env.PI_ZMUX_TEST_CURRENT_PANE = JSON.stringify({ ID: '%10' });
+    process.env.PI_ZMUX_TEST_CURRENT_PANE = JSON.stringify({ paneId: '%10' });
     const resolvedRespawn = await execute({ operation: 'pi_respawn', options: { delayMs: 0 } });
     assert.equal(resolvedRespawn.details.pane, '%10');
     delete process.env.PI_ZMUX_TEST_CURRENT_PANE;

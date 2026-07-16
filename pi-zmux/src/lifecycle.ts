@@ -15,7 +15,7 @@ type LifecycleOptions = {
 
 async function currentPaneId(cwd: string): Promise<string | undefined> {
 	const pane = await currentPane(cwd);
-	return pane?.ID;
+	return pane?.paneId;
 }
 
 export async function setCurrentPaneLifecycle(options: LifecycleOptions): Promise<boolean> {

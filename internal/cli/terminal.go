@@ -34,7 +34,7 @@ type terminalCapabilitiesResult struct {
 	TmuxVersion    string                     `json:"tmuxVersion,omitempty"`
 	InsideTmux     bool                       `json:"insideTmux"`
 	InsideEnv      terminalInsideEnv          `json:"insideEnv"`
-	CurrentTTY     string                     `json:"currentTTY,omitempty"`
+	CurrentTTY     string                     `json:"currentTty,omitempty"`
 	Clients        []terminalCapabilityClient `json:"clients"`
 	Recommendation string                     `json:"recommendation,omitempty"`
 }
@@ -54,9 +54,9 @@ type terminalCapabilityClient struct {
 	RGB         bool     `json:"rgb"`
 	Flags       []string `json:"flags,omitempty"`
 	SessionName string   `json:"sessionName,omitempty"`
-	WindowID    string   `json:"windowID,omitempty"`
+	WindowID    string   `json:"windowId,omitempty"`
 	WindowName  string   `json:"windowName,omitempty"`
-	PaneID      string   `json:"paneID,omitempty"`
+	PaneID      string   `json:"paneId,omitempty"`
 }
 
 func newTerminalCmd(app *apppkg.App) *cobra.Command {

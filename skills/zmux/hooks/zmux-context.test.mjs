@@ -75,7 +75,7 @@ test('emits additionalContext with session + tabs inside a session', () => {
     [
       '#!/bin/sh',
       'if [ "$1" = "pane" ]; then',
-      '  echo \'{"Session":"dev","Dir":"/home/user/app"}\'',
+      '  echo \'{"session":"dev","dir":"/home/user/app"}\'',
       'elif [ "$1" = "tabs" ]; then',
       '  printf "  * 1: claude  claude  ~/app\\n  2: server  node  ~/app\\n"',
       'fi',

@@ -44,7 +44,7 @@ async function buildContext(cwd: string, projectTrusted: boolean): Promise<strin
 		"pi-zmux context:",
 		`- zmux binary: ${process.env.PI_ZMUX_BIN?.trim() || "zmux"} (${version})`,
 		`- policy: ${config.policy.mode}; config: ${configStatus}; projectTrusted=${projectTrusted}`,
-		pane ? `- current zmux: session=${pane.Session ?? "?"} pane=${pane.ID ?? "?"} tab=${pane.WindowIndex ?? "?"} cwd=${pane.Dir ?? "?"}` : "- current zmux: unavailable/outside tmux",
+		pane ? `- current zmux: session=${pane.session ?? "?"} pane=${pane.paneId ?? "?"} tab=${pane.windowIndex ?? "?"} cwd=${pane.dir ?? "?"}` : "- current zmux: unavailable/outside tmux",
 		configured ? `- configured runtimes:\n${configured}` : "- configured runtimes: none",
 		`- visible tabs:\n${compact(tabs, 700)}`,
 		"Rules: use zmux operation=runtime_ensure/runtime_logs/runtime_stop for persistent software, and operation=interactive_type for sudo/password/manual input. Bounded checks can stay in bash; never hide runtimes with &, nohup, disown, or raw tmux.",

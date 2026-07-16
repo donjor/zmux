@@ -21,10 +21,10 @@ import (
 type whereContext struct {
 	Workspace   string `json:"workspace"`
 	Session     string `json:"session"`
-	SessionTmux string `json:"session_tmux"`
+	SessionTmux string `json:"sessionTmux"`
 	Tab         string `json:"tab"`
-	PaneID      string `json:"pane"`
-	WindowIndex int    `json:"window_index"`
+	PaneID      string `json:"paneId"`
+	WindowIndex int    `json:"windowIndex"`
 	Dir         string `json:"dir"`
 }
 

@@ -89,7 +89,7 @@ zmux pane list --joined --session --json
 
 When targeting another session, add `--target <session>`. If a row matches, route
 through its `tabName` with the normal resolver: `zmux run '<cmd>' -n <tabName>
--s <session>`. Do not target raw `paneID` for normal work; keep state, logging,
+-s <session>`. Do not target raw `paneId` for normal work; keep state, logging,
 placement, and lifecycle on the logical tab.
 
 ### Tear down after the task

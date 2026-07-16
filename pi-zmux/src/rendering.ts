@@ -192,11 +192,11 @@ function mergeDestination(base: Destination, parsed: Record<string, unknown> | u
     }
     return undefined;
   };
-  const pane = pick("pane", "paneId", "paneID", "ID");
+  const pane = pick("paneId");
   return {
-    workspace: base.workspace ?? pick("workspace", "Workspace"),
-    session: base.session ?? pick("session", "Session", "sessionName"),
-    tab: base.tab ?? pick("tab", "tabName", "windowName", "WindowName"),
+    workspace: base.workspace ?? pick("workspace"),
+    session: base.session ?? pick("session", "sessionName"),
+    tab: base.tab ?? pick("tab", "tabName", "windowName"),
     paneLabel: base.paneLabel ?? pick("paneLabel", "paneName"),
     paneId: base.paneId ?? (pane?.startsWith("%") ? pane : undefined),
   };

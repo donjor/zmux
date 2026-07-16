@@ -14,7 +14,7 @@ agent surface below.
 zmux ls [workspace]              # list workspaces, or sessions within one
 zmux ls -s                       # flat list of all sessions
 zmux where                       # current context: workspace/session/tab/pane/cwd (alias: whoami)
-zmux where --json                # same, machine-readable — `session_tmux` is the raw -s handle
+zmux where --json                # same, machine-readable — `sessionTmux` is the raw -s handle
 zmux new <workspace> [session…] # create workspace + sessions, attach (alias: n)
 zmux session run <session> -n <tab> [--workspace <ws>] [--cwd <dir>] -- <cmd…>
                                  # create a DETACHED session, run <cmd> as its first tab

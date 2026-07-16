@@ -48,8 +48,8 @@ let session = ''
 let dir = ''
 try {
   const pane = JSON.parse(zmux(['pane', 'current', '--json']))
-  session = typeof pane.Session === 'string' ? pane.Session : ''
-  dir = typeof pane.Dir === 'string' ? pane.Dir : ''
+  session = typeof pane.session === 'string' ? pane.session : ''
+  dir = typeof pane.dir === 'string' ? pane.dir : ''
 } catch {
   done(null) // not a resolvable zmux session, or zmux absent → stay silent
 }

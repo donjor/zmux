@@ -64,7 +64,7 @@ A worker is bound to a pair: **(zmux session, worktree path)**. Honor both:
     ```
   If a row matches the worker purpose/worktree, route into its resolved `tabName`:
   `zmux run '<cli launch>' -n <tabName> -d -s <worker-session>`. Do not target the raw
-  `paneID` for normal work; `run -n` keeps tab state, logs, placement, and lifecycle on
+  `paneId` for normal work; `run -n` keeps tab state, logs, placement, and lifecycle on
   the normal zmux resolver. This is spawn discipline for the existing roster/reaping
   model, not a separate worker task manager. For first birth via `zmux session run`,
   there is no worker session to search yet.

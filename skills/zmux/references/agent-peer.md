@@ -110,7 +110,7 @@ zmux tab peer ensure <tabName> -s <session> --command 'codex --dangerously-bypas
 zmux tab inspect <tabName> -s <session> --json   # output/startup inspection, not lifecycle truth
 ```
 
-The raw `paneID` is diagnostic; do not target it for the peer loop. `tab peer ensure`
+The raw `paneId` is diagnostic; do not target it for the peer loop. `tab peer ensure`
 preserves zmux state, logging, placement, and lifecycle behavior for
 the joined tab. This does not create a new roster category or bypass tab reaping;
 it is the same roster reuse check before creating another visible peer tab.

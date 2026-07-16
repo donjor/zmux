@@ -14,7 +14,7 @@ export async function schedulePiReload(params: {
 	retryDelayMs?: number;
 	continuationPrompt?: string;
 }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const pane = params.paneId ?? (await currentPane(params.cwd))?.ID;
+	const pane = params.paneId ?? (await currentPane(params.cwd))?.paneId;
 	if (!pane) throw new Error("cannot resolve current pane for Pi reload");
 	const prompt = params.continuationPrompt?.trim() || "Pi runtime reload complete. Continue the work from before reload; first verify the reloaded tool/extension surface if that was the reason for reload.";
 	const continuationPath = writeReloadContinuation(params.cwd, {
@@ -66,7 +66,7 @@ export async function schedulePiRespawn(params: {
 	delayMs?: number;
 	continuationPrompt?: string;
 }): Promise<{ text: string; details: Record<string, unknown> }> {
-	const pane = params.paneId ?? (await currentPane(params.cwd))?.ID;
+	const pane = params.paneId ?? (await currentPane(params.cwd))?.paneId;
 	if (!pane) throw new Error("cannot resolve current pane for Pi respawn");
 	if (params.command && params.continuationPrompt) throw new Error("continuationPrompt cannot be combined with a custom restart command");
 	const details: Record<string, unknown> = { pane, delayMs: params.delayMs ?? 300, method: "tmux respawn-pane -k" };

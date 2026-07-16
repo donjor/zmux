@@ -59,11 +59,11 @@ type Terminal struct {
 type TmuxContext struct {
 	ClientTty     string `json:"clientTty"`
 	ClientSession string `json:"clientSession"`
-	SessionID     string `json:"sessionID"`
-	WindowID      string `json:"windowID"`
+	SessionID     string `json:"sessionId"`
+	WindowID      string `json:"windowId"`
 	WindowIndex   int    `json:"windowIndex"`
 	WindowName    string `json:"windowName"`
-	PaneID        string `json:"paneID"`
+	PaneID        string `json:"paneId"`
 }
 
 type CandidateRef struct {

@@ -66,7 +66,7 @@ func runPaneList(app *apppkg.App, cmd *cobra.Command, flags *paneListFlags) erro
 		return err
 	}
 	if flags.json {
-		encoded, err := json.MarshalIndent(panes, "", "  ")
+		encoded, err := json.MarshalIndent(newPaneJSONs(panes), "", "  ")
 		if err != nil {
 			return err
 		}
@@ -102,14 +102,58 @@ func runPaneList(app *apppkg.App, cmd *cobra.Command, flags *paneListFlags) erro
 	return w.Flush()
 }
 
+// paneJSON is the explicit `--json` contract for `pane list` and
+// `pane current`. Marshaling tmux.Pane directly would leak the internal
+// exported Go field names (ID, Session, …); this DTO pins the public
+// lower-camelCase schema (paneId etc.) that pi-zmux and skill consumers read.
+type paneJSON struct {
+	PaneID      string `json:"paneId"`
+	Session     string `json:"session"`
+	Index       int    `json:"index"`
+	WindowIndex int    `json:"windowIndex"`
+	WindowName  string `json:"windowName"`
+	Active      bool   `json:"active"`
+	Command     string `json:"command"`
+	PID         int    `json:"pid"`
+	Dir         string `json:"dir"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Title       string `json:"title"`
+}
+
+func newPaneJSON(p tmux.Pane) paneJSON {
+	return paneJSON{
+		PaneID:      p.ID,
+		Session:     p.Session,
+		Index:       p.Index,
+		WindowIndex: p.WindowIndex,
+		WindowName:  p.WindowName,
+		Active:      p.Active,
+		Command:     p.Command,
+		PID:         p.PID,
+		Dir:         p.Dir,
+		Width:       p.Width,
+		Height:      p.Height,
+		Title:       p.Title,
+	}
+}
+
+func newPaneJSONs(panes []tmux.Pane) []paneJSON {
+	out := make([]paneJSON, len(panes))
+	for i, p := range panes {
+		out[i] = newPaneJSON(p)
+	}
+	return out
+}
+
 type joinedPaneListRow struct {
-	TabID      string `json:"tabID"`
+	TabID      string `json:"tabId"`
 	TabName    string `json:"tabName"`
-	PaneID     string `json:"paneID"`
+	PaneID     string `json:"paneId"`
 	Session    string `json:"session"`
 	HostName   string `json:"hostName,omitempty"`
-	HostPaneID string `json:"hostPaneID,omitempty"`
-	AnchorID   string `json:"anchorID,omitempty"`
+	HostPaneID string `json:"hostPaneId,omitempty"`
+	AnchorID   string `json:"anchorId,omitempty"`
 	CWD        string `json:"cwd,omitempty"`
 	Command    string `json:"command,omitempty"`
 	Title      string `json:"title,omitempty"`
@@ -274,7 +318,7 @@ func runPaneCurrent(app *apppkg.App, cmd *cobra.Command, flags *paneCurrentFlags
 	}
 	for _, pane := range panes {
 		if pane.ID == paneID {
-			encoded, err := json.MarshalIndent(pane, "", "  ")
+			encoded, err := json.MarshalIndent(newPaneJSON(pane), "", "  ")
 			if err != nil {
 				return err
 			}
@@ -282,7 +326,7 @@ func runPaneCurrent(app *apppkg.App, cmd *cobra.Command, flags *paneCurrentFlags
 			return nil
 		}
 	}
-	encoded, err := json.MarshalIndent(tmux.Pane{ID: paneID}, "", "  ")
+	encoded, err := json.MarshalIndent(newPaneJSON(tmux.Pane{ID: paneID}), "", "  ")
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -134,9 +135,25 @@ func TestWhereJSON(t *testing.T) {
 			t.Fatalf("where --json failed: %v", err)
 		}
 	})
-	for _, want := range []string{`"workspace": "myapp"`, `"session": "main"`, `"session_tmux": "zws_myapp__main"`, `"tab": "claude"`, `"pane": "%0"`} {
-		if !strings.Contains(out, want) {
-			t.Errorf("where --json missing %q:\n%s", want, out)
+	got := map[string]any{}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("where --json is not valid JSON: %v\n%s", err, out)
+	}
+	// Canonical lower-camelCase schema (S-007): exact key set, values checked.
+	wantKeys := map[string]any{
+		"workspace":   "myapp",
+		"session":     "main",
+		"sessionTmux": "zws_myapp__main",
+		"tab":         "claude",
+		"paneId":      "%0",
+		"windowIndex": float64(2),
+		"dir":         "/repo/sub",
+	}
+	assertExactJSONKeys(t, got, wantKeys)
+	// Old snake_case / bare-pane variants must be gone (no aliases).
+	for _, gone := range []string{"session_tmux", "window_index", "pane"} {
+		if _, ok := got[gone]; ok {
+			t.Errorf("where --json still emits removed key %q:\n%s", gone, out)
 		}
 	}
 }

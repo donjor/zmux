@@ -2,13 +2,13 @@ import { trimOutput } from "../shell.js";
 import { tmux, withSession, zmux } from "./shared.js";
 
 export interface CurrentPane {
-	Session?: string;
-	ID?: string;
-	Index?: number;
-	WindowIndex?: number;
-	Command?: string;
-	Dir?: string;
-	Title?: string;
+	session?: string;
+	paneId?: string;
+	index?: number;
+	windowIndex?: number;
+	command?: string;
+	dir?: string;
+	title?: string;
 }
 
 export async function currentPane(cwd: string): Promise<CurrentPane | undefined> {
@@ -46,7 +46,7 @@ export async function reloadZmux(cwd: string): Promise<{ text: string; details: 
 
 export async function focusTab(tab: string, cwd: string): Promise<{ text: string; details: Record<string, unknown> }> {
 	const pane = await currentPane(cwd);
-	if (!pane?.Session) throw new Error("cannot resolve current zmux session for tab focus");
-	await tmux(["select-window", "-t", `${pane.Session}:${tab}`], { cwd, timeoutMs: 5_000 });
-	return { text: `focused tab ${tab}`, details: { tab, session: pane.Session } };
+	if (!pane?.session) throw new Error("cannot resolve current zmux session for tab focus");
+	await tmux(["select-window", "-t", `${pane.session}:${tab}`], { cwd, timeoutMs: 5_000 });
+	return { text: `focused tab ${tab}`, details: { tab, session: pane.session } };
 }
