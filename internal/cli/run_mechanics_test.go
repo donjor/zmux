@@ -46,12 +46,12 @@ func TestWriteCommandScriptContract(t *testing.T) {
 	script := string(data)
 
 	wantParts := []string{
-		"#!/usr/bin/env bash\n",              // shebang
-		`printf '\033[2m$ %s\033[0m\n'`,      // dim echo of the command
+		"#!/usr/bin/env bash\n",                    // shebang
+		`printf '\033[2m$ %s\033[0m\n'`,            // dim echo of the command
 		"__zmux_cmd_cleanup() { __zmux_status=$?;", // preserve exit status
-		"rm -f",                              // self-delete
-		"trap __zmux_cmd_cleanup EXIT",       // cleanup on exit
-		"echo hi\n",                          // the command body, verbatim
+		"rm -f",                        // self-delete
+		"trap __zmux_cmd_cleanup EXIT", // cleanup on exit
+		"echo hi\n",                    // the command body, verbatim
 	}
 	for _, part := range wantParts {
 		if !strings.Contains(script, part) {

@@ -105,8 +105,10 @@ func TestResolveMultiLevelExtends(t *testing.T) {
 	// c -> b -> a. a supplies tabs + description; b overrides nothing but adds
 	// context; c overrides description. Everything flows down the chain.
 	got := resolveAll(t,
-		Recipe{Name: "a", Kind: KindSession, Description: "root", Context: ContextInside,
-			Tabs: []TabSpec{{Name: "main", Command: "a-cmd"}}},
+		Recipe{
+			Name: "a", Kind: KindSession, Description: "root", Context: ContextInside,
+			Tabs: []TabSpec{{Name: "main", Command: "a-cmd"}},
+		},
 		Recipe{Name: "b", Kind: KindSession, Extends: "a", Session: "b-sess"},
 		Recipe{Name: "c", Kind: KindSession, Extends: "b", Description: "leaf"},
 	)
@@ -127,12 +129,16 @@ func TestResolveMultiLevelExtends(t *testing.T) {
 
 func TestResolveScalarOverrideAndInheritance(t *testing.T) {
 	got := resolveAll(t,
-		Recipe{Name: "parent", Kind: KindSession,
+		Recipe{
+			Name: "parent", Kind: KindSession,
 			Description: "pdesc", Context: ContextOutside, Workspace: "pws",
 			Session: "psess", CWD: "/parent", ForEach: "items",
-			Tabs: []TabSpec{{Name: "main", Command: "pcmd"}}},
-		Recipe{Name: "child", Kind: KindWorkspace, Extends: "parent",
-			Description: "cdesc", CWD: "/child"},
+			Tabs: []TabSpec{{Name: "main", Command: "pcmd"}},
+		},
+		Recipe{
+			Name: "child", Kind: KindWorkspace, Extends: "parent",
+			Description: "cdesc", CWD: "/child",
+		},
 	)
 	c := got["child"]
 	// Overridden (child non-empty wins):
@@ -147,13 +153,17 @@ func TestResolveScalarOverrideAndInheritance(t *testing.T) {
 
 func TestResolveDefaultsAndOptionsMerge(t *testing.T) {
 	got := resolveAll(t,
-		Recipe{Name: "parent", Kind: KindSession,
+		Recipe{
+			Name: "parent", Kind: KindSession,
 			Defaults: Defaults{Workspace: "pw", Session: "ps", CWD: "/pd", TabMode: TabModeReady},
 			Options:  Options{FocusSession: "pf", FocusTab: "pt", Rerun: "skip", TabMode: TabModeReady},
-			Tabs:     []TabSpec{{Name: "main"}}},
-		Recipe{Name: "child", Kind: KindSession, Extends: "parent",
+			Tabs:     []TabSpec{{Name: "main"}},
+		},
+		Recipe{
+			Name: "child", Kind: KindSession, Extends: "parent",
 			Defaults: Defaults{Session: "cs"},
-			Options:  Options{Rerun: "send"}},
+			Options:  Options{Rerun: "send"},
+		},
 	)
 	c := got["child"]
 	if c.Defaults.Session != "cs" || c.Defaults.Workspace != "pw" || c.Defaults.CWD != "/pd" {
@@ -168,11 +178,15 @@ func TestResolveZeroValueBooleanCannotUnsetParent(t *testing.T) {
 	// mergeInputs OR-merges booleans: a child's false (zero value) cannot turn
 	// off a parent's true. A child true does set a parent false to true.
 	got := resolveAll(t,
-		Recipe{Name: "parent", Kind: KindSession,
+		Recipe{
+			Name: "parent", Kind: KindSession,
 			Inputs: Inputs{Session: true, CWD: true, Prompt: "P"},
-			Tabs:   []TabSpec{{Name: "main"}}},
-		Recipe{Name: "child", Kind: KindSession, Extends: "parent",
-			Inputs: Inputs{Workspace: true, Session: false}},
+			Tabs:   []TabSpec{{Name: "main"}},
+		},
+		Recipe{
+			Name: "child", Kind: KindSession, Extends: "parent",
+			Inputs: Inputs{Workspace: true, Session: false},
+		},
 	)
 	in := got["child"].Inputs
 	if !in.Session {
@@ -194,9 +208,11 @@ func TestResolveTabReplaceAppendByName(t *testing.T) {
 	// place by name, append new, preserve parent order.
 	got := resolveAll(t,
 		Recipe{Name: "parent", Kind: KindSession, Tabs: []TabSpec{
-			{Name: "A", Command: "a1"}, {Name: "B", Command: "b1"}}},
+			{Name: "A", Command: "a1"}, {Name: "B", Command: "b1"},
+		}},
 		Recipe{Name: "child", Kind: KindSession, Extends: "parent", Tabs: []TabSpec{
-			{Name: "B", Command: "b2"}, {Name: "C", Command: "c1"}}},
+			{Name: "B", Command: "b2"}, {Name: "C", Command: "c1"},
+		}},
 	)
 	tabs := got["child"].Tabs
 	want := []TabSpec{{Name: "A", Command: "a1"}, {Name: "B", Command: "b2"}, {Name: "C", Command: "c1"}}
@@ -224,11 +240,13 @@ func TestResolveSessionMergeAndNestedTabs(t *testing.T) {
 	got := resolveAll(t,
 		Recipe{Name: "parent", Kind: KindWorkspace, Sessions: []SessionSpec{
 			{Name: "web", CWD: "/p", ForEach: "items", Tabs: []TabSpec{
-				{Name: "A", Command: "a1"}, {Name: "B", Command: "b1"}}},
+				{Name: "A", Command: "a1"}, {Name: "B", Command: "b1"},
+			}},
 		}},
 		Recipe{Name: "child", Kind: KindWorkspace, Extends: "parent", Sessions: []SessionSpec{
 			{Name: "web", CWD: "/c", Tabs: []TabSpec{
-				{Name: "B", Command: "b2"}, {Name: "C", Command: "c1"}}},
+				{Name: "B", Command: "b2"}, {Name: "C", Command: "c1"},
+			}},
 			{Name: "api", Tabs: []TabSpec{{Name: "srv", Command: "run"}}},
 		}},
 	)
@@ -256,9 +274,11 @@ func TestResolveDefaultSessionMergesUnderPlaceholderKey(t *testing.T) {
 	// Two nameless sessions collapse to the same "<default>" merge key.
 	got := resolveAll(t,
 		Recipe{Name: "parent", Kind: KindWorkspace, Sessions: []SessionSpec{
-			{CWD: "/p", Tabs: []TabSpec{{Name: "A", Command: "a1"}}}}},
+			{CWD: "/p", Tabs: []TabSpec{{Name: "A", Command: "a1"}}},
+		}},
 		Recipe{Name: "child", Kind: KindWorkspace, Extends: "parent", Sessions: []SessionSpec{
-			{CWD: "/c", Tabs: []TabSpec{{Name: "B", Command: "b1"}}}}},
+			{CWD: "/c", Tabs: []TabSpec{{Name: "B", Command: "b1"}}},
+		}},
 	)
 	sessions := got["child"].Sessions
 	if len(sessions) != 1 {
@@ -299,9 +319,11 @@ func TestResolveDoesNotMutateParentTabs(t *testing.T) {
 	// must not mutate the parent's resolved Tabs backing array.
 	defs := makeDefs([]Recipe{
 		{Name: "parent", Kind: KindSession, Tabs: []TabSpec{
-			{Name: "A", Command: "a1"}, {Name: "B", Command: "b1"}}},
+			{Name: "A", Command: "a1"}, {Name: "B", Command: "b1"},
+		}},
 		{Name: "child", Kind: KindSession, Extends: "parent", Tabs: []TabSpec{
-			{Name: "B", Command: "MUTATED"}}},
+			{Name: "B", Command: "MUTATED"},
+		}},
 	})
 	if err := resolveDefinitions(defs); err != nil {
 		t.Fatalf("resolveDefinitions: %v", err)
@@ -328,9 +350,11 @@ func TestResolveDoesNotMutateParentSessionTabs(t *testing.T) {
 	// not reach back into the parent's session tab slice.
 	defs := makeDefs([]Recipe{
 		{Name: "parent", Kind: KindWorkspace, Sessions: []SessionSpec{
-			{Name: "web", Tabs: []TabSpec{{Name: "A", Command: "a1"}}}}},
+			{Name: "web", Tabs: []TabSpec{{Name: "A", Command: "a1"}}},
+		}},
 		{Name: "child", Kind: KindWorkspace, Extends: "parent", Sessions: []SessionSpec{
-			{Name: "web", Tabs: []TabSpec{{Name: "A", Command: "MUTATED"}, {Name: "B", Command: "b1"}}}}},
+			{Name: "web", Tabs: []TabSpec{{Name: "A", Command: "MUTATED"}, {Name: "B", Command: "b1"}}},
+		}},
 	})
 	if err := resolveDefinitions(defs); err != nil {
 		t.Fatalf("resolveDefinitions: %v", err)
