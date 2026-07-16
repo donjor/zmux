@@ -395,12 +395,6 @@ func TestThemesApplyMsgUpdatesCurrent(t *testing.T) {
 	if tab.currentTheme != "catppuccin-mocha" {
 		t.Errorf("currentTheme after apply = %q, want catppuccin-mocha", tab.currentTheme)
 	}
-	if tab.savedTheme != "catppuccin-mocha" {
-		t.Errorf("savedTheme after apply = %q, want catppuccin-mocha", tab.savedTheme)
-	}
-	if tab.previewing {
-		t.Error("previewing should be false after apply")
-	}
 }
 
 func TestThemesApplyMsgStaleIgnored(t *testing.T) {
@@ -456,7 +450,6 @@ func TestThemesDeactivateClearsTransientState(t *testing.T) {
 	tab.editing = true
 	tab.pickerActive = true
 	tab.namingActive = true
-	tab.previewing = false // revertPreview no-ops if not previewing
 
 	tab.Deactivate()
 

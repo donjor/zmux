@@ -1,7 +1,6 @@
 package tabs
 
 import (
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -96,12 +95,6 @@ type ThemesTab struct {
 	nameInput       textinput.Model
 	namingActive    bool // clone prompt active
 
-	// Preview state (ephemeral).
-	savedTheme   string
-	savedPalette *theme.Palette
-	savedStyles  *styles.Styles
-	previewing   bool
-
 	// Request tracking.
 	reqID int64
 
@@ -147,19 +140,10 @@ func (t *ThemesTab) CapturesEscape() bool {
 
 func (t *ThemesTab) Activate(reason dashboard.ActivateReason) tea.Cmd {
 	t.reqID = dashboard.NextReqID()
-	// Save current theme for preview revert.
-	t.savedTheme = t.currentTheme
-	t.savedPalette = nil
-	t.savedStyles = nil
-	t.previewing = false
 	return t.fetchData(t.reqID)
 }
 
 func (t *ThemesTab) Deactivate() {
-	// Revert preview on tab switch.
-	if t.previewing {
-		t.revertPreview()
-	}
 	t.filter.Blur()
 	t.mode = themesModeList
 	t.editing = false
@@ -188,11 +172,7 @@ func (t *ThemesTab) ShortHelp() string {
 			}
 			return "j/k:navigate slots  enter:edit color  s:save  esc:back to list"
 		}
-		help := "j/k:navigate  enter:apply  /:filter  e:edit  c:clone"
-		if t.previewing {
-			help += "  q:revert"
-		}
-		return help
+		return "j/k:navigate  enter:apply  /:filter  e:edit  c:clone"
 	}
 }
 
@@ -212,7 +192,6 @@ func (t *ThemesTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 		}
 		t.themes = msg.themes
 		t.currentTheme = msg.currentTheme
-		t.savedTheme = msg.currentTheme
 		t.applyFilter()
 		return t, nil
 
@@ -221,8 +200,6 @@ func (t *ThemesTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 			return t, cmd
 		}
 		t.currentTheme = msg.themeName
-		t.savedTheme = msg.themeName
-		t.previewing = false
 		var cmds []tea.Cmd
 		cmds = append(cmds, func() tea.Msg {
 			return dashboard.SetStatusIntent{Text: "Applied " + msg.themeName, IsError: false}
@@ -230,8 +207,6 @@ func (t *ThemesTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 		if msg.palette != nil && msg.styles != nil {
 			pal := *msg.palette
 			sty := *msg.styles
-			t.savedPalette = msg.palette
-			t.savedStyles = msg.styles
 			cmds = append(cmds, func() tea.Msg {
 				return dashboard.ThemeChangeIntent{Palette: pal, Styles: sty}
 			})
@@ -278,14 +253,6 @@ func (t *ThemesTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 // ============================================================================
 
 func (t *ThemesTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
-	// Revert preview.
-	if t.mode == themesModeList && !t.editing {
-		if key.Matches(msg, key.NewBinding(key.WithKeys("q"))) && t.previewing {
-			t.revertPreview()
-			return t, t.emitRevert()
-		}
-	}
-
 	switch t.mode {
 	case themesModeFilter:
 		return t.handleFilterKey(msg)
@@ -307,6 +274,3 @@ func (t *ThemesTab) View() string {
 	ensureCursorVisible(&t.vp, cursorLine)
 	return scroll.Scrollable(t.vp, t.styles)
 }
-
-// Preview helpers (revertPreview + emitRevert) live in themes_data.go
-// alongside the other mutation commands.

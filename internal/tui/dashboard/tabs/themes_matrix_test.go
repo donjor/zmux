@@ -1,27 +1,21 @@
 package tabs
 
 import (
-	"strings"
 	"testing"
-
-	"github.com/donjor/zmux/internal/tui/dashboard"
-	"github.com/donjor/zmux/internal/tui/styles"
 )
 
 // T-105 (055 P-001) — Themes dashboard-tab behavior matrix. Pins the S-003
 // acceptance rows the existing themes_test.go leaves uncovered: the
 // CapturesEscape precedence predicate across every mode, apply-on-enter,
-// clone→naming entry, empty-filter enter, ShortHelp preview gating, and the
-// preview/revert mechanism.
+// clone→naming entry, and empty-filter enter.
 //
-// DORMANCY NOTE (characterization, NOT a defect to fix here): `previewing` is
-// never set to true by any key handler or message in the current dashboard
-// tab — Activate/apply/revert only ever clear it. So the reachable behavior of
-// `q` in list mode is a no-op, and the q:revert / revert-on-deactivate paths
-// are dead through the public flow. The revert *mechanism* is still pinned via
-// white-box below so any S-003 convergence (T-302/T-303) that rewires preview
-// can prove it preserved these semantics. Flagged in worker-notes for the
-// conductor; not repaired under the behavior-preserving mandate.
+// N-01 RESOLUTION (T-302): the preview/revert path (`previewing` flag,
+// q:revert, revert-on-deactivate, emitRevert) was dead — never set true by any
+// public flow. The outline.Tree convergence is pure cursor/row management and
+// does not emit a live preview, so per the ledger disposition the dead path was
+// deleted rather than rewired. The four white-box preview pins that guarded the
+// dormant mechanism are gone with it; `q` in list mode is now a plain
+// unhandled no-op, pinned below.
 
 // --- CapturesEscape precedence matrix ---
 
@@ -148,79 +142,18 @@ func TestThemesEditEntersColorEditor(t *testing.T) {
 	}
 }
 
-// --- ShortHelp gates q:revert on the previewing flag ---
+// --- q in list mode is a plain unhandled no-op (preview path deleted) ---
 
-func TestThemesShortHelpGatesRevertOnPreviewing(t *testing.T) {
+func TestThemesQIsNoop(t *testing.T) {
 	tab, _, _ := newTestThemesTab(t)
 	tab = activateTheme(t, tab)
 
-	if h := tab.ShortHelp(); strings.Contains(h, "q:revert") {
-		t.Fatalf("ShortHelp must omit q:revert when not previewing: %q", h)
-	}
-	tab.previewing = true
-	if h := tab.ShortHelp(); !strings.Contains(h, "q:revert") {
-		t.Fatalf("ShortHelp must show q:revert while previewing: %q", h)
-	}
-}
-
-// --- q in list mode is a no-op while not previewing (dormant preview) ---
-
-func TestThemesQIsNoopWhenNotPreviewing(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-	if tab.previewing {
-		t.Fatal("previewing should default false")
-	}
-
+	before := tab.currentThemeInfo()
 	_, cmd := sendThemesKey(tab, "q")
 	if cmd != nil {
-		t.Fatal("q in list mode with no active preview must be a no-op")
+		t.Fatal("q in list mode must be a no-op (no revert binding)")
 	}
-	if tab.previewing {
-		t.Fatal("q must not toggle previewing on")
-	}
-}
-
-// --- preview/revert mechanism (white-box; dormant through the public flow) ---
-
-func TestThemesPreviewRevertMechanism(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-
-	// Stash a saved palette+styles snapshot and force the previewing flag,
-	// reproducing the state a rewired preview would establish.
-	resolved, err := tab.resolver.Resolve("ayu-dark")
-	if err != nil {
-		t.Fatalf("resolve ayu-dark: %v", err)
-	}
-	pal := resolved.SemanticPalette()
-	sty := styles.NewStyles(&pal)
-	tab.savedPalette = &pal
-	tab.savedStyles = &sty
-	tab.previewing = true
-
-	out, cmd := sendThemesKey(tab, "q")
-	tab = out
-	if tab.previewing {
-		t.Fatal("q while previewing must clear the previewing flag")
-	}
-	if cmd == nil {
-		t.Fatal("q while previewing must emit a revert command")
-	}
-	if _, ok := cmd().(dashboard.ThemeChangeIntent); !ok {
-		t.Fatalf("revert cmd should broadcast a ThemeChangeIntent, got %T", cmd())
-	}
-}
-
-// --- revert-on-deactivate mechanism (also dormant; pinned white-box) ---
-
-func TestThemesDeactivateRevertsActivePreview(t *testing.T) {
-	tab, _, _ := newTestThemesTab(t)
-	tab = activateTheme(t, tab)
-	tab.previewing = true
-
-	tab.Deactivate()
-	if tab.previewing {
-		t.Fatal("Deactivate must clear an active preview")
+	if after := tab.currentThemeInfo(); after != before {
+		t.Fatal("q must not move the cursor")
 	}
 }

@@ -128,26 +128,6 @@ func (t *ThemesTab) applyTheme(name string) tea.Cmd {
 	}
 }
 
-// revertPreview clears the ephemeral "we're currently previewing a
-// non-persisted theme" flag. Pairs with emitRevert.
-func (t *ThemesTab) revertPreview() {
-	t.previewing = false
-}
-
-// emitRevert produces a ThemeChangeIntent that broadcasts the saved
-// palette + styles back to the dashboard, reverting a preview. No-op
-// if we never stashed a preview snapshot.
-func (t *ThemesTab) emitRevert() tea.Cmd {
-	if t.savedPalette == nil || t.savedStyles == nil {
-		return nil
-	}
-	pal := *t.savedPalette
-	sty := *t.savedStyles
-	return func() tea.Msg {
-		return dashboard.ThemeChangeIntent{Palette: pal, Styles: sty}
-	}
-}
-
 // saveThemeFile writes the in-progress edited theme to
 // ~/.zmux/themes/<name>.
 func (t *ThemesTab) saveThemeFile() tea.Cmd {
