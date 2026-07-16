@@ -25,6 +25,27 @@ type swatchEntry struct {
 	Color theme.Color
 }
 
+// ResolveSwatch resolves name through resolver and renders its semantic
+// palette swatch at width (width <= 0 defaults to 80). Returns "" when the
+// resolver is nil or the theme fails to resolve. This is the single shared
+// resolve→palette→render wrapper used by the dashboard Themes tab, the
+// standalone theme picker, and the setup wizard so all three draw an identical
+// strip.
+func ResolveSwatch(resolver *theme.Resolver, name string, width int) string {
+	if resolver == nil {
+		return ""
+	}
+	t, err := resolver.Resolve(name)
+	if err != nil {
+		return ""
+	}
+	palette := t.SemanticPalette()
+	if width <= 0 {
+		width = 80
+	}
+	return RenderSwatch(&palette, width)
+}
+
 // RenderSwatch renders a grid of colored blocks, one per semantic role,
 // with the role name below each block. Returns a multi-line string.
 func RenderSwatch(palette *theme.Palette, width int) string {

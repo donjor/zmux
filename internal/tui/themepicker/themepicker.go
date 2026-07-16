@@ -285,7 +285,7 @@ func (m ThemePickerModel) view() string {
 	// Color swatch for the selected theme.
 	if ti := m.currentTheme(); ti != nil {
 		b.WriteString("\n")
-		swatch := m.renderSwatch(*ti)
+		swatch := views.ResolveSwatch(m.resolver, ti.Name, m.width)
 		if swatch != "" {
 			b.WriteString(swatch + "\n")
 		}
@@ -331,20 +331,6 @@ func (m ThemePickerModel) renderThemeEntry(idx int, ti theme.ThemeInfo) string {
 	}
 
 	return cursor + name + sourceTag + modeTag + "\n"
-}
-
-func (m ThemePickerModel) renderSwatch(ti theme.ThemeInfo) string {
-	t, err := m.resolver.Resolve(ti.Name)
-	if err != nil {
-		return ""
-	}
-	palette := t.SemanticPalette()
-
-	width := m.width
-	if width <= 0 {
-		width = 80
-	}
-	return views.RenderSwatch(&palette, width)
 }
 
 func (m ThemePickerModel) renderThemeHelp() string {

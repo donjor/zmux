@@ -142,17 +142,9 @@ func (m WizardModel) viewTheme() string {
 
 	// Show swatch for selected theme.
 	if m.themeCursor < len(m.themes) {
-		t, err := m.resolver.Resolve(m.themes[m.themeCursor].Name)
-		if err == nil {
-			palette := t.SemanticPalette()
-			width := m.width
-			if width <= 0 {
-				width = 80
-			}
-			swatch := views.RenderSwatch(&palette, width)
-			if swatch != "" {
-				b.WriteString("\n" + swatch + "\n")
-			}
+		swatch := views.ResolveSwatch(m.resolver, m.themes[m.themeCursor].Name, m.width)
+		if swatch != "" {
+			b.WriteString("\n" + swatch + "\n")
 		}
 	}
 

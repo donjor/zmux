@@ -250,9 +250,9 @@ func (t *ThemesTab) renderColorsContent() (string, int) {
 	}
 
 	// Color strip for highlighted theme (always visible when not editing).
-	if cur := t.currentThemeInfo(); !t.editing && cur != nil && t.resolver != nil {
+	if cur := t.currentThemeInfo(); !t.editing && cur != nil {
 		b.WriteString("\n")
-		swatch := t.renderSwatch(*cur)
+		swatch := views.ResolveSwatch(t.resolver, cur.Name, t.width)
 		if swatch != "" {
 			b.WriteString("  " + swatch + "\n")
 		}
@@ -357,23 +357,6 @@ func (t *ThemesTab) renderThemeEntry(ti theme.ThemeInfo, selected bool) string {
 	}
 
 	return "  " + cursor + name + currentMark + modeTag + "\n"
-}
-
-func (t *ThemesTab) renderSwatch(ti theme.ThemeInfo) string {
-	if t.resolver == nil {
-		return ""
-	}
-	resolved, err := t.resolver.Resolve(ti.Name)
-	if err != nil {
-		return ""
-	}
-	palette := resolved.SemanticPalette()
-
-	width := t.width
-	if width <= 0 {
-		width = 80
-	}
-	return views.RenderSwatch(&palette, width)
 }
 
 // ============================================================================
