@@ -211,6 +211,9 @@ func defaultRootEntry(a *apppkg.App) rootEntryKind {
 	return entryPicker
 }
 
+// checkTmuxVersion enforces the tmux >= 3.2 floor (popup support) at runtime.
+// The install-time peer of this check lives in install.sh; keep the two floors
+// in sync. dev.sh has no floor by design — do not add one there.
 func checkTmuxVersion(app *apppkg.App) error {
 	ver, err := app.Runner.Version()
 	if err != nil {

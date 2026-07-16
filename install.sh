@@ -55,6 +55,9 @@ if ! command -v tmux &>/dev/null; then
     info "Install tmux: apt install tmux / brew install tmux"
     exit 1
 fi
+# tmux >= 3.2 floor (popup support). Runtime peer of this check lives in
+# internal/cli/root.go checkTmuxVersion; keep the two floors in sync. This
+# script stays standalone (no shared source with the Go binary).
 tmux_version=$(tmux -V | awk '{print $2}')
 tmux_major=$(echo "$tmux_version" | cut -d. -f1)
 tmux_minor=$(echo "$tmux_version" | cut -d. -f2 | sed 's/[^0-9].*//')
