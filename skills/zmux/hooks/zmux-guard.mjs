@@ -456,6 +456,32 @@ export function isBypassed(command) {
   return BYPASS_ENV.test(command) || BYPASS_COMMENT.test(command)
 }
 
+const PURE_ZMUX_WAIT = /^zmux\s+wait\b/
+
+// isPureZmuxWait reports whether command is a single, unchained `zmux wait …`
+// invocation — the one form allowed to run with run_in_background. A `zmux wait`
+// is read-only and -T-bounded; backgrounding it gives a Claude conductor the
+// same wake-on-exit channel Pi gets from zmux_callback. Hook-only — NOT part of
+// the shared classifier corpus.
+//
+// Two asymmetric checks, both conservative (any doubt → not pure → normal block;
+// bypass tokens remain):
+//   - Chaining operators (`;`, `&`, `|`, newline) are scanned on the
+//     quote/heredoc-stripped command — a `;` inside a string literal is inert
+//     argv, not a control operator, so blanking quoted spans avoids false blocks.
+//   - Command substitution (`$(…)`, backticks) is scanned on the RAW trimmed
+//     command instead: `$(rm -rf ~)` still executes inside a double-quoted
+//     argument, so the stripped scan can't see it. Rejecting on any occurrence
+//     anywhere false-positives a single-quoted `output:` regex that contains
+//     `$(`, which is acceptable under the conservative rule.
+export function isPureZmuxWait(command) {
+  const trimmed = command.trim()
+  if (!PURE_ZMUX_WAIT.test(trimmed)) return false
+  if (trimmed.includes('$(') || trimmed.includes('`')) return false
+  const scan = stripQuotedSegments(stripHeredocs(stripEnvPrefix(trimmed)))
+  return !/[;&|\n]/.test(scan)
+}
+
 // repoCwdFromPath reports whether cwd sits inside zmux's own source tree, where
 // raw tmux is a legitimate dev tool (matches the Go CLI's go.mod walk in spirit).
 export function repoCwdFromPath(cwd) {
@@ -518,6 +544,10 @@ export function render(res) {
       `user and unmanaged; put it in a named zmux tab so it's shared and inspectable`,
       `(\`zmux watch <name>\`). A quick (<60s) poll? Use the Monitor tool, or bypass below.`,
       ``,
+      `Carve-out: a single pure \`zmux wait --for … -T …\` IS allowed in background — a`,
+      `read-only, -T-bounded condition wait whose exit wakes the conductor. Chaining`,
+      `anything onto it forfeits the carve-out.`,
+      ``,
       `Genuinely need it inline? Prefix \`ZMUX_ALLOW=1\` or append \`# zmux: allow\`.`,
     ].join('\n')
   }
@@ -568,7 +598,8 @@ function main() {
   if (
     res.decision === 'allow' &&
     payload?.tool_input?.run_in_background === true &&
-    !isBypassed(command)
+    !isBypassed(command) &&
+    !isPureZmuxWait(command)
   ) {
     res = {
       kind: 'background_param',

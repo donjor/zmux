@@ -94,6 +94,11 @@ visible named zmux runtime, and an interactive/remote command (`sudo`, `ssh`, a 
 is nudged into a shared tab. The Claude-only `run_in_background` parameter check lives
 in `zmux-guard.mjs` because it is a tool param, not a shell token.
 
+One carve-out: a single pure `zmux wait …` command may run with
+`run_in_background` — a read-only, `-T`-bounded condition wait whose exit wakes
+the conductor (`agent-worker.md` → Conductor wait discipline). Chaining anything
+else onto the command forfeits the carve-out.
+
 **Exemptions** — genuinely need the raw command (zmux development, socket inspection,
 a one-off)? Any of: prefix `ZMUX_ALLOW=1`, append `# zmux: allow`, use an explicit
 `-L <socket>`, or run from the zmux repo. Pi has its own one-shot bypass spelling

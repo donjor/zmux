@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 
-import { classify, guard } from './zmux-guard.mjs'
+import { classify, guard, isPureZmuxWait } from './zmux-guard.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const hookPath = join(here, 'zmux-guard.mjs')
@@ -99,4 +99,36 @@ test('run_in_background block honors an explicit bypass token', () => {
 
 test('run_in_background: false leaves a safe command alone', () => {
   assert.equal(runHook('git status', undefined, { run_in_background: false }), 0)
+})
+
+// --- adapter: pure `zmux wait` is the conductor wake channel, allowed in
+// background; anything chained onto it forfeits the carve-out ---
+
+test('isPureZmuxWait accepts a lone zmux wait and rejects chained/expanded forms', () => {
+  assert.equal(isPureZmuxWait('zmux wait pi-worker -s worker-auth --for turn:ready,failed,attention -T 570 --json'), true)
+  assert.equal(isPureZmuxWait('zmux wait x --for turn:ready && npm run dev'), false)
+  assert.equal(isPureZmuxWait('zmux wait $(cmd) --for idle:3'), false)
+  assert.equal(isPureZmuxWait('zmux wait x --for turn:ready | tee log'), false)
+  // Command substitution executes inside double quotes, so it must be caught on
+  // the raw command — the stripped scan blanks the quoted span and can't see it.
+  assert.equal(isPureZmuxWait('zmux wait "$(rm -rf ~)" --for idle:3'), false)
+  assert.equal(isPureZmuxWait('zmux wait "`rm -rf ~`" --for idle:3'), false)
+  assert.equal(isPureZmuxWait('npm run dev'), false)
+})
+
+test('hook allows a pure zmux wait in background (conductor wake channel)', () => {
+  const cmd = 'zmux wait pi-worker -s worker-auth --for turn:ready,failed,attention -T 570 --json'
+  assert.equal(runHook(cmd, undefined, { run_in_background: true }), 0)
+})
+
+test('hook still blocks chained/expanded zmux wait in background', () => {
+  assert.equal(runHook('npm run dev', undefined, { run_in_background: true }), 2)
+  assert.equal(runHook('zmux wait x --for turn:ready && npm run dev', undefined, { run_in_background: true }), 2)
+  assert.equal(runHook('zmux wait $(cmd) --for idle:3', undefined, { run_in_background: true }), 2)
+  assert.equal(runHook('zmux wait "$(rm -rf ~)" --for idle:3', undefined, { run_in_background: true }), 2)
+})
+
+test('foreground zmux wait is unaffected (allow)', () => {
+  assert.equal(runHook('zmux wait x --for turn:ready -T 30'), 0)
+  assert.equal(runHook('zmux wait x --for turn:ready -T 30', undefined, { run_in_background: false }), 0)
 })

@@ -164,6 +164,38 @@ for the screen to settle. Note: a worker that is *confidently wrong* will report
 `attention` — `ready` means "I think I have an answer/checkpoint," not "this is correct." Verification is the
 caller's job, never trust a worker's own `ready` as proof.
 
+## Conductor wait discipline
+
+A worker runs long and unattended. Do not poll `tab status` in a loop, and do
+not make the human the notification channel. Arm a push signal, end the turn,
+and let the wait's exit wake the conductor.
+
+Claude conductors background the wait itself — the guard allows a single pure
+`zmux wait …` command with `run_in_background`, and its exit re-invokes you:
+
+```bash
+zmux wait <worker-tab> -s <worker-session> --for turn:ready,failed,attention -T 570 --json
+```
+
+Then end the turn. On wake:
+
+- condition met → the wait's JSON names the state that fired; read
+  `zmux tab status --json` and review or unblock the worker;
+- timeout (`wait condition not met`) → re-arm the same wait, or check in.
+
+Keep `-T` under the harness's own background command timeout so the exit always
+carries the wait's verdict. One background wait per concurrent worker; the
+exiting wait identifies which worker flipped. `turn:` waits are fresh by
+default — state set before the wait started does not satisfy them.
+
+Pi conductors use `zmux_callback` instead — the same core wait delivered as a
+typed notification, no agent-side sleeps. A harness with neither channel runs
+bounded foreground waits between other work — never a poll loop.
+
+Uninstrumented CLI in the tab? Same backgrounded pattern with
+`--for output:<regex>` or `--for idle:<duration>` as fallback evidence
+(`agent-peer.md` → State).
+
 ## Names
 
 | worker | tab name |
