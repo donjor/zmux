@@ -120,16 +120,23 @@ func (c ReapContext) withDefaults() ReapContext {
 // (editors, REPLs, agent CLIs, servers, TUIs) is a live foreground process.
 var idleShells = map[string]bool{"bash": true, "zsh": true, "fish": true, "sh": true, "dash": true, "ksh": true}
 
+// IsIdleShell reports whether cmd is a known login/interactive shell whose
+// presence as a pane's foreground command means the pane is sitting at a
+// prompt. Empty or unknown commands are NOT idle shells (false negatives over
+// false kills in the reaper, false suppression in the bar). This is the single
+// predicate shared by the reaper (via PaneIsLive) and every bar render path, so
+// "which shells count as idle" cannot drift between them.
+func IsIdleShell(cmd string) bool {
+	return idleShells[cmd]
+}
+
 // PaneIsLive reports whether a pane has a live FOREGROUND process. tmux's
 // pane_current_command is the pane's foreground process, so a known shell means
 // the prompt is idle. Unknown/empty command → live (false negatives over false
 // kills). Background jobs under an idle shell are invisible here — ApplyReap's
 // final confirm covers them with a pane_pid child-process check before any kill.
 func PaneIsLive(row tmux.LogicalPaneRow) bool {
-	if row.Command == "" {
-		return true
-	}
-	return !idleShells[row.Command]
+	return !IsIdleShell(row.Command)
 }
 
 // PlanReap classifies every scanned row. Pure: no tmux writes — the apply step

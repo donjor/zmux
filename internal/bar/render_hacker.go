@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -24,7 +25,7 @@ func renderLeftHacker(p *theme.Palette, ctx BarContext) string {
 	fmt.Fprintf(&b, "#[fg=%s] > ", d)
 
 	// Active process.
-	if ctx.PaneCmd != "" && ctx.PaneCmd != "bash" && ctx.PaneCmd != "zsh" && ctx.PaneCmd != "fish" {
+	if ctx.PaneCmd != "" && !tabs.IsIdleShell(ctx.PaneCmd) {
 		fmt.Fprintf(&b, "#[fg=%s]%s ", g, ctx.PaneCmd)
 	}
 

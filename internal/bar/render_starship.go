@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -63,7 +64,7 @@ func renderRightStarship(p *theme.Palette, ctx BarContext) string {
 	var b strings.Builder
 
 	// Process.
-	if ctx.PaneCmd != "" && ctx.PaneCmd != "bash" && ctx.PaneCmd != "zsh" && ctx.PaneCmd != "fish" {
+	if ctx.PaneCmd != "" && !tabs.IsIdleShell(ctx.PaneCmd) {
 		fmt.Fprintf(&b, "#[fg=%s] %s ", p.Info.Hex(), ctx.PaneCmd)
 	}
 

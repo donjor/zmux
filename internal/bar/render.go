@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/theme"
 )
 
@@ -190,7 +191,7 @@ func RenderLeft(p *theme.Palette, ctx BarContext, preset Preset) string {
 // these fields (RenderLeft does).
 func renderLeftAux(p *theme.Palette, ctx BarContext, preset Preset) string {
 	proc := ctx.PaneCmd
-	if proc == "bash" || proc == "zsh" || proc == "fish" {
+	if tabs.IsIdleShell(proc) {
 		proc = ""
 	}
 
