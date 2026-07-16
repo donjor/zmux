@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
+	"github.com/donjor/zmux/internal/runexec"
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tabstate"
@@ -277,7 +278,7 @@ func markPeerRunning(app *apppkg.App, paneID, target string, o peerEnsureOptions
 func sendPreparedCommand(app *apppkg.App, target, command string, timeoutSec int) error {
 	sendCmd := command
 	if !isSimpleCommand(command) {
-		scriptPath, cleanup, err := writeCommandScript(command, timeoutSec)
+		scriptPath, cleanup, err := runexec.WriteCommandScript(command, time.Duration(timeoutSec)*time.Second)
 		if err != nil {
 			return fmt.Errorf("write command script: %w", err)
 		}

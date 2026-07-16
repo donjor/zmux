@@ -7,6 +7,7 @@ import (
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
+	"github.com/donjor/zmux/internal/runexec"
 	"github.com/donjor/zmux/internal/session"
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
@@ -143,7 +144,7 @@ session is tagged into the workspace but never made the default attach target.`,
 			// shell-event hooks; session run only delivers the command.
 			sendCmd := command
 			if !isSimpleCommand(command) {
-				scriptPath, cleanup, werr := writeCommandScript(command, 0)
+				scriptPath, cleanup, werr := runexec.WriteCommandScript(command, 0)
 				if werr != nil {
 					return fmt.Errorf("write command script: %w", werr)
 				}

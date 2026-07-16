@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
+	"github.com/donjor/zmux/internal/runexec"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +69,10 @@ Examples:
 			}
 
 			if watchFollow {
-				return followOutput(app, target, watchLines)
+				ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+				defer stop()
+				exec := runexec.Executor{Runner: app.Runner, Stdout: os.Stdout, Stderr: os.Stderr}
+				return exec.Follow(ctx, target, watchLines)
 			}
 
 			output, err := app.Runner.CapturePane(target, watchLines)

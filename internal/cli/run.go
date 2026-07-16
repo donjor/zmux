@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"time"
 
 	apppkg "github.com/donjor/zmux/internal/app"
 	"github.com/donjor/zmux/internal/recipe"
+	"github.com/donjor/zmux/internal/runexec"
 	"github.com/donjor/zmux/internal/tablabel"
 	"github.com/donjor/zmux/internal/tabs"
 	"github.com/donjor/zmux/internal/tmux"
@@ -174,7 +174,7 @@ Examples:
 			// temp script, which sidesteps all quoting issues.
 			sendCmd := actualCommand
 			if !isSimpleCommand(actualCommand) {
-				scriptPath, cleanup, err := writeCommandScript(actualCommand, runTimeout)
+				scriptPath, cleanup, err := runexec.WriteCommandScript(actualCommand, time.Duration(runTimeout)*time.Second)
 				if err != nil {
 					return fmt.Errorf("write command script: %w", err)
 				}
@@ -290,14 +290,29 @@ func runInResolvedTab(app *apppkg.App, rt resolvedTab, sessionName, name, sendCm
 // follow output — exactly one, in that precedence. New tabs pass an empty
 // baseline (no prior output); reused tabs pass their pre-launch snapshot.
 func dispatchRunTail(app *apppkg.App, target, waitPane, nonce string, shouldWait bool, opts runTabOpts, outputBaseline map[string]int) error {
+	// Writers are read here (not at construction) so test harnesses that swap
+	// the os.Stdout/os.Stderr package vars before RunE are still captured.
+	exec := runexec.Executor{
+		Runner:     app.Runner,
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
+		StartGrace: runLifecycleStartGrace,
+	}
+	timeout := time.Duration(opts.timeout) * time.Second
 	if shouldWait {
-		return waitForRunResult(app, target, waitPane, nonce, opts.timeout, opts.followLines)
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return exec.WaitResult(ctx, target, waitPane, nonce, timeout, opts.followLines)
 	}
 	if opts.until != "" {
-		return waitForRunReadiness(app, target, waitPane, opts, outputBaseline)
+		// Readiness historically ran without a SIGINT handler (default
+		// terminate); preserve that by passing a non-cancellable context.
+		return exec.WaitReadiness(context.Background(), target, waitPane, opts.until, timeout, opts.followLines, outputBaseline)
 	}
 	if opts.follow {
-		return followOutput(app, target, opts.followLines)
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		return exec.Follow(ctx, target, opts.followLines)
 	}
 	return nil
 }
@@ -389,32 +404,6 @@ func runInNewTab(app *apppkg.App, sessionName, name, sendCmd, nonce string, shou
 	return dispatchRunTail(app, target, waitPane, nonce, shouldWait, opts, map[string]int{})
 }
 
-func waitForRunReadiness(app *apppkg.App, target, paneID string, opts runTabOpts, outputBaseline map[string]int) error {
-	condition, err := waitfor.ParseCondition("output:" + opts.until)
-	if err != nil {
-		return err
-	}
-	outcome, err := waitfor.Wait(context.Background(), waitfor.Request{
-		Runner:         app.Runner,
-		Target:         target,
-		PaneID:         paneID,
-		Lines:          opts.followLines,
-		Timeout:        time.Duration(opts.timeout) * time.Second,
-		Condition:      condition,
-		OutputBaseline: outputBaseline,
-	})
-	if err != nil {
-		return err
-	}
-	if outcome.OutputTail != "" {
-		fmt.Print(outcome.OutputTail)
-	}
-	if !outcome.Met {
-		return fmt.Errorf("runtime readiness not met: %s", outcome.FailureKind)
-	}
-	return nil
-}
-
 func shouldDispatchRecipeRun(cmd *cobra.Command, app *apppkg.App, args []string, tabName string, sessionFlag string, follow bool, detach bool, yes bool, dryRun bool) bool {
 	if len(args) == 0 || tabName != "" || sessionFlag != "" || follow {
 		return false
@@ -484,41 +473,6 @@ func isSimpleCommand(cmd string) bool {
 	return cmd != "" && !strings.ContainsAny(cmd, "\n\r\t")
 }
 
-// writeCommandScript writes a command to a temp script file for the rare cases
-// where the command cannot be delivered as one prompt line (currently multiline
-// or literal-tab input). Returns the script path and a cleanup function.
-func writeCommandScript(command string, timeoutSec int) (string, func(), error) {
-	f, err := os.CreateTemp("", "zmux-cmd-*.sh")
-	if err != nil {
-		return "", nil, err
-	}
-
-	// Echo the command so the terminal shows what's being run, then execute it,
-	// preserving the command's exit status even when the script self-deletes.
-	// Use printf to avoid echo interpreting escape sequences.
-	escaped := strings.ReplaceAll(command, `\`, `\\`)
-	escaped = strings.ReplaceAll(escaped, `"`, `\"`)
-	script := fmt.Sprintf("#!/usr/bin/env bash\nprintf '\\033[2m$ %%s\\033[0m\\n' %q\n__zmux_cmd_cleanup() { __zmux_status=$?; rm -f %q; exit $__zmux_status; }\ntrap __zmux_cmd_cleanup EXIT\n%s\n", escaped, f.Name(), command)
-	if _, err := f.WriteString(script); err != nil {
-		f.Close()
-		os.Remove(f.Name())
-		return "", nil, err
-	}
-	f.Close()
-
-	// The script self-deletes (rm -f at the end), so cleanup is a no-op.
-	// But provide a fallback cleanup in case it never runs.
-	cleanupDelay := time.Duration(timeoutSec+10) * time.Second
-	cleanup := func() {
-		go func(delay time.Duration) {
-			time.Sleep(delay)
-			os.Remove(f.Name())
-		}(cleanupDelay)
-	}
-
-	return f.Name(), cleanup, nil
-}
-
 func stageRunID(app *apppkg.App, paneID, nonce string) error {
 	if paneID == "" || nonce == "" {
 		return fmt.Errorf("cannot stage empty run id")
@@ -530,136 +484,8 @@ func stageRunID(app *apppkg.App, paneID, nonce string) error {
 	return nil
 }
 
-// waitForRunResult watches pane output while waiting for the shell lifecycle
-// hook to publish @zmux_run_result=<nonce>:<exit>. Completion is metadata, not
-// terminal text, so stdout stays free of AGENT_DONE-style sentinels.
-var runLifecycleStartGrace = 5 * time.Second
-
-func waitForRunResult(app *apppkg.App, target, paneID, nonce string, timeoutSec, followLines int) error {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	defer signal.Stop(sig)
-
-	timeout := time.Duration(timeoutSec) * time.Second
-	deadline := time.Now().Add(timeout)
-	startDeadline := time.Now().Add(runLifecycleStartDeadline(timeout))
-	started := false
-	ticker := time.NewTicker(300 * time.Millisecond)
-	defer ticker.Stop()
-
-	seen := map[string]bool{}
-	printNew := func(output string) {
-		for _, line := range strings.Split(output, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue
-			}
-			if !seen[trimmed] {
-				seen[trimmed] = true
-				fmt.Println(line)
-			}
-		}
-	}
-
-	for {
-		select {
-		case <-sig:
-			return fmt.Errorf("interrupted")
-
-		case <-ticker.C:
-			output, err := app.Runner.CapturePane(target, followLines)
-			if err == nil {
-				printNew(output)
-			}
-			if exitCode, ok := runResultExit(app, paneID, nonce); ok {
-				_ = app.Runner.UnsetPaneOption(paneID, tabs.OptRunResult)
-				if exitCode != 0 {
-					return fmt.Errorf("command exited with code %d", exitCode)
-				}
-				return nil
-			}
-			if !started && runLifecycleStarted(app, paneID, nonce) {
-				started = true
-			}
-			if !started && time.Now().After(startDeadline) {
-				_ = app.Runner.UnsetPaneOption(paneID, tabs.OptNextRunID)
-				return fmt.Errorf("timeout after %ds waiting for shell lifecycle to start in the target pane (run `zmux setup doctor`; if stale, run `zmux setup shell` and open a fresh tab, or use --detach/--follow for REPLs/TUIs/non-interactive shells)", int(runLifecycleStartDeadline(timeout).Seconds()))
-			}
-			if time.Now().After(deadline) {
-				if err != nil {
-					if output, _ := app.Runner.CapturePane(target, followLines); output != "" {
-						fmt.Print(output)
-					}
-				}
-				return fmt.Errorf("timeout after %ds waiting for shell lifecycle result (run `zmux setup doctor`; if stale, run `zmux setup shell` for the target shell, or inspect output with `zmux watch`)", timeoutSec)
-			}
-		}
-	}
-}
-
-func runLifecycleStartDeadline(timeout time.Duration) time.Duration {
-	if timeout <= 0 || timeout > runLifecycleStartGrace {
-		return runLifecycleStartGrace
-	}
-	return timeout
-}
-
-func runLifecycleStarted(app *apppkg.App, paneID, nonce string) bool {
-	next, err := app.Runner.ShowPaneOption(paneID, tabs.OptNextRunID)
-	if err != nil {
-		return false
-	}
-	return strings.TrimSpace(next) != nonce
-}
-
-func runResultExit(app *apppkg.App, paneID, nonce string) (int, bool) {
-	value, err := app.Runner.ShowPaneOption(paneID, tabs.OptRunResult)
-	if err != nil || value == "" {
-		return 0, false
-	}
-	prefix := nonce + ":"
-	if !strings.HasPrefix(strings.TrimSpace(value), prefix) {
-		return 0, false
-	}
-	exitCode, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(value, prefix)))
-	if err != nil {
-		return 0, false
-	}
-	return exitCode, true
-}
-
-// followOutput tails the output of a tmux pane, printing new content as it appears.
-func followOutput(app *apppkg.App, target string, followLines int) error {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	defer signal.Stop(sig)
-
-	lastLen := 0
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	fmt.Fprintf(os.Stderr, "--- following %s (Ctrl+C to stop) ---\n", target)
-
-	for {
-		select {
-		case <-sig:
-			fmt.Fprintln(os.Stderr, "\n--- stopped following ---")
-			return nil
-		case <-ticker.C:
-			output, err := app.Runner.CapturePane(target, followLines)
-			if err != nil {
-				continue
-			}
-
-			lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
-			if len(lines) > lastLen {
-				for _, line := range lines[lastLen:] {
-					fmt.Println(line)
-				}
-				lastLen = len(lines)
-			} else if len(lines) < lastLen {
-				lastLen = len(lines)
-			}
-		}
-	}
-}
+// runLifecycleStartGrace is the window a blocking run waits for the target
+// pane's shell lifecycle hook to consume the staged nonce before declaring the
+// shell uninstrumented. It lives here (not in runexec) so tests can shorten it;
+// dispatchRunTail passes it to the Executor as StartGrace.
+var runLifecycleStartGrace = runexec.DefaultStartGrace
