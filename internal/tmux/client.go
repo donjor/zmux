@@ -625,44 +625,38 @@ func (c *Client) SetSessionOption(target, key, value string) error {
 	return c.runSilent("set-option", "-t", target, key, value)
 }
 
-// SetWindowOption sets a tmux window option for a specific window target.
-func (c *Client) SetWindowOption(target, key, value string) error {
-	args := []string{"set-option", "-w"}
+// scopedArgs assembles a tmux option argv: the fixed prefix (the verb plus
+// scope/mode flags such as -w/-p, -u, -q -v), an optional "-t <target>" inserted
+// only when target is non-empty, then the trailing operands (key, or key value).
+// The six window/pane option methods all share this exact skeleton, so routing
+// them through one builder keeps their argv ordering from drifting apart.
+func scopedArgs(prefix []string, target string, trailing ...string) []string {
+	args := make([]string, 0, len(prefix)+2+len(trailing))
+	args = append(args, prefix...)
 	if target != "" {
 		args = append(args, "-t", target)
 	}
-	args = append(args, key, value)
-	return c.runSilent(args...)
+	return append(args, trailing...)
+}
+
+// SetWindowOption sets a tmux window option for a specific window target.
+func (c *Client) SetWindowOption(target, key, value string) error {
+	return c.runSilent(scopedArgs([]string{"set-option", "-w"}, target, key, value)...)
 }
 
 // UnsetWindowOption unsets a tmux window option for a specific window target.
 func (c *Client) UnsetWindowOption(target, key string) error {
-	args := []string{"set-option", "-w", "-u"}
-	if target != "" {
-		args = append(args, "-t", target)
-	}
-	args = append(args, key)
-	return c.runSilent(args...)
+	return c.runSilent(scopedArgs([]string{"set-option", "-w", "-u"}, target, key)...)
 }
 
 // SetPaneOption sets a tmux pane option for a specific pane target.
 func (c *Client) SetPaneOption(target, key, value string) error {
-	args := []string{"set-option", "-p"}
-	if target != "" {
-		args = append(args, "-t", target)
-	}
-	args = append(args, key, value)
-	return c.runSilent(args...)
+	return c.runSilent(scopedArgs([]string{"set-option", "-p"}, target, key, value)...)
 }
 
 // UnsetPaneOption unsets a tmux pane option for a specific pane target.
 func (c *Client) UnsetPaneOption(target, key string) error {
-	args := []string{"set-option", "-p", "-u"}
-	if target != "" {
-		args = append(args, "-t", target)
-	}
-	args = append(args, key)
-	return c.runSilent(args...)
+	return c.runSilent(scopedArgs([]string{"set-option", "-p", "-u"}, target, key)...)
 }
 
 // ShowWindowOption reads a window option scope-exactly (show-options -w),
@@ -670,24 +664,14 @@ func (c *Client) UnsetPaneOption(target, key string) error {
 // pane-target read can surface a window value and vice versa — so mirror
 // validation and migration must use these instead.
 func (c *Client) ShowWindowOption(target, key string) (string, error) {
-	args := []string{"show-options", "-w", "-q", "-v"}
-	if target != "" {
-		args = append(args, "-t", target)
-	}
-	args = append(args, key)
-	return c.run(args...)
+	return c.run(scopedArgs([]string{"show-options", "-w", "-q", "-v"}, target, key)...)
 }
 
 // ShowPaneOption reads a pane option scope-exactly (show-options -p),
 // returning "" when unset (-q). See ShowWindowOption for why format reads
 // don't suffice.
 func (c *Client) ShowPaneOption(target, key string) (string, error) {
-	args := []string{"show-options", "-p", "-q", "-v"}
-	if target != "" {
-		args = append(args, "-t", target)
-	}
-	args = append(args, key)
-	return c.run(args...)
+	return c.run(scopedArgs([]string{"show-options", "-p", "-q", "-v"}, target, key)...)
 }
 
 // ShowPaneOptions expands sanitized pane lifecycle options in one display-

@@ -5,13 +5,12 @@ import (
 	"testing"
 )
 
-// T-106 (055 P-001) — scoped option-method argv contract (B-02/T-405). The six
-// window/pane option methods each hand-build the same skeleton: a scope flag
-// prefix (-w/-p, plus -u for unset, plus -q -v for show), an OPTIONAL "-t
-// target" inserted only when target != "", then the trailing key[/value]. T-405
-// consolidates this into one scopedArgs helper; these tables pin the exact argv
-// for every method with and without a target so the extraction is provably
-// argv-identical.
+// T-106/T-405 (055, B-02) — scoped option-method argv contract. The six
+// window/pane option methods share one skeleton: a scope flag prefix (-w/-p,
+// plus -u for unset, plus -q -v for show), an OPTIONAL "-t target" inserted only
+// when target != "", then the trailing key[/value]. T-405 routed all six through
+// the single scopedArgs helper; these tables pin the exact argv for every method
+// with and without a target, proving the consolidation is argv-identical.
 func TestClientOptionMethodArgv(t *testing.T) {
 	t.Setenv("TMUX", "")
 	logPath := filepath.Join(t.TempDir(), "tmux-args.log")
