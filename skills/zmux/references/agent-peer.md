@@ -266,7 +266,11 @@ peers without usable lifecycle hooks. The live lifecycle matrix currently proves
 Pi and Claude native completion; Codex and Agy answer but remain `running`, so
 callers must pass `idleSeconds` for those CLIs until native turn-end adapters land.
 `deliverAs: "nextTurn"` never triggers a continuation and must not be paired with
-`triggerTurn: true`.
+`triggerTurn: true`. Claude hosts get the same continue-after-the-turn semantics
+without the dispatcher by backgrounding a single pure `zmux wait`
+(guard-sanctioned); see `agent-worker.md` → Conductor wait discipline. Treat
+output/idle callback basis as fallback evidence unless lifecycle `turnSeq` /
+fresh `turnState` proves true instrumented readiness.
 
 Use the fields that actually describe this failure:
 

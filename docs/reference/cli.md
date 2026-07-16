@@ -75,7 +75,7 @@ their own session, window, cwd, and process metadata.
 
 ```bash
 zmux run '<cmd>' -n <tab> [-T seconds] [-d] [--no-focus] [-f] [--keep] [--scope daemon]
-zmux wait <tab> --for turn:ready|cmd:done|output:<regex>|idle:<duration> [--json]
+zmux wait <tab> --for turn:ready[,failed,attention]|cmd:done|output:<regex>|idle:<duration> [--json]
 zmux watch <tab> [-l lines] [--until pattern] [--idle seconds] [-f]
 zmux log start <tab> [--ansi] [--max-bytes n]
 zmux log status                    # global recording view; no -s/--session

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,13 +95,26 @@ func ParseCondition(spec string) (Condition, error) {
 	value = strings.TrimSpace(value)
 	switch ConditionKind(kind) {
 	case ConditionTurn:
-		state := tabs.NormalizeTurnState(value)
-		switch state {
-		case tabs.TurnRunning, tabs.TurnReady, tabs.TurnAttention, tabs.TurnFailed, tabs.TurnConsumed, tabs.TurnParked:
-			return Condition{Kind: ConditionTurn, Value: state}, nil
-		default:
-			return Condition{}, fmt.Errorf("unknown turn state %q", value)
+		// A turn condition may name a comma-separated set (turn:ready,failed,
+		// attention): the wait fires on whichever member the tab reaches first.
+		// A single state yields a one-element set, so the single-state spelling
+		// (and its resulting Value) stays byte-identical.
+		members := strings.Split(value, ",")
+		normalized := make([]string, 0, len(members))
+		for _, member := range members {
+			member = strings.TrimSpace(member)
+			if member == "" {
+				return Condition{}, fmt.Errorf("empty turn state in %q", value)
+			}
+			state := tabs.NormalizeTurnState(member)
+			switch state {
+			case tabs.TurnRunning, tabs.TurnReady, tabs.TurnAttention, tabs.TurnFailed, tabs.TurnConsumed, tabs.TurnParked:
+				normalized = append(normalized, state)
+			default:
+				return Condition{}, fmt.Errorf("unknown turn state %q", member)
+			}
 		}
+		return Condition{Kind: ConditionTurn, Value: strings.Join(normalized, ",")}, nil
 	case ConditionCmd:
 		if strings.HasPrefix(value, "exit=") {
 			if _, err := strconv.Atoi(strings.TrimPrefix(value, "exit=")); err != nil {
@@ -391,17 +405,20 @@ func classifyLifecycle(req Request, baseline Baseline, st Status) (Outcome, bool
 	case ConditionTurn:
 		state := tabs.NormalizeTurnState(st.TurnState)
 		fresh := req.AllowStale || freshTurn(baseline, st)
+		// State reports the turn state that actually fired, never the spec — a
+		// multi-state wait must name which member the tab reached.
 		oc := Outcome{Basis: BasisTurnState, State: state, Fresh: fresh, Status: st}
-		if state == req.Condition.Value && fresh {
+		want := turnStateSet(req.Condition)
+		if fresh && slices.Contains(want, state) {
 			oc.Met = true
 			return oc, true
 		}
-		if fresh && state == tabs.TurnFailed && req.Condition.Value != tabs.TurnFailed {
+		if fresh && state == tabs.TurnFailed && !slices.Contains(want, tabs.TurnFailed) {
 			oc.FailureKind = "turn_failed"
 			oc.Warnings = []string{"peer turn state is failed"}
 			return oc, true
 		}
-		if fresh && state == tabs.TurnAttention && req.Condition.Value != tabs.TurnAttention {
+		if fresh && state == tabs.TurnAttention && !slices.Contains(want, tabs.TurnAttention) {
 			oc.FailureKind = "turn_attention"
 			oc.Warnings = []string{"peer turn state requires attention"}
 			return oc, true
@@ -524,6 +541,13 @@ func cmdMatches(want string, st Status) bool {
 		return (st.CmdState == tabs.CmdDone || st.CmdState == tabs.CmdFailed) && st.LastExit == strings.TrimPrefix(want, "exit=")
 	}
 	return st.CmdState == want
+}
+
+// turnStateSet returns the accepted turn states for a turn condition. Values are
+// stored comma-joined by ParseCondition, so a single-state condition yields a
+// one-element set and shares the multi-state matching path.
+func turnStateSet(cond Condition) []string {
+	return strings.Split(cond.Value, ",")
 }
 
 func statusTurnSeq(st Status) int {

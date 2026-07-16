@@ -38,10 +38,13 @@ func newWaitCmd(app *apppkg.App) *cobra.Command {
 		Long: `Wait for one first-class zmux condition on a tab.
 
 Conditions are closed and explicit:
-  turn:ready|attention|failed|running
+  turn:ready|attention|failed|running   (comma-set: turn:ready,failed,attention)
   cmd:done|failed|running|exit=N
   output:<regex>
   idle:<seconds-or-duration>
+
+A turn condition may name a comma-separated set; the wait fires on whichever
+member the tab reaches first and reports the state that actually fired.
 
 Lifecycle waits are fresh by default: stale ready/done state that existed before
 this wait started does not satisfy the condition. Use --allow-stale only for
@@ -107,7 +110,7 @@ manual diagnostics where current state is intentionally enough.`,
 		},
 	}
 	cmd.Flags().StringVarP(&sessionFlag, "session", "s", "", "target session (default: current)")
-	cmd.Flags().StringVar(&forSpec, "for", "", "condition: turn:ready, cmd:done, cmd:exit=0, output:<regex>, idle:3s")
+	cmd.Flags().StringVar(&forSpec, "for", "", "condition: turn:ready (or turn:ready,failed,attention), cmd:done, cmd:exit=0, output:<regex>, idle:3s")
 	_ = cmd.MarkFlagRequired("for")
 	cmd.Flags().IntVarP(&timeoutSec, "timeout", "T", 10, "wait timeout in seconds")
 	cmd.Flags().IntVarP(&lines, "lines", "l", 120, "output lines to capture")

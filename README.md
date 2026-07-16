@@ -107,7 +107,7 @@ zmux run 'make test' -n tests -T 180        # reviewable one-shot
 zmux run 'make test' -n tests --no-focus     # wait without selecting a new tab
 zmux run 'python3 -m http.server' -n web -d # detached long-running tab
 zmux wait web --for output:'Serving HTTP' --json  # structured wait evidence
-zmux wait peer --for turn:ready --json           # fresh peer lifecycle wait
+zmux wait peer --for turn:ready,failed,attention --json  # fresh peer lifecycle wait (comma-set)
 zmux watch web -l 20                             # tail visible output
 zmux log start web --ansi                   # bounded background recording
 zmux log tail web

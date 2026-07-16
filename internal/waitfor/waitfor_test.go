@@ -10,6 +10,86 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
+func TestParseConditionTurnSet(t *testing.T) {
+	cond, err := ParseCondition("turn:ready, failed ,attention")
+	if err != nil {
+		t.Fatalf("parse set: %v", err)
+	}
+	if cond.Kind != ConditionTurn || cond.Value != "ready,failed,attention" {
+		t.Fatalf("unexpected condition: %+v", cond)
+	}
+}
+
+func TestParseConditionTurnSingleByteIdentical(t *testing.T) {
+	cond, err := ParseCondition("turn:ready")
+	if err != nil {
+		t.Fatalf("parse single: %v", err)
+	}
+	if cond.Value != "ready" {
+		t.Fatalf("single-state value drifted: %q", cond.Value)
+	}
+}
+
+func TestParseConditionTurnRejectsBadMember(t *testing.T) {
+	_, err := ParseCondition("turn:ready,bogus")
+	if err == nil || !strings.Contains(err.Error(), "bogus") {
+		t.Fatalf("expected error naming bogus, got: %v", err)
+	}
+}
+
+func TestTurnWaitSetMetByFailedReportsFired(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	mock.PaneOptions = map[string]string{
+		"%1\x00" + tabs.OptTurnState: tabs.TurnFailed,
+		"%1\x00" + tabs.OptTurnSeq:   "4",
+	}
+	cond, err := ParseCondition("turn:ready,failed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Wait(context.Background(), Request{
+		Runner:    mock,
+		Target:    "%1",
+		PaneID:    "%1",
+		Condition: cond,
+		Baseline:  &Baseline{TurnSeq: 4, TurnState: tabs.TurnRunning},
+		Timeout:   20 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if !out.Met || out.State != tabs.TurnFailed || out.FailureKind != "" {
+		t.Fatalf("fresh failed should satisfy ready,failed and report failed: %+v", out)
+	}
+}
+
+func TestTurnWaitSetRejectsStale(t *testing.T) {
+	mock := tmux.NewMockRunner()
+	mock.PaneOptions = map[string]string{
+		"%1\x00" + tabs.OptTurnState: tabs.TurnFailed,
+		"%1\x00" + tabs.OptTurnSeq:   "3",
+	}
+	cond, err := ParseCondition("turn:ready,failed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Wait(context.Background(), Request{
+		Runner:       mock,
+		Target:       "%1",
+		PaneID:       "%1",
+		Condition:    cond,
+		Baseline:     &Baseline{TurnSeq: 3, TurnState: tabs.TurnFailed},
+		Timeout:      5 * time.Millisecond,
+		PollInterval: time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+	if out.Met || out.Fresh || out.FailureKind != "turn_unproven" {
+		t.Fatalf("stale set member should be unproven: %+v", out)
+	}
+}
+
 func TestTurnWaitRejectsStaleReady(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	mock.PaneOptions = map[string]string{

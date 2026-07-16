@@ -27,6 +27,25 @@ func TestWaitAllowsFreshAfterTurnGeneration(t *testing.T) {
 	}
 }
 
+func TestWaitTurnSetReportsFiredState(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{logicalRow("%4", "test-session", "@3", 2, "ztab_peer", "claude-peer")}
+	mock.PaneOptions = map[string]string{
+		"%4\x00" + tabs.OptTurnState: tabs.TurnFailed,
+		"%4\x00" + tabs.OptTurnSeq:   "10",
+	}
+	out := captureStdout(t, func() {
+		root.SetArgs([]string{"wait", "claude-peer", "-s", "test-session", "--for", "turn:ready,failed,attention", "--fresh-after", "9", "--json"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+	})
+	if !strings.Contains(out, `"met": true`) || !strings.Contains(out, `"state": "failed"`) {
+		t.Fatalf("expected met turn set reporting failed, got:\n%s", out)
+	}
+}
+
 func TestTabInspectJSONIncludesStatusTailAndWarnings(t *testing.T) {
 	root, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
