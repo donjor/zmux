@@ -66,8 +66,7 @@ func TestThemesEnterAppliesHighlightedTheme(t *testing.T) {
 	}
 	want := tab.currentThemeInfo().Name
 
-	out, cmd := sendThemesKey(tab, "enter")
-	tab = out
+	_, cmd := sendThemesKey(tab, "enter")
 	if cmd == nil {
 		t.Fatal("enter on a highlighted theme should return an apply command")
 	}
