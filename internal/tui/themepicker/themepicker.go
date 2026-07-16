@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tui/filter"
 	"github.com/donjor/zmux/internal/tui/outline"
@@ -25,40 +26,15 @@ const (
 // themeRowID returns the stable outline row ID for a theme.
 func themeRowID(name string) string { return "theme:" + name }
 
-// themeKeymap defines keybindings for the theme picker.
-var themeKeys = struct {
-	Quit   key.Binding
-	Enter  key.Binding
-	Back   key.Binding
-	Filter key.Binding
-	Up     key.Binding
-	Down   key.Binding
-}{
-	Quit: key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q", "quit"),
-	),
-	Enter: key.NewBinding(
-		key.WithKeys("enter"),
-		key.WithHelp("enter", "apply"),
-	),
-	Back: key.NewBinding(
-		key.WithKeys("esc"),
-		key.WithHelp("esc", "cancel"),
-	),
-	Filter: key.NewBinding(
-		key.WithKeys("/"),
-		key.WithHelp("/", "filter"),
-	),
-	Up: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("up/k", "up"),
-	),
-	Down: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("down/j", "down"),
-	),
-}
+// quitKey is the standalone picker's own escape hatch — q or ctrl+c fully
+// exits the picker. It has no cross-surface analogue (the dashboard tab never
+// quits the app), so it stays a component-local binding (idiom A). Every other
+// action — apply/cancel/filter/up/down — comes from the shared internal/keys
+// registry (keys.TUI*) so the picker moves in lockstep with every list surface.
+var quitKey = key.NewBinding(
+	key.WithKeys("q", "ctrl+c"),
+	key.WithHelp("q", "quit"),
+)
 
 // ThemePickerModel is the bubbletea model for the theme picker TUI.
 // Cursor, nav, and cursor restoration across filter changes all live
@@ -161,13 +137,13 @@ func (m ThemePickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle filter mode.
 	if m.mode == themeFilter {
 		switch {
-		case key.Matches(msg, themeKeys.Back):
+		case key.Matches(msg, keys.TUICancel):
 			m.mode = themeList
 			m.filter.SetValue("")
 			m.filter.Blur()
 			m.applyFilter()
 			return m, nil
-		case key.Matches(msg, themeKeys.Enter):
+		case key.Matches(msg, keys.TUIConfirm):
 			m.mode = themeList
 			m.filter.Blur()
 			return m, nil
@@ -181,29 +157,29 @@ func (m ThemePickerModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// Normal list mode.
 	switch {
-	case key.Matches(msg, themeKeys.Quit):
+	case key.Matches(msg, quitKey):
 		m.Quitting = true
 		return m, tea.Quit
 
-	case key.Matches(msg, themeKeys.Back):
+	case key.Matches(msg, keys.TUICancel):
 		m.Quitting = true
 		return m, tea.Quit
 
-	case key.Matches(msg, themeKeys.Up):
+	case key.Matches(msg, keys.TUIListUp):
 		m.tree.MoveUp()
 		return m, nil
 
-	case key.Matches(msg, themeKeys.Down):
+	case key.Matches(msg, keys.TUIListDown):
 		m.tree.MoveDown()
 		return m, nil
 
-	case key.Matches(msg, themeKeys.Enter):
+	case key.Matches(msg, keys.TUIConfirm):
 		if ti := m.currentTheme(); ti != nil {
 			m.Chosen = ti.Name
 		}
 		return m, tea.Quit
 
-	case key.Matches(msg, themeKeys.Filter):
+	case key.Matches(msg, keys.TUIFilter):
 		m.mode = themeFilter
 		m.filter.Focus()
 		return m, textinput.Blink

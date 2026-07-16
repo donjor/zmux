@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/views"
@@ -90,14 +91,14 @@ func (t *ThemesTab) handleEditorKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	// Color picker active.
 	if t.pickerActive {
 		switch {
-		case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+		case key.Matches(msg, keys.TUIConfirm):
 			// Confirm color.
 			if t.editCursor < len(t.editSlots) {
 				t.editSlots[t.editCursor].Set(&t.editTheme, t.picker.Value())
 			}
 			t.pickerActive = false
 			return t, nil
-		case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+		case key.Matches(msg, keys.TUICancel):
 			// Cancel — restore original color.
 			if t.editCursor < len(t.editSlots) {
 				t.editSlots[t.editCursor].Set(&t.editTheme, t.pickerOrigColor)
@@ -117,19 +118,19 @@ func (t *ThemesTab) handleEditorKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 
 	// Slot navigation and editor commands.
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
+	case key.Matches(msg, keys.TUIListUp):
 		if t.editCursor > 0 {
 			t.editCursor--
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
+	case key.Matches(msg, keys.TUIListDown):
 		if t.editCursor < len(t.editSlots)-1 {
 			t.editCursor++
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+	case key.Matches(msg, keys.TUIConfirm):
 		// Open HSL picker for current slot.
 		if t.editCursor < len(t.editSlots) {
 			slot := t.editSlots[t.editCursor]
@@ -141,7 +142,7 @@ func (t *ThemesTab) handleEditorKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("s"))):
+	case key.Matches(msg, themeSaveKey):
 		// Save edited colors as custom theme (prompt for name).
 		t.namingActive = true
 		t.nameInput.SetValue(t.editName)
@@ -149,17 +150,17 @@ func (t *ThemesTab) handleEditorKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		t.nameInput.CursorEnd()
 		return t, textinput.Blink
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+	case key.Matches(msg, keys.TUICancel):
 		// Exit editing mode back to theme list.
 		t.editing = false
 		t.pickerActive = false
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
+	case key.Matches(msg, keys.TUIListBottom):
 		t.editCursor = len(t.editSlots) - 1
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
+	case key.Matches(msg, keys.TUIListTop):
 		t.editCursor = 0
 		return t, nil
 	}

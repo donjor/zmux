@@ -8,11 +8,22 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/filter"
 	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/views"
+)
+
+// Theme-family keys with no cross-surface analogue live here as package-level
+// bindings (idiom A) — built once, matched in the Update paths. Generic
+// list/confirm/cancel/filter navigation comes from the internal/keys registry
+// (keys.TUI*); only the theme-specific verbs are declared locally.
+var (
+	themeEditKey  = key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit"))
+	themeCloneKey = key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clone"))
+	themeSaveKey  = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save"))
 )
 
 // themeRowID returns the stable outline row ID for a theme. Matches the
@@ -90,7 +101,7 @@ func (t *ThemesTab) currentThemeInfo() *theme.ThemeInfo {
 
 func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+	case key.Matches(msg, keys.TUICancel):
 		// Reaches the tab only when a committed filter is active (see
 		// CapturesEscape); clear it. A second Esc then closes the dashboard.
 		if t.filter.Value() != "" {
@@ -99,35 +110,35 @@ func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
+	case key.Matches(msg, keys.TUIListUp):
 		t.tree.MoveUp()
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
+	case key.Matches(msg, keys.TUIListDown):
 		t.tree.MoveDown()
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+	case key.Matches(msg, keys.TUIConfirm):
 		// Apply highlighted theme (save config + hot reload).
 		if ti := t.currentThemeInfo(); ti != nil {
 			return t, t.applyTheme(ti.Name)
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("/"))):
+	case key.Matches(msg, keys.TUIFilter):
 		t.mode = themesModeFilter
 		t.filter.Focus()
 		return t, textinput.Blink
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
+	case key.Matches(msg, keys.TUIListBottom):
 		t.tree.JumpBottom()
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
+	case key.Matches(msg, keys.TUIListTop):
 		t.tree.JumpTop()
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("e"))):
+	case key.Matches(msg, themeEditKey):
 		// Toggle inline editing for highlighted theme.
 		if ti := t.currentThemeInfo(); ti != nil && t.resolver != nil {
 			resolved, err := t.resolver.Resolve(ti.Name)
@@ -141,7 +152,7 @@ func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("c"))):
+	case key.Matches(msg, themeCloneKey):
 		// Clone highlighted theme — prompt for name.
 		if ti := t.currentThemeInfo(); ti != nil && t.resolver != nil {
 			resolved, err := t.resolver.Resolve(ti.Name)
@@ -168,23 +179,23 @@ func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 
 func (t *ThemesTab) handleFilterKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+	case key.Matches(msg, keys.TUICancel):
 		t.mode = themesModeList
 		t.filter.SetValue("")
 		t.filter.Blur()
 		t.applyFilter()
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+	case key.Matches(msg, keys.TUIConfirm):
 		t.mode = themesModeList
 		t.filter.Blur()
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
+	case key.Matches(msg, keys.TUIListUp):
 		t.tree.MoveUp()
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
+	case key.Matches(msg, keys.TUIListDown):
 		t.tree.MoveDown()
 		return t, nil
 	}
