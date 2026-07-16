@@ -19,6 +19,27 @@ import (
 	"github.com/donjor/zmux/internal/tui/styles"
 )
 
+// Help-viewer keymap. Every binding carries a ctrl-aliased or unique spelling
+// so plain j/k/g stay typeable in the fuzzy filter — none share the shared
+// registry's spelling, so all stay component-local (idiom A), built once.
+var helpKeys = struct {
+	Quit       key.Binding
+	ScrollUp   key.Binding
+	ScrollDown key.Binding
+	PageUp     key.Binding
+	PageDown   key.Binding
+	NextScope  key.Binding
+	PrevScope  key.Binding
+}{
+	Quit:       key.NewBinding(key.WithKeys("esc", "ctrl+c")),
+	ScrollUp:   key.NewBinding(key.WithKeys("up", "ctrl+k")),
+	ScrollDown: key.NewBinding(key.WithKeys("down", "ctrl+j")),
+	PageUp:     key.NewBinding(key.WithKeys("pgup", "ctrl+u")),
+	PageDown:   key.NewBinding(key.WithKeys("pgdown", "ctrl+d")),
+	NextScope:  key.NewBinding(key.WithKeys("tab")),
+	PrevScope:  key.NewBinding(key.WithKeys("shift+tab")),
+}
+
 // scopeMode selects which sections the viewer shows: all, commands only, or
 // keybindings only. Cycled with Tab.
 type scopeMode int
@@ -79,30 +100,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc", "ctrl+c"))):
+	case key.Matches(msg, helpKeys.Quit):
 		m.Quitting = true
 		return m, tea.Quit
 
 	// Scroll the body. Arrows + ctrl+j/k so plain j/k stay typeable in the filter.
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "ctrl+k"))):
+	case key.Matches(msg, helpKeys.ScrollUp):
 		m.vp.ScrollUp(1)
 		return m, nil
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "ctrl+j"))):
+	case key.Matches(msg, helpKeys.ScrollDown):
 		m.vp.ScrollDown(1)
 		return m, nil
-	case key.Matches(msg, key.NewBinding(key.WithKeys("pgup", "ctrl+u"))):
+	case key.Matches(msg, helpKeys.PageUp):
 		m.vp.ScrollUp(m.vp.Height() / 2)
 		return m, nil
-	case key.Matches(msg, key.NewBinding(key.WithKeys("pgdown", "ctrl+d"))):
+	case key.Matches(msg, helpKeys.PageDown):
 		m.vp.ScrollDown(m.vp.Height() / 2)
 		return m, nil
 
 	// Cycle the scope filter: all -> commands -> keys -> all.
-	case key.Matches(msg, key.NewBinding(key.WithKeys("tab"))):
+	case key.Matches(msg, helpKeys.NextScope):
 		m.scope = (m.scope + 1) % 3
 		m.refresh()
 		return m, nil
-	case key.Matches(msg, key.NewBinding(key.WithKeys("shift+tab"))):
+	case key.Matches(msg, helpKeys.PrevScope):
 		m.scope = (m.scope + 2) % 3
 		m.refresh()
 		return m, nil

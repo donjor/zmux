@@ -41,13 +41,13 @@ func (t *HelpTab) Update(msg tea.Msg) (dashboard.Tab, tea.Cmd) {
 	}
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		switch {
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
+		case key.Matches(keyMsg, keys.TUIListUp):
 			t.vp.ScrollUp(1)
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("down", "j"))):
+		case key.Matches(keyMsg, keys.TUIListDown):
 			t.vp.ScrollDown(1)
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("g"))):
+		case key.Matches(keyMsg, keys.TUIListTop):
 			t.vp.GotoTop()
-		case key.Matches(keyMsg, key.NewBinding(key.WithKeys("G"))):
+		case key.Matches(keyMsg, keys.TUIListBottom):
 			t.vp.GotoBottom()
 		}
 	}

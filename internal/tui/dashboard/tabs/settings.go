@@ -9,10 +9,20 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/styles"
+)
+
+// Settings-specific keys with no cross-surface analogue: the enter/space
+// activate toggle (space also inserts in the edit input, so it stays out of
+// the shared registry) and the s-to-save shortcut. Package-level bindings
+// (idiom A); generic up/down/g/G come from keys.TUI*.
+var (
+	settingsActivateKey = key.NewBinding(key.WithKeys("enter", " "), key.WithHelp("enter/space", "toggle"))
+	settingsSaveKey     = key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "save"))
 )
 
 // ── Shared config row types ──
@@ -252,29 +262,29 @@ func (t *SettingsTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 
 func (t *SettingsTab) handleGeneralKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
+	case key.Matches(msg, keys.TUIListUp):
 		if t.cfgCursor > 0 {
 			t.cfgCursor--
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
+	case key.Matches(msg, keys.TUIListDown):
 		if t.cfgCursor < len(t.configRows)-1 {
 			t.cfgCursor++
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter", " "))):
+	case key.Matches(msg, settingsActivateKey):
 		return t.activateConfigRow()
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("s"))):
+	case key.Matches(msg, settingsSaveKey):
 		return t, t.saveConfig()
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
+	case key.Matches(msg, keys.TUIListBottom):
 		t.cfgCursor = len(t.configRows) - 1
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
+	case key.Matches(msg, keys.TUIListTop):
 		t.cfgCursor = 0
 		return t, nil
 	}

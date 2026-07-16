@@ -16,10 +16,21 @@ import (
 
 	"github.com/donjor/zmux/internal/bar"
 	"github.com/donjor/zmux/internal/config"
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/styles"
+)
+
+// Bar-specific keys with no cross-surface analogue: horizontal value cycling
+// (left/right) and the enter/space toggle (space also inserts in text surfaces,
+// so it is not in the shared registry). Built once as package-level bindings
+// (idiom A); generic up/down/g/G come from keys.TUI*.
+var (
+	barCycleLeftKey  = key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "prev value"))
+	barCycleRightKey = key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "next value"))
+	barToggleKey     = key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter/space", "toggle"))
 )
 
 // ── Messages ──
@@ -209,19 +220,19 @@ func (t *BarTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 	total := len(t.presets) + len(barLayoutOptions) + len(barSegmentLabels)
 
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
+	case key.Matches(msg, keys.TUIListUp):
 		if t.cursor > 0 {
 			t.cursor--
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
+	case key.Matches(msg, keys.TUIListDown):
 		if t.cursor < total-1 {
 			t.cursor++
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("left", "h"))):
+	case key.Matches(msg, barCycleLeftKey):
 		if t.currentSection() == barLayout {
 			layoutIdx := t.cursor - len(t.presets)
 			t.cycleLayoutValue(barLayoutOptions[layoutIdx].Field, -1)
@@ -229,7 +240,7 @@ func (t *BarTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("right", "l"))):
+	case key.Matches(msg, barCycleRightKey):
 		if t.currentSection() == barLayout {
 			layoutIdx := t.cursor - len(t.presets)
 			t.cycleLayoutValue(barLayoutOptions[layoutIdx].Field, 1)
@@ -237,7 +248,7 @@ func (t *BarTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter", "space"))):
+	case key.Matches(msg, barToggleKey):
 		switch t.currentSection() {
 		case barPresets:
 			preset := t.presets[t.cursor]
@@ -256,11 +267,11 @@ func (t *BarTab) handleKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		}
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
+	case key.Matches(msg, keys.TUIListTop):
 		t.cursor = 0
 		return t, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
+	case key.Matches(msg, keys.TUIListBottom):
 		t.cursor = total - 1
 		return t, nil
 	}

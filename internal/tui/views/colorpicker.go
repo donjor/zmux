@@ -11,7 +11,18 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/muesli/termenv"
 
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/theme"
+)
+
+// Color-picker-specific keys: horizontal value adjust (left/right, shift for a
+// bigger step) and # to switch to hex entry. No shared-registry analogue, so
+// package-level bindings (idiom A). The up/down channel switch reuses keys.TUI*
+// (same spelling as every list surface).
+var (
+	pickerAdjustDownKey = key.NewBinding(key.WithKeys("left", "shift+left"))
+	pickerAdjustUpKey   = key.NewBinding(key.WithKeys("right", "shift+right"))
+	pickerHexKey        = key.NewBinding(key.WithKeys("#"))
 )
 
 // PickerMode determines how the color picker accepts input.
@@ -86,15 +97,15 @@ func (p *ColorPicker) updateSlider(msg tea.Msg) (*ColorPicker, tea.Cmd) {
 	}
 
 	switch {
-	case key.Matches(keyMsg, key.NewBinding(key.WithKeys("left", "shift+left"))):
+	case key.Matches(keyMsg, pickerAdjustDownKey):
 		p.adjust(-step)
-	case key.Matches(keyMsg, key.NewBinding(key.WithKeys("right", "shift+right"))):
+	case key.Matches(keyMsg, pickerAdjustUpKey):
 		p.adjust(step)
-	case key.Matches(keyMsg, key.NewBinding(key.WithKeys("up", "k"))):
+	case key.Matches(keyMsg, keys.TUIListUp):
 		p.channel = (p.channel - 1 + 3) % 3
-	case key.Matches(keyMsg, key.NewBinding(key.WithKeys("down", "j"))):
+	case key.Matches(keyMsg, keys.TUIListDown):
 		p.channel = (p.channel + 1) % 3
-	case key.Matches(keyMsg, key.NewBinding(key.WithKeys("#"))):
+	case key.Matches(keyMsg, pickerHexKey):
 		p.Mode = PickerHex
 		p.HexInput.SetValue(p.Hex())
 		p.HexInput.Focus()

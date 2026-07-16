@@ -6,8 +6,19 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/donjor/zmux/internal/keys"
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/sahilm/fuzzy"
+)
+
+// Palette-specific keys: ctrl+c quit and the ctrl-aliased cursor moves (up +
+// ctrl+k / down + ctrl+j) so plain j/k stay typeable in the filter. These have
+// no shared-registry analogue, so they stay component-local (idiom A). Bare esc
+// (cancel) and enter (confirm) come from keys.TUI*.
+var (
+	paletteQuitKey = key.NewBinding(key.WithKeys("ctrl+c"))
+	paletteUpKey   = key.NewBinding(key.WithKeys("up", "ctrl+k"))
+	paletteDownKey = key.NewBinding(key.WithKeys("down", "ctrl+j"))
 )
 
 // PaletteModel is the bubbletea model for the spotlight-style command palette.
@@ -70,27 +81,27 @@ func (m *PaletteModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *PaletteModel) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, key.NewBinding(key.WithKeys("esc"))):
+	case key.Matches(msg, keys.TUICancel):
 		m.Quitting = true
 		return m, tea.Quit
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("ctrl+c"))):
+	case key.Matches(msg, paletteQuitKey):
 		m.Quitting = true
 		return m, tea.Quit
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "ctrl+k"))):
+	case key.Matches(msg, paletteUpKey):
 		if m.cursor > 0 {
 			m.cursor--
 		}
 		return m, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "ctrl+j"))):
+	case key.Matches(msg, paletteDownKey):
 		if m.cursor < len(m.filtered)-1 {
 			m.cursor++
 		}
 		return m, nil
 
-	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
+	case key.Matches(msg, keys.TUIConfirm):
 		if m.cursor < len(m.filtered) {
 			chosen := m.filtered[m.cursor]
 			m.Chosen = &chosen
