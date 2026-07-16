@@ -90,6 +90,56 @@ func TestTurnWaitSetRejectsStale(t *testing.T) {
 	}
 }
 
+func TestParseConditionTurnRejectsEmptyMember(t *testing.T) {
+	// T-202 (055 P-002) — complete the comma-set contract: an empty member
+	// (trailing/leading/double comma) is rejected, never silently dropped.
+	for _, spec := range []string{"turn:ready,", "turn:,ready", "turn:ready,,failed"} {
+		_, err := ParseCondition(spec)
+		if err == nil || !strings.Contains(err.Error(), "empty turn state") {
+			t.Fatalf("%q: expected empty-member error, got %v", spec, err)
+		}
+	}
+}
+
+func TestTurnSetExcludedTerminalKeepsFailureKind(t *testing.T) {
+	// T-202 — a set that excludes failed/attention still short-circuits on a
+	// fresh EXCLUDED terminal with its specific failure kind (not a generic
+	// timeout), exactly as the single-state path does.
+	cases := []struct {
+		state       string
+		wantFailure string
+	}{
+		{tabs.TurnFailed, "turn_failed"},
+		{tabs.TurnAttention, "turn_attention"},
+	}
+	for _, c := range cases {
+		mock := tmux.NewMockRunner()
+		mock.PaneOptions = map[string]string{
+			"%1\x00" + tabs.OptTurnState: c.state,
+			"%1\x00" + tabs.OptTurnSeq:   "6",
+		}
+		cond, err := ParseCondition("turn:ready,running")
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := Wait(context.Background(), Request{
+			Runner:       mock,
+			Target:       "%1",
+			PaneID:       "%1",
+			Condition:    cond,
+			Baseline:     &Baseline{TurnSeq: 5, TurnState: tabs.TurnRunning},
+			Timeout:      10 * time.Millisecond,
+			PollInterval: time.Millisecond,
+		})
+		if err != nil {
+			t.Fatalf("wait: %v", err)
+		}
+		if out.Met || out.FailureKind != c.wantFailure {
+			t.Fatalf("excluded %s should keep %s: %+v", c.state, c.wantFailure, out)
+		}
+	}
+}
+
 func TestTurnWaitRejectsStaleReady(t *testing.T) {
 	mock := tmux.NewMockRunner()
 	mock.PaneOptions = map[string]string{
