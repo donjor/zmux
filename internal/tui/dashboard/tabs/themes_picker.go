@@ -11,8 +11,78 @@ import (
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tui/dashboard"
 	"github.com/donjor/zmux/internal/tui/filter"
+	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/views"
 )
+
+// themeRowID returns the stable outline row ID for a theme. Matches the
+// standalone themepicker's shape so both surfaces restore the cursor to the
+// same theme across filter changes.
+func themeRowID(name string) string { return "theme:" + name }
+
+// themeGroupID returns the stable outline row ID for a source-group header
+// (Custom / Bundled / Downloaded). Header rows are non-selectable dividers.
+func themeGroupID(label string) string { return "themegroup:" + label }
+
+// buildThemeRows turns the current filtered theme list into grouped outline
+// rows: a non-selectable header per non-empty source group followed by its
+// selectable theme rows. Group order is Custom → Bundled → Downloaded, the
+// same order the list renders, so tree navigation walks the visible order.
+func (t *ThemesTab) buildThemeRows() []outline.Row {
+	type group struct {
+		header string
+		idxs   []int
+	}
+	custom := group{header: "Custom"}
+	bundled := group{header: "Bundled"}
+	downloaded := group{header: "Downloaded"}
+	for i := range t.filtered {
+		switch t.filtered[i].Source {
+		case theme.SourceUser:
+			custom.idxs = append(custom.idxs, i)
+		case theme.SourceBundled:
+			bundled.idxs = append(bundled.idxs, i)
+		case theme.SourceIterm2:
+			downloaded.idxs = append(downloaded.idxs, i)
+		}
+	}
+
+	var rows []outline.Row
+	for _, g := range []group{custom, bundled, downloaded} {
+		if len(g.idxs) == 0 {
+			continue
+		}
+		rows = append(rows, outline.Row{
+			ID:         themeGroupID(g.header),
+			Kind:       outline.RowExternalGroup,
+			Label:      g.header,
+			Selectable: false,
+		})
+		for _, i := range g.idxs {
+			rows = append(rows, outline.Row{
+				ID:         themeRowID(t.filtered[i].Name),
+				Kind:       outline.RowSession,
+				Depth:      1,
+				ParentID:   themeGroupID(g.header),
+				Label:      t.filtered[i].Name,
+				Selectable: true,
+				Data:       &t.filtered[i],
+			})
+		}
+	}
+	return rows
+}
+
+// currentThemeInfo returns the theme under the cursor, or nil when the cursor
+// rests on a header / the list is empty.
+func (t *ThemesTab) currentThemeInfo() *theme.ThemeInfo {
+	row := t.tree.CurrentSelectable()
+	if row == nil {
+		return nil
+	}
+	ti, _ := outline.RowData[theme.ThemeInfo](row)
+	return ti
+}
 
 // ============================================================================
 // Key handling — Colors section (theme list)
@@ -30,21 +100,17 @@ func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
-		if t.themeCursor > 0 {
-			t.themeCursor--
-		}
+		t.tree.MoveUp()
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
-		if t.themeCursor < len(t.filtered)-1 {
-			t.themeCursor++
-		}
+		t.tree.MoveDown()
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("enter"))):
 		// Apply highlighted theme (save config + hot reload).
-		if t.themeCursor < len(t.filtered) {
-			return t, t.applyTheme(t.filtered[t.themeCursor].Name)
+		if ti := t.currentThemeInfo(); ti != nil {
+			return t, t.applyTheme(ti.Name)
 		}
 		return t, nil
 
@@ -54,19 +120,16 @@ func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t, textinput.Blink
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("G"))):
-		if len(t.filtered) > 0 {
-			t.themeCursor = len(t.filtered) - 1
-		}
+		t.tree.JumpBottom()
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("g"))):
-		t.themeCursor = 0
+		t.tree.JumpTop()
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("e"))):
 		// Toggle inline editing for highlighted theme.
-		if t.themeCursor < len(t.filtered) && t.resolver != nil {
-			ti := t.filtered[t.themeCursor]
+		if ti := t.currentThemeInfo(); ti != nil && t.resolver != nil {
 			resolved, err := t.resolver.Resolve(ti.Name)
 			if err == nil {
 				t.editTheme = resolved
@@ -80,8 +143,7 @@ func (t *ThemesTab) handleColorsKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("c"))):
 		// Clone highlighted theme — prompt for name.
-		if t.themeCursor < len(t.filtered) && t.resolver != nil {
-			ti := t.filtered[t.themeCursor]
+		if ti := t.currentThemeInfo(); ti != nil && t.resolver != nil {
 			resolved, err := t.resolver.Resolve(ti.Name)
 			if err == nil {
 				t.editTheme = resolved
@@ -119,15 +181,11 @@ func (t *ThemesTab) handleFilterKey(msg tea.KeyMsg) (dashboard.Tab, tea.Cmd) {
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("up", "k"))):
-		if t.themeCursor > 0 {
-			t.themeCursor--
-		}
+		t.tree.MoveUp()
 		return t, nil
 
 	case key.Matches(msg, key.NewBinding(key.WithKeys("down", "j"))):
-		if t.themeCursor < len(t.filtered)-1 {
-			t.themeCursor++
-		}
+		t.tree.MoveDown()
 		return t, nil
 	}
 
@@ -192,9 +250,9 @@ func (t *ThemesTab) renderColorsContent() (string, int) {
 	}
 
 	// Color strip for highlighted theme (always visible when not editing).
-	if !t.editing && t.themeCursor < len(t.filtered) && t.resolver != nil {
+	if cur := t.currentThemeInfo(); !t.editing && cur != nil && t.resolver != nil {
 		b.WriteString("\n")
-		swatch := t.renderSwatch(t.filtered[t.themeCursor])
+		swatch := t.renderSwatch(*cur)
 		if swatch != "" {
 			b.WriteString("  " + swatch + "\n")
 		}
@@ -212,30 +270,35 @@ func (t *ThemesTab) renderColorsContent() (string, int) {
 }
 
 // renderThemeList renders themes grouped by source with section headers.
-// Returns the rendered content and the cursor line within it.
+// Returns the rendered content and the cursor line within it. The group order
+// mirrors buildThemeRows so the highlighted row matches the tree cursor.
 func (t *ThemesTab) renderThemeList() (string, int) {
 	var b strings.Builder
 
 	// Group filtered themes by source.
 	type group struct {
 		header string
-		items  []indexedTheme
+		items  []theme.ThemeInfo
 	}
 
 	bundled := group{header: "Bundled"}
 	downloaded := group{header: "Downloaded"}
 	custom := group{header: "Custom"}
 
-	for i, ti := range t.filtered {
-		it := indexedTheme{globalIdx: i, info: ti}
+	for _, ti := range t.filtered {
 		switch ti.Source {
 		case theme.SourceBundled:
-			bundled.items = append(bundled.items, it)
+			bundled.items = append(bundled.items, ti)
 		case theme.SourceIterm2:
-			downloaded.items = append(downloaded.items, it)
+			downloaded.items = append(downloaded.items, ti)
 		case theme.SourceUser:
-			custom.items = append(custom.items, it)
+			custom.items = append(custom.items, ti)
 		}
+	}
+
+	highlighted := ""
+	if cur := t.currentThemeInfo(); cur != nil {
+		highlighted = cur.Name
 	}
 
 	groups := []group{custom, bundled, downloaded}
@@ -246,11 +309,12 @@ func (t *ThemesTab) renderThemeList() (string, int) {
 		if len(g.items) > 0 {
 			b.WriteString("  " + t.styles.Muted.Bold(true).Render(g.header) + "\n")
 			lineCount++
-			for _, it := range g.items {
-				if it.globalIdx == t.themeCursor {
+			for _, ti := range g.items {
+				selected := ti.Name == highlighted
+				if selected {
 					cursorLine = lineCount
 				}
-				entry := t.renderThemeEntry(it.globalIdx, it.info)
+				entry := t.renderThemeEntry(ti, selected)
 				b.WriteString(entry)
 				lineCount += strings.Count(entry, "\n")
 			}
@@ -266,13 +330,7 @@ func (t *ThemesTab) renderThemeList() (string, int) {
 	return b.String(), cursorLine
 }
 
-type indexedTheme struct {
-	globalIdx int
-	info      theme.ThemeInfo
-}
-
-func (t *ThemesTab) renderThemeEntry(idx int, ti theme.ThemeInfo) string {
-	selected := idx == t.themeCursor
+func (t *ThemesTab) renderThemeEntry(ti theme.ThemeInfo, selected bool) string {
 	isCurrent := ti.Name == t.currentTheme
 
 	cursor := "  "
@@ -325,8 +383,7 @@ func (t *ThemesTab) renderSwatch(ti theme.ThemeInfo) string {
 func (t *ThemesTab) applyFilter() {
 	query := t.filter.Value()
 	t.filtered = filter.Fuzzy(t.themes, query, func(ti theme.ThemeInfo) string { return ti.Name })
-
-	if t.themeCursor >= len(t.filtered) {
-		t.themeCursor = max(0, len(t.filtered)-1)
-	}
+	// SetRows re-pins the cursor by stable theme ID when the highlighted theme
+	// survives the filter, then falls through the outline restore hierarchy.
+	t.tree.SetRows(t.buildThemeRows())
 }

@@ -70,7 +70,7 @@ func TestThemesEnterAppliesHighlightedTheme(t *testing.T) {
 	if len(tab.filtered) == 0 {
 		t.Fatal("expected themes after activate")
 	}
-	want := tab.filtered[tab.themeCursor].Name
+	want := tab.currentThemeInfo().Name
 
 	out, cmd := sendThemesKey(tab, "enter")
 	tab = out
@@ -115,7 +115,7 @@ func TestThemesEnterOnEmptyFilterIsNoop(t *testing.T) {
 func TestThemesCloneEntersNamingPrompt(t *testing.T) {
 	tab, _, _ := newTestThemesTab(t)
 	tab = activateTheme(t, tab)
-	base := tab.filtered[tab.themeCursor].Name
+	base := tab.currentThemeInfo().Name
 
 	out, _ := sendThemesKey(tab, "c")
 	tab = out

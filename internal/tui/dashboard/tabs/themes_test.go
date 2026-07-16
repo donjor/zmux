@@ -148,34 +148,54 @@ func TestThemesShortHelpChangesPerMode(t *testing.T) {
 
 // ── Cursor navigation ──
 
+// TestThemesColorsCursor pins j/k/g/G navigation over the outline.Tree. The
+// test resolver exposes bundled themes only, so the tree is a single
+// (non-selectable) "Bundled" header followed by the alphabetical theme rows —
+// navigation walks that order and the highlighted theme is read back through
+// currentThemeInfo (the cursor now lives on the tree, not a themeCursor int).
 func TestThemesColorsCursor(t *testing.T) {
 	tab, _, _ := newTestThemesTab(t)
 	tab = activateTheme(t, tab)
 
-	if tab.themeCursor != 0 {
-		t.Fatalf("start themeCursor = %d, want 0", tab.themeCursor)
+	names := make([]string, len(tab.filtered))
+	for i, ti := range tab.filtered {
+		names[i] = ti.Name
+	}
+	if len(names) < 2 {
+		t.Fatalf("need at least 2 bundled themes to exercise nav, got %d", len(names))
+	}
+	cur := func() string {
+		ti := tab.currentThemeInfo()
+		if ti == nil {
+			t.Fatal("currentThemeInfo is nil — cursor left the selectable rows")
+		}
+		return ti.Name
+	}
+
+	if got := cur(); got != names[0] {
+		t.Fatalf("start highlighted = %q, want %q", got, names[0])
 	}
 
 	tab, _ = sendThemesKey(tab, "j")
-	if tab.themeCursor != 1 {
-		t.Errorf("after j: themeCursor = %d, want 1", tab.themeCursor)
+	if got := cur(); got != names[1] {
+		t.Errorf("after j: highlighted = %q, want %q", got, names[1])
 	}
 
 	tab, _ = sendThemesKey(tab, "k")
-	if tab.themeCursor != 0 {
-		t.Errorf("after k: themeCursor = %d, want 0", tab.themeCursor)
+	if got := cur(); got != names[0] {
+		t.Errorf("after k: highlighted = %q, want %q", got, names[0])
 	}
 
 	// G to jump to bottom.
 	tab, _ = sendThemesKey(tab, "G")
-	if tab.themeCursor != len(tab.filtered)-1 {
-		t.Errorf("after G: themeCursor = %d, want %d", tab.themeCursor, len(tab.filtered)-1)
+	if got, want := cur(), names[len(names)-1]; got != want {
+		t.Errorf("after G: highlighted = %q, want %q", got, want)
 	}
 
 	// g to jump back to top.
 	tab, _ = sendThemesKey(tab, "g")
-	if tab.themeCursor != 0 {
-		t.Errorf("after g: themeCursor = %d, want 0", tab.themeCursor)
+	if got := cur(); got != names[0] {
+		t.Errorf("after g: highlighted = %q, want %q", got, names[0])
 	}
 }
 

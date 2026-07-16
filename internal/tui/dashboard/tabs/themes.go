@@ -10,6 +10,7 @@ import (
 	"github.com/donjor/zmux/internal/theme"
 	"github.com/donjor/zmux/internal/tmux"
 	"github.com/donjor/zmux/internal/tui/dashboard"
+	"github.com/donjor/zmux/internal/tui/outline"
 	"github.com/donjor/zmux/internal/tui/scroll"
 	"github.com/donjor/zmux/internal/tui/styles"
 	"github.com/donjor/zmux/internal/tui/views"
@@ -73,11 +74,14 @@ type ThemesTab struct {
 
 	mode themesMode
 
-	// Theme list state.
+	// Theme list state. The cursor + grouped navigation live on the shared
+	// outline.Tree (source-group headers are non-selectable rows), so the
+	// dashboard picker moves through the same visual order it renders and
+	// behaves like every other list surface.
 	themes       []theme.ThemeInfo
 	filtered     []theme.ThemeInfo
 	currentTheme string
-	themeCursor  int
+	tree         *outline.Tree
 	filter       textinput.Model
 
 	// Inline editing state.
@@ -123,6 +127,7 @@ func NewThemesTab(resolver *theme.Resolver, fs config.FS, runner tmux.Runner, se
 		runner:    runner,
 		selfBin:   selfBin,
 		styles:    styles,
+		tree:      outline.NewTree(),
 		filter:    filterInput,
 		editSlots: buildEditorSlots(),
 		nameInput: nameInput,
