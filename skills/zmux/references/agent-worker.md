@@ -188,9 +188,10 @@ carries the wait's verdict. One background wait per concurrent worker; the
 exiting wait identifies which worker flipped. `turn:` waits are fresh by
 default — state set before the wait started does not satisfy them.
 
-Pi conductors use `zmux_callback` instead — the same core wait delivered as a
-typed notification, no agent-side sleeps. A harness with neither channel runs
-bounded foreground waits between other work — never a poll loop.
+Pi conductors register a dispatcher `callback_watch` instead — the same core
+wait delivered as a typed notification, no agent-side sleeps. A harness with
+neither channel runs bounded foreground waits between other work — never a poll
+loop.
 
 Uninstrumented CLI in the tab? Same backgrounded pattern with
 `--for output:<regex>` or `--for idle:<duration>` as fallback evidence
