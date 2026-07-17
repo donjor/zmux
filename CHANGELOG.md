@@ -5,7 +5,20 @@ Notable changes, newest first. Forward work lives in
 versioning is semver-ish until the first public release.
 
 ## [Unreleased]
-> Release tag: pending | Compare: `v0.16.0...HEAD`
+> Release tag: pending | Compare: `v0.17.0...HEAD`
+
+## [0.17.0] - 2026-07-17
+> Release tag: `v0.17.0` | Topics: `run`, `scratch`, `peer`, `agents` | Compare: `v0.16.0...v0.17.0`
+
+### Added
+
+- **Shared `scratch` lane for unnamed bounded runs** `run` `scratch` — an unnamed `zmux run` for a bounded command now defaults into one reused `scratch` tab instead of minting a fresh tab per command, and a new `zmux scratch` verb addresses that lane directly; durable/named runs keep their own dedicated tab, so long-lived work is never collapsed into the shared lane.
+- **Ownership readback on peer-tab ensure** `peer` `agents` — `tab peer ensure` reuse now surfaces the existing tab's owner `topic`/`role` stamp in its JSON, so a host detects a foreign or finished tab in a single call instead of ensure-then-inspect, and typing into an unverified tab becomes detectable by default.
+
+### Changed
+
+- **Non-blocking sprawl nudge for ad-hoc run tabs** `agents` `scratch` — a new `ZD-012` doctrine rule shares one scratch lane for bounded commands, and the guard emits a non-blocking nudge (never a hard block) when ad-hoc bounded-run tabs accumulate past the small-roster shape.
+- **Peer roster and ensure loop aligned to minted names** `peer` `agents` — `agent-peer.md` roster names now match the selector's minted `<provider>-<lane>` tab names exactly and fold in the ownership-checked ensure/reuse loop, so the skill and the selector describe one loop.
 
 ## [0.16.0] - 2026-07-16
 > Release tag: `v0.16.0` | Topics: `wait`, `cli`, `tui`, `themes`, `agents`, `pi`, `tests` | Compare: `v0.15.1...v0.16.0`
