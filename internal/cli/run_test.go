@@ -257,6 +257,118 @@ func TestRunLabelsAndDetachesNewNamedWindow(t *testing.T) {
 	}
 }
 
+// An unnamed BOUNDED run defaults to the shared `scratch` lane and CLAIMS it as
+// a stable label (pane-scoped @zmux_label=scratch) so reruns dedup — killing the
+// old command-word-per-command sprawl (`go test …` → a throwaway `go` tab).
+func TestRunUnnamedBoundedDefaultsToScratchLane(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%7"
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 0)
+
+	rootCmd.SetArgs([]string{"run", "go test ./...", "-s", "test-session", "-T", "5"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+
+	var created, labeled bool
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" {
+			created = true
+			if c.Args[1] != scratchLane {
+				t.Errorf("unnamed bounded run should target the scratch lane, got NewWindow name %q", c.Args[1])
+			}
+		}
+		if c.Method == "ApplyOptions" && c.Args[0] == "-p" && c.Args[1] == "%7" &&
+			c.Args[2] == "@zmux_label" && c.Args[3] == scratchLane {
+			labeled = true
+		}
+	}
+	if !created {
+		t.Fatal("expected NewWindow for the scratch lane")
+	}
+	if !labeled {
+		t.Errorf("scratch lane must be claimed with @zmux_label=scratch so reruns dedup, calls=%+v", mock.Calls)
+	}
+}
+
+// The second unnamed bounded run reuses the existing scratch tab instead of
+// minting another — the whole point of the default lane.
+func TestRunUnnamedBoundedReusesScratchLane(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 2}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{logicalRow("%4", "test-session", "@3", 4, "ztab_scratch", scratchLane)}
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 0)
+
+	rootCmd.SetArgs([]string{"run", "bun run lint", "-s", "test-session", "-T", "5"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" {
+			t.Errorf("a second unnamed bounded run must reuse the scratch lane, not create a tab: %+v", mock.Calls)
+		}
+	}
+}
+
+// Durable/no-exit unnamed runs (-d, a dev server) must NOT land in the shared
+// scratch lane — they keep the command-word name and their own tab.
+func TestRunUnnamedDetachedKeepsOwnTab(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%7"
+
+	rootCmd.SetArgs([]string{"run", "npm run dev", "-s", "test-session", "-d"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" {
+			if c.Args[1] == scratchLane {
+				t.Errorf("a durable (detached) unnamed run must not use the scratch lane")
+			}
+			if c.Args[1] != "npm" {
+				t.Errorf("durable unnamed run should keep the command-word name, got %q", c.Args[1])
+			}
+		}
+	}
+}
+
+// A --scope daemon unnamed run is durable too — keeps its own tab, not scratch.
+func TestRunUnnamedDaemonScopeKeepsOwnTab(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%7"
+
+	rootCmd.SetArgs([]string{"run", "redis-server", "-s", "test-session", "--scope", "daemon", "-d"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" && c.Args[1] == scratchLane {
+			t.Errorf("a daemon-scope unnamed run must not use the scratch lane")
+		}
+	}
+}
+
+// The explicit -n escape hatch always wins over the scratch default.
+func TestRunExplicitNameOverridesScratchDefault(t *testing.T) {
+	rootCmd, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.NewWindowPaneID = "%7"
+	mock.CapturePaneFunc = runResultCaptureFunc(mock, 0)
+
+	rootCmd.SetArgs([]string{"run", "go test ./...", "-n", "mytab", "-s", "test-session", "-T", "5"})
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("run command failed: %v", err)
+	}
+	for _, c := range mock.Calls {
+		if c.Method == "NewWindow" && c.Args[1] != "mytab" {
+			t.Errorf("explicit -n must win over the scratch default, got NewWindow name %q", c.Args[1])
+		}
+	}
+}
+
 func TestRunNoFocusCanStillWaitForCompletion(t *testing.T) {
 	rootCmd, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}

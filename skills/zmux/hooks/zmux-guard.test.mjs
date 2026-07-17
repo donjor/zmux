@@ -10,9 +10,9 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 
-import { classify, guard, isPureZmuxWait } from './zmux-guard.mjs'
+import { classify, guard, isPureZmuxWait, sprawlNudge } from './zmux-guard.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const hookPath = join(here, 'zmux-guard.mjs')
@@ -131,4 +131,40 @@ test('hook still blocks chained/expanded zmux wait in background', () => {
 test('foreground zmux wait is unaffected (allow)', () => {
   assert.equal(runHook('zmux wait x --for turn:ready -T 30'), 0)
   assert.equal(runHook('zmux wait x --for turn:ready -T 30', undefined, { run_in_background: false }), 0)
+})
+
+// --- Part C: sprawl nudge (hook-only, non-blocking) --------------------------
+
+test('sprawlNudge fires on an ad-hoc named bounded run, not on roster/durable/unnamed', () => {
+  // Ad-hoc named bounded run → nudge.
+  assert.match(sprawlNudge("zmux run 'go test ./...' -n eval-2"), /ad-hoc tab/)
+  assert.match(sprawlNudge('zmux run "bun test" --name test-run'), /ad-hoc tab/)
+  // Roster names keep their own tab → silent.
+  assert.equal(sprawlNudge("zmux run 'npm run dev' -n dev"), null)
+  assert.equal(sprawlNudge("zmux run 'claude' -n codex-peer"), null)
+  assert.equal(sprawlNudge("zmux run 'x' -n worker-auth"), null)
+  // Durable/no-exit runs legitimately keep a tab → silent.
+  assert.equal(sprawlNudge("zmux run 'npm run dev' -n myserver -d"), null)
+  assert.equal(sprawlNudge("zmux run 'x' -n keeper --keep"), null)
+  assert.equal(sprawlNudge("zmux run 'redis' -n db --scope daemon"), null)
+  // Unnamed run already defaults to scratch → nothing to nudge.
+  assert.equal(sprawlNudge("zmux run 'go test ./...'"), null)
+  // Not a zmux run at all → silent.
+  assert.equal(sprawlNudge('git status'), null)
+})
+
+test('hook proceeds (exit 0) and prints the sprawl nudge on stderr', () => {
+  // execFileSync only returns stdout; the nudge goes to stderr, so capture it
+  // via spawnSync-style stdio. Non-blocking means status must stay 0.
+  const payload = JSON.stringify({ tool_input: { command: "zmux run 'go test ./...' -n eval-2" }, cwd: '/home/user/some/project' })
+  const res = spawnSync('node', [hookPath], { input: payload, encoding: 'utf8' })
+  assert.equal(res.status, 0, 'ad-hoc bounded run must still proceed (non-blocking nudge)')
+  assert.match(res.stderr, /ad-hoc tab/)
+})
+
+test('hook stays silent for an unnamed run (already scratch-defaulted)', () => {
+  const payload = JSON.stringify({ tool_input: { command: "zmux run 'go test ./...'" }, cwd: '/home/user/some/project' })
+  const res = spawnSync('node', [hookPath], { input: payload, encoding: 'utf8' })
+  assert.equal(res.status, 0)
+  assert.doesNotMatch(res.stderr, /ad-hoc tab/)
 })

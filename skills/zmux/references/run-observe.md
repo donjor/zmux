@@ -20,6 +20,8 @@ zmux tabs                            # tabs in the current session
 ## Run commands in named tabs
 
 ```bash
+zmux run '<cmd>'                        # unnamed BOUNDED run → shared 'scratch' lane (claimed + reused)
+zmux scratch '<cmd>'                    # blessed explicit form of the same scratch lane
 zmux run '<cmd>' -n <name>              # run + wait for completion (default)
 zmux run '<cmd>' -n <name> -T 180       # wait, 180s timeout (default 120)
 zmux run '<cmd>' -n <name> -d           # detach — for commands expected to keep running
@@ -28,6 +30,8 @@ zmux run '<cmd>' -n <name> -s <session> # target a specific session
 ```
 
 `zmux run` waits by default, streams output, then returns the command exit code via zmux's shell-lifecycle run-result channel. It types normal single-line commands directly into the tab so they remain visible and shell-history re-runnable; temp script indirection is reserved for rare command text that cannot be delivered as one prompt line. It does not print completion sentinels — do not add your own `echo ":::DONE:::"` markers, wrapper scripts, or `sleep && watch` layer.
+
+An unnamed **bounded** `zmux run '<cmd>'` (no `-n`, and not `-d`/`--keep`/`--until`/`--scope daemon|peer|worker|agent-shell`) defaults to the shared `scratch` tab, claiming that stable label and reusing the one tab on every rerun instead of minting a per-command throwaway. `zmux scratch '<cmd>'` is the same lane spelled out. Durable/no-exit runs keep today's behavior — a command-word name or an explicit `-n` — never scratch.
 
 If a tab with that name already exists, the command is sent to it and the tab is reused. `-d` creates or reuses the tab without stealing focus; use it only for commands expected to keep running.
 
@@ -85,8 +89,9 @@ zmux type <peer> '<prompt>' --mark-peer-running --wait-turn ready --json
 ## Common patterns
 
 ```bash
-# Reviewable one-shot that exits but should stay inspectable
-zmux run 'go test ./...' -n scratch -T 180
+# Reviewable one-shot that exits but should stay inspectable → shared scratch lane
+zmux run 'go test ./...' -T 180        # bare/unnamed bounded run defaults to scratch
+zmux scratch 'go test ./...' -T 180    # explicit form of the same lane
 
 # Headed/browser-visible Playwright or Chrome proof batch
 # Reuse one scratch/proof tab for serial lanes; do not mint one tab per spec.

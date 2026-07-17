@@ -21,16 +21,38 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// scratchLane is the single shared reusable tab that unnamed bounded runs
+// default to (and that `zmux scratch '<cmd>'` targets explicitly): one tab for
+// every one-off command instead of a throwaway tab per command word.
+const scratchLane = "scratch"
+
 // isRosterTabName reports whether name is a canonical roster tab — the shared
 // roster the zmux skill teaches (dev/scratch/agent-shells, plus peer/worker
 // patterns). Ad-hoc names outside it earn a one-line reuse nudge. Keep in sync
 // with the roster in skills/zmux/SKILL.md.
 func isRosterTabName(name string) bool {
 	switch name {
-	case "dev", "scratch", "claude", "codex":
+	case "dev", scratchLane, "claude", "codex":
 		return true
 	}
 	return strings.HasSuffix(name, "-peer") || strings.HasPrefix(name, "worker")
+}
+
+// isBoundedRun reports whether a run is a bounded foreground command (one that
+// exits on its own) rather than a durable/no-exit runtime. Only bounded runs
+// default to the shared scratch lane and earn the ad-hoc-name reuse nudge; a
+// dev server or watcher (--detach/--keep/--until, or a daemon/peer/worker/
+// agent-shell scope) keeps its own kept tab — a runtime in the shared scratch
+// tab would be wrong.
+func isBoundedRun(detach, keep bool, until, scope string) bool {
+	if detach || keep || until != "" {
+		return false
+	}
+	switch scope {
+	case tabs.ScopeDaemon, tabs.ScopePeer, tabs.ScopeWorker, tabs.ScopeAgentShell:
+		return false
+	}
+	return true
 }
 
 // callerLifecycle reads the lifecycle origin/scope of the pane the command was
@@ -103,8 +125,8 @@ Examples:
   zmux run 'npm test' -n tests -s myproject   # target specific session`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			MaybeReap(app, time.Now()) // GC stale tabs before spawning a new one
 			if !runForceCommand && shouldDispatchRecipeRun(cmd, app, args, runWindowName, runSessionFlag, runFollow, runDetach, runYes, runDryRun) {
+				MaybeReap(app, time.Now()) // GC stale tabs before spawning a recipe
 				return runRecipeFromRun(app, cmd, args[0], args[1:], recipe.PlanOptions{
 					CWD:       runCWD,
 					Workspace: runWorkspace,
@@ -144,59 +166,32 @@ Examples:
 				return fmt.Errorf("session %q does not exist", sessionName)
 			}
 
-			// Determine tab name.
+			// Determine tab name + claim label. An unnamed BOUNDED run defaults
+			// to the shared `scratch` lane and claims it as a stable label so it
+			// dedups and reuses like an explicit `-n scratch` — killing the
+			// per-command tab sprawl the command-word name (`go test …` → `go`)
+			// used to mint. Durable/no-exit runs keep the command-word name and
+			// never claim (incidental names must not become stable labels); an
+			// explicit -n always wins. Universal across human and agent origin —
+			// keyed on exit-condition, not who launched it.
 			name := runWindowName
+			claimLabel := runWindowName
 			if name == "" {
-				parts := strings.Fields(command)
-				if len(parts) > 0 {
-					name = parts[0]
+				if isBoundedRun(runDetach, runKeep, runUntil, runScope) {
+					name, claimLabel = scratchLane, scratchLane
 				} else {
-					name = "task"
+					parts := strings.Fields(command)
+					if len(parts) > 0 {
+						name = parts[0]
+					} else {
+						name = "task"
+					}
 				}
 			}
 
-			// Completion and glyph state are owned by shell lifecycle hooks in
-			// the target pane. A blocking run stages a nonce in pane metadata;
-			// shell-event start/end consumes it and writes a silent
-			// @zmux_run_result. No stdout sentinel or tab-state epilogue is
-			// appended in the normal path.
-			shouldWait := !runDetach && !runFollow
-			actualCommand := command
-			nonce := ""
-			if shouldWait {
-				nonce = runNonce()
-			}
-
-			// Simple single-line commands are typed verbatim at the prompt so
-			// they land in the tab's shell history — a human can Up-arrow to
-			// re-run them (restart a dev server, re-run tests). Anything that
-			// interactive bash or send-keys could reinterpret falls back to a
-			// temp script, which sidesteps all quoting issues.
-			sendCmd := actualCommand
-			if !isSimpleCommand(actualCommand) {
-				scriptPath, cleanup, err := runexec.WriteCommandScript(actualCommand, time.Duration(runTimeout)*time.Second)
-				if err != nil {
-					return fmt.Errorf("write command script: %w", err)
-				}
-				if cleanup != nil {
-					defer cleanup()
-				}
-				sendCmd = fmt.Sprintf("bash %s", scriptPath)
-			}
-
-			// Find an existing tab to reuse. The choke point matches a
-			// logical tab (id → label, wherever its pane lives — full,
-			// pane-of, docked) before the legacy window label/name pass, and
-			// claims an explicitly-named unlabeled name-match so the first
-			// restart after tmux auto-renames it still reuses. Names derived
-			// from the command never claim — incidental names must not
-			// become stable labels.
-			rt, err := resolveTabTargetForMutation(app, sessionName, name, runWindowName)
-			if err != nil {
-				return err
-			}
 			opts := runTabOpts{
 				windowName:  runWindowName,
+				claimLabel:  claimLabel,
 				detach:      runDetach,
 				noFocus:     runNoFocus,
 				follow:      runFollow,
@@ -208,10 +203,7 @@ Examples:
 				origin:      runOrigin,
 				until:       runUntil,
 			}
-			if rt.found() {
-				return runInResolvedTab(app, rt, sessionName, name, sendCmd, nonce, shouldWait, opts)
-			}
-			return runInNewTab(app, sessionName, name, sendCmd, nonce, shouldWait, opts)
+			return runCommandInTab(app, sessionName, name, command, opts)
 		},
 	}
 
@@ -242,6 +234,7 @@ Examples:
 // so the RunE closure stays a thin dispatcher over the reuse/create branches.
 type runTabOpts struct {
 	windowName  string
+	claimLabel  string // stable label to claim at birth/reuse; "" = incidental name, don't claim
 	detach      bool
 	noFocus     bool
 	follow      bool
@@ -252,6 +245,70 @@ type runTabOpts struct {
 	scope       string
 	origin      string
 	until       string
+}
+
+// runCommandInTab is the shared command-in-tab delivery path for `zmux run`
+// (command mode) and `zmux scratch '<cmd>'`: stage the send form, resolve or
+// create the lane, GC stale tabs (exempting the lane just resolved so the sweep
+// can't kill the reuse target out from under an in-flight command), then
+// deliver and tail. Callers own name/claim-label selection (scratch default,
+// explicit -n, or incidental command-word name).
+func runCommandInTab(app *apppkg.App, sessionName, name, command string, opts runTabOpts) error {
+	// Completion and glyph state are owned by shell lifecycle hooks in the
+	// target pane. A blocking run stages a nonce in pane metadata; shell-event
+	// start/end consumes it and writes a silent @zmux_run_result. No stdout
+	// sentinel or tab-state epilogue is appended in the normal path.
+	shouldWait := !opts.detach && !opts.follow
+	nonce := ""
+	if shouldWait {
+		nonce = runNonce()
+	}
+
+	// Simple single-line commands are typed verbatim at the prompt so they land
+	// in the tab's shell history — a human can Up-arrow to re-run them (restart
+	// a dev server, re-run tests). Anything interactive bash or send-keys could
+	// reinterpret falls back to a temp script, which sidesteps all quoting
+	// issues. The cleanup defer holds until delivery completes below.
+	sendCmd := command
+	if !isSimpleCommand(command) {
+		scriptPath, cleanup, err := runexec.WriteCommandScript(command, time.Duration(opts.timeout)*time.Second)
+		if err != nil {
+			return fmt.Errorf("write command script: %w", err)
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
+		sendCmd = fmt.Sprintf("bash %s", scriptPath)
+	}
+
+	// Find an existing tab to reuse. The choke point matches a logical tab
+	// (id → label, wherever its pane lives — full, pane-of, docked) before the
+	// legacy window label/name pass, and claims a claim-labeled unlabeled
+	// name-match so the first restart after tmux auto-renames it still reuses.
+	// An empty claim label never claims — incidental names must not become
+	// stable labels.
+	rt, err := resolveTabTargetForMutation(app, sessionName, name, opts.claimLabel)
+	if err != nil {
+		return err
+	}
+	// GC stale tabs after resolving so the sweep can exempt this reuse target —
+	// otherwise the shared scratch lane could be reaped on the very call about
+	// to reuse it (GC-before-resolve race).
+	MaybeReap(app, time.Now(), exemptPaneFor(app, rt))
+	if rt.found() {
+		return runInResolvedTab(app, rt, sessionName, name, sendCmd, nonce, shouldWait, opts)
+	}
+	return runInNewTab(app, sessionName, name, sendCmd, nonce, shouldWait, opts)
+}
+
+// exemptPaneFor returns the pane id of a resolved reuse target so a GC sweep can
+// spare it; "" when nothing matched (a fresh create has no reuse target).
+func exemptPaneFor(app *apppkg.App, rt resolvedTab) string {
+	if !rt.found() {
+		return ""
+	}
+	paneID, _ := paneTargetForResolvedTab(app, rt)
+	return paneID
 }
 
 // runInResolvedTab delivers the command to an already-existing tab, clearing
@@ -325,10 +382,12 @@ func runInNewTab(app *apppkg.App, sessionName, name, sendCmd, nonce string, shou
 	// than a silent duplicate.
 	if opts.windowName != "" {
 		fmt.Fprintf(os.Stderr, "no tab %q in %s — creating\n", name, sessionName)
-		// Roster nudge (plan 038): a fresh ad-hoc named tab is the
-		// sprawl slip. Non-blocking, create-only; --keep / --scope daemon
-		// and peer/worker names opt out (they're deliberate roster tabs).
-		if !isRosterTabName(name) && !opts.keep && opts.scope != tabs.ScopeDaemon && opts.scope != tabs.ScopePeer && opts.scope != tabs.ScopeWorker {
+		// Roster nudge (plan 038): a fresh ad-hoc named tab for a BOUNDED run is
+		// the sprawl slip — steer to the shared 'scratch' lane (or 'dev' for a
+		// runtime). Non-blocking, create-only; durable runs (--detach/--keep/
+		// --until, or a daemon/peer/worker/agent-shell scope) opt out — their own
+		// tab is deliberate.
+		if !isRosterTabName(name) && isBoundedRun(opts.detach, opts.keep, opts.until, opts.scope) {
 			fmt.Fprintf(os.Stderr, "tip: %q is an ad-hoc tab — reuse 'scratch' (one-offs) or 'dev' (runtime) to avoid sprawl (zmux skill: tab roster)\n", name)
 		}
 	}
@@ -359,7 +418,7 @@ func runInNewTab(app *apppkg.App, sessionName, name, sendCmd, nonce string, shou
 	// incidental and can auto-rename without becoming an address pin.
 	if paneID != "" {
 		label, labelSource := "", ""
-		if opts.windowName != "" {
+		if opts.claimLabel != "" {
 			label, labelSource = name, tablabel.SourcePane
 		}
 		if _, err := tabs.Stamp(app.Runner, paneID, paneID, label, labelSource); err != nil {

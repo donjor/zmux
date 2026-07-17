@@ -78,6 +78,13 @@ purpose-name roster (`dev`, `scratch`, `<agent>-peer`, `worker-*`,
 `test-run`, per-Playwright-lane, or feature-named tabs" rule live in
 `references/guard-and-tab-states.md`.
 
+`scratch` is the **default** ephemeral lane, not just advice: an unnamed bounded
+`zmux run '<cmd>'` claims and reuses the one shared `scratch` tab automatically,
+and `zmux scratch '<cmd>'` is the blessed explicit form (`zmux scratch extract`
+still promotes a popup). Bounded checks share that one tab instead of minting a
+throwaway per command. Durable runs (`-d`/`--keep`/`--scope daemon`) opt out and
+keep their own named tab.
+
 ### Joined panes are roster tabs too
 
 Before minting a fresh visible long-running tab, check whether this session

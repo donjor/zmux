@@ -134,6 +134,41 @@ func TestTabPeerEnsureReusesExistingWithoutSendingCommand(t *testing.T) {
 	}
 }
 
+// On the reuse path, ensure must surface the EXISTING tab's stored ownership
+// stamp (topic/role/host/turn) so a host ownership-loop can detect a foreign
+// owner in one call instead of a follow-up `tab inspect`.
+func TestTabPeerEnsureReportsExistingOwnerOnReuse(t *testing.T) {
+	root, mock := withMockApp(t)
+	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}
+	mock.LogicalRows = []tmux.LogicalPaneRow{logicalRow("%4", "test-session", "@3", 2, "ztab_peer", "codex-peer")}
+	mock.PaneOptions = map[string]string{
+		"%4\x00" + tabs.OptScope:        tabs.ScopePeer,
+		"%4\x00" + tabs.OptPeerTopic:    "other host review",
+		"%4\x00" + tabs.OptPeerRole:     "codex",
+		"%4\x00" + tabs.OptPeerHostTab:  "ztab_otherhost",
+		"%4\x00" + tabs.OptPeerHostPane: "%99",
+		"%4\x00" + tabs.OptTurnState:    tabs.TurnRunning,
+	}
+	out := captureStdout(t, func() {
+		root.SetArgs([]string{"tab", "peer", "ensure", "codex-peer", "-s", "test-session", "--json"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute: %v", err)
+		}
+	})
+	for _, want := range []string{
+		`"reused": true`,
+		`"existingTopic": "other host review"`,
+		`"existingRole": "codex"`,
+		`"existingHostTab": "ztab_otherhost"`,
+		`"existingHostPane": "%99"`,
+		`"existingTurnState": "running"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("expected reused-owner JSON to contain %s:\n%s", want, out)
+		}
+	}
+}
+
 func TestTypeMarkPeerRunningWritesLifecycle(t *testing.T) {
 	root, mock := withMockApp(t)
 	mock.Sessions = []tmux.Session{{Name: "test-session", Windows: 1}}

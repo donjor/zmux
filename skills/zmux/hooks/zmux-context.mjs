@@ -90,7 +90,7 @@ if (tabs) {
 }
 lines.push(
   "Read a tab: `zmux watch <tab>` (read-only). Interact: `zmux send <tab> <keys>` / `zmux type <tab> '<text>'`. " +
-    "New work: `zmux run '<cmd>' -n <name>` (add -d for servers) — but for ephemeral commands and re-runs reuse ONE scratch shell (the listed `bash`/`scratch` tab; re-fire `run -n scratch`, never spawn or suffix-bump a tab per command), and keep bounded checks (typecheck/test/lint/build) in your shell. Tear down: `zmux tab kill <name>`. " +
+    "New work: `zmux run '<cmd>' -n <name>` (add -d for servers). Ephemeral/bounded commands and re-runs default to ONE shared scratch lane — a bare `zmux run '<cmd>'` (or `zmux scratch '<cmd>'`) claims and reuses the `scratch` tab automatically, so never spawn or suffix-bump a tab per command; keep bounded checks whose captured stdout is the whole artifact in your shell. Tear down: `zmux tab kill <name>`. " +
     "Other sessions: `zmux ls -s`. " +
     'A PreToolUse guard blocks raw tmux and background jobs (shell `&`/`nohup` and Bash `run_in_background`), so reach for zmux first.',
 )

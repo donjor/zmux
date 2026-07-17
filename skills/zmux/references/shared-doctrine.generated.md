@@ -91,3 +91,11 @@ These are harness-neutral outcomes projected for the Claude skill. Claude-specif
 - **Claude mechanism:** Skill doctrine and guard warnings (guard)
   - Caveat: none.
 - **Verify:** `skills/zmux/SKILL.md`, `pi-zmux/test/dispatcher.mjs`
+
+### ZD-012 · Share one scratch lane for bounded commands
+
+- **Invariant:** Bounded one-shot commands that exit on their own share a single reused scratch tab instead of minting an ad-hoc tab per command.
+- **Instruction:** Run bounded checks (typecheck, test, lint, build, one-shot scripts) through the shared scratch lane; reserve a named tab for durable runtimes or work you must keep addressable.
+- **Claude mechanism:** zmux scratch / unnamed zmux run scratch-default (instruction)
+  - Caveat: The scratch lane is reused, not immortal — an idle scratch tab is still reaped and reminted on the next bounded run.
+- **Verify:** `skills/zmux/references/guard-and-tab-states.md`, `skills/zmux/references/run-observe.md`

@@ -89,6 +89,7 @@ func collapseClones(rows []tmux.LogicalPaneRow) []tmux.LogicalPaneRow {
 type ReapContext struct {
 	Now          time.Time
 	CallerPaneID string // the invoking pane — never killed
+	ExemptPaneID string // a pane the current op is about to reuse (e.g. run's resolved scratch target) — never killed this pass
 	AgentTTL     time.Duration
 	HumanFlagAge time.Duration
 	HumanKillAge time.Duration
@@ -175,6 +176,12 @@ func classifyReap(r tmux.LogicalPaneRow, ctx ReapContext, sessionWindows int) Re
 	}
 	if r.PaneID != "" && r.PaneID == ctx.CallerPaneID {
 		return keep("calling pane")
+	}
+	// Never reap the pane the current op is about to reuse — closes the
+	// GC-before-resolve race where a `run` reusing the shared scratch lane
+	// would kill it on the very sweep that precedes the reuse.
+	if r.PaneID != "" && r.PaneID == ctx.ExemptPaneID {
+		return keep("run reuse target")
 	}
 	if r.Hidden != "" {
 		return keep("hidden/docked")

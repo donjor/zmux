@@ -26,3 +26,5 @@
 | ZD-010 | Fail closed and clean exact owned state | pi | typed-operation | Typed target resolution plus tab_kill/session_kill | — |
 | ZD-011 | Make remote mutation legible | claude | guard | Skill doctrine and guard warnings | — |
 | ZD-011 | Make remote mutation legible | pi | guard | Dispatcher safety warnings and interactive routing | Warnings do not infer whether a decoded mutation is authorized. |
+| ZD-012 | Share one scratch lane for bounded commands | claude | instruction | zmux scratch / unnamed zmux run scratch-default | The scratch lane is reused, not immortal — an idle scratch tab is still reaped and reminted on the next bounded run. |
+| ZD-012 | Share one scratch lane for bounded commands | pi | instruction | scratch-default bounded run reuse | The scratch lane is reused, not immortal — an idle scratch tab is still reaped and reminted on the next bounded run. |

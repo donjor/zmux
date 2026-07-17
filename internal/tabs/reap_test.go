@@ -8,6 +8,26 @@ import (
 	"github.com/donjor/zmux/internal/tmux"
 )
 
+// The GC-before-resolve race: a stale scratch lane must not be killed on the
+// very sweep that precedes the `run` about to reuse it. ExemptPaneID spares it.
+func TestClassifyReapExemptsRunReuseTarget(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	// Agent-origin task tab idle well past its TTL — normally a kill.
+	row := tmux.LogicalPaneRow{
+		PaneID: "%scratch", Session: "work", WindowID: "@1", WindowPanes: 1,
+		Command: "bash", Origin: OriginAgent, Scope: ScopeTask,
+		Born:           strconv.FormatInt(now.Add(-2*time.Hour).Unix(), 10),
+		WindowActivity: now.Add(-2 * time.Hour),
+	}
+	if got := classifyReap(row, ReapContext{Now: now}.withDefaults(), 2).Action; got != ReapKill {
+		t.Fatalf("baseline: idle agent task past ttl should be ReapKill, got %v", got)
+	}
+	ctx := ReapContext{Now: now, ExemptPaneID: "%scratch"}.withDefaults()
+	if got := classifyReap(row, ctx, 2).Action; got != ReapKeep {
+		t.Fatalf("the run's resolved reuse target must be kept, got %v", got)
+	}
+}
+
 func TestClassifyReap(t *testing.T) {
 	now := time.Unix(1_000_000, 0)
 	ago := func(d time.Duration) string { return strconv.FormatInt(now.Add(-d).Unix(), 10) }

@@ -44,21 +44,25 @@ already exists, so addressing by a stable purpose-name keeps related work togeth
 | --- | --- |
 | `claude` / `codex` / `pi` / `agy` | the session's primary agent shell — long-lived, not a task tab |
 | `dev` | the project runtime: app server, local service, main REPL, the process a human stops/restarts |
-| `scratch` | reviewable one-offs: mutations, manual takeover, things to inspect/re-run, no durable name |
+| `scratch` | reviewable one-offs: mutations, manual takeover, things to inspect/re-run, no durable name. **The default lane** — an unnamed bounded `zmux run '<cmd>'` (and `zmux scratch '<cmd>'`) claims and reuses this one tab automatically |
 | `admin` / `remote-<host>` | SSH, sudo, remote shells, and remote-config retries — one stable tab per host |
 | `<agent>-peer` | a review peer with a semantic `tab peer` lifecycle — owned by the peer skill |
 | `worker-*` | orchestrated worker *sessions* (not conductor roster tabs) |
 
 Do **not** mint `eval-2`, `test-run`, `build-x`, numbered remote/admin tabs,
 per-Playwright-lane, or feature-named tabs.
-That scatters the surface and is the exact sprawl this rule exists to stop.
+That scatters the surface and is the exact sprawl this rule exists to stop. You no
+longer have to reach for the scratch lane by hand: an unnamed **bounded** `zmux run
+'<cmd>'` now defaults to the shared `scratch` tab and reuses it on every rerun, and
+`zmux scratch '<cmd>'` is the blessed explicit form. Passing `-n eval-2` for a
+bounded run is the ad-hoc sprawl the guard now nudges against.
 
 Route by purpose:
 
-- reviewable long/odd command → `scratch`;
+- reviewable long/odd command → `scratch` (bare `zmux run '<cmd>'` / `zmux scratch '<cmd>'` lands here by default);
 - SSH/remote-admin retries → `admin` or one `remote-<host>` tab;
-- main runtime → `dev`;
-- bounded check → your shell.
+- main runtime → `dev` (durable runs — `-d`/`--keep`/`--scope daemon` — never route to scratch);
+- bounded check whose captured stdout is the whole artifact → your shell.
 
 App-managed detached daemons (their own `setsid`/systemd/Docker `-d`) aren't tabs
 at all — don't babysit an empty wrapper.

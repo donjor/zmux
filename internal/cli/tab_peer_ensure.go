@@ -19,19 +19,27 @@ import (
 )
 
 type peerEnsureOutput struct {
-	Tab         string           `json:"tab"`
-	Session     string           `json:"session,omitempty"`
-	Target      string           `json:"target"`
-	PaneID      string           `json:"paneId"`
-	Created     bool             `json:"created"`
-	Reused      bool             `json:"reused"`
-	Restarted   bool             `json:"restarted"`
-	CommandSent bool             `json:"commandSent"`
-	Outcome     *waitfor.Outcome `json:"outcome,omitempty"`
-	Readiness   *waitfor.Outcome `json:"readiness,omitempty"`
-	Status      waitfor.Status   `json:"status"`
-	OutputTail  string           `json:"outputTail,omitempty"`
-	Warnings    []string         `json:"warnings,omitempty"`
+	Tab         string `json:"tab"`
+	Session     string `json:"session,omitempty"`
+	Target      string `json:"target"`
+	PaneID      string `json:"paneId"`
+	Created     bool   `json:"created"`
+	Reused      bool   `json:"reused"`
+	Restarted   bool   `json:"restarted"`
+	CommandSent bool   `json:"commandSent"`
+	// Existing-owner read-back: on the reuse path these surface the stored
+	// stamp of the tab we resolved onto, so a host ownership-loop can detect a
+	// foreign/stale owner in one call instead of a follow-up `tab inspect`.
+	ExistingTopic     string           `json:"existingTopic,omitempty"`
+	ExistingRole      string           `json:"existingRole,omitempty"`
+	ExistingHostTab   string           `json:"existingHostTab,omitempty"`
+	ExistingHostPane  string           `json:"existingHostPane,omitempty"`
+	ExistingTurnState string           `json:"existingTurnState,omitempty"`
+	Outcome           *waitfor.Outcome `json:"outcome,omitempty"`
+	Readiness         *waitfor.Outcome `json:"readiness,omitempty"`
+	Status            waitfor.Status   `json:"status"`
+	OutputTail        string           `json:"outputTail,omitempty"`
+	Warnings          []string         `json:"warnings,omitempty"`
 }
 
 func newTabPeerEnsureCmd(app *apppkg.App) *cobra.Command {
@@ -179,6 +187,11 @@ func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, e
 		paneID, target := paneTargetForResolvedTab(app, rt)
 		out.Target = target
 		out.PaneID = paneID
+		// Read back the existing tab's stored ownership stamp before any restart
+		// restamps it, so a host ownership-loop sees who currently owns this tab
+		// (topic/role/host + turn state) in the same call. Additive; write/
+		// placement semantics are unchanged.
+		readExistingPeerOwner(app, paneID, &out)
 		if o.restart && strings.TrimSpace(o.command) != "" {
 			if err := markPeerRunning(app, paneID, target, o); err != nil {
 				warnings = append(warnings, "peer lifecycle start failed: "+err.Error())
@@ -229,6 +242,27 @@ func runTabPeerEnsure(app *apppkg.App, o peerEnsureOptions) (peerEnsureOutput, e
 		return out, fmt.Errorf("peer ensure readiness not met: %s", emptyForHuman(out.Readiness.FailureKind, "unproven"))
 	}
 	return out, nil
+}
+
+// readExistingPeerOwner reads the stored peer/turn stamp off a reused tab's
+// pane and fills the ExistingOwner read-back fields on out. Best-effort: a read
+// error or unstamped pane simply leaves the fields empty (omitempty). Reuses the
+// same pane-canonical option accessors `tab status` uses — no new metadata store.
+func readExistingPeerOwner(app *apppkg.App, paneID string, out *peerEnsureOutput) {
+	if paneID == "" {
+		return
+	}
+	opts, err := app.Runner.ShowPaneOptions(paneID, []string{
+		tabs.OptPeerTopic, tabs.OptPeerRole, tabs.OptPeerHostTab, tabs.OptPeerHostPane, tabs.OptTurnState,
+	})
+	if err != nil {
+		return
+	}
+	out.ExistingTopic = opts[tabs.OptPeerTopic]
+	out.ExistingRole = opts[tabs.OptPeerRole]
+	out.ExistingHostTab = opts[tabs.OptPeerHostTab]
+	out.ExistingHostPane = opts[tabs.OptPeerHostPane]
+	out.ExistingTurnState = tabs.NormalizeTurnState(opts[tabs.OptTurnState])
 }
 
 func createPeerCommandTab(app *apppkg.App, sessionName, name, command string, o peerEnsureOptions) (paneID, target string, err error) {
@@ -325,6 +359,22 @@ func printPeerEnsure(out peerEnsureOutput) {
 	}
 	if out.CommandSent {
 		fmt.Println("command: sent")
+	}
+	if out.ExistingRole != "" || out.ExistingTopic != "" || out.ExistingHostTab != "" || out.ExistingTurnState != "" {
+		var parts []string
+		if out.ExistingRole != "" {
+			parts = append(parts, "role="+out.ExistingRole)
+		}
+		if out.ExistingTopic != "" {
+			parts = append(parts, "topic="+out.ExistingTopic)
+		}
+		if out.ExistingHostTab != "" {
+			parts = append(parts, "host="+out.ExistingHostTab)
+		}
+		if out.ExistingTurnState != "" {
+			parts = append(parts, "turn="+out.ExistingTurnState)
+		}
+		fmt.Printf("existing-owner: %s\n", strings.Join(parts, " "))
 	}
 	if out.Readiness != nil {
 		fmt.Printf("readiness: met=%t basis=%s\n", out.Readiness.Met, out.Readiness.Basis)

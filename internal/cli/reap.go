@@ -81,7 +81,11 @@ func newReapCmd(app *apppkg.App) *cobra.Command {
 // wired into high-traffic commands (ls/tabs/run) and tmux hooks; errors are
 // swallowed so housekeeping never breaks the foreground command. The guard hook
 // must never call this — reaping is a mutation.
-func MaybeReap(app *apppkg.App, now time.Time) {
+//
+// exemptPane, when non-empty, is a pane the caller is about to reuse (e.g.
+// run's resolved scratch lane) — the sweep must not kill it out from under the
+// in-flight command (GC-before-resolve race).
+func MaybeReap(app *apppkg.App, now time.Time, exemptPane ...string) {
 	if !app.Runner.ServerRunning() {
 		return
 	}
@@ -89,7 +93,11 @@ func MaybeReap(app *apppkg.App, now time.Time) {
 		return
 	}
 	markReaped(app, now)
-	_, _ = tabs.ApplyReap(app.Runner, tabs.ReapContext{Now: now, CallerPaneID: os.Getenv("TMUX_PANE")})
+	exempt := ""
+	if len(exemptPane) > 0 {
+		exempt = exemptPane[0]
+	}
+	_, _ = tabs.ApplyReap(app.Runner, tabs.ReapContext{Now: now, CallerPaneID: os.Getenv("TMUX_PANE"), ExemptPaneID: exempt})
 }
 
 // shouldReap reports whether the throttle window has elapsed since the last

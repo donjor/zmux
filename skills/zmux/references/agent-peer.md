@@ -40,18 +40,24 @@ The driving agent is the adapter. zmux provides dumb terminal primitives.
 
 ## Names
 
-Use stable descriptive tab names:
+Use stable descriptive tab names. A roster name encodes `<provider>-<shortlane>`:
+the provider that is driving and the lane (role) it serves. Hosts that mint peers
+from a selector already emit these names, so match them rather than inventing
+per-task variants.
 
-| peer | tab name |
-| --- | --- |
-| Codex | `codex-peer` |
-| Claude Code | `claude-peer` |
-| Pi | `pi-peer` |
-| Antigravity CLI | `agy-peer` |
-| Task-specific | `<topic>-peer` |
+| lane | tab name | encoding |
+| --- | --- | --- |
+| Peer review (Pi) | `pi-peer` | `<provider>`-`peer` |
+| Peer review (Codex) | `codex-peer` | `<provider>`-`peer` |
+| Peer review (Claude) | `claude-peer` | `<provider>`-`peer` |
+| Planner | `codex-planner` | `<provider>`-`planner` |
+| Worker | `pi-worker` | `<provider>`-`worker` |
+| Passenger | `sol-passenger` | doctrine agent name |
+| Task-specific | `<topic>-peer` | topic-scoped fallback |
 
-Avoid legacy workflow names. The tab name should say which peer is running or
-which task it is serving.
+Swap the provider prefix to whichever CLI drives the lane (`agy-peer`,
+`claude-worker`, …); the shortlane suffix stays stable. Avoid legacy workflow
+names. The tab name should say which provider is running and which lane it serves.
 
 ## Spawn
 
@@ -114,6 +120,33 @@ The raw `paneId` is diagnostic; do not target it for the peer loop. `tab peer en
 preserves zmux state, logging, placement, and lifecycle behavior for
 the joined tab. This does not create a new roster category or bypass tab reaping;
 it is the same roster reuse check before creating another visible peer tab.
+
+### Ownership-checked reuse loop
+
+`tab peer ensure … --json` is one call: it either created the tab or resolved an
+existing one. When it returns `created:false` it also reports the existing tab's
+`existingTopic`, `existingRole`, `existingHostTab`/`existingHostPane`, and
+`existingTurnState`. Branch on that stamp before typing — never send into a tab
+whose owner you did not verify this loop:
+
+- **mine + finished** (`existingHostPane` is your pane, `existingTurnState` is
+  `consumed`/`failed`/idle) → kill and remint fresh: self-healing teardown, then
+  re-ensure the same roster name.
+- **mine + live, same brief, within a 3-handoff cap** → reuse the tab as-is and
+  continue the exchange.
+- **foreign or ambiguous** (owner pane is not yours, or the topic/role does not
+  match this engagement) → do not touch it; retry the ensure under `<name>-2`,
+  then `<name>-3`.
+
+```bash
+zmux tab peer ensure pi-peer -s <session> --command '…' --role pi --topic '<brief>' --json
+# created:false → read existingRole / existingTopic / existingHostPane / existingTurnState,
+# classify mine|foreign per the branches above, then reuse / remint / retry -2.
+```
+
+Fresh-process-per-engagement is unchanged: reusing the roster **name** never
+reuses the peer's session. A mine+finished tab is always killed and reminted, so
+the next engagement starts from a clean process.
 
 Spawn detached with the max-permission profile:
 

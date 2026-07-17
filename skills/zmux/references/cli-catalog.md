@@ -68,6 +68,9 @@ qualify it as `workspace/session`. Omit `-s` and the **current** session is used
 ## Tabs
 
 ```bash
+zmux run '<cmd>'                 # unnamed BOUNDED run → shared 'scratch' lane (claimed + reused); durable (-d/--keep/--scope daemon) keeps its own tab
+zmux scratch '<cmd>'             # blessed explicit form of the scratch lane (bounded, reused)
+zmux scratch extract             # promote the current scratch popup into a real window
 zmux tabs [session]              # list tabs — riders nested under hosts, hidden marked ~ (alias: t)
 zmux tab move <tab> <dest-session>  # move a tab to another session in the workspace
 zmux tab label '<label>'         # set a stable zmux label for the current tab

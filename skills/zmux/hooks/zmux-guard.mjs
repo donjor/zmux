@@ -488,6 +488,44 @@ export function repoCwdFromPath(cwd) {
   return /\/donjor\/zmux(\b|\/|\.)/.test(cwd || '')
 }
 
+// --- Sprawl nudge (hook-only; NOT part of the shared classifier corpus) ------
+//
+// Part C belt-and-suspenders: warn mid-session when an agent mints an AD-HOC
+// named tab for a BOUNDED run (`zmux run -n <adhoc>`). The default lane is now
+// the shared `scratch` tab, so a fresh tab per bounded command is sprawl. The
+// SessionStart context hook only primes at login; this catches the slip in the
+// act. Non-blocking (nudge on stderr, exit 0). Kept outside classify()/guard.go
+// — it has no meaning in the shared corpus or for codex/pi, exactly like the
+// run_in_background adapter. String-only by design: the guard stays a fast,
+// stateless, dependency-free classifier and never queries live tmux tab state.
+
+// Roster tab names that legitimately keep their own tab (mirrors the Go
+// isRosterTabName): dev/scratch/claude/codex, any *-peer, any worker*.
+const ROSTER_TAB = /^(dev|scratch|claude|codex|.+-peer|worker.*)$/
+// -n/--name <value> on a `zmux run`.
+const RUN_NAME_FLAG = /(?:^|\s)(?:-n|--name)(?:=|\s+)("[^"]*"|'[^']*'|\S+)/
+// Durable/no-exit markers — a run carrying any of these keeps its own tab.
+const RUN_DURABLE_FLAG = /(?:^|\s)(-d|--detach|--keep|--until)(?:=|\s|$)/
+const RUN_DURABLE_SCOPE = /(?:^|\s)--scope(?:=|\s+)(?:daemon|peer|worker|agent-shell)\b/
+
+// sprawlNudge returns a non-blocking nudge string when command is a `zmux run`
+// that mints an ad-hoc named tab for a bounded run, else null.
+export function sprawlNudge(command) {
+  const trimmed = command.trim()
+  if (!/^zmux\s+run\b/.test(trimmed)) return null
+  // Durable/no-exit runs legitimately keep their own kept tab — no nudge.
+  if (RUN_DURABLE_FLAG.test(trimmed) || RUN_DURABLE_SCOPE.test(trimmed)) return null
+  const m = trimmed.match(RUN_NAME_FLAG)
+  if (!m) return null // unnamed run already defaults to scratch — nothing to nudge
+  const name = unquotePayload(m[1])
+  if (ROSTER_TAB.test(name)) return null
+  return [
+    `zmux-guard (nudge): '${name}' is an ad-hoc tab for a bounded run.`,
+    `  → reuse the shared 'scratch' lane: \`zmux scratch '<cmd>'\` (a bare \`zmux run '<cmd>'\` now defaults to scratch too).`,
+    `Bounded checks (typecheck/test/lint/build) share ONE scratch tab — don't mint a tab per command. Not blocking.`,
+  ].join('\n')
+}
+
 // render produces the stderr message for a non-allow verdict.
 export function render(res) {
   const suggest = SUGGEST[res.target]
@@ -609,7 +647,15 @@ function main() {
     }
   }
 
-  if (res.decision === 'allow') process.exit(0)
+  if (res.decision === 'allow') {
+    // Non-blocking sprawl nudge: an ad-hoc named tab for a bounded run. Emitted
+    // on stderr, still proceeds (exit 0). Suppressed by an explicit bypass token.
+    if (!isBypassed(command)) {
+      const nudge = sprawlNudge(command)
+      if (nudge) process.stderr.write(nudge + '\n')
+    }
+    process.exit(0)
+  }
 
   process.stderr.write(render(res) + '\n')
   process.exit(res.decision === 'block' ? 2 : 0)
